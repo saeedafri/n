@@ -1,0 +1,61 @@
+/* ============================================================================
+   LOGIN PAGE LAYOUT CSS
+   Header at top, footer at bottom, no extra space
+   ============================================================================ */
+
+/* Hide Streamlit default elements - but NOT our custom header */
+#MainMenu, .stDeployButton {display: none !important;}
+[data-testid="stSidebar"] {display: none !important;}
+[data-testid="stSidebarCollapsedControl"] {display: none !important;}
+
+/* Main app container - remove all padding/margin */
+.stApp, .main, main {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+}
+
+/* Ensure custom site-header is visible and on top */
+.site-header {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Fix Contact Us button text color - override hide_sidebar() CSS */
+html body .coresight-header-links .coresight-header-contact,
+html body .coresight-header-links .coresight-header-contact:link,
+html body .coresight-header-links .coresight-header-contact:visited,
+html body .coresight-header-links .coresight-header-contact:active {
+    color: #fff !important;
+    text-decoration: none !important;
+}
+
+html body .coresight-header-links .coresight-header-contact:hover {
+    color: #d62e2f !important;
+    text-decoration: none !important;
+}
+
+/* Block container - full width with SIP-style top offset */
+.main .block-container {
+    padding: 85px 0 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+}
+
+/* Remove default Streamlit spacing */
+.stApp > div:first-child {
+    padding-top: 0 !important;
+}
+
+/* Content wrapper - match market_data page layout */
+.content-wrapper {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 !important;
+}
+
+/* Keep login area flush; top offset handled by block-container */
+.login-content {
+    padding-top: 0 !important;
+}

@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Streamlit: Main Portal",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "streamlit",
+            "args": ["run", "${workspaceFolder}/app/main.py", "--server.port", "8000", "--server.runOnSave", "true"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/app"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "subProcess": true,
+            "justMyCode": false,
+            "preLaunchTask": "Clear logs"
+        }
+    ]
+}

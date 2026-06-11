@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/code-review-graph",
+      "args": ["serve"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
+      }
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY_HERE"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement"]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/postgres"],
+      "env": {
+        "PG_CONNECTION_STRING": "YOUR_POSTGRES_CONNECTION_STRING_HERE"
+      }
+    },
+    "python": {
+      "command": "npx",
+      "args": ["-y", "@e2b/mcp-server"],
+      "env": {
+        "E2B_API_KEY": "YOUR_E2B_API_KEY_HERE"
+      }
+    }
+  }
+}

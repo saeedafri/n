@@ -1,0 +1,424 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Clear logs",
+			"type": "shell",
+			"command": "mkdir -p '${workspaceFolder}/logs' && : > '${workspaceFolder}/logs/logs.txt'",
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Start Streamlit App (Test)",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "STG DB Audit",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python app/docs/stg_db_audit.py",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "STG DB Audit v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python app/docs/stg_db_audit.py",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Restart Streamlit App (Test)",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && pkill -f 'streamlit run.*8502' 2>/dev/null; sleep 1 && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8502 Restarted",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8502 Final",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python -m streamlit run app/main.py --server.port 8502",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Streamlit 8502 Phase5",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true 2>&1",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Streamlit 8502 Phase5",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8502 Validation",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8502 Validation",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8502 FilterTest",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8502 AuditPhase",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "DB Evidence Extraction",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _db_evidence.py 2>&1 | tee _db_evidence_output.txt"
+		},
+		{
+			"label": "Restart Streamlit 8502 PostFix",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8502) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Test Dup Check",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _test_dup_check.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Test Dup Fix",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _test_dup_fix.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "DB Evidence Duplicates",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _db_evidence_duplicates.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Restart Streamlit 8502 Clean",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8502) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=LOCAL DEBUG=true .venv/bin/streamlit run app/main.py --server.port 8502 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8504 STAGING Test",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 1; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8504 STAGING Debounce Fix",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Check YF Table",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _check_yf_table.py 2>&1 | tee _check_yf_output.txt",
+			"isBackground": false
+		},
+		{
+			"label": "Restart 8504 STG",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8504 Fix1+Fix2",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Streamlit 8504 Fix1+Fix2 v2",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Add ICP Indexes",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _add_icp_indexes.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Benchmark ICP",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _benchmark_icp.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task A ANALYZE",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task_a.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task B Drop Index",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task_b.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task C YF Title Fix",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task_c.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task D Ticker Index",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task_d.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task E Benchmark",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task_e.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Phase2 Tasks",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _phase2_tasks.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task 1 Index Cleanup",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task1_index_cleanup.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task 1 Index Cleanup v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python3 _task1_index_cleanup.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task 2 Final Benchmark",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && .venv/bin/python scripts/bench_final_phase1.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task 2 Final Benchmark v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_final_phase1.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Task 2 Benchmark v3",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_final_phase1.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Bench Final v4",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_final_phase1.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Bench Final v5",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_final_phase1.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Bench Final v6",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_final_phase1.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "STG App 8504 Verify",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "Restart 8504 STG PostFix",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Restart 8504 Deferred Join",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Test Deferred Join",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _test_deferred_join.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Test Deferred Join v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _test_deferred_join.py 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "DJTest 2026-03-19",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _test_deferred_join.py 2>&1 | tee _djtest_output.txt",
+			"isBackground": false
+		},
+		{
+			"label": "DJTest STG v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _test_deferred_join.py 2>&1 | tee _djtest_output.txt",
+			"isBackground": false
+		},
+		{
+			"label": "Restart 8504 120s Timeout",
+			"type": "shell",
+			"command": "kill -9 $(lsof -t -i :8504) 2>/dev/null; sleep 2; cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && APP_ENV=STAGING DEBUG=false .venv/bin/streamlit run app/main.py --server.port 8504 --server.headless true",
+			"isBackground": true
+		},
+		{
+			"label": "Sync Files to STG",
+			"type": "shell",
+			"command": "cp /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/data/repository.py /Users/mohdsaeedafri/Code-market-Data/app/data/repository.py && cp /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/pages/newsroom.py /Users/mohdsaeedafri/Code-market-Data/app/pages/newsroom.py && diff /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/data/repository.py /Users/mohdsaeedafri/Code-market-Data/app/data/repository.py; echo \"repo diff: $?\" && diff /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/pages/newsroom.py /Users/mohdsaeedafri/Code-market-Data/app/pages/newsroom.py; echo \"newsroom diff: $?\""
+		},
+		{
+			"label": "Task4 Index Check",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _task4_index_check.py 2>&1"
+		},
+		{
+			"label": "Task4 Index Check v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _task4_index_check.py 2>&1"
+		},
+		{
+			"label": "Sync newsroom.py",
+			"type": "shell",
+			"command": "cp /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/pages/newsroom.py /Users/mohdsaeedafri/Code-market-Data/app/pages/newsroom.py && diff /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/pages/newsroom.py /Users/mohdsaeedafri/Code-market-Data/app/pages/newsroom.py; echo \"newsroom diff: $?\""
+		},
+		{
+			"label": "Check repo sync",
+			"type": "shell",
+			"command": "diff /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/data/repository.py /Users/mohdsaeedafri/Code-market-Data/app/data/repository.py; echo \"repo diff: $?\""
+		},
+		{
+			"label": "Task2+3 Indexes",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _task23_indexes.py 2>&1"
+		},
+		{
+			"label": "Production Gate Benchmark",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_production_gate.py 2>&1"
+		},
+		{
+			"label": "Bench Gate v2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_production_gate.py 2>&1"
+		},
+		{
+			"label": "Bench Gate v3",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_production_gate.py 2>&1"
+		},
+		{
+			"label": "Bench Gate v4",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_production_gate.py 2>&1"
+		},
+		{
+			"label": "Bench Gate v5",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_production_gate.py 2>&1"
+		},
+		{
+			"label": "Bench Gate v5 WARM",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Code-market-Data && /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/python scripts/bench_production_gate.py 2>&1"
+		},
+		{
+			"label": "Cleanup Temp Scripts",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && rm -f _task_a.py _task_b.py _task_c.py _task_d.py _task_e.py _task1_index_cleanup.py _task4_index_check.py _test_deferred_join.py _task23_indexes.py && ls _*.py 2>/dev/null || echo 'All temp scripts cleaned.'"
+		},
+		{
+			"label": "Final Cleanup",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && rm -f _phase2_tasks.py _check_yf_table.py _db_evidence.py _db_evidence_duplicates.py _test_dup_check.py _test_dup_fix.py && ls _*.py 2>/dev/null || echo 'All temp scripts cleaned.'"
+		},
+		{
+			"label": "Sync + Verify Diffs",
+			"type": "shell",
+			"command": "cp /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/data/repository.py /Users/mohdsaeedafri/Code-market-Data/app/data/repository.py && cp /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/pages/newsroom.py /Users/mohdsaeedafri/Code-market-Data/app/pages/newsroom.py && diff /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/data/repository.py /Users/mohdsaeedafri/Code-market-Data/app/data/repository.py; echo \"repo: $?\" && diff /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/app/pages/newsroom.py /Users/mohdsaeedafri/Code-market-Data/app/pages/newsroom.py; echo \"newsroom: $?\""
+		},
+		{
+			"label": "STG DB Analysis",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _stg_analysis.py 2>&1"
+		},
+		{
+			"label": "STG Analysis Part2",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _stg_analysis2.py 2>&1"
+		},
+		{
+			"label": "STG Analysis Part3",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _stg_analysis3.py 2>&1"
+		},
+		{
+			"label": "STG EXPLAIN Plans",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _stg_explain.py 2>&1"
+		},
+		{
+			"label": "Validate Dedup",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _validate_dedup.py 2>&1"
+		},
+		{
+			"label": "Streamlit 8501 E2E Validation",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && source .venv/bin/activate && streamlit run app/main.py --server.port 8501 --server.headless true 2>&1",
+			"isBackground": true
+		},
+		{
+			"label": "STG DB Proof",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && .venv/bin/python _stg_proof.py 2>&1"
+		},
+		{
+			"label": "Streamlit 8501 Fresh",
+			"type": "shell",
+			"command": "cd /Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement && source .venv/bin/activate && streamlit run app/main.py --server.port 8501 --server.headless true 2>&1",
+			"isBackground": true
+		}
+	]
+}

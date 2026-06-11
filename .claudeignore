@@ -1,0 +1,96 @@
+# Python environments
+venv/
+env/
+.venv/
+__env__/
+.venv_old/
+.venv_backup/
+
+# Python cache & build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Dependency locks (thousands of tokens each)
+package-lock.json
+yarn.lock
+poetry.lock
+Pipfile.lock
+requirements.lock
+
+# Testing artifacts
+htmlcov/
+.coverage
+.tox/
+.hypothesis/
+junit.xml
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.fleet/
+
+# Git internals
+.git/
+.gitmodules
+
+# Database & large data
+*.db
+*.sqlite
+*.sqlite3
+data/filings_blob_cache/
+data/large_datasets/
+data/old_backups/
+
+# Logs
+*.log
+logs/
+server-logs/
+npm-debug.log
+
+# Caches & temp
+node_modules/
+.cache/
+tmp/
+temp/
+.tmp/
+
+# Large media & archives
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.zip
+*.tar.gz
+*.rar
+
+# Azure/cloud specific
+*.token
+local.settings.json
+
+# edgartools vendored data (large)
+edgartools/tests/
+edgartools/docs/
+edgartools/*.egg-info/
+
+# Generated/compiled assets
+*.min.js
+*.min.css

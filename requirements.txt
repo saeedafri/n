@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Research Portal - Python Dependencies
+# ═══════════════════════════════════════════════════════════════════════════════
+# Last updated: 2026-02-24
+# Critical: All packages below are REQUIRED for production deployment
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Core Framework (REQUIRED)
+# ───────────────────────────────────────────────────────────────────────────────
+streamlit>=1.54.0
+itsdangerous>=2.2.0  # Streamlit ASGI (SessionMiddleware) when using uvicorn app.asgi_app
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Data Processing (REQUIRED)
+# ───────────────────────────────────────────────────────────────────────────────
+pandas>=2.3.0
+numpy>=2.4.0
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Visualization (REQUIRED)
+# ───────────────────────────────────────────────────────────────────────────────
+plotly>=6.5.0
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Database (REQUIRED)
+# ───────────────────────────────────────────────────────────────────────────────
+sqlalchemy>=2.0.46
+pymysql>=1.1.0
+cryptography>=46.0.0  # Required for MySQL SSL connections
+
+# ───────────────────────────────────────────────────────────────────────────────
+# SEC Filing Processing (REQUIRED)
+# Used by: scripts/export_xbrl_facts.py, scripts/enrich_from_edgartools.py
+# ───────────────────────────────────────────────────────────────────────────────
+edgartools>=3.0.0
+requests>=2.31.0
+
+# ───────────────────────────────────────────────────────────────────────────────
+# LLM Integration (REQUIRED)
+# Used by: app/core/llm_extractor.py
+# ───────────────────────────────────────────────────────────────────────────────
+openai>=1.0.0
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Machine Learning / Search (REQUIRED)
+# Used by: app/core/search_engine.py (TranscriptSearchEngine - TF-IDF)
+# ───────────────────────────────────────────────────────────────────────────────
+scikit-learn>=1.3.0
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Utilities (REQUIRED)
+# ───────────────────────────────────────────────────────────────────────────────
+python-dotenv>=1.2.0
+streamlit-local-storage>=0.0.25  # Browser localStorage persistence
+streamlit-cookies-controller>=0.0.4  # Cookie management for authentication
+streamlit-calendar>=1.3.0  # FullCalendar-based earnings calendar view
+attrs>=23.0.0  # Used by: app/components/companyProfile.py
+diskcache>=5.6.0  # Persistent file-based cache for Azure blob metadata
+fpdf2>=2.8.0  # PDF generation for transcript downloads
+pymupdf>=1.24.0  # HTML to PDF for filing downloads (pre-built wheels, no system deps)
+pdf2image>=1.16.0  # PDF to image conversion for company_filings.py (requires Poppler)
+openpyxl>=3.1.0  # Excel generation for market data downloads
+streamlit-aggrid>=1.2.0  # Column filtering in screening results grid
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Standard Library Modules Used (No installation required):
+#   - argparse, contextlib, dataclasses, datetime, decimal, enum, functools
+#   - html, json, logging, os, pathlib, random, re, socket, sys, threading
+#   - time, traceback, typing
+# ═══════════════════════════════════════════════════════════════════════════════
+# NOTE: forex-python REMOVED - not used in code. Forex rates fetched from DB.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+azure-storage-blob>=12.19.0
+azure-storage-file-datalake>=12.23.0
+azure-core>=1.30.0
+

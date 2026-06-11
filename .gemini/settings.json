@@ -1,0 +1,31 @@
+{
+  "general": {
+    "plan": {
+      "modelRouting": true
+    },
+    "defaultApprovalMode": "auto_edit",
+    "vimMode": false
+  },
+  "model": {
+    "name": "gemini-2.0-pro-exp",
+    "compressionThreshold": 0.5,
+    "maxSessionTurns": -1,
+    "generateContentConfig": {
+      "temperature": 0.2,
+      "thinkingConfig": {
+        "thinkingBudget": 4096
+      }
+    }
+  },
+  "ui": {
+    "inlineThinkingMode": "full",
+    "hideContextSummary": true
+  },
+  "tools": {
+    "useRipgrep": true
+  },
+  "experimental": {
+    "modelSteering": true,
+    "memoryManager": true
+  }
+}
