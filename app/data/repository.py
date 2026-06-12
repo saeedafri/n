@@ -4006,7 +4006,7 @@ class KeyStatsRepository:
         # ── Forward F- model revenue forecast (annual only, next 5 years) ──
         if period_type == 'annual' and periods:
             _last_hist_date = _last_actual_hist_date  # use original last actual, not E- appended date
-            _n_actual = len(total_revenue_vals)  # count of actual historical periods
+            _n_actual = len(results)  # use results (historical-only); total_revenue_vals is mutated by E-estimate appends
             _last_rev_mm = next(
                 (l['values'][_n_actual - 1] for l in line_items if l['label'] == 'Total Revenue' and len(l['values']) >= _n_actual),
                 None
