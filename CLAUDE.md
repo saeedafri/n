@@ -16,6 +16,27 @@
 
 ---
 
+## Workflow Standards — MANDATORY (every task in this repo)
+
+1. **Root cause first, then fix at the root.** Never patch a symptom. Use the
+   `superpowers:systematic-debugging` skill: investigate with real DB/data evidence
+   (run probes against the staging DB) until the true cause is proven, *then* fix.
+2. **Always verify in the real UI with Playwright before claiming done.** Use the
+   `superpowers:verification-before-completion` discipline — evidence, not assertions.
+   - Launch:  `bash .claude/dev/run_local.sh`  → app on `http://localhost:8501`
+     (built-in OIDC bypass as `mohdsaeedafri@coresight.com`, staging DB; **no code edits**).
+   - Drive:   `.venv/bin/python .claude/dev/ui_test.py --path /<page> [--click "<btn>"] [--dialog] --shot /tmp/x.png`
+   - Read the screenshot + dumped text; show the user proof.
+   - NEVER add a bypass to `auth_manager.py` — the launcher uses the existing
+     `APP_ENV=LOCAL + DEBUG=true + LOCAL_TEST_USER_EMAIL` path; nothing reaches STG.
+3. **Use Claude skills to cut tokens & raise quality.** Prefer `code-review-graph`
+   MCP / `graphify` over Grep/Glob/Read for exploration (cheaper, structural);
+   `superpowers:*` for process. Keep output terse. Do NOT add new MCP servers/skills.
+4. **Scope discipline.** Fix exactly what was asked; flag unrelated issues separately
+   (background-task chip) instead of bundling them.
+
+---
+
 ## Knowledge Graph — Use FIRST (before Grep/Glob/Read)
 
 `code-review-graph` MCP is configured. Use it before any file reads.
