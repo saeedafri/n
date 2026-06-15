@@ -1,0 +1,111 @@
+{
+  "projectRoot": "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement",
+  "batchFiles": [
+    {
+      "path": "app/core/llm_extractor.py",
+      "language": "python",
+      "sizeLines": 484,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/search_engine.py",
+      "language": "python",
+      "sizeLines": 222,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/ssl_setup.py",
+      "language": "python",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/earnings_calendar.py",
+      "language": "python",
+      "sizeLines": 2219,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/cache_cleaner.py",
+      "language": "python",
+      "sizeLines": 128,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/earnings_alert_dispatcher.py",
+      "language": "python",
+      "sizeLines": 273,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/earnings_alert_email.py",
+      "language": "python",
+      "sizeLines": 120,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/excel_export.py",
+      "language": "python",
+      "sizeLines": 1005,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filing_pdf.py",
+      "language": "python",
+      "sizeLines": 87,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/html_to_pdf.py",
+      "language": "python",
+      "sizeLines": 100,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/server_logger.py",
+      "language": "python",
+      "sizeLines": 984,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "app/core/llm_extractor.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/core/search_engine.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/core/ssl_setup.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/earnings_calendar.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/earnings_alert_email.py",
+      "app/utils/server_logger.py",
+      "app/utils/ticker_utils.py"
+    ],
+    "app/utils/cache_cleaner.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/earnings_alert_dispatcher.py": [
+      "app/utils/earnings_alert_email.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/earnings_alert_email.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/excel_export.py": [
+      "app/utils/constants.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/filing_pdf.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/html_to_pdf.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/server_logger.py": []
+  }
+}

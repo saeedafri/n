@@ -1,0 +1,211 @@
+{
+  "projectRoot": "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement",
+  "batchFiles": [
+    {
+      "path": "app/components/auth_utils.py",
+      "language": "python",
+      "sizeLines": 516,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/loading.py",
+      "language": "python",
+      "sizeLines": 438,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/navigation.py",
+      "language": "python",
+      "sizeLines": 1243,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/access_control.py",
+      "language": "python",
+      "sizeLines": 325,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/auth_manager.py",
+      "language": "python",
+      "sizeLines": 1314,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/config.py",
+      "language": "python",
+      "sizeLines": 279,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/database.py",
+      "language": "python",
+      "sizeLines": 612,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/access_management.py",
+      "language": "python",
+      "sizeLines": 760,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/admin_iam.py",
+      "language": "python",
+      "sizeLines": 427,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/audit.py",
+      "language": "python",
+      "sizeLines": 578,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/forecasting.py",
+      "language": "python",
+      "sizeLines": 3404,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/forecasting_admin.py",
+      "language": "python",
+      "sizeLines": 438,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/live_earnings_transcript.py",
+      "language": "python",
+      "sizeLines": 1087,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/logs.py",
+      "language": "python",
+      "sizeLines": 670,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/reports.py",
+      "language": "python",
+      "sizeLines": 575,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/screening.py",
+      "language": "python",
+      "sizeLines": 5890,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/settings.py",
+      "language": "python",
+      "sizeLines": 744,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/companyProfile.py",
+      "language": "python",
+      "sizeLines": 579,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "app/components/auth_utils.py": [
+      "app/core/database.py"
+    ],
+    "app/components/loading.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/components/navigation.py": [
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/core/access_control.py": [
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/core/auth_manager.py": [
+      "app/core/database.py"
+    ],
+    "app/core/config.py": [],
+    "app/core/database.py": [
+      "app/core/config.py"
+    ],
+    "app/pages/access_management.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/admin_iam.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py"
+    ],
+    "app/pages/audit.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/forecasting.py": [
+      "app/components/loading.py",
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/utils/constants.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/forecasting_admin.py": [
+      "app/components/loading.py",
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/live_earnings_transcript.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py"
+    ],
+    "app/pages/logs.py": [
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/reports.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/screening.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py"
+    ],
+    "app/pages/settings.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/companyProfile.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/components/toolbar.py",
+      "app/core/database.py"
+    ]
+  }
+}

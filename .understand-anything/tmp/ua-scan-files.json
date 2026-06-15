@@ -1,0 +1,940 @@
+{
+  "scriptCompleted": true,
+  "files": [
+    {
+      "path": ".antigravitycli/1ac8590d-97f8-44c4-bd56-7a88458a0160.json",
+      "language": "json",
+      "sizeLines": 13,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claudeignore",
+      "language": "unknown",
+      "sizeLines": 96,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".code-review-graphignore",
+      "language": "unknown",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".cursorrules",
+      "language": "unknown",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".mcp.json",
+      "language": "json",
+      "sizeLines": 23,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".opencode.json",
+      "language": "json",
+      "sizeLines": 9,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".understand-anything/.understandignore",
+      "language": "unknown",
+      "sizeLines": 228,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".understand-anything/tmp/ua-scan-files.json",
+      "language": "json",
+      "sizeLines": 1175,
+      "fileCategory": "config"
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 38,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "app/__init__.py",
+      "language": "python",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/auth_utils.py",
+      "language": "python",
+      "sizeLines": 516,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/charts.py",
+      "language": "python",
+      "sizeLines": 409,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/companyProfile.py",
+      "language": "python",
+      "sizeLines": 616,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/header_logout.html",
+      "language": "html",
+      "sizeLines": 114,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/layout.py",
+      "language": "python",
+      "sizeLines": 312,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/loading.py",
+      "language": "python",
+      "sizeLines": 438,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/login_footer.html",
+      "language": "html",
+      "sizeLines": 142,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/login_header.html",
+      "language": "html",
+      "sizeLines": 116,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/login_layout.css",
+      "language": "css",
+      "sizeLines": 61,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/navigation.py",
+      "language": "python",
+      "sizeLines": 1243,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/styles.py",
+      "language": "python",
+      "sizeLines": 728,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/tables.py",
+      "language": "python",
+      "sizeLines": 445,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/toolbar.py",
+      "language": "python",
+      "sizeLines": 217,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/access_control.py",
+      "language": "python",
+      "sizeLines": 325,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/auth_environment.py",
+      "language": "python",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/auth_manager.py",
+      "language": "python",
+      "sizeLines": 1314,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/config.py",
+      "language": "python",
+      "sizeLines": 279,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/database.py",
+      "language": "python",
+      "sizeLines": 612,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/llm_extractor.py",
+      "language": "python",
+      "sizeLines": 484,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/search_engine.py",
+      "language": "python",
+      "sizeLines": 222,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/ssl_setup.py",
+      "language": "python",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/main.py",
+      "language": "python",
+      "sizeLines": 533,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/access_management.py",
+      "language": "python",
+      "sizeLines": 760,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/admin_iam.py",
+      "language": "python",
+      "sizeLines": 427,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/audit.py",
+      "language": "python",
+      "sizeLines": 578,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/company_filings.py",
+      "language": "python",
+      "sizeLines": 3943,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/earnings_calendar.py",
+      "language": "python",
+      "sizeLines": 2219,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/earnings_calls.py",
+      "language": "python",
+      "sizeLines": 2274,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/forecasting_admin.py",
+      "language": "python",
+      "sizeLines": 438,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/forecasting.py",
+      "language": "python",
+      "sizeLines": 3404,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/home.py",
+      "language": "python",
+      "sizeLines": 257,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/live_earnings_transcript.py",
+      "language": "python",
+      "sizeLines": 1087,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/login.py",
+      "language": "python",
+      "sizeLines": 1452,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/logout_bridge.py",
+      "language": "python",
+      "sizeLines": 422,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/logs.py",
+      "language": "python",
+      "sizeLines": 670,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/market_data.py",
+      "language": "python",
+      "sizeLines": 4111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/newsroom.py",
+      "language": "python",
+      "sizeLines": 1630,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/reports.py",
+      "language": "python",
+      "sizeLines": 575,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/screening.py",
+      "language": "python",
+      "sizeLines": 5890,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/settings.py",
+      "language": "python",
+      "sizeLines": 744,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/azure_blob.py",
+      "language": "python",
+      "sizeLines": 185,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/background_scanner.py",
+      "language": "python",
+      "sizeLines": 1343,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/blob_doc_type_discovery.py",
+      "language": "python",
+      "sizeLines": 442,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/cache_cleaner.py",
+      "language": "python",
+      "sizeLines": 128,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/cache_manager.py",
+      "language": "python",
+      "sizeLines": 575,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/companyProfile.py",
+      "language": "python",
+      "sizeLines": 579,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/constants.py",
+      "language": "python",
+      "sizeLines": 1169,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/earnings_alert_dispatcher.py",
+      "language": "python",
+      "sizeLines": 273,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/earnings_alert_email.py",
+      "language": "python",
+      "sizeLines": 120,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/excel_export.py",
+      "language": "python",
+      "sizeLines": 1005,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filing_pdf.py",
+      "language": "python",
+      "sizeLines": 87,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filing_units.py",
+      "language": "python",
+      "sizeLines": 349,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filings_cache.py",
+      "language": "python",
+      "sizeLines": 510,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/html_to_pdf.py",
+      "language": "python",
+      "sizeLines": 100,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/local_storage_manager.py",
+      "language": "python",
+      "sizeLines": 520,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/local_storage.py",
+      "language": "python",
+      "sizeLines": 439,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/market_data.py",
+      "language": "python",
+      "sizeLines": 1916,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/non_sec_blob_fallback.py",
+      "language": "python",
+      "sizeLines": 474,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/retailer_forecaster.py",
+      "language": "python",
+      "sizeLines": 345,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/server_logger.py",
+      "language": "python",
+      "sizeLines": 984,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/ticker_utils.py",
+      "language": "python",
+      "sizeLines": 124,
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/transcript_pdf.py",
+      "language": "python",
+      "sizeLines": 222,
+      "fileCategory": "code"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 249,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/diagrams/complete_flow.md",
+      "language": "markdown",
+      "sizeLines": 297,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/README.md",
+      "language": "markdown",
+      "sizeLines": 140,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/00_start_here_for_new_people.md",
+      "language": "markdown",
+      "sizeLines": 186,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/01_system_flow.md",
+      "language": "markdown",
+      "sizeLines": 124,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/02_data_sources_and_preparation.md",
+      "language": "markdown",
+      "sizeLines": 232,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/03_outlier_detection.md",
+      "language": "markdown",
+      "sizeLines": 410,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/04_linear_regression.md",
+      "language": "markdown",
+      "sizeLines": 400,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/05_cagr.md",
+      "language": "markdown",
+      "sizeLines": 220,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/06_exponential_smoothing.md",
+      "language": "markdown",
+      "sizeLines": 193,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/07_holt_linear_trend.md",
+      "language": "markdown",
+      "sizeLines": 227,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/08_moving_average_trend.md",
+      "language": "markdown",
+      "sizeLines": 215,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/09_weighted_average_growth.md",
+      "language": "markdown",
+      "sizeLines": 240,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/10_backtesting_ensemble_and_scenarios.md",
+      "language": "markdown",
+      "sizeLines": 374,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/11_ui_number_mapping.md",
+      "language": "markdown",
+      "sizeLines": 166,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/12_real_examples_you_can_match_in_ui.md",
+      "language": "markdown",
+      "sizeLines": 170,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/13_ml_from_scratch_complete_guide.md",
+      "language": "markdown",
+      "sizeLines": 683,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/14_complete_glossary.md",
+      "language": "markdown",
+      "sizeLines": 325,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_01_linear_regression_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 371,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_02_cagr_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 321,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_03_exponential_smoothing_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 291,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_04_holt_linear_trend_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 331,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_05_ma_trend_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 289,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_06_weighted_average_growth_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 338,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_07_ensemble_and_scenarios_deep_dive.md",
+      "language": "markdown",
+      "sizeLines": 356,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/README.md",
+      "language": "markdown",
+      "sizeLines": 96,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/TECHNICAL_REFERENCE_COMPLETE.md",
+      "language": "markdown",
+      "sizeLines": 1561,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/EARNINGS_CALENDAR_OPTIMIZATION_NOTES.md",
+      "language": "markdown",
+      "sizeLines": 420,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/market-data-commands.md",
+      "language": "markdown",
+      "sizeLines": 485,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/phase3_index_analysis.md",
+      "language": "markdown",
+      "sizeLines": 789,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/SIP_server_debug_commands.md",
+      "language": "markdown",
+      "sizeLines": 572,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "GEMINI.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "OIDC_FLOW.md",
+      "language": "markdown",
+      "sizeLines": 2118,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "sizeLines": 5,
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 389,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "requirements.txt",
+      "language": "txt",
+      "sizeLines": 78,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "scripts/azure_filing_uploader.py",
+      "language": "python",
+      "sizeLines": 836,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/backfill_forecasts.py",
+      "language": "python",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/build_screening_segment_member_cache.py",
+      "language": "python",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/build_screening_segment_values_cache.py",
+      "language": "python",
+      "sizeLines": 288,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/calculate_derived_metrics.py",
+      "language": "python",
+      "sizeLines": 429,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/delete_and_load_10q.py",
+      "language": "python",
+      "sizeLines": 267,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/ec_perf_playwright.py",
+      "language": "python",
+      "sizeLines": 870,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/edgartools_offerings_examples.py",
+      "language": "python",
+      "sizeLines": 509,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/enrich_from_edgartools.py",
+      "language": "python",
+      "sizeLines": 246,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_8k_ecal.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_combine_insert.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_helpers.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_news_earnings.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_news_keywords.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_news_mna.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/export_xbrl_facts.py",
+      "language": "python",
+      "sizeLines": 1608,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/extract_credit_ratings.py",
+      "language": "python",
+      "sizeLines": 861,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/extract_net_sales_guidance.py",
+      "language": "python",
+      "sizeLines": 578,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/extract_store_counts.py",
+      "language": "python",
+      "sizeLines": 816,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/fetch_filing_html.py",
+      "language": "python",
+      "sizeLines": 235,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/forecasting_refresh_e2e_playwright.py",
+      "language": "python",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/generate_and_load.py",
+      "language": "python",
+      "sizeLines": 585,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/generate_key_developments_v4.py",
+      "language": "python",
+      "sizeLines": 3178,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/generate_proxy_json.py",
+      "language": "python",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/ingest_key_developments.py",
+      "language": "python",
+      "sizeLines": 1697,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/load_filings_to_db.py",
+      "language": "python",
+      "sizeLines": 201,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/load_supplementary_json.py",
+      "language": "python",
+      "sizeLines": 211,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/md_filter_e2e_playwright.py",
+      "language": "python",
+      "sizeLines": 136,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/prune_coreiq_forecasts_horizon.py",
+      "language": "python",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/README.md",
+      "language": "markdown",
+      "sizeLines": 206,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "scripts/rebuild_all_forecasts.py",
+      "language": "python",
+      "sizeLines": 302,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/rerun_forecasts.py",
+      "language": "python",
+      "sizeLines": 285,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/run_etl_parallel.py",
+      "language": "python",
+      "sizeLines": 435,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/run_phase3_db_analysis.py",
+      "language": "python",
+      "sizeLines": 409,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/screening_key_stats_ratios_e2e.py",
+      "language": "python",
+      "sizeLines": 358,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/screening_segment_statements_e2e.py",
+      "language": "python",
+      "sizeLines": 683,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/start_ec_perf_local.sh",
+      "language": "shell",
+      "sizeLines": 79,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/sync_yf_final.py",
+      "language": "python",
+      "sizeLines": 233,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/sync_yf_stg.py",
+      "language": "python",
+      "sizeLines": 266,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/test_period_switch.py",
+      "language": "python",
+      "sizeLines": 312,
+      "fileCategory": "code"
+    }
+  ],
+  "totalFiles": 152,
+  "filteredByIgnore": 60,
+  "estimatedComplexity": "large",
+  "stats": {
+    "filesScanned": 152,
+    "byCategory": {
+      "config": 5,
+      "code": 105,
+      "docs": 37,
+      "markup": 4,
+      "script": 1
+    },
+    "byLanguage": {
+      "json": 5,
+      "unknown": 4,
+      "markdown": 36,
+      "python": 101,
+      "html": 3,
+      "css": 1,
+      "txt": 1,
+      "shell": 1
+    }
+  }
+}

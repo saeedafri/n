@@ -1,0 +1,353 @@
+{
+  "scriptCompleted": true,
+  "stats": {
+    "filesScanned": 152,
+    "filesWithImports": 46,
+    "totalEdges": 145
+  },
+  "importMap": {
+    ".antigravitycli/1ac8590d-97f8-44c4-bd56-7a88458a0160.json": [],
+    ".claudeignore": [],
+    ".code-review-graphignore": [],
+    ".cursorrules": [],
+    ".mcp.json": [],
+    ".opencode.json": [],
+    ".understand-anything/.understandignore": [],
+    ".understand-anything/tmp/ua-scan-files.json": [],
+    "AGENTS.md": [],
+    "app/__init__.py": [],
+    "app/components/__init__.py": [],
+    "app/components/auth_utils.py": [
+      "app/core/database.py"
+    ],
+    "app/components/charts.py": [
+      "app/components/styles.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/components/companyProfile.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/components/toolbar.py",
+      "app/core/database.py",
+      "app/utils/constants.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/components/header_logout.html": [],
+    "app/components/layout.py": [
+      "app/components/styles.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/components/loading.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/components/login_footer.html": [],
+    "app/components/login_header.html": [],
+    "app/components/login_layout.css": [],
+    "app/components/navigation.py": [
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/components/styles.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/components/tables.py": [
+      "app/components/styles.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/components/toolbar.py": [
+      "app/components/styles.py",
+      "app/utils/local_storage.py"
+    ],
+    "app/core/__init__.py": [],
+    "app/core/access_control.py": [
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/core/auth_environment.py": [],
+    "app/core/auth_manager.py": [
+      "app/core/database.py"
+    ],
+    "app/core/config.py": [],
+    "app/core/database.py": [
+      "app/core/config.py"
+    ],
+    "app/core/llm_extractor.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/core/search_engine.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/core/ssl_setup.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/main.py": [],
+    "app/pages/__init__.py": [],
+    "app/pages/access_management.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/admin_iam.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py"
+    ],
+    "app/pages/audit.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/company_filings.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/filing_units.py",
+      "app/utils/server_logger.py",
+      "app/utils/ticker_utils.py"
+    ],
+    "app/pages/earnings_calendar.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/earnings_alert_email.py",
+      "app/utils/server_logger.py",
+      "app/utils/ticker_utils.py"
+    ],
+    "app/pages/earnings_calls.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/local_storage_manager.py",
+      "app/utils/ticker_utils.py"
+    ],
+    "app/pages/forecasting_admin.py": [
+      "app/components/loading.py",
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/forecasting.py": [
+      "app/components/loading.py",
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/utils/constants.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/home.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/local_storage_manager.py",
+      "app/utils/local_storage.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/live_earnings_transcript.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py"
+    ],
+    "app/pages/login.py": [
+      "app/components/styles.py",
+      "app/core/auth_environment.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/logout_bridge.py": [
+      "app/core/auth_environment.py"
+    ],
+    "app/pages/logs.py": [
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/market_data.py": [
+      "app/components/companyProfile.py",
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/components/toolbar.py",
+      "app/core/auth_manager.py",
+      "app/utils/constants.py",
+      "app/utils/local_storage_manager.py",
+      "app/utils/local_storage.py",
+      "app/utils/server_logger.py",
+      "app/utils/ticker_utils.py"
+    ],
+    "app/pages/newsroom.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/constants.py",
+      "app/utils/server_logger.py",
+      "app/utils/ticker_utils.py"
+    ],
+    "app/pages/reports.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/access_control.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/pages/screening.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py"
+    ],
+    "app/pages/settings.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/core/auth_manager.py",
+      "app/core/database.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/__init__.py": [],
+    "app/utils/azure_blob.py": [],
+    "app/utils/background_scanner.py": [
+      "app/utils/filings_cache.py"
+    ],
+    "app/utils/blob_doc_type_discovery.py": [],
+    "app/utils/cache_cleaner.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/cache_manager.py": [],
+    "app/utils/companyProfile.py": [
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/components/toolbar.py",
+      "app/core/database.py"
+    ],
+    "app/utils/constants.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/earnings_alert_dispatcher.py": [
+      "app/utils/earnings_alert_email.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/earnings_alert_email.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/excel_export.py": [
+      "app/utils/constants.py",
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/filing_pdf.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/filing_units.py": [],
+    "app/utils/filings_cache.py": [],
+    "app/utils/html_to_pdf.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/local_storage_manager.py": [],
+    "app/utils/local_storage.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/market_data.py": [
+      "app/components/companyProfile.py",
+      "app/components/navigation.py",
+      "app/components/styles.py",
+      "app/components/toolbar.py",
+      "app/core/auth_manager.py",
+      "app/utils/local_storage_manager.py",
+      "app/utils/local_storage.py"
+    ],
+    "app/utils/non_sec_blob_fallback.py": [],
+    "app/utils/retailer_forecaster.py": [],
+    "app/utils/server_logger.py": [],
+    "app/utils/ticker_utils.py": [
+      "app/utils/server_logger.py"
+    ],
+    "app/utils/transcript_pdf.py": [],
+    "CLAUDE.md": [],
+    "docs/CIQ_Estimates_Explained/diagrams/complete_flow.md": [],
+    "docs/CIQ_Estimates_Explained/README.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/00_start_here_for_new_people.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/01_system_flow.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/02_data_sources_and_preparation.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/03_outlier_detection.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/04_linear_regression.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/05_cagr.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/06_exponential_smoothing.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/07_holt_linear_trend.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/08_moving_average_trend.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/09_weighted_average_growth.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/10_backtesting_ensemble_and_scenarios.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/11_ui_number_mapping.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/12_real_examples_you_can_match_in_ui.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/13_ml_from_scratch_complete_guide.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/14_complete_glossary.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_01_linear_regression_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_02_cagr_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_03_exponential_smoothing_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_04_holt_linear_trend_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_05_ma_trend_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_06_weighted_average_growth_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_07_ensemble_and_scenarios_deep_dive.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/README.md": [],
+    "docs/CIQ_Estimates_Explained/revenue-estimates-models/TECHNICAL_REFERENCE_COMPLETE.md": [],
+    "docs/EARNINGS_CALENDAR_OPTIMIZATION_NOTES.md": [],
+    "docs/market-data-commands.md": [],
+    "docs/phase3_index_analysis.md": [],
+    "docs/SIP_server_debug_commands.md": [],
+    "GEMINI.md": [],
+    "OIDC_FLOW.md": [],
+    "package.json": [],
+    "README.md": [],
+    "requirements.txt": [],
+    "scripts/azure_filing_uploader.py": [],
+    "scripts/backfill_forecasts.py": [],
+    "scripts/build_screening_segment_member_cache.py": [],
+    "scripts/build_screening_segment_values_cache.py": [],
+    "scripts/calculate_derived_metrics.py": [],
+    "scripts/delete_and_load_10q.py": [],
+    "scripts/ec_perf_playwright.py": [],
+    "scripts/edgartools_offerings_examples.py": [],
+    "scripts/enrich_from_edgartools.py": [],
+    "scripts/etl_8k_ecal.py": [],
+    "scripts/etl_combine_insert.py": [],
+    "scripts/etl_helpers.py": [],
+    "scripts/etl_news_earnings.py": [],
+    "scripts/etl_news_keywords.py": [],
+    "scripts/etl_news_mna.py": [],
+    "scripts/export_xbrl_facts.py": [],
+    "scripts/extract_credit_ratings.py": [],
+    "scripts/extract_net_sales_guidance.py": [],
+    "scripts/extract_store_counts.py": [],
+    "scripts/fetch_filing_html.py": [
+      "scripts/export_xbrl_facts.py"
+    ],
+    "scripts/forecasting_refresh_e2e_playwright.py": [],
+    "scripts/generate_and_load.py": [],
+    "scripts/generate_key_developments_v4.py": [],
+    "scripts/generate_proxy_json.py": [],
+    "scripts/ingest_key_developments.py": [],
+    "scripts/load_filings_to_db.py": [],
+    "scripts/load_supplementary_json.py": [],
+    "scripts/md_filter_e2e_playwright.py": [],
+    "scripts/prune_coreiq_forecasts_horizon.py": [],
+    "scripts/README.md": [],
+    "scripts/rebuild_all_forecasts.py": [],
+    "scripts/rerun_forecasts.py": [],
+    "scripts/run_etl_parallel.py": [],
+    "scripts/run_phase3_db_analysis.py": [],
+    "scripts/screening_key_stats_ratios_e2e.py": [],
+    "scripts/screening_segment_statements_e2e.py": [],
+    "scripts/start_ec_perf_local.sh": [],
+    "scripts/sync_yf_final.py": [],
+    "scripts/sync_yf_stg.py": [],
+    "scripts/test_period_switch.py": []
+  }
+}

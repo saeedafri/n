@@ -1,0 +1,765 @@
+{
+  "projectRoot": "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement",
+  "files": [
+    {
+      "path": ".antigravitycli/1ac8590d-97f8-44c4-bd56-7a88458a0160.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claudeignore",
+      "language": "unknown",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".code-review-graphignore",
+      "language": "unknown",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".cursorrules",
+      "language": "unknown",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".mcp.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": ".opencode.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": ".understand-anything/.understandignore",
+      "language": "unknown",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".understand-anything/tmp/ua-scan-files.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "app/__init__.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/__init__.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/auth_utils.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/charts.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/companyProfile.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/header_logout.html",
+      "language": "html",
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/layout.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/loading.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/login_footer.html",
+      "language": "html",
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/login_header.html",
+      "language": "html",
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/login_layout.css",
+      "language": "css",
+      "fileCategory": "markup"
+    },
+    {
+      "path": "app/components/navigation.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/styles.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/tables.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/components/toolbar.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/__init__.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/access_control.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/auth_environment.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/auth_manager.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/config.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/database.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/llm_extractor.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/search_engine.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/core/ssl_setup.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/main.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/__init__.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/access_management.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/admin_iam.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/audit.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/company_filings.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/earnings_calendar.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/earnings_calls.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/forecasting_admin.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/forecasting.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/home.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/live_earnings_transcript.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/login.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/logout_bridge.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/logs.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/market_data.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/newsroom.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/reports.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/screening.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/pages/settings.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/__init__.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/azure_blob.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/background_scanner.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/blob_doc_type_discovery.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/cache_cleaner.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/cache_manager.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/companyProfile.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/constants.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/earnings_alert_dispatcher.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/earnings_alert_email.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/excel_export.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filing_pdf.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filing_units.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/filings_cache.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/html_to_pdf.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/local_storage_manager.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/local_storage.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/market_data.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/non_sec_blob_fallback.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/retailer_forecaster.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/server_logger.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/ticker_utils.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "app/utils/transcript_pdf.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/diagrams/complete_flow.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/README.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/00_start_here_for_new_people.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/01_system_flow.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/02_data_sources_and_preparation.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/03_outlier_detection.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/04_linear_regression.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/05_cagr.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/06_exponential_smoothing.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/07_holt_linear_trend.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/08_moving_average_trend.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/09_weighted_average_growth.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/10_backtesting_ensemble_and_scenarios.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/11_ui_number_mapping.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/12_real_examples_you_can_match_in_ui.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/13_ml_from_scratch_complete_guide.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/14_complete_glossary.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_01_linear_regression_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_02_cagr_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_03_exponential_smoothing_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_04_holt_linear_trend_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_05_ma_trend_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_06_weighted_average_growth_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/MODEL_07_ensemble_and_scenarios_deep_dive.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/README.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CIQ_Estimates_Explained/revenue-estimates-models/TECHNICAL_REFERENCE_COMPLETE.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/EARNINGS_CALENDAR_OPTIMIZATION_NOTES.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/market-data-commands.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/phase3_index_analysis.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/SIP_server_debug_commands.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "GEMINI.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "OIDC_FLOW.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "requirements.txt",
+      "language": "txt",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "scripts/azure_filing_uploader.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/backfill_forecasts.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/build_screening_segment_member_cache.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/build_screening_segment_values_cache.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/calculate_derived_metrics.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/delete_and_load_10q.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/ec_perf_playwright.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/edgartools_offerings_examples.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/enrich_from_edgartools.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_8k_ecal.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_combine_insert.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_helpers.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_news_earnings.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_news_keywords.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/etl_news_mna.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/export_xbrl_facts.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/extract_credit_ratings.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/extract_net_sales_guidance.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/extract_store_counts.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/fetch_filing_html.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/forecasting_refresh_e2e_playwright.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/generate_and_load.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/generate_key_developments_v4.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/generate_proxy_json.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/ingest_key_developments.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/load_filings_to_db.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/load_supplementary_json.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/md_filter_e2e_playwright.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/prune_coreiq_forecasts_horizon.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/README.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "scripts/rebuild_all_forecasts.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/rerun_forecasts.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/run_etl_parallel.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/run_phase3_db_analysis.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/screening_key_stats_ratios_e2e.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/screening_segment_statements_e2e.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/start_ec_perf_local.sh",
+      "language": "shell",
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/sync_yf_final.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/sync_yf_stg.py",
+      "language": "python",
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/test_period_switch.py",
+      "language": "python",
+      "fileCategory": "code"
+    }
+  ]
+}
