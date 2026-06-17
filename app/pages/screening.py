@@ -103,7 +103,11 @@ from data.screening_config import (
     STATEMENT_CONFIG,
     TIMEFRAMES,
     PERIOD_TYPES,
+    PERIOD_TYPE_LABELS,
     QUARTERS,
+    TRAILING_QUARTERS_OPTIONS,
+    TRAILING_QUARTERS_DEFAULT,
+    TRAILING_QUARTERS_STMTS,
     SCREENING_YEARS,
     FORWARD_SCREENING_YEARS,
     FORWARD_LOOKING_STMTS,
@@ -731,7 +735,11 @@ def _format_screening_cell_value(val, unit: str = "") -> str:
 
 def _criterion_unit(criteria: List[dict], display_col: str) -> str:
     for c in criteria:
-        if c.get("display_col") == display_col and c.get("metric_info"):
+        if not c.get("metric_info"):
+            continue
+        if (c.get("display_col") == display_col
+                or display_col in (c.get("quarter_cols") or [])
+                or display_col in (c.get("year_cols") or [])):
             return c["metric_info"].get("unit", "") or ""
     return ""
 
@@ -774,7 +782,23 @@ def _get_financial_metric_cols(criteria: List[dict]) -> List[str]:
         cols = []
         seen = set()
         for c in criteria:
-            if c.get("type") == "financial" and c.get("display_col"):
+            if c.get("type") != "financial":
+                continue
+            # Trailing-quarters criterion contributes one column per quarter.
+            if c.get("period_type") == "TQ":
+                for qc in (c.get("quarter_cols") or []):
+                    if qc not in seen:
+                        cols.append(qc)
+                        seen.add(qc)
+                continue
+            # Year-range criterion contributes one column per fiscal year.
+            if c.get("year_cols"):
+                for yc in c["year_cols"]:
+                    if yc not in seen:
+                        cols.append(yc)
+                        seen.add(yc)
+                continue
+            if c.get("display_col"):
                 col = c["display_col"]
                 if col not in seen:
                     cols.append(col)
@@ -3311,6 +3335,14 @@ def _render_segment_members_step(
         cnt = member_counts.get(name, 0)
         return f"{name} ({cnt} companies)" if cnt else name
 
+    # For geo segments: normalize any saved raw alias to its canonical label so
+    # criteria stored before canonicalization (e.g. "U.S.") still pre-populate.
+    if segment_type == "geographical" and default_seg_members:
+        from data.segment_aliases import canonicalize_geo_label
+        default_seg_members = list(dict.fromkeys(
+            canonicalize_geo_label(m) for m in default_seg_members
+        ))
+
     valid_defaults = [m for m in default_seg_members if m in member_names]
     _ms_kwargs = dict(
         label="Segment members",
@@ -3337,6 +3369,8 @@ def _submit_financial_criterion(
     quarter: Optional[str],
     year_sel: str,
     *,
+    num_quarters: Optional[int] = None,
+    year_range: Optional[List[int]] = None,
     is_segment_stmt: bool = False,
     segment_type: Optional[str] = None,
     selected_segments: Optional[List[str]] = None,
@@ -3348,14 +3382,23 @@ def _submit_financial_criterion(
         st.error("Metric not found. Please re-select.")
         return False
 
-    if operator == "Between":
+    is_trailing = (period_type == "TQ")
+    is_year_range = bool(year_range)
+
+    if not is_trailing and not is_year_range and operator == "Between":
         lo, hi = min(val1, val2), max(val1, val2)
         if lo == hi:
             st.error("Between: Min and Max values must differ.")
             return False
         val1, val2 = lo, hi
 
-    if period_type in ("CQ", "FQ") and quarter:
+    if is_trailing:
+        n = int(num_quarters or TRAILING_QUARTERS_DEFAULT)
+        timeframe = f"Last {n} Quarters"
+    elif is_year_range:
+        _ys = sorted(int(y) for y in year_range)
+        timeframe = f"FY {_ys[0]}–{_ys[-1]}"
+    elif period_type in ("CQ", "FQ") and quarter:
         q_num = quarter.replace("Q", "")
         if year_sel == "Latest":
             timeframe = f"{period_type}{q_num} Latest"
@@ -3364,10 +3407,23 @@ def _submit_financial_criterion(
     else:
         timeframe = "FY Latest" if year_sel == "Latest" else f"FY {year_sel}"
 
-    if is_segment_stmt:
+    if is_trailing:
+        display_col = f"{metric_label} — Last {int(num_quarters or TRAILING_QUARTERS_DEFAULT)} Quarters"
+    elif is_year_range:
+        display_col = f"{metric_label} ({unit}) — {timeframe}"
+    elif is_segment_stmt:
         display_col = f"{stmt} | {metric_label} ({unit}) | {timeframe}"
     else:
         display_col = f"{metric_label} ({unit}) [{timeframe}]"
+
+    if is_trailing:
+        summary = f"{stmt} / {metric_label}: {timeframe} (all quarterly values)"
+    elif is_year_range:
+        summary = f"{stmt} / {metric_label}: {timeframe} (year-by-year columns)"
+    else:
+        summary = build_financial_summary(
+            stmt, metric_label, operator, val1, val2, timeframe, unit=unit,
+        )
 
     criterion = {
         "type":         "financial",
@@ -3382,10 +3438,12 @@ def _submit_financial_criterion(
         "quarter":      quarter,
         "year":         year_sel,
         "display_col":  display_col,
-        "summary":      build_financial_summary(
-            stmt, metric_label, operator, val1, val2, timeframe, unit=unit,
-        ),
+        "summary":      summary,
     }
+    if is_trailing:
+        criterion["num_quarters"] = int(num_quarters or TRAILING_QUARTERS_DEFAULT)
+    if is_year_range:
+        criterion["year_range"] = sorted(int(y) for y in year_range)
 
     if is_segment_stmt:
         criterion["segment_type"] = segment_type or "business"
@@ -3459,6 +3517,8 @@ def _render_financial_form():
                 default_period_type = prefill.get("period_type", "FY")
                 default_quarter     = prefill.get("quarter", "Q1")
                 default_year_val    = prefill.get("year")
+                default_num_quarters = int(prefill.get("num_quarters") or TRAILING_QUARTERS_DEFAULT)
+                default_year_range  = prefill.get("year_range")
                 default_seg_members = list(prefill.get("selected_segments") or [])
             else:
                 default_stmt        = st.session_state.get("scr_fin_stmt", stmt_options[0])
@@ -3468,6 +3528,8 @@ def _render_financial_form():
                 default_period_type = "FY"
                 default_quarter     = "Q1"
                 default_year_val    = None
+                default_num_quarters = TRAILING_QUARTERS_DEFAULT
+                default_year_range  = None
                 default_seg_members = []
 
             if default_stmt not in stmt_options:
@@ -3541,9 +3603,21 @@ def _render_financial_form():
                 f'<p class="form-section-label" style="margin-top:12px;">{_period_step} — Set Period Type &amp; Year</p>',
                 unsafe_allow_html=True,
             )
-            pt_idx = PERIOD_TYPES.index(default_period_type) if default_period_type in PERIOD_TYPES else 0
+            # Trailing-quarters (TQ) is offered only for statements with
+            # quarterly SEC/YF tables (Income Statement, Balance Sheet, Cash Flow).
+            period_options = list(PERIOD_TYPES)
+            if stmt in TRAILING_QUARTERS_STMTS:
+                period_options = period_options + ["TQ"]
+            if default_period_type not in period_options:
+                default_period_type = "FY"
+            # If a prior selection (e.g. "TQ") is no longer valid for this
+            # statement, clear the widget key so the selectbox resets cleanly.
+            if st.session_state.get("scr_fin_period_type_sel") not in period_options:
+                st.session_state.pop("scr_fin_period_type_sel", None)
+            pt_idx = period_options.index(default_period_type)
             period_type = st.selectbox(
-                "Period Type", options=PERIOD_TYPES, index=pt_idx,
+                "Period Type", options=period_options, index=pt_idx,
+                format_func=lambda p: PERIOD_TYPE_LABELS.get(p, p),
                 key="scr_fin_period_type_sel",
             )
             # Forward-looking statements (Estimates / Forecasting) offer future
@@ -3551,8 +3625,29 @@ def _render_financial_form():
             # historical range.
             _years = FORWARD_SCREENING_YEARS if stmt in FORWARD_LOOKING_STMTS else SCREENING_YEARS
             year_options = ["Latest"] + _years
+            is_trailing = (period_type == "TQ")
             is_quarterly = (period_type in ("CQ", "FQ"))
-            if is_quarterly:
+            num_quarters = None
+            year_range = None
+            # Year-range (display-only year columns) supported only for the core
+            # statements that route through apply_financial_criterion.
+            _allow_year_range = (
+                stmt in {"Income Statement", "Balance Sheet", "Cash Flow"}
+                and not is_segment_stmt
+            )
+            if is_trailing:
+                # Display-only: pick how many trailing quarters to show as columns.
+                quarter = None
+                year_sel = "Latest"
+                nq_idx = (TRAILING_QUARTERS_OPTIONS.index(default_num_quarters)
+                          if default_num_quarters in TRAILING_QUARTERS_OPTIONS else 0)
+                num_quarters = st.selectbox(
+                    "Number of Quarters", options=TRAILING_QUARTERS_OPTIONS, index=nq_idx,
+                    key="scr_fin_num_quarters_sel",
+                    help="Shows the last N quarterly values as separate columns "
+                         "(display-only — no value filter is applied).",
+                )
+            elif is_quarterly:
                 col_q, col_y = st.columns(2)
                 with col_q:
                     q_idx = QUARTERS.index(default_quarter) if default_quarter in QUARTERS else 0
@@ -3564,18 +3659,64 @@ def _render_financial_form():
                                             key="scr_fin_year_sel")
             else:
                 quarter = None
-                yr_idx = year_options.index(default_year_val) if default_year_val in year_options else 0
-                year_sel = st.selectbox("Year", options=year_options, index=yr_idx,
-                                        key="scr_fin_year_sel")
+                _ymode = "Single year"
+                if _allow_year_range:
+                    _ymode = st.radio(
+                        "Year selection", ["Single year", "Year range"],
+                        horizontal=True, key="scr_fin_year_mode",
+                        index=(1 if default_year_range else 0),
+                        help="Year range shows the metric for each year side by side "
+                             "(display-only — no value filter is applied).",
+                    )
+                if _ymode == "Year range":
+                    _rng_years = [int(y) for y in _years]   # numeric years, no "Latest"
+                    _dr = [int(y) for y in (default_year_range or [])]
+                    _from_idx = (_rng_years.index(_dr[0]) if _dr and _dr[0] in _rng_years
+                                 else min(4, len(_rng_years) - 1))
+                    _to_idx = (_rng_years.index(_dr[-1]) if _dr and _dr[-1] in _rng_years
+                               else 0)
+                    _cf, _ct = st.columns(2)
+                    with _cf:
+                        _yfrom = st.selectbox(
+                            "From year", options=_rng_years, index=_from_idx,
+                            key="scr_fin_year_from",
+                        )
+                    with _ct:
+                        _yto = st.selectbox(
+                            "To year", options=_rng_years, index=_to_idx,
+                            key="scr_fin_year_to",
+                        )
+                    _lo, _hi = sorted([int(_yfrom), int(_yto)])
+                    year_range = list(range(_lo, _hi + 1))
+                    year_sel = "Latest"     # unused in range mode
+                else:
+                    yr_idx = year_options.index(default_year_val) if default_year_val in year_options else 0
+                    year_sel = st.selectbox("Year", options=year_options, index=yr_idx,
+                                            key="scr_fin_year_sel")
 
-            st.markdown(
-                f'<p class="form-section-label" style="margin-top:12px;">{_op_step} — Set Operator &amp; Value</p>',
-                unsafe_allow_html=True,
-            )
-            op_idx = OPERATORS.index(default_op) if default_op in OPERATORS else 0
-            operator = st.selectbox(
-                "Operator", options=OPERATORS, index=op_idx, key="scr_fin_op_sel",
-            )
+            if is_trailing:
+                # Display-only mode: no operator/value step.
+                st.caption(
+                    f"Last {num_quarters} quarters of {metric_label} will be shown "
+                    "as separate columns. No value filter is applied."
+                )
+                operator = "Greater Than"
+            elif year_range:
+                # Display-only mode: one column per fiscal year, no value filter.
+                st.caption(
+                    f"{metric_label} for FY {year_range[0]}–{year_range[-1]} will be "
+                    "shown as separate year columns. No value filter is applied."
+                )
+                operator = "Greater Than"
+            else:
+                st.markdown(
+                    f'<p class="form-section-label" style="margin-top:12px;">{_op_step} — Set Operator &amp; Value</p>',
+                    unsafe_allow_html=True,
+                )
+                op_idx = OPERATORS.index(default_op) if default_op in OPERATORS else 0
+                operator = st.selectbox(
+                    "Operator", options=OPERATORS, index=op_idx, key="scr_fin_op_sel",
+                )
 
             add_credit_ratings = False
             add_store_counts = False
@@ -3599,7 +3740,11 @@ def _render_financial_form():
                 clear_on_submit=True,
                 border=False,
             ):
-                if operator == "Between":
+                if is_trailing or year_range:
+                    # Display-only: no value inputs.
+                    val1 = 0.0
+                    val2 = 0.0
+                elif operator == "Between":
                     c1, c2 = st.columns(2)
                     with c1:
                         val1 = st.number_input(
@@ -3648,6 +3793,8 @@ def _render_financial_form():
                         period_type,
                         quarter,
                         year_sel,
+                        num_quarters=num_quarters,
+                        year_range=year_range,
                         is_segment_stmt=is_segment_stmt,
                         segment_type=segment_type,
                         selected_segments=_seg_selected,
@@ -5267,8 +5414,13 @@ def _render_filterable_results_grid(
     link_columns: Optional[List[str]] = None,
     hidden_columns: Optional[List[str]] = None,
     height: int = 520,
-) -> None:
-    """Render screening results with AG Grid column-menu text filters."""
+    enable_selection: bool = False,
+):
+    """Render screening results with AG Grid column-menu text filters.
+
+    When enable_selection=True, adds a left checkbox column + header select-all and
+    returns the AgGrid response (use .selected_rows); otherwise returns None.
+    """
     if display_df is None or display_df.empty:
         st.info(empty_message)
         return
@@ -5317,6 +5469,12 @@ def _render_filterable_results_grid(
                 resizable=True,
                 cellRenderer=_GRID_LINK_RENDERER,
             )
+    if enable_selection:
+        gb.configure_selection(
+            selection_mode="multiple",
+            use_checkbox=True,
+            header_checkbox=True,
+        )
     grid_options = gb.build()
     _apply_grid_column_overrides(
         grid_options,
@@ -5324,7 +5482,14 @@ def _render_filterable_results_grid(
         hidden_columns=list(hidden_cols),
     )
 
-    AgGrid(
+    _update_mode = (
+        GridUpdateMode.SELECTION_CHANGED
+        | GridUpdateMode.FILTERING_CHANGED
+        | GridUpdateMode.SORTING_CHANGED
+    ) if enable_selection else (
+        GridUpdateMode.FILTERING_CHANGED | GridUpdateMode.SORTING_CHANGED
+    )
+    grid_response = AgGrid(
         display_df,
         gridOptions=grid_options,
         key=key,
@@ -5335,10 +5500,78 @@ def _render_filterable_results_grid(
         show_search=False,
         show_toolbar=False,
         show_download_button=False,
-        update_mode=GridUpdateMode.FILTERING_CHANGED | GridUpdateMode.SORTING_CHANGED,
+        update_mode=_update_mode,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         theme="streamlit",
     )
+    return grid_response if enable_selection else None
+
+
+def _normalize_selected_rows(grid_resp) -> List[dict]:
+    """Extract selected rows (list of dicts) from an AgGrid response, version-safe."""
+    if grid_resp is None:
+        return []
+    sel = None
+    try:
+        sel = grid_resp.selected_rows
+    except Exception:
+        try:
+            sel = grid_resp["selected_rows"]
+        except Exception:
+            sel = None
+    if sel is None:
+        return []
+    if isinstance(sel, pd.DataFrame):
+        return [] if sel.empty else sel.to_dict("records")
+    if isinstance(sel, list):
+        return sel
+    return []
+
+
+def _render_save_as_watchlist_panel(grid_resp) -> None:
+    """Save the checkbox-selected result companies as a new watchlist.
+
+    Reuses the real watchlist save path (create_watchlist + add_companies_to_watchlist).
+    Selection comes from the AG Grid checkboxes; nothing else in the results flow changes.
+    """
+    try:
+        sel = _normalize_selected_rows(grid_resp)
+        with st.expander(f"⭐ Save selection as Watchlist  ·  {len(sel)} selected", expanded=False):
+            with st.form("scr_save_wl_form", clear_on_submit=False):
+                c1, c2, c3 = st.columns([3, 5, 2])
+                with c1:
+                    name = st.text_input("Watchlist name", key="scr_wl_save_name", max_chars=100)
+                with c2:
+                    desc = st.text_input("Description (optional)", key="scr_wl_save_desc")
+                with c3:
+                    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                    submitted = st.form_submit_button("Save as Watchlist", type="primary", width="stretch")
+            if submitted:
+                if not sel:
+                    st.warning("Select at least one company using the checkboxes on the left.")
+                elif not (name or "").strip():
+                    st.warning("Please enter a watchlist name.")
+                else:
+                    email = _current_user_email()
+                    new_id = _real_wl_create(name.strip(), email, (desc or "").strip())
+                    if not new_id:
+                        st.error("Could not create the watchlist. Please try again.")
+                    else:
+                        companies = [{
+                            "ticker":       (r.get("Ticker") or "").strip(),
+                            "company_name": (r.get("_CompanyName") or r.get("Company Name") or "").strip(),
+                            "sector":       (r.get("_Sector") or "").strip(),
+                            "country":      (r.get("_Country") or "").strip(),
+                        } for r in sel if (r.get("Ticker") or "").strip()]
+                        added = _real_wl_add_companies(new_id, companies, email)
+                        st.success(
+                            f"Saved watchlist '{name.strip()}' with {added} "
+                            f"compan{'y' if added == 1 else 'ies'}."
+                        )
+    except Exception as e:
+        log_structured_error(e, page="screening",
+                             component="_render_save_as_watchlist_panel", operation="save_watchlist")
+        st.error("Could not save the watchlist. Please check logs.")
 
 
 def _render_results():
@@ -5533,12 +5766,30 @@ def _render_results():
         if has_segment_results:
             _render_segment_expanded_table(df, criteria, seg_criteria)
         else:
-            _render_filterable_results_grid(
-                display_df,
+            # Build a selection-enabled copy carrying hidden identity columns so the
+            # checkbox-selected rows can be saved as a watchlist (E3). The original
+            # display_df (used for Excel + matched count) is untouched.
+            _sel_df = display_df.copy()
+            try:
+                _sel_df["Ticker"] = df["ticker"].to_numpy()
+                _sel_df["_CompanyName"] = (
+                    df["company_name"].to_numpy() if "company_name" in df.columns
+                    else _sel_df["Company Name"].to_numpy()
+                )
+                _sel_df["_Sector"] = df["sector"].to_numpy() if "sector" in df.columns else ""
+                _sel_df["_Country"] = df["country"].to_numpy() if "country" in df.columns else ""
+                _hidden = ["Ticker", "_CompanyName", "_Sector", "_Country"]
+            except Exception:
+                _sel_df, _hidden = display_df.copy(), []
+            _grid_resp = _render_filterable_results_grid(
+                _sel_df,
                 key="companies_results_grid",
                 empty_message="No matching companies found.",
                 pinned_column="Company Name",
+                hidden_columns=_hidden,
+                enable_selection=True,
             )
+            _render_save_as_watchlist_panel(_grid_resp)
         log_timing(
             "SCREENING_RESULTS_TABLE_RENDER",
             (time.perf_counter() - t_table) * 1000,

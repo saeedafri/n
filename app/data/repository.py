@@ -2393,7 +2393,9 @@ class EarningsCallRepository:
         ticker: Optional[str] = None,
         year: Optional[int] = None,
         quarter: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
+        allowed_tickers: Optional[Tuple[str, ...]] = None,
+        offset: int = 0,
     ) -> List[Dict]:
         """
         Cross-transcript keyword search using MySQL FULLTEXT index.
@@ -2410,6 +2412,16 @@ class EarningsCallRepository:
 
         keyword = keyword.strip()
         if not keyword:
+            return []
+
+        scoped_tickers = tuple(
+            dict.fromkeys(
+                str(t).strip().upper()
+                for t in (allowed_tickers or ())
+                if str(t).strip()
+            )
+        )
+        if allowed_tickers is not None and not scoped_tickers:
             return []
 
         params: Dict = {}
@@ -2441,8 +2453,18 @@ class EarningsCallRepository:
             params['kw'] = f'%{keyword}%'
 
         if ticker and ticker != 'ALL':
+            clean_ticker = str(ticker).strip().upper()
+            if scoped_tickers and clean_ticker not in scoped_tickers:
+                return []
             base_query += " AND ticker = :ticker"
-            params['ticker'] = ticker
+            params['ticker'] = clean_ticker
+        elif scoped_tickers:
+            wl_keys = []
+            for idx, scoped_ticker in enumerate(scoped_tickers):
+                key = f"wl_ticker_{idx}"
+                wl_keys.append(f":{key}")
+                params[key] = scoped_ticker
+            base_query += f" AND ticker IN ({', '.join(wl_keys)})"
 
         if year and str(year) != 'ALL':
             base_query += " AND year = :year"
@@ -2454,8 +2476,9 @@ class EarningsCallRepository:
                 base_query += " AND q = :quarter_q"
                 params['quarter_q'] = q_int
 
-        base_query += " ORDER BY year DESC, q DESC LIMIT :limit"
+        base_query += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset"
         params['limit'] = limit
+        params['offset'] = offset
 
         # Execute main query
         query_start = time.perf_counter()
@@ -2473,8 +2496,18 @@ class EarningsCallRepository:
             """
             fb_params: Dict = {'kw': f'%{keyword}%'}
             if ticker and ticker != 'ALL':
+                clean_ticker = str(ticker).strip().upper()
+                if scoped_tickers and clean_ticker not in scoped_tickers:
+                    return []
                 fallback += " AND ticker = :ticker"
-                fb_params['ticker'] = ticker
+                fb_params['ticker'] = clean_ticker
+            elif scoped_tickers:
+                wl_keys = []
+                for idx, scoped_ticker in enumerate(scoped_tickers):
+                    key = f"fb_wl_ticker_{idx}"
+                    wl_keys.append(f":{key}")
+                    fb_params[key] = scoped_ticker
+                fallback += f" AND ticker IN ({', '.join(wl_keys)})"
             if year and str(year) != 'ALL':
                 fallback += " AND year = :year"
                 fb_params['year'] = int(year) if isinstance(year, str) else year
@@ -2483,8 +2516,9 @@ class EarningsCallRepository:
                 if q_int:
                     fallback += " AND q = :quarter_q"
                     fb_params['quarter_q'] = q_int
-            fallback += " ORDER BY year DESC, q DESC LIMIT :limit"
+            fallback += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset"
             fb_params['limit'] = limit
+            fb_params['offset'] = offset
 
             fb_start = time.perf_counter()
             results = db_manager.execute_query_readonly(fallback, fb_params)

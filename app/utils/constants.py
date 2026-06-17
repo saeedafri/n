@@ -1076,6 +1076,20 @@ SEGMENT_SKIP_MEMBERS = {
     'retail segment sales', 'retail segment',
     # Other common consolidated-entity labels
     'total company operations', 'total operations',
+    # Pension / retirement-plan geographic breakdowns filed on StatementGeographicalAxis.
+    # These are NOT geographic revenue (HON, MDLZ, DBD pension plan data leaks here).
+    'u.s. plans', 'u.s. plan',
+    'domestic plan', 'domestic plans',
+    'u.s. defined benefit plan', 'u.s. defined benefit plans',
+    'non-u.s. plans', 'non-u.s. plan', 'non-us plans', 'non-us plan',
+    'canadian salaried and hourly plans',
+    'u.k. plans', 'uk plans',
+    'foreign plans', 'foreign plan',
+    'pension plans', 'pension plan',
+    'retirement plans', 'retirement plan',
+    'defined benefit plans', 'defined benefit plan',
+    'u.s. pension plans', 'u.s. pension plan',
+    'international plans', 'international plan',
 }
 
 # --- Metric groups: CapIQ section name → matching rules ---

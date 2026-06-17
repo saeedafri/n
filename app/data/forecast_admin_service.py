@@ -201,18 +201,26 @@ def sync_all_eligible(
     force: bool = False,
     periods: int = 5,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    exclude_tickers: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
-    """Run `sync_forecast_for_ticker` for every company returned by `get_companies`."""
+    """Run `sync_forecast_for_ticker` for every company returned by `get_companies`.
+
+    `exclude_tickers` (matched case-insensitively) are skipped — used to hold back
+    companies whose annual reporting date has not yet been identified.
+    """
     try:
         companies = RevenueForecastService.get_companies()
     except Exception:
         companies = []
 
+    _excl = {str(t).strip().upper() for t in (exclude_tickers or set())}
     results: List[Dict[str, Any]] = []
     total = len(companies)
     for i, row in enumerate(companies):
         disp = (row.get("ticker") or "").strip()
         if not disp:
+            continue
+        if disp.upper() in _excl:
             continue
         if progress_callback:
             try:

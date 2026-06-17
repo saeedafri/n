@@ -2798,6 +2798,11 @@ def _get_refresh_permissions(user_email: Optional[str]) -> tuple[bool, bool]:
         return False, False
 
 
+def _has_report_date(value) -> bool:
+    """True when an annual reporting date is identified (not the blank "—" marker)."""
+    return bool(value) and str(value).strip() not in ("", "—", "-", "N/A", "None")
+
+
 @st.dialog("Refresh Forecasting Models", width="large")
 def _refresh_dialog(can_run: bool, user_email: str) -> None:
     from datetime import datetime, timezone as _tz
@@ -2860,6 +2865,13 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
         st.warning("No forecast data found. Run models first.")
         return
 
+    # Tickers whose annual reporting date is not yet identified — their per-row
+    # "Refresh Now" is withheld and they are excluded from "Refresh All".
+    _blocked_tickers = {
+        row["ticker"] for row in table_rows
+        if not _has_report_date(row.get("annual_reported_on"))
+    }
+
     # Column widths: ticker, company, exchange, annual reported on, fiscal period, last refresh, [action]
     _CW = [1, 2, 1, 1.4, 1.4, 1.8, 0.9] if can_run else [1, 2, 1, 1.4, 1.4, 1.8]
     _HDR_STYLE = "font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;"
@@ -2867,7 +2879,7 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
 
     # Header row
     hcols = st.columns(_CW)
-    _hdrs = ["Ticker", "Company Name", "Exchange", "Annual Reported On", "Fiscal Period", "Last Refresh"]
+    _hdrs = ["Ticker", "Company Name", "Exchange", "Reporting Date", "Fiscal Period", "Last Refresh"]
     if can_run:
         _hdrs.append("Action")
     for hc, lbl in zip(hcols, _hdrs):
@@ -2888,7 +2900,14 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
 
             if can_run:
                 action_ph = rcols[6].empty()
-                if action_ph.button("Refresh Now", key=f"refresh_now_{ticker}"):
+                if not _has_report_date(row.get("annual_reported_on")):
+                    # Reporting date not identified yet — withhold Refresh Now.
+                    action_ph.markdown(
+                        '<span style="font-size:11px;color:#9CA3AF;font-style:italic;" '
+                        'title="Reporting date pending — refresh is on hold">On hold</span>',
+                        unsafe_allow_html=True,
+                    )
+                elif action_ph.button("Refresh Now", key=f"refresh_now_{ticker}"):
                     action_ph.markdown('<span style="font-size:12px;color:#6B7280">Running…</span>', unsafe_allow_html=True)
                     with st.spinner(""):
                         result = sync_forecast_for_ticker(ticker, force=True)
@@ -2911,7 +2930,7 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
     if can_run:
         if st.button("Refresh All", key="refresh_all_btn"):
             with st.spinner("Running all forecast models — this may take several minutes…"):
-                results = sync_all_eligible(force=True)
+                results = sync_all_eligible(force=True, exclude_tickers=_blocked_tickers)
                 clear_revenue_forecast_caches()
                 get_refresh_table_data.clear()
             updated = sum(1 for r in results if r.get("status") == "updated")
@@ -2919,6 +2938,23 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
             st.success(f"Refresh All complete — {updated} updated, {errors} errors.")
             st.toast(f"✓ Refresh All done: {updated} updated")
             send_model_refresh_email(triggered_by=user_email, results=results)
+
+    if _blocked_tickers:
+        _n = len(_blocked_tickers)
+        _co = "company" if _n == 1 else "companies"
+        st.markdown(
+            f'<div style="margin-top:10px;padding:11px 14px;background:#F9FAFB;'
+            f'border-left:3px solid #B91C1C;border-radius:4px;font-size:12px;'
+            f'color:#4B5563;line-height:1.55;">'
+            f'<strong style="color:#374151;">{_n} {_co} on hold.</strong> '
+            f'{"Its annual reporting date has" if _n == 1 else "Their annual reporting dates have"} '
+            f'not been confirmed yet. To keep every forecast aligned to a verified reporting period, '
+            f'automated refresh is paused for {"it" if _n == 1 else "them"} and '
+            f'{"it is" if _n == 1 else "they are"} excluded from <strong>Refresh All</strong>. '
+            f'Refresh re-enables automatically once the reporting date is identified.'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def main() -> None:

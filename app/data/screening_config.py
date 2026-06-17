@@ -52,10 +52,32 @@ except ImportError:
 
 # Period types for financial screening — mirrors market_data.py CQ/FQ nomenclature
 # FY = Fiscal Year (Annual), CQ = Calendar Quarter, FQ = Fiscal Quarter
+# TQ = Trailing Quarters (last N quarterly values shown as separate columns)
 PERIOD_TYPES = ["FY", "CQ", "FQ"]
 
 # Quarters available when CQ or FQ is selected
 QUARTERS = ["Q1", "Q2", "Q3", "Q4"]
+
+# ── Trailing-quarters mode ────────────────────────────────────────────────
+# Display the last N quarterly values of a metric as separate columns in one
+# view (e.g. last 8 quarters of Inventory / COGS). Display-only — no operator
+# or threshold filter is applied; every company keeps its row and missing
+# quarters show N/A. Columns are aligned by calendar quarter of period-end
+# (e.g. "Q3 2025") so values are comparable across companies.
+TRAILING_QUARTERS = "TQ"
+TRAILING_QUARTERS_OPTIONS = [4, 8, 12]
+TRAILING_QUARTERS_DEFAULT = 8
+
+# Statement types that support trailing-quarters (have quarterly SEC/YF tables).
+TRAILING_QUARTERS_STMTS = {"Income Statement", "Balance Sheet", "Cash Flow"}
+
+# Friendly labels for the Period Type selector.
+PERIOD_TYPE_LABELS = {
+    "FY": "FY (Annual)",
+    "CQ": "Calendar Quarter",
+    "FQ": "Fiscal Quarter",
+    "TQ": "Last N Quarters",
+}
 
 # Year range for financial screening (historical statements)
 SCREENING_YEARS = list(range(_CURRENT_FY, 2014, -1))  # 2026 … 2015

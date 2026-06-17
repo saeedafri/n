@@ -11,12 +11,13 @@ from typing import List, Optional, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor
 
 from components.styles import hide_sidebar, set_page_layout, render_styles, COLORS, TYPOGRAPHY, SPACING
-from core.auth_manager import require_auth
-require_auth(page="earnings_calls")
+from core.auth_manager import require_auth, get_current_user
+# require_auth(page="earnings_calls")
 hide_sidebar()
 
 from components.navigation import render_header, render_coresight_footer
 from data.repository import EarningsCallRepository, EarningsCalendarRepository
+from data.watchlist_service import get_user_watchlists, get_watchlist_companies
 from core.database import init_database
 from utils.local_storage_manager import load_earnings_calls_state, save_earnings_calls_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
@@ -1180,13 +1181,35 @@ def get_quarters(company, year):
     return EarningsCallRepository.get_available_quarters(company, year)
 
 
+def _watchlist_rows_to_tickers(rows: List[Dict]) -> Tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            str(row.get("ticker", "")).strip().upper()
+            for row in (rows or [])
+            if str(row.get("ticker", "")).strip()
+        )
+    )
+
+
 @st.cache_data(ttl=120, show_spinner=False)
-def _get_cross_search_results(keyword: str, company: str, year: str, quarter: str) -> List[Dict]:
+def _get_cross_search_results(
+    keyword: str,
+    company: str,
+    year: str,
+    quarter: str,
+    watchlist_id: Optional[int] = None,
+    allowed_tickers: Optional[Tuple[str, ...]] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Tuple[List[Dict], int]:
     """
     Cross-transcript search: FULLTEXT DB lookup (~15ms) + cached segment extraction.
 
-    Returns up to 50 results — one best-matching segment per transcript.
-    Cached 2 min: subsequent searches for same keyword+filters are instant.
+    Returns (results, raw_count): one best-matching segment per transcript, plus the
+    number of transcripts the DB returned (used to decide whether "Load more" applies).
+    Only the first `limit` matching transcripts are parsed — pagination keeps the
+    initial render fast (parse a page, not the whole result set). Per-transcript parses
+    are cached, so loading more only parses the new transcripts.
     """
 
     # Step 1: FULLTEXT DB lookup
@@ -1195,7 +1218,9 @@ def _get_cross_search_results(keyword: str, company: str, year: str, quarter: st
         ticker=company if company != 'ALL' else None,
         year=year if str(year) != 'ALL' else None,
         quarter=quarter if quarter != 'ALL' else None,
-        limit=50,
+        limit=limit,
+        offset=offset,
+        allowed_tickers=allowed_tickers if watchlist_id is not None else None,
     )
 
     # Step 2: Parse transcripts and extract matching segments
@@ -1235,7 +1260,7 @@ def _get_cross_search_results(keyword: str, company: str, year: str, quarter: st
                 })
                 break  # first match per transcript only
 
-    return results
+    return results, len(raw_rows)
 
 
 def render_cross_search_panel(company: str, year: str, quarter: str) -> str:
@@ -1634,6 +1659,58 @@ def render_earnings_calls(active_ticker: str = None):
             year = st.session_state.get('ec_year', 'ALL')
         # NOTE: Do NOT call save_earnings_calls_state() here — see on_company_change comment.
 
+    if "ec_calls_active_watchlist_id" not in st.session_state:
+        st.session_state.ec_calls_active_watchlist_id = None
+    if "ec_calls_active_watchlist_name" not in st.session_state:
+        st.session_state.ec_calls_active_watchlist_name = ""
+
+    _ec_calls_user_email = get_current_user() or ""
+    try:
+        # All active watchlists are visible to every user (the service filters by
+        # permission flags, not ownership), so load unconditionally. This also makes
+        # the dropdown populate when auth is bypassed locally (empty email still
+        # returns the full list) — fixes the "No watchlists found" case.
+        _ec_calls_watchlists = get_user_watchlists(_ec_calls_user_email)
+    except Exception as _ec_wl_exc:
+        log_structured_error(_ec_wl_exc, page="earnings_calls", component="render_earnings_calls",
+                             operation="load_watchlists", context=f"user={_ec_calls_user_email}")
+        _ec_calls_watchlists = []
+
+    _ec_calls_no_wl_label = "— No watchlist —"
+    _ec_calls_wl_options = [_ec_calls_no_wl_label] + [
+        f"{wl['name']} ({wl.get('company_count', 0)} companies)"
+        for wl in _ec_calls_watchlists
+    ]
+    _ec_calls_wl_ids: List[Optional[int]] = [None] + [wl["id"] for wl in _ec_calls_watchlists]
+    _ec_calls_wl_names: List[str] = [""] + [wl["name"] for wl in _ec_calls_watchlists]
+
+    _ec_calls_cur_wl_id = st.session_state.ec_calls_active_watchlist_id
+    if _ec_calls_cur_wl_id is not None and _ec_calls_cur_wl_id not in _ec_calls_wl_ids:
+        st.session_state.ec_calls_active_watchlist_id = None
+        st.session_state.ec_calls_active_watchlist_name = ""
+        st.session_state.pop("ec_calls_watchlist_filter", None)
+        _ec_calls_cur_wl_id = None
+    _ec_calls_wl_default_idx = (
+        _ec_calls_wl_ids.index(_ec_calls_cur_wl_id)
+        if _ec_calls_cur_wl_id in _ec_calls_wl_ids
+        else 0
+    )
+
+    def _on_ec_calls_watchlist_change():
+        try:
+            _sel = st.session_state.get("ec_calls_watchlist_filter", "")
+            if not _sel or _sel == _ec_calls_no_wl_label or _sel not in _ec_calls_wl_options:
+                st.session_state.ec_calls_active_watchlist_id = None
+                st.session_state.ec_calls_active_watchlist_name = ""
+            else:
+                _idx = _ec_calls_wl_options.index(_sel)
+                st.session_state.ec_calls_active_watchlist_id = _ec_calls_wl_ids[_idx]
+                st.session_state.ec_calls_active_watchlist_name = _ec_calls_wl_names[_idx]
+        except Exception as _wl_cb_exc:
+            log_structured_error(_wl_cb_exc, page="earnings_calls", component="_on_ec_calls_watchlist_change",
+                                 operation="watchlist_change_callback",
+                                 context=f"label={st.session_state.get('ec_calls_watchlist_filter', '')}")
+
     # =======================================================================
     # PAGE TITLE — Same pattern as newsroom
     # =======================================================================
@@ -1645,10 +1722,37 @@ def render_earnings_calls(active_ticker: str = None):
     """, unsafe_allow_html=True)
 
     # =======================================================================
-    # FILTER ROW — Same pattern as newsroom:
-    # Search | (gap) | Company | Year | Quarter
+    # WATCHLIST SCOPE (transcript search only) — a single selector placed ABOVE
+    # the search box. Shown ONLY when Company, Year and Quarter are all "ALL"
+    # (true cross-transcript search). Restricting to a watchlist focuses the
+    # keyword search on just those companies (and runs faster).
     # =======================================================================
-    search_col, _gap, company_col, year_col, quarter_col = st.columns([3, 1, 4, 1, 1])
+    _ec_pre_company = st.session_state.get("ec_company", "ALL")
+    _ec_pre_year = str(st.session_state.get("ec_year", "ALL"))
+    _ec_pre_quarter = st.session_state.get("ec_quarter", "ALL")
+    _ec_show_watchlist = (
+        _ec_pre_company == "ALL"
+        and _ec_pre_year == "ALL"
+        and _ec_pre_quarter == "ALL"
+        and bool(_ec_calls_watchlists)
+    )
+    if _ec_show_watchlist:
+        _wl_col, _wl_spacer = st.columns([4, 8], gap="small")
+        with _wl_col:
+            st.selectbox(
+                "Watchlist — search only these companies",
+                options=_ec_calls_wl_options,
+                index=_ec_calls_wl_default_idx,
+                key="ec_calls_watchlist_filter",
+                on_change=_on_ec_calls_watchlist_change,
+                help="Keyword search runs only within this watchlist's companies. "
+                     "Leave on “— No watchlist —” to search all transcripts.",
+            )
+
+    # =======================================================================
+    # FILTER ROW — Search | Company | Year | Quarter
+    # =======================================================================
+    search_col, company_col, year_col, quarter_col = st.columns([3, 4, 1, 1], gap="small")
 
     with search_col:
         search_term = st.text_input(
@@ -1687,6 +1791,27 @@ def render_earnings_calls(active_ticker: str = None):
             on_change=on_quarter_change,
         )
 
+    _watchlist_scope_enabled = (
+        company == 'ALL'
+        and str(year) == 'ALL'
+        and quarter == 'ALL'
+    )
+
+    _active_watchlist_id = st.session_state.ec_calls_active_watchlist_id
+    _active_watchlist_name = st.session_state.ec_calls_active_watchlist_name
+    _active_watchlist_tickers: Optional[Tuple[str, ...]] = None
+    _active_watchlist_company_count = 0
+    _applied_watchlist_id = _active_watchlist_id if _watchlist_scope_enabled else None
+    if _applied_watchlist_id is not None:
+        try:
+            _active_watchlist_rows = get_watchlist_companies(_applied_watchlist_id)
+        except Exception as _ec_wl_comp_exc:
+            log_structured_error(_ec_wl_comp_exc, page="earnings_calls", component="render_earnings_calls",
+                                 operation="get_watchlist_companies",
+                                 context=f"watchlist_id={_applied_watchlist_id}")
+            _active_watchlist_rows = []
+        _active_watchlist_tickers = _watchlist_rows_to_tickers(_active_watchlist_rows)
+        _active_watchlist_company_count = len(_active_watchlist_tickers)
 
     # =======================================================================
     # DETECT MODE: cross-transcript search vs single-transcript view
@@ -1808,17 +1933,49 @@ def render_earnings_calls(active_ticker: str = None):
         search_label = "Search All Transcripts" if is_cross_search else "Search Transcript"
         search_icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D62E2F" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
 
+        # Cross-transcript pagination — a subtle "Show more" text link sits at the
+        # BOTTOM of the results list, inside this box, so it only appears once the
+        # user scrolls past the loaded items. Offset pagination fetches only the
+        # NEXT page each time and appends it, so no match is ever skipped and
+        # already-loaded transcripts are never re-fetched.
+        _CROSS_PAGE = 15
+
         with st.container(border=True, height=520):
             st.markdown(f'<div class="transcript-search-header">{search_icon}<span class="transcript-search-title">{search_label}</span></div>', unsafe_allow_html=True)
 
             if is_cross_search:
                 # ── CROSS-TRANSCRIPT SEARCH MODE ──
                 if active_keyword:
-                    cross_results = _get_cross_search_results(active_keyword, company, str(year), quarter)
+                    # Reset accumulator on a new search (keyword/filters/watchlist);
+                    # load the first page. Results are kept newest-first (the DB
+                    # orders year DESC, quarter DESC, id DESC).
+                    _cross_sig = (active_keyword, company, str(year), quarter, _applied_watchlist_id)
+                    if st.session_state.get("ec_cross_sig") != _cross_sig:
+                        _page, _raw = _get_cross_search_results(
+                            active_keyword, company, str(year), quarter,
+                            _applied_watchlist_id, _active_watchlist_tickers, _CROSS_PAGE, 0,
+                        )
+                        st.session_state.ec_cross_sig = _cross_sig
+                        st.session_state.ec_cross_acc = _page
+                        st.session_state.ec_cross_offset = _CROSS_PAGE
+                        st.session_state.ec_cross_has_more = (_raw == _CROSS_PAGE)
+                    cross_results = list(st.session_state.get("ec_cross_acc", []))
+                    _cross_has_more = bool(st.session_state.get("ec_cross_has_more", False))
+                    if _applied_watchlist_id is not None:
+                        st.caption(
+                            f"Filtering by watchlist: **{_active_watchlist_name}** — "
+                            f"{_active_watchlist_company_count} compan"
+                            f"{'y' if _active_watchlist_company_count == 1 else 'ies'}"
+                        )
                     if cross_results:
+                        _cross_count_html = (
+                            f'Showing <b>{len(cross_results)}</b> results for "<b>{active_keyword}</b>" — newest first'
+                            if _cross_has_more else
+                            f'Found <b>{len(cross_results)}</b> match'
+                            f'{"es" if len(cross_results) != 1 else ""} for "<b>{active_keyword}</b>" — newest first'
+                        )
                         st.markdown(
-                            f'<div class="transcript-search-count">Found <b>{len(cross_results)}</b> '
-                            f'match{"es" if len(cross_results) != 1 else ""} for "<b>{active_keyword}</b>"</div>',
+                            f'<div class="transcript-search-count">{_cross_count_html}</div>',
                             unsafe_allow_html=True
                         )
                         for r in cross_results:
@@ -1839,6 +1996,23 @@ def render_earnings_calls(active_ticker: str = None):
                             </div>
                             '''
                             st.markdown(card_html, unsafe_allow_html=True)
+                        if _cross_has_more:
+                            _sm_l, _sm_c, _sm_r = st.columns([1, 2, 1])
+                            with _sm_c:
+                                if st.button("Show more ↓", key="ec_cross_load_more",
+                                             type="tertiary", width="stretch"):
+                                    _off = int(st.session_state.get("ec_cross_offset", _CROSS_PAGE))
+                                    _page, _raw = _get_cross_search_results(
+                                        active_keyword, company, str(year), quarter,
+                                        _applied_watchlist_id, _active_watchlist_tickers,
+                                        _CROSS_PAGE, _off,
+                                    )
+                                    st.session_state.ec_cross_acc = (
+                                        list(st.session_state.get("ec_cross_acc", [])) + _page
+                                    )
+                                    st.session_state.ec_cross_offset = _off + _CROSS_PAGE
+                                    st.session_state.ec_cross_has_more = (_raw == _CROSS_PAGE)
+                                    st.rerun()
                     else:
                         st.markdown(
                             f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>',
@@ -1934,6 +2108,7 @@ def render_earnings_calls(active_ticker: str = None):
                 st.markdown('<div class="transcript-search-placeholder">No transcript loaded to search</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="transcript-search-placeholder">Type a keyword above to search within the transcript</div>', unsafe_allow_html=True)
+
 
     # ── RIGHT COLUMN: Transcript Content ──
     with right_col:

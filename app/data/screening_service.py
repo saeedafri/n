@@ -42,6 +42,8 @@ from data.screening_config import (
     KEYDEV_CATEGORY_REVERSE_ALIASES,
     TABULAR_MARKET_DATA_STMTS,
     SEGMENT_STATEMENT_TYPES,
+    TRAILING_QUARTERS_DEFAULT,
+    TRAILING_QUARTERS_STMTS,
 )
 from data.repository import (
     CompanyRepository,
@@ -144,7 +146,6 @@ _GEO_SEGMENT_PRESETS: List[str] = sorted([
     "Australia", "South Korea", "India", "Brazil",
     # Retail-specific geo segments
     "Domestic", "Foreign",
-    "Walmart U.S.", "Walmart International", "Sam's Club",
     "International Retail Stores and E-commerce Operations",
     "Wholly-owned Retail Stores", "Wholly-owned Retail Store and E-commerce Operations",
 ])
@@ -346,6 +347,209 @@ def apply_geography_criterion(
     }
 
 
+def _calendar_quarter_label(d) -> str:
+    """Calendar-quarter label from a date, e.g. 'Q3 2025'."""
+    q = (d.month - 1) // 3 + 1
+    return f"Q{q} {d.year}"
+
+
+def _apply_trailing_quarters_criterion(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    cfg: Dict,
+    metric_info: Dict,
+    tickers: List[str],
+    rows_in: int,
+) -> Tuple[pd.DataFrame, Dict]:
+    """Annotate the universe with the last N quarterly values of a metric.
+
+    Display-only: no operator/threshold filter is applied. Produces one value
+    column per quarter (aligned by calendar quarter of period-end, most recent
+    first), e.g. ``Inventory ($mm) [Q3 2025]``. Companies missing a quarter show
+    N/A. The produced column names are stamped onto ``criterion['quarter_cols']``
+    so the UI can surface them.
+    """
+    t_total = time.perf_counter()
+    num_q = int(criterion.get("num_quarters") or TRAILING_QUARTERS_DEFAULT)
+    label = metric_info["label"]
+    unit = metric_info.get("unit", "$mm") or "$mm"
+
+    # ── Source split (SEC vs YF) ──
+    companies_map = CompanyRepository.get_companies_map()
+    sec_tickers = [t for t in tickers if companies_map.get(t, {}).get("source") == "SEC"]
+    yf_tickers  = [t for t in tickers if companies_map.get(t, {}).get("source") == "YFinance"]
+
+    need_sec = bool(sec_tickers and metric_info.get("sec_col"))
+    need_yf  = bool(yf_tickers  and metric_info.get("yf_item"))
+
+    # ── Fetch ALL quarterly rows (date, value) per ticker, parallel ──
+    all_rows: List[tuple] = []
+    futures = {}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        if need_sec:
+            futures["sec"] = pool.submit(
+                _query_sec_quarterly_with_dates,
+                sec_tickers, cfg, metric_info["sec_col"], None,
+            )
+        if need_yf:
+            futures["yf"] = pool.submit(
+                _query_yf_quarterly_with_dates,
+                yf_tickers, cfg, metric_info["yf_item"], None,
+            )
+    for k in ("sec", "yf"):
+        if k in futures:
+            try:
+                all_rows.extend(futures[k].result())
+            except Exception as exc:
+                log_error(f"[SCREENING] TQ {k} query failed: {exc}")
+
+    # ── Per-ticker: keep latest num_q quarters, keyed by calendar-quarter label ──
+    per_ticker: Dict[str, list] = {}
+    for ticker, dt, val in all_rows:
+        per_ticker.setdefault(ticker, []).append((dt, val))
+
+    label_dates: Dict[str, object] = {}            # label → representative (max) date
+    ticker_label_val: Dict[str, Dict[str, float]] = {}
+    for ticker, rows_list in per_ticker.items():
+        rows_sorted = sorted(rows_list, key=lambda x: x[0], reverse=True)
+        lv: Dict[str, float] = {}
+        for dt, val in rows_sorted:
+            lbl = _calendar_quarter_label(dt)
+            if lbl in lv:                           # already took this quarter (latest wins)
+                continue
+            try:
+                lv[lbl] = float(val) / DB_SCALE
+            except (TypeError, ValueError):
+                continue
+            if lbl not in label_dates or dt > label_dates[lbl]:
+                label_dates[lbl] = dt
+            if len(lv) >= num_q:
+                break
+        ticker_label_val[ticker] = lv
+
+    # ── Global: most recent num_q quarter labels across the universe ──
+    ordered_labels = sorted(
+        label_dates.keys(), key=lambda l: label_dates[l], reverse=True
+    )[:num_q]
+    col_names = [f"{label} ({unit}) [{lbl}]" for lbl in ordered_labels]
+
+    # ── Build annotated universe ──
+    out = working_df.copy()
+    for lbl, col in zip(ordered_labels, col_names):
+        out[col] = out["ticker"].map(
+            lambda t, _l=lbl: ticker_label_val.get(t, {}).get(_l)
+        )
+
+    # Stamp produced columns onto the criterion so the UI can render them.
+    criterion["quarter_cols"] = col_names
+
+    with_data = sum(1 for t in tickers if ticker_label_val.get(t))
+    ms_total = (time.perf_counter() - t_total) * 1000
+    log_timing("SCREENING_FIN_TQ_TOTAL", ms_total,
+               f"metric={label} quarters={num_q} cols={len(col_names)} "
+               f"sec={len(sec_tickers)} yf={len(yf_tickers)} with_data={with_data}")
+
+    return out, {
+        "type":         "financial",
+        "statement":    criterion.get("statement"),
+        "metric":       label,
+        "period_type":  "TQ",
+        "num_quarters": num_q,
+        "quarter_cols": col_names,
+        "rows_in":      rows_in,
+        "rows_out":     len(out),
+        "sec_tickers":  len(sec_tickers),
+        "yf_tickers":   len(yf_tickers),
+        "with_data":    with_data,
+        "elapsed_ms":   ms_total,
+    }
+
+
+def _apply_year_range_criterion(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    cfg: Dict,
+    metric_info: Dict,
+    tickers: List[str],
+    rows_in: int,
+) -> Tuple[pd.DataFrame, Dict]:
+    """Annotate the universe with one annual value column per fiscal year in a range.
+
+    Display-only: no operator/threshold filter is applied (mirrors trailing-quarters).
+    Produces one column per year, e.g. ``Total Revenue ($mm) [FY 2023]``. Companies
+    missing a year show N/A. Produced column names are stamped onto
+    ``criterion['year_cols']`` so the UI + Excel render them side by side.
+    """
+    t_total = time.perf_counter()
+    years = sorted({int(y) for y in (criterion.get("year_range") or [])})
+    label = metric_info["label"]
+    unit = metric_info.get("unit", "$mm") or "$mm"
+    stmt = criterion.get("statement")
+
+    companies_map = CompanyRepository.get_companies_map()
+    sec_tickers = [t for t in tickers if companies_map.get(t, {}).get("source") == "SEC"]
+    yf_tickers  = [t for t in tickers if companies_map.get(t, {}).get("source") == "YFinance"]
+    need_sec = bool(sec_tickers and metric_info.get("sec_col"))
+    need_yf  = bool(yf_tickers  and metric_info.get("yf_item"))
+
+    out = working_df.copy()
+    col_names: List[str] = []
+    for y in years:
+        raw: Dict[str, Optional[float]] = {}
+        futures = {}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            if need_sec:
+                futures["sec"] = pool.submit(
+                    _query_sec_latest, sec_tickers, cfg, metric_info["sec_col"],
+                    f"{stmt}/{label}", y, "annual", None,
+                )
+            if need_yf:
+                futures["yf"] = pool.submit(
+                    _query_yf_latest, yf_tickers, cfg, metric_info["yf_item"],
+                    f"{stmt}/{label}", y, "annual", None,
+                )
+        for k in ("sec", "yf"):
+            if k in futures:
+                try:
+                    raw.update(futures[k].result())
+                except Exception as exc:
+                    log_error(f"[SCREENING] year-range {k} fetch failed (FY {y}): {exc}")
+        col = f"{label} ({unit}) [FY {y}]"
+        col_names.append(col)
+
+        def _to_mm(t, _raw=raw):
+            v = _raw.get(t)
+            if v is None:
+                return None
+            try:
+                return float(v) / DB_SCALE
+            except (TypeError, ValueError):
+                return None
+        out[col] = out["ticker"].map(_to_mm)
+
+    criterion["year_cols"] = col_names
+    with_data = int(out[col_names].notna().any(axis=1).sum()) if col_names else 0
+    ms_total = (time.perf_counter() - t_total) * 1000
+    log_timing("SCREENING_FIN_YEAR_RANGE_TOTAL", ms_total,
+               f"metric={label} years={years} cols={len(col_names)} "
+               f"sec={len(sec_tickers)} yf={len(yf_tickers)} with_data={with_data}")
+
+    return out, {
+        "type":        "financial",
+        "statement":   stmt,
+        "metric":      label,
+        "period_type": "FY",
+        "year_range":  years,
+        "year_cols":   col_names,
+        "rows_in":     rows_in,
+        "rows_out":    len(out),
+        "sec_tickers": len(sec_tickers),
+        "yf_tickers":  len(yf_tickers),
+        "with_data":   with_data,
+        "elapsed_ms":  ms_total,
+    }
+
+
 def apply_financial_criterion(
     criterion: Dict,
     working_df: pd.DataFrame,
@@ -353,15 +557,17 @@ def apply_financial_criterion(
     """Apply a financial metric criterion to working_df.
 
     Companies without data for the metric are excluded from results.
-    Supports both Annual and Quarterly period types.
+    Supports Annual, Quarterly (CQ/FQ), and Trailing-Quarters (TQ) period types.
     """
     t_total = time.perf_counter()
     rows_in = len(working_df)
 
     stmt        = criterion["statement"]
     metric_info = criterion["metric_info"]
-    operator    = criterion["operator"]
-    value1      = float(criterion["value1"])
+    # operator/value are unused in trailing-quarters (display-only) mode, so read
+    # them defensively — a TQ criterion need not carry filter fields.
+    operator    = criterion.get("operator", "Greater Than")
+    value1      = float(criterion.get("value1") or 0.0)
     value2      = float(criterion.get("value2") or 0.0)
     timeframe   = criterion.get("timeframe", "Latest")
     display_col = criterion.get("display_col", f"{metric_info['label']} ($mm)")
@@ -385,6 +591,21 @@ def apply_financial_criterion(
 
     log_info(f"[TIMING] SCREENING_FIN_START | stmt={stmt} metric={metric_info['label']} "
              f"op={operator} period={period_type} tickers={len(tickers)}")
+
+    # Trailing-quarters mode: return the last N quarterly values as separate
+    # columns (display-only) instead of a single filtered value column.
+    if period_type == "TQ":
+        return _apply_trailing_quarters_criterion(
+            criterion, working_df, cfg, metric_info, tickers, rows_in,
+        )
+
+    # Year-range mode (annual): return the metric for each fiscal year in the
+    # range as separate display-only columns (no operator filter) — the annual
+    # analog of trailing-quarters. Lets analysts read year-over-year side by side.
+    if criterion.get("year_range"):
+        return _apply_year_range_criterion(
+            criterion, working_df, cfg, metric_info, tickers, rows_in,
+        )
 
     # Determine DB period value: "annual" for FY, "quarterly" for CQ/FQ
     period_value = "quarterly" if period_type in ("CQ", "FQ") else "annual"
@@ -1220,12 +1441,9 @@ _GEO_MEMBER_PRESETS: List[Tuple[str, str, int]] = [
     ("geographical", "Other",                               6),
     ("geographical", "Rest of Asia Pacific",                3),
     ("geographical", "Rest of World",                       5),
-    ("geographical", "Sam's Club",                          1),
     ("geographical", "South Korea",                         1),
     ("geographical", "United Kingdom",                      4),
     ("geographical", "United States",                       10),
-    ("geographical", "Walmart U.S.",                        1),
-    ("geographical", "Walmart International",               1),
 ]
 
 
@@ -1373,6 +1591,8 @@ def rebuild_segment_values_cache_async() -> bool:
                   AND numeric_value  > 0
                   AND dimension_member_label IS NOT NULL
                   AND ({geo_axes_expr})
+                  AND LOWER(dimension_member_label) NOT REGEXP
+                      ' plans?$|defined benefit|\\bpension\\b|salaried.{{1,30}}hourly'
                 GROUP BY ticker, metric_key, dimension_member_label, report_fiscal_year
                 HAVING metric_key IS NOT NULL
             """
@@ -1573,6 +1793,8 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
             source = "values_cache"
         except Exception as exc:
             log_error(f"[SCREENING] segment member values-cache fallback failed: {exc}")
+    if segment_type == "geographical":
+        out = _collapse_geo_canonical_options(out)
     ms = (time.perf_counter() - t0) * 1000
     log_timing(
         "SCREENING_SEGMENT_OPTIONS_CACHE_HIT" if out else "SCREENING_SEGMENT_OPTIONS_CACHE_MISS",
@@ -1580,6 +1802,59 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
         f"type={segment_type} members={len(out)} source={source}",
     )
     return out
+
+
+def _collapse_geo_canonical_options(
+    raw_opts: List[Tuple[str, int]],
+) -> List[Tuple[str, int]]:
+    """Collapse raw US alias labels under canonical 'United States' in the geo dropdown.
+
+    Suppresses raw variants (U.S., UNITED STATES, United State, etc.) so users see
+    one clean "United States" option.  Also removes pension/plan contamination labels.
+    Company counts from suppressed aliases are folded into the canonical count
+    (may slightly over-count since companies rarely use multiple aliases in the same FY).
+    """
+    from data.segment_aliases import (
+        GEO_ALIAS_TO_CANONICAL,
+        GEO_CANONICAL_GROUPS,
+        GEO_KNOWN_BIZ_LABELS,
+        GEO_PENSION_SKIP_LABELS,
+        GEO_SUPPRESSED_DROPDOWN_LABELS,
+    )
+    # Accumulate company counts from suppressed raw aliases into their canonical
+    canonical_extra: Dict[str, int] = {}
+    for label, cnt in raw_opts:
+        norm = label.lower().strip()
+        if norm in GEO_PENSION_SKIP_LABELS or norm in GEO_KNOWN_BIZ_LABELS:
+            continue
+        canon = GEO_ALIAS_TO_CANONICAL.get(norm)
+        if canon and label in GEO_SUPPRESSED_DROPDOWN_LABELS:
+            canonical_extra[canon] = canonical_extra.get(canon, 0) + cnt
+
+    result: List[Tuple[str, int]] = []
+    seen_canonicals: Set[str] = set()
+    for label, cnt in raw_opts:
+        norm = label.lower().strip()
+        if norm in GEO_PENSION_SKIP_LABELS or norm in GEO_KNOWN_BIZ_LABELS:
+            continue
+        if label in GEO_SUPPRESSED_DROPDOWN_LABELS:
+            continue
+        canon = GEO_ALIAS_TO_CANONICAL.get(norm)
+        if canon and canon in GEO_CANONICAL_GROUPS:
+            if canon in seen_canonicals:
+                continue
+            seen_canonicals.add(canon)
+            result.append((canon, cnt + canonical_extra.get(canon, 0)))
+        else:
+            result.append((label, cnt))
+
+    # Ensure canonical labels are present even if only raw aliases were in DB
+    for canon, extra in canonical_extra.items():
+        if canon not in seen_canonicals:
+            result.append((canon, extra))
+
+    result.sort(key=lambda x: (-x[1], x[0].lower()))
+    return result
 
 
 def ensure_segment_values_cache_table() -> bool:
@@ -1879,6 +2154,31 @@ def _build_ticker_segment_values_from_cache(
             continue
         out.setdefault(ticker, {})[member] = float(val)
     return out
+
+
+def _canonicalize_geo_ticker_values(
+    ticker_values: Dict[str, Dict[str, float]],
+) -> Dict[str, Dict[str, float]]:
+    """Replace raw alias member labels with canonical labels and drop pension labels.
+
+    Applied after fetching from cache/v4 for geographical segment screening.
+    If multiple raw aliases resolve to the same canonical (rare), takes the max value.
+    """
+    from data.segment_aliases import canonicalize_geo_label, is_geo_pension_label
+    result: Dict[str, Dict[str, float]] = {}
+    for ticker, member_values in ticker_values.items():
+        canonical_mv: Dict[str, float] = {}
+        for label, val in member_values.items():
+            if is_geo_pension_label(label):
+                continue
+            canon = canonicalize_geo_label(label)
+            if canon in canonical_mv:
+                canonical_mv[canon] = max(canonical_mv[canon], val)
+            else:
+                canonical_mv[canon] = val
+        if canonical_mv:
+            result[ticker] = canonical_mv
+    return result
 
 
 def _normalize_segment_options_rows(
@@ -2218,6 +2518,18 @@ def apply_segment_statement_criterion(
             "rows_out": 0, "elapsed_ms": 0,
         }
 
+    # For geographical segments: normalize any saved raw alias → canonical label
+    # (backward-compat for criteria saved before canonicalization), then expand
+    # canonicals to all raw aliases for DB matching.
+    query_segments = selected_segments
+    if segment_type == "geographical" and selected_segments:
+        from data.segment_aliases import canonicalize_geo_label, expand_geo_canonical_segments
+        normalized = list(dict.fromkeys(
+            canonicalize_geo_label(s) for s in selected_segments
+        ))
+        selected_segments = normalized
+        query_segments = expand_geo_canonical_segments(normalized)
+
     log_info(
         f"[TIMING] SCREENING_SEGMENT_STATEMENT_START | stmt={stmt} "
         f"metric={metric_label} type={segment_type} year={year_sel} "
@@ -2232,7 +2544,7 @@ def apply_segment_statement_criterion(
     )
     if cache_scope.get("available"):
         rows = read_segment_values_cache(
-            tickers, segment_type, metric_key, year_sel, selected_segments,
+            tickers, segment_type, metric_key, year_sel, query_segments,
         )
     elif ENABLE_SEGMENT_LIVE_SQL_FALLBACK:
         data_source = "v4_live_sql_fallback"
@@ -2246,7 +2558,7 @@ def apply_segment_statement_criterion(
             segment_type,
             year_sel,
             metric_key,
-            selected_segments=selected_segments,
+            selected_segments=query_segments,
         )
     else:
         # NON-FILTERING GRACEFUL DEGRADE — the values cache cannot answer this
@@ -2289,6 +2601,8 @@ def apply_segment_statement_criterion(
         ticker_values = _build_ticker_segment_values_from_cache(rows)
     else:
         ticker_values = _build_ticker_segment_values(rows, segment_type, metric_key, year_sel)
+    if segment_type == "geographical":
+        ticker_values = _canonicalize_geo_ticker_values(ticker_values)
     ms_build = (time.perf_counter() - t_build) * 1000
     log_timing(
         "SEGMENT_BUILD_VALUES",
@@ -3691,6 +4005,11 @@ def recompute_working_set(
                 result_df, cached_dbg = criterion_cache[cache_key]
                 dbg = dict(cached_dbg)
                 dbg["cache_hit"] = True
+                # Re-stamp derived columns the UI needs (skipped from fingerprint).
+                if dbg.get("quarter_cols"):
+                    criterion["quarter_cols"] = dbg["quarter_cols"]
+                if dbg.get("year_cols"):
+                    criterion["year_cols"] = dbg["year_cols"]
 
         # FULLY NON-FILTERING: every criterion type — including industry &
         # geography — only ANNOTATES the full universe and never drops a company.
@@ -3727,6 +4046,17 @@ def recompute_working_set(
                 primary = {"industry": "Industry", "geography": "Country"}.get(ctype)
             if primary and primary in full_df.columns:
                 with_data = int(full_df[primary].notna().sum())
+            # Trailing-quarters: display_col is a friendly label (not a data
+            # column). Count companies with any quarter value instead.
+            elif criterion.get("quarter_cols"):
+                q_cols = [c for c in criterion["quarter_cols"] if c in full_df.columns]
+                if q_cols:
+                    with_data = int(full_df[q_cols].notna().any(axis=1).sum())
+            # Year-range: count companies with any year value (display-only columns).
+            elif criterion.get("year_cols"):
+                y_cols = [c for c in criterion["year_cols"] if c in full_df.columns]
+                if y_cols:
+                    with_data = int(full_df[y_cols].notna().any(axis=1).sum())
 
         dbg = dict(dbg or {})
         dbg["criterion_idx"]     = i
@@ -3769,7 +4099,7 @@ def _criterion_fingerprint(criterion: Dict) -> str:
     Excludes ephemeral / derived fields (summary, display_col) so that
     two identical criteria always produce the same fingerprint.
     """
-    skip = {"summary", "display_col"}
+    skip = {"summary", "display_col", "quarter_cols", "year_cols"}
     safe = {k: v for k, v in criterion.items() if k not in skip}
     return json.dumps(safe, sort_keys=True, default=str)
 

@@ -15,7 +15,7 @@ import calendar
 import os
 import smtplib
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
@@ -461,19 +461,42 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     _t1 = perf_counter()
     yf_result: Dict[str, Dict[str, Any]] = {}
     try:
+        # yf_earnings_calendar stores the STRIPPED base in `ticker` (e.g. 'TSCO',
+        # 'JD', '1913') and the EXACT composite in `yf_symbol` (e.g. 'TSCO.L',
+        # 'JD.L', '1913.HK').  Forecast tickers are composite, so we must match on
+        # `yf_symbol` — keying on `ticker` returns nothing AND would collide base
+        # symbols across companies (TSCO.L=Tesco vs TSCO=Tractor Supply).
         yf_cal_rows = db_manager.execute_query_readonly(
             """
-            SELECT ticker, earnings_date, ingested_at
+            SELECT yf_symbol AS ticker, earnings_date, ingested_at
             FROM coreiq_yf_earnings_calendar
-            WHERE ticker LIKE '%.%'
+            WHERE yf_symbol LIKE '%.%'
               AND earnings_date IS NOT NULL
             """,
             {},
         )
         if yf_cal_rows:
-            fye_bulk = _fiscal_year_end_bulk()  # {ticker: month_name_str}, cached
+            # FYE month for composite tickers.  The AV/YF *overview* tables omit
+            # foreign listings, so the forecast's own fiscal-year-end
+            # (coreiq_model_forecasts.last_actual_date) is the authoritative source;
+            # _fiscal_year_end_bulk() is kept only as a fallback.
+            fye_fc_rows = db_manager.execute_query_readonly(
+                """
+                SELECT ticker, MONTH(MAX(last_actual_date)) AS fye_month
+                FROM coreiq_model_forecasts
+                WHERE ticker LIKE '%.%' AND last_actual_date IS NOT NULL
+                GROUP BY ticker
+                """,
+                {},
+            )
+            fye_by_symbol: Dict[str, int] = {
+                (r.get("ticker") or "").strip(): r.get("fye_month")
+                for r in (fye_fc_rows or [])
+                if r.get("fye_month")
+            }
+            fye_bulk = _fiscal_year_end_bulk()  # {ticker: month_name_str}, cached fallback
 
-            # Build (ticker, earnings_date, ingested_at) grouped by ticker
+            # Build (ticker, earnings_date, ingested_at) grouped by composite yf_symbol.
             ticker_raw: Dict[str, list] = defaultdict(list)
             for r in yf_cal_rows:
                 tk = (r.get("ticker") or "").strip()
@@ -485,9 +508,8 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
 
             today = date.today()
             for tk, rows_list in ticker_raw.items():
-                # Use exact composite-ticker FYE only — no base-ticker fallback
-                # to avoid cross-contaminating different companies sharing a symbol.
-                fye_month = _fye_name_to_month_num(fye_bulk.get(tk))
+                # Composite-ticker FYE: forecast last_actual_date first, bulk fallback.
+                fye_month = fye_by_symbol.get(tk) or _fye_name_to_month_num(fye_bulk.get(tk))
                 if not fye_month:
                     continue
 
@@ -538,8 +560,19 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
 
     # NASDAQ takes priority where both paths produced a result
     result: Dict[str, Dict[str, Any]] = {**yf_result, **nasdaq_result}
+
+    # Staleness guard: keep all upcoming Q4 dates, but drop a *past* Q4 date older
+    # than ~15 months. Some foreign tickers only have old Q4-derivable calendar
+    # rows (recent rows are interim/half-year), and showing a years-old date as the
+    # "Reporting Date" misleads more than "—" does. 15 months gives buffer for late
+    # annual reporters while still excluding clearly outdated dates.
+    _stale_cutoff = date.today() - timedelta(days=460)
+    _before_guard = len(result)
+    result = {tk: info for tk, info in result.items() if info["date"] >= _stale_cutoff}
+
     log_timing("_annual_q4.TOTAL", (perf_counter() - _t) * 1000,
-               f"nasdaq={len(nasdaq_result)} yf={len(yf_result)} total={len(result)}", level="INFO")
+               f"nasdaq={len(nasdaq_result)} yf={len(yf_result)} "
+               f"total={len(result)} dropped_stale={_before_guard - len(result)}", level="INFO")
     return result
 
 
@@ -776,11 +809,14 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
         annual_str = ann.strftime("%b %d, %Y") if ann else "—"
 
         # Fiscal period from coreiq_model_forecasts.last_actual_date.
+        # Show month + day only (no year): the column denotes the fiscal-year-END
+        # pattern (e.g. "Feb 28"), not a specific year — showing a year made it look
+        # mismatched against the Reporting Date (which can be a later fiscal year).
         fp = row.get("fiscal_period_end")
         if fp and hasattr(fp, "strftime"):
-            fiscal_period_str = fp.strftime("%b %d, %Y")
+            fiscal_period_str = fp.strftime("%b %d")
         else:
-            fiscal_period_str = str(fp)[:10] if fp else "—"
+            fiscal_period_str = str(fp)[5:10] if fp else "—"
 
         lr = row.get("last_refresh")
         if lr and hasattr(lr, "strftime"):
