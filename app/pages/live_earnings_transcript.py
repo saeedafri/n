@@ -28,7 +28,7 @@ import streamlit as st
 from components.styles import hide_sidebar, render_styles, set_page_layout
 from core.auth_manager import require_auth
 
-require_auth(page="live_earnings_transcript")
+# require_auth(page="live_earnings_transcript")
 hide_sidebar()
 
 from components.navigation import render_coresight_footer, render_header

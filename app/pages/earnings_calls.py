@@ -7,6 +7,7 @@ import streamlit as st
 import re
 import os
 import time as _time
+from io import BytesIO
 from typing import List, Optional, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -619,6 +620,22 @@ def get_earnings_css() -> str:
         margin: -8px;
     }
 
+    button[data-testid="stBaseButton-secondary"] {
+        background: transparent !important;
+        border: 1px solid #D62E2F !important;
+        color: #D62E2F !important;
+        border-radius: 4px !important;
+        padding: 7px 12px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        transition: background 0.15s, color 0.15s !important;
+    }
+
+    button[data-testid="stBaseButton-secondary"]:hover {
+        background: #D62E2F !important;
+        color: #FFFFFF !important;
+    }
+
     </style>
     """
     except Exception as e:
@@ -941,6 +958,230 @@ function dl(){{
         log_structured_error(e, page="earnings_calls", component="_render_js_download_button", operation="rendering download button")
 
 
+def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "Excel", auto_click: bool = False) -> None:
+    """Client-side Excel download button via JS Blob API; matches market_data.py."""
+    try:
+        import base64
+        from streamlit.components.v1 import html as _sthtml
+
+        b64 = base64.b64encode(excel_bytes).decode("ascii")
+        safe_name = filename.replace("'", "\\'").replace('"', '\\"')
+        safe_label = label.replace("'", "\\'").replace('"', '\\"')
+        auto_trigger = "window.addEventListener('load', function(){ setTimeout(dl, 100); });" if auto_click else ""
+
+        btn_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=table" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{
+  display:flex;justify-content:flex-end;align-items:center;
+  height:52px;background:transparent;
+  font-family:'Inter','Roboto',Helvetica,Arial,sans-serif;
+  padding:0 20px;
+}}
+button{{
+  background:transparent;
+  border:1px solid #D62E2F;
+  color:#D62E2F;
+  border-radius:4px;
+  padding:7px 12px;
+  font-size:13px;
+  font-weight:500;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background 0.15s,color 0.15s;
+  letter-spacing:0.01em;
+  display:flex;align-items:center;gap:6px;
+}}
+button:hover{{background:#D62E2F;color:#fff;}}
+button:active{{opacity:0.85;}}
+.material-symbols-outlined {{
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-size:18px;
+}}
+</style>
+</head>
+<body>
+<button onclick="dl()"><span class="material-symbols-outlined">table</span>&nbsp;&nbsp;{safe_label}</button>
+<script>
+var _d="{b64}";
+function dl(){{
+  try{{
+    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
+    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
+    var blob=new Blob([u8],{{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url; a.download="{safe_name}";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){{URL.revokeObjectURL(url);}},200);
+  }}catch(e){{console.error("Excel download failed:",e);}}
+}}
+{auto_trigger}
+</script>
+</body></html>"""
+        _sthtml(btn_html, height=52, scrolling=False)
+    except Exception as e:
+        log_structured_error(e, page="earnings_calls", component="_render_excel_js_download", operation="render_excel_download_button")
+
+
+def _build_keyword_results_excel(results: List[Dict], ticker_display: Dict[str, str]) -> bytes:
+    """Build a branded one-sheet workbook for loaded keyword search results."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        from datetime import datetime
+
+        def _company_from_ticker(ticker: str) -> str:
+            label = ticker_display.get(ticker, ticker) or ticker
+            return label.split("(")[0].strip() if "(" in label else label
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Keyword Results"
+
+        red = "D62E2F"
+        dark = "2D2A29"
+        gray = "6B6B6B"
+        light_gray = "E0E0E0"
+        header_bg = "F0F0F0"
+        alt_row = "F9F9F9"
+        keyword_fill = "FFF3CD"
+
+        thin = Border(
+            top=Side(style="thin", color=light_gray),
+            bottom=Side(style="thin", color=light_gray),
+            left=Side(style="thin", color=light_gray),
+            right=Side(style="thin", color=light_gray),
+        )
+
+        headers = ["Company", "Ticker", "Year", "Quarter", "Reporter Name", "Whole Paragraph"]
+        last_col = len(headers)
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+        title = ws.cell(row=1, column=1, value="Earnings Calls Keyword Search Results")
+        title.font = Font(name="Inter", size=14, bold=True, color=red)
+        title.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[1].height = 30
+
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
+        subtitle = ws.cell(
+            row=2,
+            column=1,
+            value=f"{len(results)} result{'s' if len(results) != 1 else ''} | Generated {datetime.now().strftime('%B %d, %Y %I:%M %p')}",
+        )
+        subtitle.font = Font(name="Inter", size=10, color=gray)
+        subtitle.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[2].height = 22
+
+        start_row = 4
+        header_font = Font(name="Inter", size=10, bold=True, color=dark)
+        header_fill = PatternFill(start_color=header_bg, end_color=header_bg, fill_type="solid")
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=start_row, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = thin
+        ws.row_dimensions[start_row].height = 28
+
+        # Hoist shared style objects out of the per-cell loop. Re-instantiating
+        # Font/Fill/Alignment for every cell dominates build time on large
+        # exports; sharing one object reference per style keeps it O(1).
+        body_font = Font(name="Inter", size=10, color=dark)
+        alt_fill = PatternFill(start_color=alt_row, end_color=alt_row, fill_type="solid")
+        snippet_fill = PatternFill(start_color=keyword_fill, end_color=keyword_fill, fill_type="solid")
+        align_left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        align_left_center = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        for row_idx, result in enumerate(results, start_row + 1):
+            ticker = str(result.get("ticker") or "").strip()
+            values = [
+                _company_from_ticker(ticker),
+                ticker,
+                str(result.get("year") or ""),
+                str(result.get("quarter") or ""),
+                str(result.get("speaker") or ""),
+                re.sub(r"\s+", " ", str(result.get("paragraph") or result.get("snippet") or "")).strip(),
+            ]
+            is_alt = (row_idx - start_row) % 2 == 0
+            has_snippet = bool(result.get("snippet"))
+            for col_idx, value in enumerate(values, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = body_font
+                cell.border = thin
+                if col_idx == 6:
+                    cell.alignment = align_left_top
+                    if has_snippet:
+                        cell.fill = snippet_fill
+                    elif is_alt:
+                        cell.fill = alt_fill
+                else:
+                    cell.alignment = align_left_center
+                    if is_alt:
+                        cell.fill = alt_fill
+            ws.row_dimensions[row_idx].height = 72
+
+        widths = [34, 12, 10, 10, 24, 90]
+        for col_idx, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+        ws.freeze_panes = f"A{start_row + 1}"
+        ws.auto_filter.ref = f"A{start_row}:{get_column_letter(last_col)}{start_row + len(results)}"
+
+        buf = BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    except Exception as e:
+        log_structured_error(e, page="earnings_calls", component="_build_keyword_results_excel", operation="build_excel")
+        return b""
+
+
+def _safe_excel_filename_keyword(keyword: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", (keyword or "").strip()).strip("_")
+    return cleaned[:40] or "keyword"
+
+
+def _matching_paragraph_for_export(transcript_text: str, keyword: str) -> Tuple[str, str, int]:
+    """Return speaker + paragraph containing keyword from a transcript/window."""
+    try:
+        import html
+
+        kw_lower = (keyword or "").lower()
+        cleaned = html.unescape(transcript_text or "")
+        cleaned = re.sub(r"<[^>]+>", "", cleaned).strip()
+        speaker_pattern = re.compile(r'^([A-Z][a-zA-Z\s\.]+(?:\s+[A-Z][a-zA-Z]+)*):\s*(.*)$')
+        current_speaker = "Transcript"
+
+        for idx, para in enumerate(re.split(r"\n\s*\n", cleaned)):
+            para = re.sub(r"\s+", " ", para.strip())
+            if not para:
+                continue
+            match = speaker_pattern.match(para)
+            if match:
+                current_speaker = match.group(1).strip()
+                para_text = (match.group(2) or "").strip()
+                if para_text and kw_lower in para_text.lower():
+                    return current_speaker, para_text, idx
+                continue
+            if kw_lower in para.lower():
+                return current_speaker, para, idx
+
+        lower = cleaned.lower()
+        idx = lower.find(kw_lower)
+        if idx >= 0:
+            start = max(0, idx - 800)
+            end = min(len(cleaned), idx + len(keyword) + 1800)
+            para = re.sub(r"\s+", " ", cleaned[start:end].strip())
+            return current_speaker, para, 0
+    except Exception as e:
+        log_structured_error(e, page="earnings_calls", component="_matching_paragraph_for_export", operation="extract_paragraph")
+    return "Transcript", "", 0
+
+
 # =============================================================================
 # PDF VIEWER (self-contained — no import from company_filings)
 # Highlights keyword on ALL pages when no specific page is targeted.
@@ -1256,11 +1497,115 @@ def _get_cross_search_results(
                     'quarter': q_str,
                     'speaker': seg['speaker'],
                     'snippet': snippet,
+                    'paragraph': seg['text'],
                     'seg_index': i,
                 })
                 break  # first match per transcript only
 
     return results, len(raw_rows)
+
+
+@st.cache_resource
+def _get_ec_excel_executor() -> ThreadPoolExecutor:
+    """Singleton background pool for heavy Excel builds (shared across reruns/sessions)."""
+    return ThreadPoolExecutor(max_workers=2)
+
+
+def _build_cross_excel_job(
+    keyword: str,
+    company: str,
+    year: str,
+    quarter: str,
+    watchlist_id: Optional[int],
+    allowed_tickers: Optional[Tuple[str, ...]],
+    ticker_display: Dict[str, str],
+) -> bytes:
+    """Heavy Excel build run OFF the script thread — never touches st.session_state.
+
+    Fetches all matching keyword windows and renders the workbook. Runs inside the
+    background executor so the Streamlit session stays interactive while it works.
+    """
+    try:
+        results = _compute_all_cross_search_results_for_excel(
+            keyword, company, year, quarter, watchlist_id, allowed_tickers,
+        )
+        return _build_keyword_results_excel(results, ticker_display)
+    except Exception as e:
+        log_structured_error(e, page="earnings_calls", component="_build_cross_excel_job", operation="background_excel")
+        return b""
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _get_all_cross_search_results_for_excel(
+    keyword: str,
+    company: str,
+    year: str,
+    quarter: str,
+    watchlist_id: Optional[int] = None,
+    allowed_tickers: Optional[Tuple[str, ...]] = None,
+) -> List[Dict]:
+    """Cached wrapper around the export computation (foreground callers)."""
+    return _compute_all_cross_search_results_for_excel(
+        keyword, company, year, quarter, watchlist_id, allowed_tickers,
+    )
+
+
+def _compute_all_cross_search_results_for_excel(
+    keyword: str,
+    company: str,
+    year: str,
+    quarter: str,
+    watchlist_id: Optional[int] = None,
+    allowed_tickers: Optional[Tuple[str, ...]] = None,
+) -> List[Dict]:
+    """Fetch every matching cross-transcript result for Excel export.
+
+    NOT cached — safe to call from a background worker thread (no ScriptRunContext
+    needed). The cached entry point above delegates here for foreground callers.
+    """
+    raw_rows = EarningsCallRepository.search_transcript_windows_for_export(
+        keyword=keyword,
+        ticker=company if company != 'ALL' else None,
+        year=year if str(year) != 'ALL' else None,
+        quarter=quarter if quarter != 'ALL' else None,
+        allowed_tickers=allowed_tickers if watchlist_id is not None else None,
+        limit=10000,
+    )
+    kw_lower = keyword.lower()
+    results: List[Dict] = []
+
+    for row in raw_rows:
+        transcript_text = row.get("transcript_text", "") or ""
+        if not transcript_text:
+            continue
+
+        speaker, paragraph, seg_index = _matching_paragraph_for_export(transcript_text, keyword)
+        if not paragraph or kw_lower not in paragraph.lower():
+            continue
+
+        idx = paragraph.lower().find(kw_lower)
+        start = max(0, idx - 40)
+        end = min(len(paragraph), idx + len(keyword) + 40)
+        snippet = paragraph[start:end]
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(paragraph):
+            snippet = snippet + "..."
+
+        q_val = row.get("q")
+        results.append(
+            {
+                "ticker": row.get("ticker", ""),
+                "year": str(row.get("year", "")),
+                "quarter": f"Q{q_val}" if q_val else "",
+                "speaker": speaker,
+                "snippet": snippet,
+                "paragraph": paragraph,
+                "seg_index": seg_index,
+            }
+        )
+
+    return results
 
 
 def render_cross_search_panel(company: str, year: str, quarter: str) -> str:
@@ -1509,6 +1854,10 @@ def render_earnings_calls(active_ticker: str = None):
         year_options = ['ALL'] + ([str(y) for y in available_years] if available_years else ["2025", "2024"])
     if _tracker: _tracker.step_end("FETCH_YEARS_QUARTERS", f"company={st.session_state.ec_company} years={len(year_options)-1}")
 
+    # Company is the parent filter. The cascade to Year=ALL / Quarter=ALL fires once,
+    # in on_company_change (the ACTION of selecting ALL) — NOT here on every render,
+    # so the user can still narrow Year/Quarter while keeping Company on ALL.
+    _ec_company_is_all = (st.session_state.ec_company == 'ALL')
     if "ec_year" not in st.session_state or st.session_state.ec_year not in year_options:
         # Default to first real year (skip 'ALL')
         st.session_state.ec_year = year_options[1] if len(year_options) > 1 else year_options[0]
@@ -1534,10 +1883,13 @@ def render_earnings_calls(active_ticker: str = None):
 
     if "ec_quarter" not in st.session_state or st.session_state.ec_quarter not in quarter_options:
         st.session_state.ec_quarter = quarter_options[-1] if len(quarter_options) > 1 else quarter_options[0]
-    else:
+    elif not _ec_company_is_all:
         # Even if ec_quarter exists, default to latest on fresh page load
-        # (user can still override via dropdown)
-        # EXCEPTION: Don't override if we just navigated from calendar
+        # (user can still override via dropdown).
+        # EXCEPTION 1: Don't override if we just navigated from calendar.
+        # EXCEPTION 2: When Company is ALL we never auto-narrow the Quarter —
+        # keep it at the user's choice (ALL by default) so cross-transcript
+        # search stays broad after the parent-filter cascade.
         if st.session_state.get('_ec_quarter_user_set') != True and not _just_from_calendar:
             st.session_state.ec_quarter = quarter_options[-1] if len(quarter_options) > 1 else quarter_options[0]
 
@@ -1591,10 +1943,14 @@ def render_earnings_calls(active_ticker: str = None):
             st.session_state.active_ticker = ticker
 
         if ticker == 'ALL':
-            _yrs = EarningsCallRepository.get_all_available_years()
-            year_opts = ['ALL'] + [str(y) for y in _yrs]
-            _yq = None
-        elif ticker in _non_sec_only_tickers:
+            # Parent filter ALL → cascade Year and Quarter to ALL (cross-transcript
+            # search). No need to fetch year/quarter options for a single company.
+            st.session_state.ec_year = 'ALL'
+            st.session_state.ec_quarter = 'ALL'
+            st.session_state._ec_quarter_user_set = False
+            return
+
+        if ticker in _non_sec_only_tickers:
             _yq = EarningsCallRepository.get_non_sec_transcript_years_and_quarters(ticker)
             years = sorted(_yq.keys(), reverse=True) if _yq else []
             year_opts = ['ALL'] + ([str(y) for y in years] if years else ["2025", "2024"])
@@ -1737,22 +2093,20 @@ def render_earnings_calls(active_ticker: str = None):
         and bool(_ec_calls_watchlists)
     )
     if _ec_show_watchlist:
-        _wl_col, _wl_spacer = st.columns([4, 8], gap="small")
+        _wl_col, _wl_spacer = st.columns([3, 7], gap="small")
         with _wl_col:
             st.selectbox(
-                "Watchlist — search only these companies",
+                "Watchlist",
                 options=_ec_calls_wl_options,
                 index=_ec_calls_wl_default_idx,
                 key="ec_calls_watchlist_filter",
-                on_change=_on_ec_calls_watchlist_change,
-                help="Keyword search runs only within this watchlist's companies. "
-                     "Leave on “— No watchlist —” to search all transcripts.",
+                on_change=_on_ec_calls_watchlist_change
             )
 
     # =======================================================================
     # FILTER ROW — Search | Company | Year | Quarter
     # =======================================================================
-    search_col, company_col, year_col, quarter_col = st.columns([3, 4, 1, 1], gap="small")
+    search_col, company_col, year_col, quarter_col = st.columns([3, 5, 1, 1], gap="small")
 
     with search_col:
         search_term = st.text_input(
@@ -1760,6 +2114,7 @@ def render_earnings_calls(active_ticker: str = None):
             placeholder="eg., revenue, AWS, guidance...",
             value=st.session_state.get('ec_search', ''),
             key="ec_search_input",
+            help="Enter a keyword to search across all matching transcripts",
         )
         st.session_state.ec_search = search_term
 
@@ -1940,6 +2295,10 @@ def render_earnings_calls(active_ticker: str = None):
         # already-loaded transcripts are never re-fetched.
         _CROSS_PAGE = 15
 
+        # Captured inside the box, consumed by the Excel export rendered BELOW it.
+        cross_results = []
+        _single_matches = []
+
         with st.container(border=True, height=520):
             st.markdown(f'<div class="transcript-search-header">{search_icon}<span class="transcript-search-title">{search_label}</span></div>', unsafe_allow_html=True)
 
@@ -1978,6 +2337,8 @@ def render_earnings_calls(active_ticker: str = None):
                             f'<div class="transcript-search-count">{_cross_count_html}</div>',
                             unsafe_allow_html=True
                         )
+                        # Excel export button/download is rendered BELOW this box
+                        # (see "EXCEL EXPORT — below the box" block after the container).
                         for r in cross_results:
                             highlighted_snippet = _highlight_keyword(r['snippet'], active_keyword)
                             view_url = (
@@ -2085,10 +2446,20 @@ def render_earnings_calls(active_ticker: str = None):
                             snippet = '...' + snippet
                         if end < len(seg['text']):
                             snippet = snippet + '...'
-                        matches.append({'speaker': seg['speaker'], 'snippet': snippet, 'index': i})
+                        matches.append({
+                            'ticker': company,
+                            'year': str(year),
+                            'quarter': quarter,
+                            'speaker': seg['speaker'],
+                            'snippet': snippet,
+                            'paragraph': seg['text'],
+                            'index': i,
+                        })
 
                 if matches:
+                    _single_matches = matches
                     st.markdown(f'<div class="transcript-search-count">Found {len(matches)} match{"es" if len(matches) != 1 else ""} for "<b>{active_keyword}</b>"</div>', unsafe_allow_html=True)
+                    # Excel export is rendered BELOW this box (after the container).
                     for m in matches[:30]:
                         highlighted_snippet = _highlight_keyword(m['snippet'], active_keyword)
                         card_html = f'''
@@ -2108,6 +2479,116 @@ def render_earnings_calls(active_ticker: str = None):
                 st.markdown('<div class="transcript-search-placeholder">No transcript loaded to search</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="transcript-search-placeholder">Type a keyword above to search within the transcript</div>', unsafe_allow_html=True)
+
+        # ===================================================================
+        # EXCEL EXPORT — rendered BELOW the results box (not inside it).
+        # Cross-transcript export is heavy, so it runs in a BACKGROUND thread:
+        # clicking "Excel" submits the build to the pool and the page stays
+        # interactive; once ready the download fires automatically.
+        # ===================================================================
+        if is_cross_search and active_keyword and cross_results:
+            _xl_sig = (active_keyword, company, str(year), quarter, _applied_watchlist_id)
+            _xl_filename = (
+                f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}"
+                "_Keyword_Results.xlsx"
+            )
+
+            # Drop any prepared bytes / in-flight future that belong to a previous
+            # search signature so we never auto-download stale results.
+            if (st.session_state.get("ec_cross_excel_sig") not in (None, _xl_sig)):
+                st.session_state.pop("ec_cross_excel_bytes", None)
+                st.session_state.pop("ec_cross_excel_sig", None)
+                st.session_state.pop("ec_cross_excel_auto_click", None)
+            if (st.session_state.get("ec_cross_excel_future_sig") not in (None, _xl_sig)):
+                st.session_state.pop("ec_cross_excel_future", None)
+                st.session_state.pop("ec_cross_excel_future_sig", None)
+
+            _xl_ready = (
+                st.session_state.get("ec_cross_excel_sig") == _xl_sig
+                and st.session_state.get("ec_cross_excel_bytes")
+            )
+            _xl_future = st.session_state.get("ec_cross_excel_future")
+
+            if _xl_ready:
+                _auto_click = bool(st.session_state.pop("ec_cross_excel_auto_click", False))
+                _render_excel_js_download(
+                    st.session_state.ec_cross_excel_bytes,
+                    _xl_filename,
+                    "Excel",
+                    auto_click=_auto_click,
+                )
+            elif _xl_future is not None:
+                if _xl_future.done():
+                    try:
+                        _xl_bytes_done = _xl_future.result()
+                    except Exception as _xl_err:
+                        log_structured_error(_xl_err, page="earnings_calls",
+                                             component="cross_excel_future", operation="collect_background_excel")
+                        _xl_bytes_done = b""
+                    st.session_state.pop("ec_cross_excel_future", None)
+                    st.session_state.pop("ec_cross_excel_future_sig", None)
+                    if _xl_bytes_done:
+                        st.session_state.ec_cross_excel_sig = _xl_sig
+                        st.session_state.ec_cross_excel_bytes = _xl_bytes_done
+                        st.session_state.ec_cross_excel_auto_click = True
+                        st.rerun()
+                    else:
+                        st.markdown(
+                            '<div class="transcript-search-count" style="color:#D62E2F;">'
+                            'Could not build the Excel file — please try again.</div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.markdown(
+                        '<div class="transcript-search-count">'
+                        '<span style="display:inline-flex;align-items:center;gap:8px;">'
+                        '<span style="width:14px;height:14px;border:2px solid #eee;'
+                        'border-top:2px solid #d62e2f;border-radius:50%;'
+                        'display:inline-block;animation:ec-spin 0.8s linear infinite;"></span>'
+                        'Preparing Excel in the background — the page stays responsive. '
+                        'Your download starts automatically when it\'s ready.</span></div>'
+                        '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
+                        unsafe_allow_html=True,
+                    )
+                    # Lightweight poll: the heavy build runs OFF this thread, so
+                    # each cycle just re-checks the future and returns immediately.
+                    _time.sleep(0.8)
+                    st.rerun()
+            else:
+                _dl_l, _dl_r = st.columns([1, 1])
+                with _dl_r:
+                    if st.button(
+                        "▦  Excel",
+                        key=f"ec_cross_excel_prepare_{hash(_xl_sig)}",
+                        width="stretch",
+                        help="Build an Excel of all matching results — runs in the background; download is automatic.",
+                    ):
+                        _fut = _get_ec_excel_executor().submit(
+                            _build_cross_excel_job,
+                            active_keyword, company, str(year), quarter,
+                            _applied_watchlist_id, _active_watchlist_tickers, dict(ticker_display),
+                        )
+                        st.session_state.ec_cross_excel_future = _fut
+                        st.session_state.ec_cross_excel_future_sig = _xl_sig
+                        st.rerun()
+
+        elif (not is_cross_search) and active_keyword and _single_matches:
+            # Single-transcript export is small/fast — build inline (cached by sig).
+            _xl_sig = (active_keyword, company, str(year), quarter, len(_single_matches))
+            if st.session_state.get("ec_single_excel_sig") != _xl_sig:
+                st.session_state.ec_single_excel_sig = _xl_sig
+                st.session_state.ec_single_excel_bytes = _build_keyword_results_excel(
+                    _single_matches, ticker_display,
+                )
+            _xl_bytes = st.session_state.get("ec_single_excel_bytes")
+            if _xl_bytes:
+                _dl_l, _dl_r = st.columns([1, 1])
+                with _dl_r:
+                    _render_excel_js_download(
+                        _xl_bytes,
+                        f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.xlsx",
+                        "Excel",
+                    )
 
 
     # ── RIGHT COLUMN: Transcript Content ──

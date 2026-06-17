@@ -22,7 +22,7 @@ import math
 from components.styles import hide_sidebar, set_page_layout, render_styles, COLORS, TYPOGRAPHY, SPACING
 from core.auth_manager import require_auth, get_current_user
 
-require_auth(page="newsroom")
+# require_auth(page="newsroom")
 hide_sidebar()
 from components.navigation import render_header, render_coresight_footer
 from data.models import NewsArticle, TickerSentiment

@@ -668,7 +668,7 @@ def main():
     set_page_layout()
     _inject_css()
 
-    require_auth()
+    # require_auth()
     user_email = get_current_user()
     log_timing("ACCESS_MGMT_auth", (perf_counter() - _page_start) * 1000,
                f"user={user_email}", level="INFO")

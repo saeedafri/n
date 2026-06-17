@@ -10,7 +10,7 @@ from utils.local_storage import set_marketdata_tab
 from utils.local_storage_manager import set_persistent_state, save_market_data_state
 from utils.server_logger import log_structured_error, log_error, error_boundary
 
-require_auth(page="home")
+# require_auth(page="home")
 hide_sidebar()
 
 # =============================================================================

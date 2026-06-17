@@ -685,7 +685,15 @@ def _current_user_email() -> str:
     """Return the authenticated user's email (empty string if unavailable)."""
     try:
         auth = get_auth_data()
-        return (auth or {}).get("user_email", "") or ""
+        email = (auth or {}).get("user_email", "") or ""
+        if email:
+            return email
+        if (
+            os.getenv("APP_ENV", "").upper() == "LOCAL"
+            and os.getenv("DEBUG", "").lower() in ("true", "1", "yes")
+        ):
+            return os.getenv("LOCAL_TEST_USER_EMAIL", "").strip()
+        return ""
     except Exception:
         return ""
 

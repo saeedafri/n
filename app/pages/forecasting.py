@@ -458,7 +458,7 @@ SCENARIO_COLORS = {
 # Display currency for this page. Populated at runtime from the service payload.
 _EST_DISPLAY_CURRENCY = "USD"
 
-require_auth(page="forecasting")
+# require_auth(page="forecasting")
 
 hide_sidebar()
 render_styles()

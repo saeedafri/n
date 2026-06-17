@@ -2530,6 +2530,194 @@ class EarningsCallRepository:
 
         return [dict(r) for r in results]
 
+    @staticmethod
+    def search_transcript_windows_for_export(
+        keyword: str,
+        ticker: Optional[str] = None,
+        year: Optional[int] = None,
+        quarter: Optional[str] = None,
+        allowed_tickers: Optional[Tuple[str, ...]] = None,
+        limit: int = 10000,
+    ) -> List[Dict]:
+        """Return keyword-centered transcript windows for full Excel export."""
+        from utils.server_logger import log_db_timing
+        import re as _re
+        import time
+
+        total_start = time.perf_counter()
+        keyword = (keyword or "").strip()
+        if not keyword:
+            return []
+
+        scoped_tickers = tuple(
+            dict.fromkeys(
+                str(t).strip().upper()
+                for t in (allowed_tickers or ())
+                if str(t).strip()
+            )
+        )
+        if allowed_tickers is not None and not scoped_tickers:
+            return []
+
+        words = [w.lower() for w in _re.findall(r"[A-Za-z0-9]+", keyword)]
+        needle = words[0] if words else keyword.lower()
+        params: Dict = {"limit": limit}
+
+        if len(keyword) >= 3:
+            if len(words) == 1:
+                ft_kw = f'+{words[0]}*'
+            else:
+                ft_kw = ' '.join(f'+"{w}"' for w in words if w)
+            base_query = """
+                SELECT id, ticker, year, quarter, q
+                FROM coreiq_av_earnings_call_transcripts
+                WHERE MATCH(transcript_text) AGAINST (:kw IN BOOLEAN MODE)
+                  AND has_transcript = 1
+            """
+            params["kw"] = ft_kw
+        else:
+            base_query = """
+                SELECT id, ticker, year, quarter, q
+                FROM coreiq_av_earnings_call_transcripts
+                WHERE transcript_text LIKE :kw
+                  AND has_transcript = 1
+            """
+            params["kw"] = f"%{keyword}%"
+
+        if ticker and ticker != 'ALL':
+            clean_ticker = str(ticker).strip().upper()
+            if scoped_tickers and clean_ticker not in scoped_tickers:
+                return []
+            base_query += " AND ticker = :ticker"
+            params["ticker"] = clean_ticker
+        elif scoped_tickers:
+            wl_keys = []
+            for idx, scoped_ticker in enumerate(scoped_tickers):
+                key = f"wl_ticker_{idx}"
+                wl_keys.append(f":{key}")
+                params[key] = scoped_ticker
+            base_query += f" AND ticker IN ({', '.join(wl_keys)})"
+
+        if year and str(year) != 'ALL':
+            base_query += " AND year = :year"
+            params["year"] = int(year) if isinstance(year, str) else year
+
+        if quarter and quarter != 'ALL':
+            q_int = EarningsCallRepository._parse_quarter_param(quarter)
+            if q_int:
+                base_query += " AND q = :quarter_q"
+                params["quarter_q"] = q_int
+
+        base_query += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit"
+
+        metadata_start = time.perf_counter()
+        metadata_rows = db_manager.execute_query_readonly(base_query, params)
+        metadata_ms = (time.perf_counter() - metadata_start) * 1000
+
+        if not metadata_rows and len(keyword) >= 3:
+            fallback = """
+                SELECT id, ticker, year, quarter, q
+                FROM coreiq_av_earnings_call_transcripts
+                WHERE transcript_text LIKE :kw AND has_transcript = 1
+            """
+            fb_params: Dict = {"kw": f"%{keyword}%", "limit": limit}
+            if ticker and ticker != 'ALL':
+                clean_ticker = str(ticker).strip().upper()
+                if scoped_tickers and clean_ticker not in scoped_tickers:
+                    return []
+                fallback += " AND ticker = :ticker"
+                fb_params["ticker"] = clean_ticker
+            elif scoped_tickers:
+                wl_keys = []
+                for idx, scoped_ticker in enumerate(scoped_tickers):
+                    key = f"fb_wl_ticker_{idx}"
+                    wl_keys.append(f":{key}")
+                    fb_params[key] = scoped_ticker
+                fallback += f" AND ticker IN ({', '.join(wl_keys)})"
+            if year and str(year) != 'ALL':
+                fallback += " AND year = :year"
+                fb_params["year"] = int(year) if isinstance(year, str) else year
+            if quarter and quarter != 'ALL':
+                q_int = EarningsCallRepository._parse_quarter_param(quarter)
+                if q_int:
+                    fallback += " AND q = :quarter_q"
+                    fb_params["quarter_q"] = q_int
+            fallback += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit"
+            fb_start = time.perf_counter()
+            metadata_rows = db_manager.execute_query_readonly(fallback, fb_params)
+            metadata_ms += (time.perf_counter() - fb_start) * 1000
+
+        if not metadata_rows:
+            return []
+
+        rows_by_id = {int(r["id"]): dict(r) for r in metadata_rows}
+        ordered_ids = [int(r["id"]) for r in metadata_rows]
+        window_rows: List[Dict] = []
+        batch_size = 100
+
+        # Window extraction is the dominant cost. Two fixes here:
+        #   1. LOCATE(:needle, transcript_text) WITHOUT LOWER() — the column
+        #      collation is *_ci (case-insensitive), so the explicit LOWER()
+        #      forced MySQL to materialise a lowercased copy of every full
+        #      LONGTEXT row (the single biggest cost; ~36% slower per batch).
+        #   2. Run the per-100 batches CONCURRENTLY — each batch is an
+        #      independent read on its own pooled connection, so a small pool
+        #      collapses ~N serial round-trips into N/workers.
+        def _fetch_window_batch(batch_ids: List[int]) -> List[Dict]:
+            batch_params: Dict = {
+                "needle": needle,
+                "before_chars": 6000,
+                "window_chars": 16000,
+            }
+            id_keys = []
+            for idx, row_id in enumerate(batch_ids):
+                key = f"id_{idx}"
+                id_keys.append(f":{key}")
+                batch_params[key] = row_id
+            batch_sql = f"""
+                SELECT id,
+                       SUBSTRING(
+                           transcript_text,
+                           GREATEST(1, LOCATE(:needle, transcript_text) - :before_chars),
+                           :window_chars
+                       ) AS transcript_text
+                FROM coreiq_av_earnings_call_transcripts
+                WHERE id IN ({', '.join(id_keys)})
+            """
+            out: List[Dict] = []
+            for row in db_manager.execute_query_readonly(batch_sql, batch_params):
+                meta = rows_by_id.get(int(row["id"]), {}).copy()
+                meta["transcript_text"] = row.get("transcript_text") or ""
+                out.append(meta)
+            return out
+
+        batches = [
+            ordered_ids[i:i + batch_size]
+            for i in range(0, len(ordered_ids), batch_size)
+        ]
+        if len(batches) <= 1:
+            for batch in batches:
+                window_rows.extend(_fetch_window_batch(batch))
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            _workers = min(6, len(batches))
+            with ThreadPoolExecutor(max_workers=_workers) as _pool:
+                for batch_out in _pool.map(_fetch_window_batch, batches):
+                    window_rows.extend(batch_out)
+
+        order = {row_id: idx for idx, row_id in enumerate(ordered_ids)}
+        window_rows.sort(key=lambda r: order.get(int(r.get("id", 0)), len(order)))
+
+        total_ms = (time.perf_counter() - total_start) * 1000
+        log_db_timing(
+            "search_transcript_windows_for_export.TOTAL",
+            "coreiq_av_earnings_call_transcripts",
+            total_ms,
+            rows=len(window_rows),
+            ticker=str(ticker or ''),
+        )
+        return window_rows
+
     # ------------------------------------------------------------------
     # NON-SEC Transcript PDFs  (from coreiq_filing_metrics_v4)
     # ------------------------------------------------------------------

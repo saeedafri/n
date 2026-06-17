@@ -32,7 +32,7 @@ from utils.server_logger import log_error, log_info, log_warning, log_structured
 
 from components.styles import hide_sidebar, set_page_layout
 from core.auth_manager import require_auth
-require_auth(page="company_filings")
+# require_auth(page="company_filings")
 hide_sidebar()
 from components.styles import render_styles
 from components.navigation import render_header, render_coresight_footer

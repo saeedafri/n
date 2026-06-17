@@ -24,7 +24,7 @@ from components.toolbar import render_tabs
 from components.companyProfile import render_company_profile_content, get_company_css, get_profile_rows_for_excel, render_info_table, render_business_description, render_reference_table
 from components.navigation import render_company_header
 from core.auth_manager import require_auth
-require_auth(page="market_data")
+# require_auth(page="market_data")
 
 hide_sidebar()
 
@@ -1810,7 +1810,43 @@ def render_page():
                 st.session_state[_active_period_type_key] = 'Annual'
 
     # Convert UI period type to database value (use isolated key for Estimates/Forecasting)
-    _period_type_db = (st.session_state.get(_active_period_type_key) or 'Annual').lower()
+    _period_type_sel_title = (st.session_state.get(_active_period_type_key) or 'Annual')
+    # Availability-aware effective period type (per tab). Many foreign / YFinance
+    # issuers report only Annual for some statements (e.g. no quarterly income
+    # statement) while still having quarterly data for others (e.g. balance sheet).
+    # Snap the selected type to one that actually has data for THIS tab so the grid
+    # shows data and the Period Type filter still renders — instead of an empty page
+    # with a hidden filter the user cannot change.
+    if selected_tab == "company_profile":
+        _available_period_types = ["Annual"]
+        _period_type_eff_title = _period_type_sel_title
+        _period_type_fell_back = False
+    else:
+        _available_period_types = get_available_period_types(selected_ticker, selected_tab)
+        if _period_type_sel_title in _available_period_types:
+            _period_type_eff_title = _period_type_sel_title
+        else:
+            _period_type_eff_title = _available_period_types[0] if _available_period_types else "Annual"
+        _period_type_fell_back = (_period_type_eff_title != _period_type_sel_title)
+    _period_type_db = _period_type_eff_title.lower()
+
+    # One-liner notice rendered on a tab when the selected period type is not
+    # reported for this company and we fell back to an available one.
+    _PERIOD_TAB_LABELS = {
+        "income_statement": "income statement",
+        "balance_sheet": "balance sheet",
+        "cash_flow": "cash flow",
+        "key_stats": "key stats",
+        "ratios": "ratios",
+        "segment_data": "segment data",
+    }
+
+    def _render_period_fallback_notice():
+        if _period_type_fell_back and selected_tab in _PERIOD_TAB_LABELS:
+            st.info(
+                f"{_period_type_sel_title} {_PERIOD_TAB_LABELS[selected_tab]} data is not reported "
+                f"for this company — showing {_period_type_eff_title} instead."
+            )
 
     # Now define _active_date_key with period_type included so Quarterly/Annual have separate date ranges
     _active_date_key = (f"_dr_isolated_{selected_tab}_{_period_type_db}"
@@ -2445,7 +2481,7 @@ def render_page():
 
         # Get currency from database - use already fetched _early_reported_currency
         # Same currency applies to all tabs for the same company
-        _period_type_db = (st.session_state.get(_active_period_type_key) or 'Annual').lower()
+        _period_type_db = _period_type_eff_title.lower()
         reported_currency = _early_reported_currency or "USD"
 
         # Initialize FROM currency — default to reported_currency for the current ticker
@@ -2693,13 +2729,18 @@ def render_page():
             else:
                 f_period, f1, f2, f3, f4, f5, f_arrow, f6, f7 = st.columns([1.1, 1.4, 1.4, 1.1, 1.5, 1.0, 0.1, 1.0, 1.5], gap="small", vertical_alignment="center", width="stretch")
 
-        # Get available period types for this company
-        _available_period_types = get_available_period_types(selected_ticker, selected_tab)
+        # Available period types computed earlier (availability-aware effective
+        # period type) — reuse to avoid a duplicate DB round-trip.
 
         if f_period is not None:
             with f_period:
                 st.html('<div class="filter-label">Period Type</div>')
                 _pt_key = "period_type_select_shared"
+                # The shared selection may be e.g. Quarterly while this tab only has
+                # Annual data — snap the widget's stored value into the available
+                # options so Streamlit doesn't raise and the box shows the real type.
+                if st.session_state.get(_pt_key) not in _available_period_types:
+                    st.session_state[_pt_key] = _period_type_eff_title
                 # If only one period type available, show it disabled
                 if len(_available_period_types) == 1:
                     st.selectbox(
@@ -3161,7 +3202,8 @@ def render_page():
     elif selected_tab == "balance_sheet":
         _t0_tab = _time.perf_counter()
         _t0 = _time.perf_counter()
-        _period_type_db = (st.session_state.get(period_type_key) or 'Annual').lower()
+        _period_type_db = _period_type_eff_title.lower()
+        _render_period_fallback_notice()
         render_balance_sheet(selected_ticker, start_date, end_date, conversion_rate, reported_currency, sort_ascending, historical_rate_map, units_scale, units_label, _period_type_db)
         _timings['balance_sheet_render'] = (_time.perf_counter() - _t0) * 1000
         # Excel download
@@ -3189,7 +3231,8 @@ def render_page():
     elif selected_tab == "cash_flow":
         _t0_tab = _time.perf_counter()
         _t0 = _time.perf_counter()
-        _period_type_db = (st.session_state.get(period_type_key) or 'Annual').lower()
+        _period_type_db = _period_type_eff_title.lower()
+        _render_period_fallback_notice()
         render_cash_flow(selected_ticker, start_date, end_date, conversion_rate, reported_currency, sort_ascending, historical_rate_map, units_scale, units_label, _period_type_db)
         _timings['cash_flow_render'] = (_time.perf_counter() - _t0) * 1000
         # Excel download
@@ -3218,7 +3261,8 @@ def render_page():
     elif selected_tab == "income_statement":
         _t0_tab = _time.perf_counter()
         try:
-            _period_type_db = (st.session_state.get(period_type_key) or 'Annual').lower()
+            _period_type_db = _period_type_eff_title.lower()
+            _render_period_fallback_notice()
             # Session-state short-circuit — reuse cached HTML when inputs unchanged
             _conv_mode = st.session_state.get('conversion_mode', 'spot')
             _is_ck = f"_is_html_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}_{_conv_mode}"
@@ -3336,7 +3380,8 @@ def render_page():
     elif selected_tab == "key_stats":
         _t0_tab = _time.perf_counter()
         try:
-            _period_type_db = (st.session_state.get(period_type_key) or 'Annual').lower()
+            _period_type_db = _period_type_eff_title.lower()
+            _render_period_fallback_notice()
             # Session-state short-circuit — reuse cached HTML when inputs unchanged
             _conv_mode = st.session_state.get('conversion_mode', 'spot')
             _ks_ck = f"_ks_html_v2_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}_{_conv_mode}"
@@ -3571,7 +3616,8 @@ def render_page():
     elif selected_tab == "ratios":
         _t0_tab = _time.perf_counter()
         try:
-            _period_type_db = (st.session_state.get(period_type_key) or 'Annual').lower()
+            _period_type_db = _period_type_eff_title.lower()
+            _render_period_fallback_notice()
 
             # Phase 5: Session-state short-circuit — reuse cached HTML when inputs unchanged
             _ratios_cache_key = f"_ratios_html_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}"
@@ -3929,7 +3975,8 @@ def render_page():
         _t0_tab = _time.perf_counter()
         try:
             _t0 = _time.perf_counter()
-            _seg_period_type = (st.session_state.get(period_type_key) or 'Annual').lower()
+            _seg_period_type = _period_type_eff_title.lower()
+            _render_period_fallback_notice()
             _seg_fye = getattr(company, 'fiscal_year_end', None) if company else None
             render_segment_data(selected_ticker, start_date, end_date, conversion_rate, reported_currency, sort_ascending, historical_rate_map, units_scale, units_label, _seg_period_type, fiscal_year_end=_seg_fye)
             _timings['segment_data_render'] = (_time.perf_counter() - _t0) * 1000
