@@ -465,6 +465,120 @@ def _apply_trailing_quarters_criterion(
     }
 
 
+def _quarter_range_labels(from_q: int, from_y: int, to_q: int, to_y: int) -> List[str]:
+    """Calendar-quarter labels for every quarter in [from, to], chronological.
+
+    e.g. (1, 2023, 4, 2024) -> ['Q1 2023','Q2 2023',...,'Q4 2024']. Order-agnostic
+    (swaps if from > to). Mirrors `_calendar_quarter_label`'s 'Q{n} {year}' format.
+    """
+    start = int(from_y) * 4 + (int(from_q) - 1)
+    end = int(to_y) * 4 + (int(to_q) - 1)
+    if start > end:
+        start, end = end, start
+    labels: List[str] = []
+    for idx in range(start, end + 1):
+        y, q = divmod(idx, 4)
+        labels.append(f"Q{q + 1} {y}")
+    return labels
+
+
+def _apply_quarter_range_criterion(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    cfg: Dict,
+    metric_info: Dict,
+    tickers: List[str],
+    rows_in: int,
+) -> Tuple[pd.DataFrame, Dict]:
+    """Annotate the universe with one value column per calendar quarter in a range.
+
+    Display-only (no operator/threshold). Like trailing-quarters, but the columns
+    are bounded by the analyst's chosen [from quarter, to quarter] instead of the
+    last N. EVERY quarter in the range gets a column (N/A where a company has no
+    data) so nothing in the window is missed. Columns are chronological (oldest →
+    newest). Produced names are stamped onto ``criterion['quarter_cols']`` so the
+    UI + Excel render them via the existing quarter pipeline.
+    """
+    t_total = time.perf_counter()
+    qr = criterion.get("quarter_range") or {}
+    target = _quarter_range_labels(
+        qr.get("from_q", 1), qr.get("from_y"), qr.get("to_q", 4), qr.get("to_y"),
+    )
+    target_set = set(target)
+    label = metric_info["label"]
+    unit = metric_info.get("unit", "$mm") or "$mm"
+
+    companies_map = CompanyRepository.get_companies_map()
+    sec_tickers = [t for t in tickers if companies_map.get(t, {}).get("source") == "SEC"]
+    yf_tickers  = [t for t in tickers if companies_map.get(t, {}).get("source") == "YFinance"]
+    need_sec = bool(sec_tickers and metric_info.get("sec_col"))
+    need_yf  = bool(yf_tickers  and metric_info.get("yf_item"))
+
+    all_rows: List[tuple] = []
+    futures = {}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        if need_sec:
+            futures["sec"] = pool.submit(
+                _query_sec_quarterly_with_dates, sec_tickers, cfg, metric_info["sec_col"], None,
+            )
+        if need_yf:
+            futures["yf"] = pool.submit(
+                _query_yf_quarterly_with_dates, yf_tickers, cfg, metric_info["yf_item"], None,
+            )
+    for k in ("sec", "yf"):
+        if k in futures:
+            try:
+                all_rows.extend(futures[k].result())
+            except Exception as exc:
+                log_error(f"[SCREENING] quarter-range {k} query failed: {exc}")
+
+    # Per ticker: value per in-range calendar quarter (latest date wins per quarter).
+    per_ticker: Dict[str, list] = {}
+    for ticker, dt, val in all_rows:
+        per_ticker.setdefault(ticker, []).append((dt, val))
+    ticker_label_val: Dict[str, Dict[str, float]] = {}
+    for ticker, rows_list in per_ticker.items():
+        lv: Dict[str, float] = {}
+        for dt, val in sorted(rows_list, key=lambda x: x[0], reverse=True):
+            lbl = _calendar_quarter_label(dt)
+            if lbl not in target_set or lbl in lv:
+                continue
+            try:
+                lv[lbl] = float(val) / DB_SCALE
+            except (TypeError, ValueError):
+                continue
+        ticker_label_val[ticker] = lv
+
+    col_names = [f"{label} ({unit}) [{lbl}]" for lbl in target]
+    out = working_df.copy()
+    for lbl, col in zip(target, col_names):
+        out[col] = out["ticker"].map(
+            lambda t, _l=lbl: ticker_label_val.get(t, {}).get(_l)
+        )
+
+    criterion["quarter_cols"] = col_names
+    with_data = sum(1 for t in tickers if ticker_label_val.get(t))
+    ms_total = (time.perf_counter() - t_total) * 1000
+    log_timing("SCREENING_FIN_QRANGE_TOTAL", ms_total,
+               f"metric={label} cols={len(col_names)} sec={len(sec_tickers)} "
+               f"yf={len(yf_tickers)} with_data={with_data}")
+
+    return out, {
+        "type":          "financial",
+        "statement":     criterion.get("statement"),
+        "metric":        label,
+        "period_type":   "QR",
+        "quarter_range": qr,
+        "quarter_cols":  col_names,
+        "rows_in":       rows_in,
+        "rows_out":      len(out),
+        "sec_tickers":   len(sec_tickers),
+        "yf_tickers":    len(yf_tickers),
+        "with_data":     with_data,
+        "elapsed_ms":    ms_total,
+    }
+
+
 def _apply_year_range_criterion(
     criterion: Dict,
     working_df: pd.DataFrame,
@@ -604,6 +718,14 @@ def apply_financial_criterion(
     # analog of trailing-quarters. Lets analysts read year-over-year side by side.
     if criterion.get("year_range"):
         return _apply_year_range_criterion(
+            criterion, working_df, cfg, metric_info, tickers, rows_in,
+        )
+
+    # Quarter-range mode: one display-only column per calendar quarter in the
+    # chosen [from, to] range (no operator filter) — the bounded analog of
+    # trailing-quarters. Reuses the quarter_cols pipeline (render + Excel).
+    if period_type == "QR" or criterion.get("quarter_range"):
+        return _apply_quarter_range_criterion(
             criterion, working_df, cfg, metric_info, tickers, rows_in,
         )
 

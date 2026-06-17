@@ -784,9 +784,10 @@ def _get_financial_metric_cols(criteria: List[dict]) -> List[str]:
         for c in criteria:
             if c.get("type") != "financial":
                 continue
-            # Trailing-quarters criterion contributes one column per quarter.
-            if c.get("period_type") == "TQ":
-                for qc in (c.get("quarter_cols") or []):
+            # Quarterly multi-column criteria (Last N Quarters / Quarter Range)
+            # contribute one column per quarter (stamped on quarter_cols).
+            if c.get("quarter_cols"):
+                for qc in c["quarter_cols"]:
                     if qc not in seen:
                         cols.append(qc)
                         seen.add(qc)
@@ -3371,6 +3372,7 @@ def _submit_financial_criterion(
     *,
     num_quarters: Optional[int] = None,
     year_range: Optional[List[int]] = None,
+    quarter_range: Optional[dict] = None,
     is_segment_stmt: bool = False,
     segment_type: Optional[str] = None,
     selected_segments: Optional[List[str]] = None,
@@ -3384,8 +3386,9 @@ def _submit_financial_criterion(
 
     is_trailing = (period_type == "TQ")
     is_year_range = bool(year_range)
+    is_qrange = bool(quarter_range)
 
-    if not is_trailing and not is_year_range and operator == "Between":
+    if not is_trailing and not is_year_range and not is_qrange and operator == "Between":
         lo, hi = min(val1, val2), max(val1, val2)
         if lo == hi:
             st.error("Between: Min and Max values must differ.")
@@ -3398,6 +3401,9 @@ def _submit_financial_criterion(
     elif is_year_range:
         _ys = sorted(int(y) for y in year_range)
         timeframe = f"FY {_ys[0]}–{_ys[-1]}"
+    elif is_qrange:
+        timeframe = (f"Q{quarter_range['from_q']} {quarter_range['from_y']}–"
+                     f"Q{quarter_range['to_q']} {quarter_range['to_y']}")
     elif period_type in ("CQ", "FQ") and quarter:
         q_num = quarter.replace("Q", "")
         if year_sel == "Latest":
@@ -3411,6 +3417,8 @@ def _submit_financial_criterion(
         display_col = f"{metric_label} — Last {int(num_quarters or TRAILING_QUARTERS_DEFAULT)} Quarters"
     elif is_year_range:
         display_col = f"{metric_label} ({unit}) — {timeframe}"
+    elif is_qrange:
+        display_col = f"{metric_label} ({unit}) — {timeframe}"
     elif is_segment_stmt:
         display_col = f"{stmt} | {metric_label} ({unit}) | {timeframe}"
     else:
@@ -3420,6 +3428,8 @@ def _submit_financial_criterion(
         summary = f"{stmt} / {metric_label}: {timeframe} (all quarterly values)"
     elif is_year_range:
         summary = f"{stmt} / {metric_label}: {timeframe} (year-by-year columns)"
+    elif is_qrange:
+        summary = f"{stmt} / {metric_label}: {timeframe} (quarter-by-quarter columns)"
     else:
         summary = build_financial_summary(
             stmt, metric_label, operator, val1, val2, timeframe, unit=unit,
@@ -3444,6 +3454,8 @@ def _submit_financial_criterion(
         criterion["num_quarters"] = int(num_quarters or TRAILING_QUARTERS_DEFAULT)
     if is_year_range:
         criterion["year_range"] = sorted(int(y) for y in year_range)
+    if is_qrange:
+        criterion["quarter_range"] = dict(quarter_range)
 
     if is_segment_stmt:
         criterion["segment_type"] = segment_type or "business"
@@ -3519,6 +3531,7 @@ def _render_financial_form():
                 default_year_val    = prefill.get("year")
                 default_num_quarters = int(prefill.get("num_quarters") or TRAILING_QUARTERS_DEFAULT)
                 default_year_range  = prefill.get("year_range")
+                default_quarter_range = prefill.get("quarter_range")
                 default_seg_members = list(prefill.get("selected_segments") or [])
             else:
                 default_stmt        = st.session_state.get("scr_fin_stmt", stmt_options[0])
@@ -3530,6 +3543,7 @@ def _render_financial_form():
                 default_year_val    = None
                 default_num_quarters = TRAILING_QUARTERS_DEFAULT
                 default_year_range  = None
+                default_quarter_range = None
                 default_seg_members = []
 
             if default_stmt not in stmt_options:
@@ -3607,7 +3621,7 @@ def _render_financial_form():
             # quarterly SEC/YF tables (Income Statement, Balance Sheet, Cash Flow).
             period_options = list(PERIOD_TYPES)
             if stmt in TRAILING_QUARTERS_STMTS:
-                period_options = period_options + ["TQ"]
+                period_options = period_options + ["TQ", "QR"]
             if default_period_type not in period_options:
                 default_period_type = "FY"
             # If a prior selection (e.g. "TQ") is no longer valid for this
@@ -3626,9 +3640,11 @@ def _render_financial_form():
             _years = FORWARD_SCREENING_YEARS if stmt in FORWARD_LOOKING_STMTS else SCREENING_YEARS
             year_options = ["Latest"] + _years
             is_trailing = (period_type == "TQ")
+            is_qrange = (period_type == "QR")
             is_quarterly = (period_type in ("CQ", "FQ"))
             num_quarters = None
             year_range = None
+            quarter_range = None
             # Year-range (display-only year columns) supported only for the core
             # statements that route through apply_financial_criterion.
             _allow_year_range = (
@@ -3647,6 +3663,45 @@ def _render_financial_form():
                     help="Shows the last N quarterly values as separate columns "
                          "(display-only — no value filter is applied).",
                 )
+            elif is_qrange:
+                # Display-only: pick a calendar quarter+year range; one column per
+                # quarter in [from, to]. No value filter.
+                quarter = None
+                year_sel = "Latest"
+                _qs = list(QUARTERS)
+                _qr_years = [int(y) for y in _years]
+                _dqr = default_quarter_range or {}
+                def _q_idx(qv, fallback):
+                    try:
+                        return _qs.index(f"Q{int(qv)}")
+                    except Exception:
+                        return fallback
+                _qc1, _qc2, _qc3, _qc4 = st.columns(4)
+                with _qc1:
+                    _fq = st.selectbox("From quarter", options=_qs,
+                                       index=_q_idx(_dqr.get("from_q"), 0),
+                                       key="scr_fin_qr_from_q")
+                with _qc2:
+                    _fy = st.selectbox(
+                        "From year", options=_qr_years,
+                        index=(_qr_years.index(int(_dqr["from_y"]))
+                               if _dqr.get("from_y") in _qr_years
+                               else min(2, len(_qr_years) - 1)),
+                        key="scr_fin_qr_from_y")
+                with _qc3:
+                    _tq = st.selectbox("To quarter", options=_qs,
+                                       index=_q_idx(_dqr.get("to_q"), len(_qs) - 1),
+                                       key="scr_fin_qr_to_q")
+                with _qc4:
+                    _ty = st.selectbox(
+                        "To year", options=_qr_years,
+                        index=(_qr_years.index(int(_dqr["to_y"]))
+                               if _dqr.get("to_y") in _qr_years else 0),
+                        key="scr_fin_qr_to_y")
+                quarter_range = {
+                    "from_q": int(str(_fq).replace("Q", "")), "from_y": int(_fy),
+                    "to_q": int(str(_tq).replace("Q", "")), "to_y": int(_ty),
+                }
             elif is_quarterly:
                 col_q, col_y = st.columns(2)
                 with col_q:
@@ -3708,6 +3763,14 @@ def _render_financial_form():
                     "shown as separate year columns. No value filter is applied."
                 )
                 operator = "Greater Than"
+            elif quarter_range:
+                # Display-only mode: one column per quarter in the range, no value filter.
+                st.caption(
+                    f"{metric_label} from Q{quarter_range['from_q']} {quarter_range['from_y']} "
+                    f"to Q{quarter_range['to_q']} {quarter_range['to_y']} will be shown as "
+                    "separate quarter columns. No value filter is applied."
+                )
+                operator = "Greater Than"
             else:
                 st.markdown(
                     f'<p class="form-section-label" style="margin-top:12px;">{_op_step} — Set Operator &amp; Value</p>',
@@ -3740,7 +3803,7 @@ def _render_financial_form():
                 clear_on_submit=True,
                 border=False,
             ):
-                if is_trailing or year_range:
+                if is_trailing or year_range or quarter_range:
                     # Display-only: no value inputs.
                     val1 = 0.0
                     val2 = 0.0
@@ -3795,6 +3858,7 @@ def _render_financial_form():
                         year_sel,
                         num_quarters=num_quarters,
                         year_range=year_range,
+                        quarter_range=quarter_range,
                         is_segment_stmt=is_segment_stmt,
                         segment_type=segment_type,
                         selected_segments=_seg_selected,
@@ -5433,6 +5497,11 @@ def _render_filterable_results_grid(
         st.dataframe(display_df, width="stretch", hide_index=True)
         return
 
+    # Monetary columns hold values in $ millions — show ONE legend above the grid
+    # instead of repeating "($mm)" in every column header (headers stripped below).
+    if any("($mm)" in str(c) for c in display_df.columns):
+        st.caption("All monetary figures are in **$ millions (mm)**.")
+
     pin_col = _resolve_grid_pin_column(display_df, pinned_column)
     link_cols = set(link_columns or [])
 
@@ -5480,6 +5549,24 @@ def _render_filterable_results_grid(
         grid_options,
         link_columns=list(link_cols),
         hidden_columns=list(hidden_cols),
+    )
+
+    # Display-only: strip "($mm)" from headers (the unit is shown once in the
+    # legend above). Underlying column keys — and the Excel export — keep the unit.
+    for _cd in grid_options.get("columnDefs", []):
+        _f = str(_cd.get("field", ""))
+        if "($mm)" in _f:
+            _cd["headerName"] = _f.replace("($mm)", "").replace("  ", " ").strip()
+        # Header-fit floor so auto-size can never truncate the (stripped) label.
+        if not _cd.get("hide"):
+            _hn = str(_cd.get("headerName") or _f)
+            _cd["minWidth"] = max(120, len(_hn) * 8 + 44)
+    # Auto-size each column to its content, clamped to the minWidth above so the
+    # full header always fits; the grid scrolls horizontally past the viewport.
+    grid_options["onFirstDataRendered"] = JsCode(
+        "function(p){var a=p.api;"
+        "if(a&&a.autoSizeAllColumns){a.autoSizeAllColumns(false);}"
+        "else if(p.columnApi&&p.columnApi.autoSizeAllColumns){p.columnApi.autoSizeAllColumns(false);}}"
     )
 
     _update_mode = (

@@ -71,12 +71,18 @@ TRAILING_QUARTERS_DEFAULT = 8
 # Statement types that support trailing-quarters (have quarterly SEC/YF tables).
 TRAILING_QUARTERS_STMTS = {"Income Statement", "Balance Sheet", "Cash Flow"}
 
+# Quarter Range = one display-only column per calendar quarter in a chosen
+# [from, to] window. Same quarterly tables as TQ; bounded by the analyst's range
+# instead of "last N". Reuses the quarter_cols pipeline.
+QUARTER_RANGE = "QR"
+
 # Friendly labels for the Period Type selector.
 PERIOD_TYPE_LABELS = {
     "FY": "FY (Annual)",
     "CQ": "Calendar Quarter",
     "FQ": "Fiscal Quarter",
     "TQ": "Last N Quarters",
+    "QR": "Quarter Range",
 }
 
 # Year range for financial screening (historical statements)
