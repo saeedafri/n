@@ -4,12 +4,9 @@ Earnings Calendar Page - Coresight Research
 Calendar (Month grid) + Year view of earnings announcements with EPS beat/miss
 indicators and deep links to earnings call transcripts.
 """
-from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any, Tuple
 import html
-import json as _json
-import time as _time_module
 
 import streamlit as st
 
@@ -19,47 +16,6 @@ from core.auth_manager import require_auth, get_current_user, _auth_request_meta
 from utils.server_logger import new_rerun_id, log_timing
 
 new_rerun_id("earnings_calendar")
-
-# ─── EC_PERF timing helper ────────────────────────────────────────────────────
-# All [EC_PERF] log lines pass through at WARNING level (same gate as log_timing
-# when level="WARNING") so they appear even when APP_LOG_LEVEL=WARNING.
-def _ec_perf(phase: str, elapsed_ms: float, **meta) -> None:
-    """Emit a searchable [EC_PERF] timing line to the server log."""
-    try:
-        extra = " ".join(f"{k}={v}" for k, v in meta.items() if v is not None)
-        from utils.server_logger import log_warning as _lw
-        _lw(f"[EC_PERF] {phase} | {elapsed_ms:.2f}ms" + (f" | {extra}" if extra else ""))
-    except Exception:
-        pass
-def _ec_opt(phase: str, **meta) -> None:
-    """Emit a searchable [EC_OPT] line to the server log at WARNING level."""
-    try:
-        extra = " ".join(f"{k}={v}" for k, v in meta.items() if v is not None)
-        from utils.server_logger import log_warning as _lw
-        _lw(f"[EC_OPT] {phase}" + (f" | {extra}" if extra else ""))
-    except Exception:
-        pass
-
-
-# ─── Date-range helpers for windowed fetch ────────────────────────────────────
-
-def _month_view_date_range(anchor: date) -> Tuple[date, date]:
-    """Return (grid_start_inclusive, grid_end_inclusive) for a dayGridMonth grid.
-
-    Matches FullCalendar firstDay=0 (Sunday): 6-week window.
-    """
-    first = anchor.replace(day=1)
-    # Python weekday: Mon=0...Sun=6; days to roll back to preceding Sunday:
-    days_back = (first.weekday() + 1) % 7
-    grid_start = first - timedelta(days=days_back)
-    return grid_start, grid_start + timedelta(days=41)  # 42 days inclusive
-
-
-def _year_view_date_range(anchor: date) -> Tuple[date, date]:
-    """Return (Jan 1, Dec 31) for the year containing anchor."""
-    return date(anchor.year, 1, 1), date(anchor.year, 12, 31)
-
-
 log_timing(
     "AUTH_PAGE_ENTRY",
     0,
@@ -67,14 +23,14 @@ log_timing(
     level="WARNING",
 )
 log_auth_cookie_server_presence(page="earnings_calendar", context="before_require_auth")
-# _auth_data = require_auth(page="earnings_calendar")
-# log_timing(
-#     "AUTH_PAGE_ENTRY",
-#     0,
-#     f"{_auth_request_meta()} page=earnings_calendar stage=after_require_auth "
-#     f"user={(_auth_data or {}).get('user_email', '?')}",
-#     level="WARNING",
-# )
+_auth_data = require_auth(page="earnings_calendar")
+log_timing(
+    "AUTH_PAGE_ENTRY",
+    0,
+    f"{_auth_request_meta()} page=earnings_calendar stage=after_require_auth "
+    f"user={(_auth_data or {}).get('user_email', '?')}",
+    level="WARNING",
+)
 hide_sidebar()
 
 from data.repository import CompanyRepository, EarningsCalendarRepository
@@ -1203,7 +1159,8 @@ def _to_fullcalendar(events: List[Dict]) -> List[Dict]:
 
 def _render_detail_panel(event_data: Dict) -> None:
     try:
-        _dp_t0 = _time_module.perf_counter()
+        import time as _t
+        _t0 = _t.perf_counter()
 
         ep          = event_data.get("extendedProps", {})
         ticker      = ep.get("ticker", "")
@@ -1217,16 +1174,7 @@ def _render_detail_panel(event_data: Dict) -> None:
 
         quarter_label = f"Q{fiscal_q} {fiscal_year}" if fiscal_q and fiscal_year else fqe or "—"
         company_color = _company_color(ticker)
-
-        _t_transcript = _time_module.perf_counter()
         transcript_info = EarningsCalendarRepository.get_transcript_for_calendar_event(ticker, start_date)
-        _ec_perf(
-            "DETAIL_TRANSCRIPT_LOOKUP",
-            (_time_module.perf_counter() - _t_transcript) * 1000,
-            ticker=ticker,
-            earnings_date=start_date,
-            found=(transcript_info is not None),
-        )
         transcript_value = "—"
         if transcript_info:
             transcript_year = transcript_info["year"]
@@ -1300,12 +1248,7 @@ def _render_detail_panel(event_data: Dict) -> None:
         </div>
         """)
 
-        _ec_perf(
-            "DETAIL_PANEL_TOTAL",
-            (_time_module.perf_counter() - _dp_t0) * 1000,
-            ticker=ticker,
-            earnings_date=start_date,
-        )
+        _panel_ms = (_t.perf_counter() - _t0) * 1000
     except Exception as exc:
         log_structured_error(exc, page="earnings_calendar", component="_render_detail_panel",
                              operation="render_detail", context="detail panel render")
@@ -1399,17 +1342,9 @@ def render_page() -> None:
         _t0_page = _time.perf_counter()
 
         # Render styles FIRST - before anything else to prevent layout flash
-        _t_styles = _time.perf_counter()
         render_styles()
-        _ec_perf("RENDER_STYLES", (_time.perf_counter() - _t_styles) * 1000)
-
-        _t_page_cfg = _time.perf_counter()
         st.set_page_config(page_title="Earnings Calendar", layout="wide")
-        _ec_perf("SET_PAGE_CONFIG", (_time.perf_counter() - _t_page_cfg) * 1000)
-
-        _t_css = _time.perf_counter()
         st.html(_get_css())
-        _ec_perf("GET_CSS", (_time.perf_counter() - _t_css) * 1000)
 
         # Reset company dropdown and watchlist filter on fresh navigation to this page
         if st.session_state.get("_active_page") != "earnings_calendar":
@@ -1417,13 +1352,8 @@ def render_page() -> None:
             st.session_state.pop("ec_watchlist_filter", None)
             st.session_state["ec_active_watchlist_id"] = None
             st.session_state["ec_active_watchlist_name"] = ""
-            # Clear visible range so date-windowing recomputes from scratch
-            st.session_state.pop("ec_visible_start", None)
-            st.session_state.pop("ec_visible_end", None)
 
-        _t_header = _time.perf_counter()
         render_header(current_page="earnings_calendar")
-        _ec_perf("RENDER_HEADER", (_time.perf_counter() - _t_header) * 1000)
 
         # Show loading placeholder immediately before any blocking DB calls
         _ecal_loading_hint = st.empty()
@@ -1456,157 +1386,54 @@ def render_page() -> None:
             st.session_state.ec_active_watchlist_id = None
         if "ec_active_watchlist_name" not in st.session_state:
             st.session_state.ec_active_watchlist_name = ""
-        if "ec_visible_start" not in st.session_state:
-            st.session_state.ec_visible_start = None
-        if "ec_visible_end" not in st.session_state:
-            st.session_state.ec_visible_end = None
-        _ec_perf("SESSION_STATE_INIT", (_time.perf_counter() - _t_session) * 1000)
-
-        # ── Compute visible date range for windowed fetch ─────────────────────────
-        _t_vis_range = _time.perf_counter()
-        _anchor_iso = st.session_state._ec_current_date or date.today().isoformat()
-        try:
-            _anchor = date.fromisoformat(_anchor_iso[:10])
-        except Exception:
-            _anchor = date.today()
-        _cur_view = st.session_state.ec_view  # "calendar" | "year"
-
-        _vis_start: Optional[date] = None
-        _vis_end_inclusive: Optional[date] = None
-        _vis_range_source = "not_set"
-
-        if st.session_state.ec_visible_start and st.session_state.ec_visible_end:
-            try:
-                _vis_start = date.fromisoformat(st.session_state.ec_visible_start[:10])
-                # ec_visible_end is the EXCLUSIVE end from datesSet; convert to inclusive
-                _vis_end_exclusive = date.fromisoformat(st.session_state.ec_visible_end[:10])
-                _vis_end_inclusive = _vis_end_exclusive - timedelta(days=1)
-                _vis_range_source = "session_datesSet"
-            except Exception:
-                _vis_start = None
-                _vis_end_inclusive = None
-                _vis_range_source = "session_parse_error"
-
-        if _vis_start is None:
-            if _cur_view == "year":
-                _vis_start, _vis_end_inclusive = _year_view_date_range(_anchor)
-                _vis_range_source = "computed_year"
-            else:
-                _vis_start, _vis_end_inclusive = _month_view_date_range(_anchor)
-                _vis_range_source = "computed_month"
-
-        _ec_opt(
-            "VISIBLE_RANGE",
-            vis_start=str(_vis_start),
-            vis_end=str(_vis_end_inclusive),
-            source=_vis_range_source,
-            view=_cur_view,
-        )
-        _ec_perf("VISIBLE_RANGE_COMPUTE", (_time.perf_counter() - _t_vis_range) * 1000)
 
         # ── load available tickers + date range + all events (parallel — all independent) ─
+        from concurrent.futures import ThreadPoolExecutor
 
         def _fetch_tickers():
             try:
-                _ft0 = _time.perf_counter()
+                t = _time.perf_counter()
                 result = EarningsCalendarRepository.get_available_tickers()
-                _ec_perf(
-                    "DB_GET_AVAILABLE_TICKERS",
-                    (_time.perf_counter() - _ft0) * 1000,
-                    ticker_count=len(result),
-                )
-                return result  # [] = valid empty; list = has tickers
+                return result
             except Exception as exc:
                 log_structured_error(exc, page="earnings_calendar", component="_fetch_tickers",
                                      operation="fetch_tickers", context="parallel fetch")
-                _ec_opt("DB_ERROR_TICKERS")
-                return None  # None = DB error
+                return []
 
         def _fetch_date_range():
             try:
-                _ft0 = _time.perf_counter()
+                t = _time.perf_counter()
                 result = EarningsCalendarRepository.get_date_range()
-                _ec_perf(
-                    "DB_GET_DATE_RANGE",
-                    (_time.perf_counter() - _ft0) * 1000,
-                    min_date=str(result[0]) if result[0] else None,
-                    max_date=str(result[1]) if result[1] else None,
-                )
-                return result  # (None, None) = valid empty table; tuple = has dates
+                return result
             except Exception as exc:
                 log_structured_error(exc, page="earnings_calendar", component="_fetch_date_range",
                                      operation="fetch_date_range", context="parallel fetch")
-                _ec_opt("DB_ERROR_DATE_RANGE")
-                return None  # None = DB error (distinct from valid (None, None))
+                return (None, None)
 
         def _fetch_all_events():
             try:
-                _ft0 = _time.perf_counter()
-                result = EarningsCalendarRepository.get_calendar_events(
-                    tickers=None,
-                    start_date=_vis_start,
-                    end_date=_vis_end_inclusive,
-                )
-                _ec_perf(
-                    "DB_GET_CALENDAR_EVENTS_ALL",
-                    (_time.perf_counter() - _ft0) * 1000,
-                    event_count=len(result),
-                    company_count=len({e.get("ticker") for e in result if e.get("ticker")}),
-                    vis_start=str(_vis_start),
-                    vis_end=str(_vis_end_inclusive),
-                )
-                return result  # [] = valid empty range; list = has events
+                t = _time.perf_counter()
+                # Pre-fetch ALL events (no ticker filter) — used when user has "All Companies" selected
+                result = EarningsCalendarRepository.get_calendar_events(tickers=None)
+                return result
             except Exception as exc:
                 log_structured_error(exc, page="earnings_calendar", component="_fetch_all_events",
                                      operation="fetch_all_events", context="parallel fetch")
-                _ec_opt(
-                    "DB_ERROR_VISIBLE_RANGE",
-                    vis_start=str(_vis_start),
-                    vis_end=str(_vis_end_inclusive),
-                )
-                return None  # None = DB error, distinct from valid []
+                return []
 
         _t_parallel = _time.perf_counter()
-        _ec_perf("PARALLEL_FETCH_START", 0)
         # Single loading UX: custom `_ecal_loading_hint` above (don't stack `st.spinner` with same message).
         with ThreadPoolExecutor(max_workers=3) as _ec_exec:
             _ticker_future = _ec_exec.submit(_fetch_tickers)
             _dr_future = _ec_exec.submit(_fetch_date_range)
             _events_future = _ec_exec.submit(_fetch_all_events)
-            _tickers_raw     = _ticker_future.result()
-            _dr_raw          = _dr_future.result()
+            all_tickers_meta = _ticker_future.result()
+            (min_date, max_date) = _dr_future.result()
             _prefetched_events = _events_future.result()
-
-        # Unpack sentinels: None = DB error; non-None = valid (including valid empty)
-        _tickers_had_db_error    = _tickers_raw is None
-        _date_range_had_db_error = _dr_raw is None
-        _events_had_db_error     = _prefetched_events is None
-
-        all_tickers_meta = _tickers_raw if not _tickers_had_db_error else []
-        min_date, max_date = _dr_raw if not _date_range_had_db_error else (None, None)
-        if _events_had_db_error:
-            _prefetched_events = []  # normalize for downstream list operations
-
-        _ec_perf(
-            "PARALLEL_FETCH_TOTAL_WALL",
-            (_time.perf_counter() - _t_parallel) * 1000,
-            ticker_count=len(all_tickers_meta),
-            prefetched_events=len(_prefetched_events),
-            tickers_db_error=_tickers_had_db_error,
-            date_range_db_error=_date_range_had_db_error,
-            events_db_error=_events_had_db_error,
-            max_date=str(max_date) if max_date else None,
-        )
 
         if not all_tickers_meta or not max_date:
             _ecal_loading_hint.empty()
-            if _tickers_had_db_error or _date_range_had_db_error:
-                st.warning(
-                    "Earnings calendar metadata could not be loaded right now. "
-                    "This may be a temporary database issue — please try again in a moment."
-                )
-            else:
-                st.error("No earnings calendar data found.")
+            st.error("No earnings calendar data found.")
             return
 
         del min_date  # unused — year range dropdowns removed; FullCalendar arrows handle navigation
@@ -1616,7 +1443,6 @@ def render_page() -> None:
         _all_opt      = "All Companies"
         ticker_map    = {f"{m['name']} ({m['ticker']})": m["ticker"] for m in all_tickers_meta}
         all_labels    = [_all_opt] + list(ticker_map.keys())
-        _ec_perf("DROPDOWN_BUILD", (_time.perf_counter() - _t_dropdown) * 1000, label_count=len(all_labels))
 
         # ── Company synchronization ───────────────────────────────────────────────
         _t_ticker_resolve = _time.perf_counter()
@@ -1633,13 +1459,6 @@ def render_page() -> None:
         )
 
         _incoming = _validated_ticker
-        _ec_perf(
-            "TICKER_RESOLVE",
-            (_time.perf_counter() - _t_ticker_resolve) * 1000,
-            url_ticker=_url_ticker or "none",
-            validated=_validated_ticker,
-            was_fallback=_was_fallback,
-        )
 
         # If fallback was applied, update the URL
         if _was_fallback:
@@ -1666,55 +1485,20 @@ def render_page() -> None:
                                      context=f"label={st.session_state.get('ec_company_filter', '')}")
                 return
 
-        # ── toolbar setup: email badge + watchlist list — loaded in parallel ────────
-        _t_toolbar = _time.perf_counter()
+        # ── toolbar setup: email badge + watchlist list (one email lookup shared by both) ────
         _toolbar_user_email = _get_signed_in_user_email()
+        _ec_tb_alerts_on = bool(
+            _load_existing_alert_preferences(_toolbar_user_email).get("enabled", False)
+        )
 
-        def _load_alert_prefs_task():
-            try:
-                _ft0 = _time.perf_counter()
-                result = _load_existing_alert_preferences(_toolbar_user_email)
-                _ec_perf(
-                    "LOAD_ALERT_PREFERENCES",
-                    (_time.perf_counter() - _ft0) * 1000,
-                    user=_toolbar_user_email or "unknown",
-                    alerts_on=bool(result.get("enabled", False)),
-                )
-                return result
-            except Exception as exc:
-                log_structured_error(exc, page="earnings_calendar",
-                                     component="_load_alert_prefs_task",
-                                     operation="load_alert_prefs",
-                                     context=f"user={_toolbar_user_email}")
-                return {"enabled": False, "days_before": 1, "selection_mode": "companies",
-                        "tickers": [], "sectors": [], "watchlist_id": None}
-
-        def _load_watchlists_task():
-            try:
-                _ft0 = _time.perf_counter()
-                if not _toolbar_user_email:
-                    return []
-                result = get_user_watchlists(_toolbar_user_email)
-                _ec_perf(
-                    "LOAD_USER_WATCHLISTS",
-                    (_time.perf_counter() - _ft0) * 1000,
-                    watchlist_count=len(result),
-                )
-                return result
-            except Exception as exc:
-                log_structured_error(exc, page="earnings_calendar",
-                                     component="_load_watchlists_task",
-                                     operation="load_toolbar_watchlists",
-                                     context=f"user={_toolbar_user_email}")
-                return []
-
-        with ThreadPoolExecutor(max_workers=2) as _tb_exec:
-            _prefs_future = _tb_exec.submit(_load_alert_prefs_task)
-            _wl_future    = _tb_exec.submit(_load_watchlists_task)
-            _raw_prefs         = _prefs_future.result()
-            _toolbar_watchlists = _wl_future.result()
-
-        _ec_tb_alerts_on = bool(_raw_prefs.get("enabled", False))
+        try:
+            _toolbar_watchlists = get_user_watchlists(_toolbar_user_email) if _toolbar_user_email else []
+        except Exception as _wl_toolbar_exc:
+            log_structured_error(
+                _wl_toolbar_exc, page="earnings_calendar", component="render_page",
+                operation="load_toolbar_watchlists", context=f"user={_toolbar_user_email}",
+            )
+            _toolbar_watchlists = []
 
         _no_wl_label = "— No watchlist —"
         _wl_options = [_no_wl_label] + [
@@ -1726,19 +1510,11 @@ def render_page() -> None:
 
         # Validate active watchlist still exists; reset stale state if deleted/hidden
         _cur_wl_id = st.session_state.ec_active_watchlist_id
-        _stale_wl = _cur_wl_id is not None and _cur_wl_id not in _wl_ids
-        if _stale_wl:
+        if _cur_wl_id is not None and _cur_wl_id not in _wl_ids:
             st.session_state.ec_active_watchlist_id = None
             st.session_state.ec_active_watchlist_name = ""
             st.session_state.pop("ec_watchlist_filter", None)
             _cur_wl_id = None
-        _ec_perf(
-            "TOOLBAR_SETUP_TOTAL",
-            (_time.perf_counter() - _t_toolbar) * 1000,
-            watchlist_option_count=len(_wl_options),
-            active_wl_id=_cur_wl_id,
-            stale_wl_reset=_stale_wl,
-        )
 
         _wl_default_idx = _wl_ids.index(_cur_wl_id) if _cur_wl_id in _wl_ids else 0
 
@@ -1825,9 +1601,6 @@ def render_page() -> None:
                     width="stretch",
                     type="primary" if st.session_state.ec_view == "calendar" else "secondary",
                 ):
-                    if st.session_state.ec_view != "calendar":
-                        st.session_state.ec_visible_start = None
-                        st.session_state.ec_visible_end = None
                     st.session_state.ec_view = "calendar"
                     st.session_state.ec_selected_event = None
             with c2:
@@ -1836,26 +1609,14 @@ def render_page() -> None:
                     width="stretch",
                     type="primary" if st.session_state.ec_view == "year" else "secondary",
                 ):
-                    if st.session_state.ec_view != "year":
-                        st.session_state.ec_visible_start = None
-                        st.session_state.ec_visible_end = None
                     st.session_state.ec_view = "year"
                     st.session_state.ec_selected_event = None
 
         # ── load events (all dates; FullCalendar arrows handle navigation) ────────
         _t_events = _time.perf_counter()
         _active_wl_id = st.session_state.ec_active_watchlist_id
-        _active_company_label = st.session_state.get("ec_company_filter", _all_opt)
-        _ec_perf(
-            "EVENT_FILTER_START",
-            0,
-            view=st.session_state.ec_view,
-            active_wl_id=_active_wl_id,
-            company_label=(_active_company_label or _all_opt)[:60],
-        )
         if _active_wl_id is not None:
             # Watchlist mode: fetch member rows then filter prefetched events in memory
-            _t_wl_fetch = _time.perf_counter()
             try:
                 _wl_company_rows = get_watchlist_companies(_active_wl_id)
             except Exception as _wl_filter_exc:
@@ -1864,106 +1625,35 @@ def render_page() -> None:
                     operation="get_watchlist_companies", context=f"watchlist_id={_active_wl_id}",
                 )
                 _wl_company_rows = []
-            _ec_perf(
-                "DB_GET_WATCHLIST_COMPANIES",
-                (_time.perf_counter() - _t_wl_fetch) * 1000,
-                watchlist_id=_active_wl_id,
-                row_count=len(_wl_company_rows),
-            )
-            _t_wl_filter = _time.perf_counter()
             events = _filter_events_by_watchlist(_prefetched_events, _wl_company_rows)
-            _ec_perf(
-                "FILTER_EVENTS_BY_WATCHLIST",
-                (_time.perf_counter() - _t_wl_filter) * 1000,
-                prefetched=len(_prefetched_events),
-                after_filter=len(events),
-                company_count=len({e["ticker"] for e in events}),
-            )
             _wl_active_name = st.session_state.ec_active_watchlist_name
             _wl_cal_count = len({e["ticker"] for e in events})
-            # Only show the watchlist caption when the base events fetch succeeded.
-            # If _events_had_db_error the caption would falsely show "0 companies found"
-            # when the real problem is a DB timeout, not an empty watchlist.
-            if not _events_had_db_error:
-                st.caption(
-                    f"Filtering by watchlist: **{_wl_active_name}** — "
-                    f"{len(_wl_company_rows)} {'company' if len(_wl_company_rows) == 1 else 'companies'}, "
-                    f"{_wl_cal_count} {'company' if _wl_cal_count == 1 else 'companies'} "
-                    f"found on this earnings calendar."
-                )
+            st.caption(
+                f"Filtering by watchlist: **{_wl_active_name}** — "
+                f"{len(_wl_company_rows)} {'company' if len(_wl_company_rows) == 1 else 'companies'}, "
+                f"{_wl_cal_count} {'company' if _wl_cal_count == 1 else 'companies'} "
+                f"found on this earnings calendar."
+            )
         elif selected_label == _all_opt:
             # "All Companies" selected — use the pre-fetched result (0ms — already in cache)
             events = _prefetched_events
-            _ec_perf(
-                "EVENT_FILTER_ALL_COMPANIES",
-                (_time.perf_counter() - _t_events) * 1000,
-                events=len(events),
-                companies=len({e["ticker"] for e in events}),
-                source="prefetched",
-            )
         else:
             # Specific company selected — fetch filtered subset (hits Streamlit cache)
-            _t_specific = _time.perf_counter()
             with st.spinner(""):
-                events = EarningsCalendarRepository.get_calendar_events(
-                    tickers=selected_tickers,
-                    start_date=_vis_start,
-                    end_date=_vis_end_inclusive,
-                )
-            _ec_perf(
-                "DB_GET_CALENDAR_EVENTS_SPECIFIC",
-                (_time.perf_counter() - _t_specific) * 1000,
-                tickers=",".join(selected_tickers),
-                event_count=len(events),
-                vis_start=str(_vis_start),
-                vis_end=str(_vis_end_inclusive),
-            )
-        _ec_perf(
-            "EVENT_FILTER_TOTAL",
-            (_time.perf_counter() - _t_events) * 1000,
-            filter_mode=("watchlist" if _active_wl_id else ("all" if selected_label == _all_opt else "company")),
-            final_event_count=len(events),
-            final_company_count=len({e.get("ticker") for e in events if e.get("ticker")}),
-        )
-
-        _filter_mode = "watchlist" if _active_wl_id else ("all" if selected_label == _all_opt else "company")
+                events = EarningsCalendarRepository.get_calendar_events(tickers=selected_tickers)
 
         if not events:
-            # Watchlist and all-companies modes both depend on _prefetched_events.
-            # If _events_had_db_error is true, an empty result is a DB failure artefact —
-            # not a real empty window. Show a retryable warning instead of dead-stating.
-            if _events_had_db_error and _filter_mode in ("all", "watchlist"):
-                _ec_opt(
-                    "DB_ERROR_EMPTY_RESULT",
-                    vis_start=str(_vis_start),
-                    vis_end=str(_vis_end_inclusive),
-                    filter_mode=_filter_mode,
-                )
-                _ecal_loading_hint.empty()
-                st.warning(
-                    "Earnings events could not be loaded right now. "
-                    "This may be a temporary database issue — please try again in a moment."
-                )
-                render_coresight_footer()
-                return
-            # Valid empty range: no events in this window, or filter/watchlist yields zero.
-            # Fall through — FullCalendar renders an empty navigable grid.
-            _ec_opt(
-                "VALID_EMPTY_RANGE",
-                vis_start=str(_vis_start),
-                vis_end=str(_vis_end_inclusive),
-                filter_mode=_filter_mode,
-            )
+            _ecal_loading_hint.empty()
+            st.html('<div class="ec-no-data">No earnings events found for the selected filters.</div>')
+            render_coresight_footer()
+            return
 
         # ── event count ───────────────────────────────────────────────────────────
-        if events:
-            st.html(f"""
-            <div class="ec-event-count">
-                {len(events):,} events &nbsp;·&nbsp; {len(set(e['ticker'] for e in events))} companies
-            </div>
-            """)
-        else:
-            st.html('<div class="ec-event-count">No events in this date range — use prev/next to navigate.</div>')
+        st.html(f"""
+        <div class="ec-event-count">
+            {len(events):,} events &nbsp;·&nbsp; {len(set(e['ticker'] for e in events))} companies
+        </div>
+        """)
 
         # ─────────────────────────────────────────────────────────────────────────
         # FULLCALENDAR — Month (dayGridMonth) or Year (multiMonthYear) view
@@ -1971,21 +1661,7 @@ def render_page() -> None:
         from streamlit_calendar import calendar as st_calendar
 
         _t_fc_prep = _time.perf_counter()
-        fc_events = _to_fullcalendar(events)
-        _fc_convert_ms = (_time.perf_counter() - _t_fc_prep) * 1000
-        _t_payload = _time.perf_counter()
-        try:
-            _payload_bytes = len(_json.dumps(fc_events, default=str).encode("utf-8"))
-        except Exception:
-            _payload_bytes = -1
-        _ec_perf(
-            "TO_FULLCALENDAR",
-            _fc_convert_ms,
-            input_events=len(events),
-            output_events=len(fc_events),
-            payload_bytes=_payload_bytes,
-            payload_kb=round(_payload_bytes / 1024, 1) if _payload_bytes > 0 else -1,
-        )
+        fc_events    = _to_fullcalendar(events)
         _dated       = [e["earnings_date"] for e in events if e.get("earnings_date")]
         initial_date = _to_iso(max(_dated)) if _dated else date.today().isoformat()
         is_year_view = st.session_state.ec_view == "year"
@@ -2031,13 +1707,6 @@ def render_page() -> None:
         # the correct month.  We update _ec_current_date on event click so when
         # Streamlit rerenders, the calendar opens back on the event's month.
         cal_options["initialDate"] = st.session_state._ec_current_date
-        _ec_perf(
-            "CALENDAR_OPTIONS_BUILD",
-            (_time.perf_counter() - _t_fc_prep) * 1000,
-            view=("year" if is_year_view else "month"),
-            fc_events=len(fc_events),
-            initial_date=cal_options.get("initialDate"),
-        )
 
         calendar_css = """
             .fc { font-family:'Roboto',sans-serif !important; background:#FFFFFF !important; }
@@ -2072,88 +1741,23 @@ def render_page() -> None:
 
         with cal_col:
             _t_fc_render = _time.perf_counter()
-            _ec_perf(
-                "ST_CALENDAR_CALL_START",
-                0,
-                fc_events=len(fc_events),
-                view=("year" if is_year_view else "month"),
-                key=cal_key,
-            )
-            # eventsSet is intentionally excluded — it fires on every event repaint and
-            # causes infinite reruns. datesSet fires only when the visible date RANGE
-            # changes (navigation, view switch). We guard with ec_visible_start/end
-            # comparison so a rerun from datesSet doesn't trigger a second rerun.
+            # Default streamlit-calendar callbacks include `eventsSet`, which FullCalendar
+            # fires whenever events are painted (initial load, month nav, etc.). Each call
+            # posts to Streamlit and retriggers a full script rerun — feels like constant
+            # reloads. We only need clicks for the detail panel.
             cal_result = st_calendar(
                 events=fc_events,
                 options=cal_options,
                 custom_css=calendar_css,
                 key=cal_key,
-                callbacks=["eventClick", "datesSet"],
+                callbacks=["eventClick"],
             )
-            _ec_perf(
-                "ST_CALENDAR_CALL_END_SERVER",
-                (_time.perf_counter() - _t_fc_render) * 1000,
-                note="server-side_component_call_only_not_browser_paint",
-            )
-
-        # ── datesSet: update stored visible range; rerun to re-fetch with new window ─
-        # Guard: compare new range against stored to prevent rerun loops.
-        # - First render: computed range may differ from FullCalendar's → one corrective rerun.
-        # - Navigation (prev/next/today): one rerun to fetch the new window.
-        # - Subsequent fires for the same range: NO rerun (loop proof).
-        _dates_set = (cal_result or {}).get("datesSet")
-        if _dates_set:
-            _new_vis_start = (_dates_set.get("startStr") or "")[:10]
-            _new_vis_end   = (_dates_set.get("endStr")   or "")[:10]
-            if not _new_vis_start or not _new_vis_end:
-                _ec_opt("DATES_SET_IGNORED", reason="missing_start_or_end",
-                        raw=str(_dates_set)[:80])
-            elif (
-                _new_vis_start != st.session_state.get("ec_visible_start")
-                or _new_vis_end != st.session_state.get("ec_visible_end")
-            ):
-                # Range changed — update state and rerun to fetch the new window
-                _ec_opt(
-                    "DATES_SET_UPDATED",
-                    old_start=st.session_state.get("ec_visible_start"),
-                    old_end=st.session_state.get("ec_visible_end"),
-                    new_start=_new_vis_start,
-                    new_end=_new_vis_end,
-                )
-                st.session_state.ec_visible_start = _new_vis_start
-                st.session_state.ec_visible_end   = _new_vis_end
-                # Advance _ec_current_date into the visible range so FullCalendar
-                # remounts on the correct month if ec_cal_version changes later.
-                try:
-                    _ds_anchor = date.fromisoformat(_new_vis_start) + timedelta(days=20)
-                    st.session_state._ec_current_date = _ds_anchor.isoformat()
-                except Exception:
-                    pass
-                st.rerun()
-            else:
-                # Range unchanged — no rerun; loop stops here
-                _ec_opt(
-                    "DATES_SET_NO_RERUN",
-                    start=_new_vis_start,
-                    end=_new_vis_end,
-                    reason="range_unchanged",
-                )
 
         if cal_result and cal_result.get("eventClick"):
             clicked_event = cal_result["eventClick"]["event"]
             # Compare as strings — JSON may coerce ids to int on one run and str on another.
             clicked_id = str(clicked_event.get("id", "") or "")
             current_id = str((st.session_state.ec_selected_event or {}).get("id", "") or "")
-            _clicked_ticker = (clicked_event.get("extendedProps") or {}).get("ticker", "")
-            _clicked_date = clicked_event.get("start", "")
-            _ec_perf(
-                "EVENT_CLICK_RECEIVED",
-                0,
-                clicked_id=clicked_id,
-                ticker=_clicked_ticker,
-                date=_clicked_date,
-                triggers_rerun=(clicked_id != current_id),
-            )
             if clicked_id != current_id:
                 st.session_state.ec_selected_event = clicked_event
                 # Track the event's month so initialDate keeps FullCalendar here
@@ -2166,14 +1770,8 @@ def render_page() -> None:
         with detail_col:
             if st.session_state.ec_selected_event:
                 st.html('<div style="height:60px;"></div>')
-                _t_detail = _time.perf_counter()
                 _render_detail_panel(st.session_state.ec_selected_event)
-                _ec_perf(
-                    "DETAIL_PANEL_RENDER_TOTAL",
-                    (_time.perf_counter() - _t_detail) * 1000,
-                )
                 if st.button("✕ Close", key="ec_close_detail"):
-                    _ec_perf("DETAIL_CLOSE_BUTTON_CLICKED", 0)
                     st.session_state.ec_selected_event = None
                     st.session_state.ec_cal_version   += 1
                     st.rerun()
@@ -2182,21 +1780,6 @@ def render_page() -> None:
 
         # Clear the early loading placeholder now that content is rendered
         _ecal_loading_hint.empty()
-
-        _total_ms = (_time.perf_counter() - _t0_page) * 1000
-        _ec_perf(
-            "TOTAL_RENDER_MS",
-            _total_ms,
-            db_parallel_ms=round((_t_dropdown - _t_parallel) * 1000, 1),
-            toolbar_ms=round((_time.perf_counter() - _t_toolbar) * 1000, 1),
-            fc_convert_ms=round(_fc_convert_ms, 1),
-            payload_bytes=_payload_bytes,
-            payload_kb=round(_payload_bytes / 1024, 1) if _payload_bytes > 0 else -1,
-            final_events=len(events),
-            final_fc_events=len(fc_events),
-            view=("year" if is_year_view else "month"),
-            filter_mode=("watchlist" if _active_wl_id else ("all" if selected_label == _all_opt else "company")),
-        )
 
         render_coresight_footer()
 

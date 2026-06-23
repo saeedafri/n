@@ -8203,6 +8203,107 @@ class EarningsCalendarRepository:
             return rows[0]["earnings_date"]
         return None
 
+    _MONTH_ABB = {
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+    }
+
+    @staticmethod
+    def _fqe_string_for_transcript(report_fiscal_year, fiscal_q, fye_month, convention) -> str:
+        """NASDAQ `fiscal_quarter_ending` label ('Mon/Year') for an AV (year, q) transcript.
+
+        The quarter-end MONTH is unambiguous (fiscal-year-end month + quarter). Only the YEAR is
+        company-dependent: AV numbers the fiscal year either by the calendar year it STARTS in
+        (convention='start', e.g. TGT -> FY2026 Q1 ends Apr 2026) or ENDS in (convention='end',
+        e.g. WMT -> FY2026 Q1 ends Apr 2025). See `_fiscal_numbering_convention`.
+        """
+        fye_cal_year = int(report_fiscal_year) + (1 if convention == "start" else 0)
+        m = int(fye_month) - (4 - int(fiscal_q)) * 3
+        y = fye_cal_year
+        while m <= 0:
+            m += 12
+            y -= 1
+        return f"{EarningsCalendarRepository._MONTH_ABB[m]}/{y}"
+
+    @staticmethod
+    def _nasdaq_report_date_for_fqe(ticker, fqe) -> "Optional[date]":
+        """Announcement date from the NASDAQ calendar for a given `fiscal_quarter_ending` label."""
+        rows = db_manager.execute_query_readonly(
+            """
+            SELECT MAX(earnings_date) AS d
+            FROM coreiq_nasdaq_earnings_calendar
+            WHERE ticker = :ticker
+              AND fiscal_quarter_ending = :fqe
+              AND earnings_date IS NOT NULL
+            """,
+            {"ticker": ticker, "fqe": fqe},
+        )
+        d = rows[0].get("d") if rows else None
+        if d is None:
+            return None
+        return d.date() if isinstance(d, datetime) else d
+
+    @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
+    def _fiscal_numbering_convention(ticker: str, fye_month: int) -> Optional[str]:
+        """Return 'start' or 'end': whether AV numbers this company's fiscal year by the calendar
+        year it STARTS in (e.g. TGT) or ENDS in (e.g. WMT). Two companies can share a fiscal-year-end
+        month yet number oppositely, so this CANNOT be derived from the FYE month alone.
+
+        Determined logically from the NASDAQ calendar (no transcript text): a transcript can only
+        exist once its call has happened (report_date <= today). Anchor on the most recent transcript
+        NASDAQ actually has a row for (the NASDAQ calendar can lag the transcript feed by a quarter or
+        two). Default to 'end'; choose 'start' only when the start-reading places that anchor's call
+        recently in the past (<=220 days) and LATER than the end-reading — i.e. the company numbers
+        its fiscal year by the calendar year it starts in. The wrong convention for an 'end' company
+        lands ~a year in the future (no past NASDAQ row), so it is never selected.
+        """
+        if not ticker or not fye_month:
+            return None
+        trs = db_manager.execute_query_readonly(
+            """
+            SELECT year, q
+            FROM coreiq_av_earnings_call_transcripts
+            WHERE ticker = :ticker AND has_transcript = 1
+            ORDER BY year DESC, q DESC
+            """,
+            {"ticker": ticker},
+        ) or []
+        if not trs:
+            return None
+        nas_rows = db_manager.execute_query_readonly(
+            """
+            SELECT fiscal_quarter_ending AS fqe, MAX(earnings_date) AS d
+            FROM coreiq_nasdaq_earnings_calendar
+            WHERE ticker = :ticker
+              AND earnings_date IS NOT NULL
+              AND fiscal_quarter_ending IS NOT NULL
+            GROUP BY fiscal_quarter_ending
+            """,
+            {"ticker": ticker},
+        ) or []
+        if not nas_rows:
+            return None
+        nas: Dict[str, date] = {}
+        for r in nas_rows:
+            d = r.get("d")
+            if d is not None:
+                nas[r["fqe"]] = d.date() if isinstance(d, datetime) else d
+
+        today = date.today()
+        for t in trs:  # newest-first
+            d_end = nas.get(
+                EarningsCalendarRepository._fqe_string_for_transcript(t["year"], t["q"], fye_month, "end")
+            )
+            if d_end and d_end <= today:
+                d_start = nas.get(
+                    EarningsCalendarRepository._fqe_string_for_transcript(t["year"], t["q"], fye_month, "start")
+                )
+                if d_start and d_start <= today and d_start > d_end and (today - d_start).days <= 220:
+                    return "start"
+                return "end"
+        return None
+
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
     @_log_query_time
@@ -8228,6 +8329,30 @@ class EarningsCalendarRepository:
             fye_map = {}
         fye_name = fye_map.get(ticker, "December")
         fye_month = _MONTH_NAME_TO_NUM.get(fye_name.lower(), 12)
+
+        # PRIMARY: resolve via the company's fiscal-year-numbering convention + the NASDAQ calendar.
+        # AV labels a transcript by fiscal (year, q); the quarter-END MONTH follows from the FYE and
+        # the convention fixes the YEAR. This replaces the per-company-inconsistent year guessing that
+        # produced the recurring wrong-year header dates (e.g. TGT vs WMT — both January FYE, opposite
+        # numbering). Falls through to the candidate/NASDAQ derivation below when unresolved.
+        try:
+            convention = EarningsCalendarRepository._fiscal_numbering_convention(ticker, fye_month)
+            if convention:
+                fqe = EarningsCalendarRepository._fqe_string_for_transcript(
+                    report_fiscal_year, fiscal_q, fye_month, convention
+                )
+                rd = EarningsCalendarRepository._nasdaq_report_date_for_fqe(ticker, fqe)
+                if rd:
+                    fpe_dates = EarningsCalendarRepository._fqe_strings_to_unique_end_dates([fqe])
+                    return {
+                        "report_date": rd,
+                        "fiscal_period_end_date": fpe_dates[0] if fpe_dates else None,
+                    }
+        except Exception as _conv_err:
+            log_error(
+                f"[EC] convention resolve failed for {ticker} "
+                f"{report_fiscal_year}Q{fiscal_q}: {_conv_err}"
+            )
 
         transcript_rows = db_manager.execute_query_readonly(
             """
@@ -8886,226 +9011,48 @@ class SegmentDataRepository:
             return "geo"
         return "business"  # Business, Product and Service, etc.
 
-    # Aggregate "wrapper" members: a fact tagged with one of these on the primary
-    # axis is a multi-axis segment cross-section whose REAL breakdown lives in the
-    # secondary clause of full_dimension_label (e.g. Costco / Apple report segment
-    # revenue as "Consolidation Items: Operating Segments, Geographical: <region>").
-    _SEGMENT_WRAPPER_MEMBERS = {
-        'operating segments', 'reportable segments', 'reportable segment',
-    }
+    # Generic wrapper members that denote the operating-segment total, not a real segment.
+    # Multi-dimensional facts pair these with the actual segment on a SECOND axis, e.g. Costco
+    # geo revenue is tagged ConsolidationItems=Operating Segments + Segments=United States, with
+    # the real member ("United States") surfaced in the dimension_label column.
+    _SEGMENT_WRAPPER_MEMBERS = frozenset({
+        "operating segments", "reportable segments", "reportable segment",
+        "total reportable segments",
+    })
+
+    _SEGMENT_GEO_AXIS_KEYS = (
+        "StatementGeographicalAxis", "GeographicDistributionAxis",
+        "RegionReportingInformationByRegionAxis", "CountryAxis",
+        "InvestmentGeographicRegionAxis",
+    )
+
+    _GEO_KEYWORDS = (
+        "international", "domestic", "foreign", "overseas", "region", "americas",
+        "america", "europe", "asia", "africa", "oceania", "pacific", "middle east",
+        "emea", "apac", "u.s.", "united states", "united kingdom", "canad", "mexic",
+        "rest of world", "non-u.s", "non-us", "worldwide", "latin",
+    )
 
     @staticmethod
-    def _is_segment_heading(heading: str) -> bool:
-        """True if a normalised secondary-axis heading is a real reportable-segment
-        dimension (Geographical / Business / Product / *Segments) — not an
-        unrelated disaggregation axis (Counterparty, Sales Channel, Restructuring…)."""
-        if heading in ("Geographical", "Business", "Product and Service"):
-            return True
-        h = (heading or "").lower()
-        return h.endswith("segments") or h.endswith("segment")
-
-    # Strong geographic tokens (a member must contain at least one of these to be
-    # geo) and weak/connector tokens that are allowed alongside them.
-    _GEO_STRONG_TOKENS = {
-        'us', 'usa', 'u.s', 'u.s.', 'domestic', 'canada', 'canadian',
-        'america', 'americas', 'european', 'europe', 'emea', 'apac', 'asia',
-        'asian', 'pacific', 'africa', 'african', 'oceania', 'china', 'chinese',
-        'japan', 'japanese', 'korea', 'korean', 'india', 'indian', 'mexico',
-        'mexican', 'brazil', 'foreign', 'overseas', 'international', 'intl',
-        'eurasia', 'caribbean', 'nordic', 'benelux', 'iberia', 'latam',
-    }
-    _GEO_WEAK_TOKENS = {
-        'and', '&', 'the', 'of', 'other', 'rest', 'world', 'region', 'regions',
-        'operations', 'operation', 'markets', 'market', 'states', 'united',
-        'kingdom', 'east', 'west', 'north', 'south', 'central', 'eastern',
-        'western', 'northern', 'southern', 'middle', 'greater', 'latin',
-        'primarily', 'including', 'excluding', 'all', 'segment', 'segments',
-    }
+    @functools.lru_cache(maxsize=1)
+    def _geo_name_set() -> frozenset:
+        """Lower-cased country names + canonical geo aliases for name-based geo detection."""
+        from utils.constants import COUNTRY_NAMES
+        from data.segment_aliases import GEO_ALIAS_TO_CANONICAL
+        s = set(GEO_ALIAS_TO_CANONICAL.keys())
+        s |= {str(v).lower().strip() for v in COUNTRY_NAMES.values()}
+        s |= {str(k).lower().strip() for k in COUNTRY_NAMES.keys()}
+        return frozenset(s)
 
     @staticmethod
-    def _is_geo_member(member: str) -> bool:
-        """Is this reportable-segment member a country/region? Used so geographies
-        tagged on the generic 'Segments' axis (Costco's United States / Canada,
-        Apple's Americas / Greater China) route to the Geographic table — while
-        brand-named operating segments that merely CONTAIN a geo word ("Walmart
-        U.S.", "Walmart International") stay in the Business table.
-
-        Token-based (not substring): a member qualifies only if EVERY word is a
-        recognised geo/connector token AND at least one is a strong geo token.
-        Country full names from COUNTRY_NAMES are also accepted verbatim."""
+    def _looks_geographic(member: str) -> bool:
+        """Heuristic: does a segment member name denote a geography (country / region)?"""
         if not member:
             return False
-        from utils.constants import COUNTRY_NAMES
-        m = member.lower().strip()
-        if m.lower().endswith(" operations"):
-            m = m[:-len(" operations")].strip()
-        # Whole-string match against known country full names (handles multi-word
-        # names like "united kingdom", "south korea", "united arab emirates").
-        country_full = {nm.lower() for nm in COUNTRY_NAMES.values()}
-        if m in country_full:
+        low = member.lower().strip()
+        if low in SegmentDataRepository._geo_name_set():
             return True
-        import re
-        tokens = [t for t in re.split(r'[\s,/\-]+', m) if t]
-        if not tokens:
-            return False
-        strong = SegmentDataRepository._GEO_STRONG_TOKENS
-        weak = SegmentDataRepository._GEO_WEAK_TOKENS
-        has_strong = False
-        for t in tokens:
-            t = t.strip('.')
-            if t in strong or (t + '.') in strong:
-                has_strong = True
-            elif t in weak:
-                continue
-            elif t in {w.strip('.') for w in strong}:
-                has_strong = True
-            else:
-                return False  # a non-geo word (e.g. a brand) → not a geography
-        return has_strong
-
-    @staticmethod
-    def _canon_geo_member(member: str) -> str:
-        """Collapse cross-filing geo label drift so the same region isn't counted
-        twice (Costco tags US as 'United States Operations' in older filings and
-        'United States' in FY2025). Strip trailing 'Operations'; map adjectives."""
-        m = (member or "").strip()
-        if m.lower().endswith(" operations"):
-            m = m[:-len(" operations")].strip()
-        repl = {"canadian": "Canada", "u.s.": "United States",
-                "us": "United States", "usa": "United States"}
-        return repl.get(m.lower(), m)
-
-    @staticmethod
-    def _unwrap_wrapper_row(fdl: str):
-        """For a multi-axis 'Operating Segments' wrapper fact, return (member,
-        section) from its secondary clause, or None to skip.
-
-        Only the clean 2-clause shape is unwrapped
-        ("Consolidation Items: Operating Segments, <Axis>: <member>"). 3+ clause
-        cross-tabs (channel / restructuring / sub-segment splits) are skipped to
-        avoid double-counting the same revenue across multiple disaggregations.
-        Member is the trailing clause, so commas inside member names
-        ("KOREA, REPUBLIC OF") are preserved."""
-        parts = (fdl or "").split(": ")
-        if len(parts) - 1 != 2:
-            return None  # bare aggregate (no breakdown) or cross-tab → skip
-        mid, member = parts[1], parts[2].strip()
-        sec_heading_raw = mid.rsplit(", ", 1)[-1] if ", " in mid else mid
-        heading = SegmentDataRepository._normalize_heading(sec_heading_raw)
-        ml = member.lower().strip()
-        if not member or ml in SegmentDataRepository.SEGMENT_SKIP_MEMBERS:
-            return None
-        # Drop elimination / corporate-adjustment cross-sections (e.g. Hasbro's
-        # "Corporate Elimination") — these are not reportable segments and carry
-        # negative/contra values that would pollute the table.
-        if 'elimination' in ml or 'intersegment' in ml or 'inter-segment' in ml:
-            return None
-        if not SegmentDataRepository._is_segment_heading(heading):
-            return None
-        member = SegmentDataRepository._title_case_member(member)
-        if heading == "Geographical" or SegmentDataRepository._is_geo_member(member):
-            return (SegmentDataRepository._canon_geo_member(member), "geo")
-        return (member, "business")
-
-    @staticmethod
-    def _classify_segment_rows(
-        filtered: List[Dict[str, Any]],
-        years: List[int],
-    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-        """Classify pre-fetched rows into (business_data, geo_data, metric_totals).
-
-        SINGLE SOURCE OF TRUTH for segment-member classification, shared by the
-        annual Segments tab (``_build_segment_tables_from_db``) AND the screening
-        segment values cache (``screening_service.build_segment_values_cache``).
-        Any change to wrapper-unwrap / geo-routing / metric-matching here flows
-        to both, so the screener can never drift from what the tab shows.
-
-        The caller MUST pass ``filtered`` already ordered by
-        ``(report_fiscal_year, full_dimension_label, original_label, filing_date DESC)``
-        so the first-wins merge keeps the most recent filing's value. Rows whose
-        derived year is not in ``years`` are skipped. Pass non-dimensioned rows
-        (``_is_ndim=True``) to populate ``metric_totals``; omit them (the cache
-        path does) to leave it empty.
-        """
-        from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
-
-        biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
-
-        # STRICTLY ADDITIVE: process ordinary single-axis rows FIRST, multi-axis
-        # "Operating Segments" wrapper rows LAST. Combined with the first-wins
-        # ("only set when None") merge below, this guarantees unwrapped wrapper
-        # data can only FILL empty cells — it can never override a value an
-        # existing single-axis fact already produced. No regression to current
-        # business/geo numbers; wrapper data only adds what was missing.
-        # `sorted` (not in-place) keeps the caller's list intact; Python's stable
-        # sort preserves the caller's recency ordering within each group.
-        filtered = sorted(
-            filtered,
-            key=lambda r: 1 if (r.get('dimension_member_label') or '').lower().strip()
-            in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS else 0,
-        )
-
-        for row in filtered:
-            if not SegmentDataRepository._is_monetary_row(row):
-                continue
-            orig_label = row.get('original_label') or ''
-            row_year = SegmentDataRepository._get_row_year(row)
-            raw_val = row.get('numeric_value')
-            if raw_val is None or row_year not in years:
-                continue
-            scaled = raw_val / 1_000_000
-
-            # Non-dimensioned rows → metric_totals (exact consolidated totals)
-            if row.get('_is_ndim'):
-                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                    if SegmentDataRepository._matches_metric(orig_label, cfg):
-                        if metric_name not in metric_totals:
-                            metric_totals[metric_name] = {y: None for y in years}
-                        if metric_totals[metric_name].get(row_year) is None:
-                            metric_totals[metric_name][row_year] = scaled
-                        break
-                continue
-
-            # Dimensioned rows → segment members
-            fdl = row.get('full_dimension_label') or ''
-            member_raw = row.get('dimension_member_label') or ''
-            is_wrapper = member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS
-            if is_wrapper:
-                # Multi-axis wrapper fact (e.g. Costco/Apple report segment revenue
-                # as "Operating Segments × <region/segment>"). Unwrap the real
-                # breakdown from full_dimension_label; previously these were dropped.
-                resolved = SegmentDataRepository._unwrap_wrapper_row(fdl)
-                if resolved is None:
-                    continue
-                member, section = resolved
-            else:
-                if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
-                    continue
-                member = SegmentDataRepository._title_case_member(member_raw)
-                if not member:
-                    continue
-                heading = SegmentDataRepository._get_heading(fdl)
-                section = SegmentDataRepository._classify_heading(heading)
-
-            for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                if SegmentDataRepository._matches_metric(orig_label, cfg):
-                    # Wrapper-only guard: revenue is never negative; a negative
-                    # "Revenues" cross-section is an intersegment/adjustment line,
-                    # not a real segment value — skip so it can't add a bad member.
-                    if is_wrapper and metric_name == "Revenues" and scaled < 0:
-                        break
-                    target = geo_data if section == "geo" else biz_data
-                    if metric_name not in target:
-                        target[metric_name] = {}
-                    if member not in target[metric_name]:
-                        target[metric_name][member] = {y: None for y in years}
-                    if target[metric_name][member][row_year] is None:
-                        target[metric_name][member][row_year] = scaled
-                    break
-
-        return biz_data, geo_data, metric_totals
+        return any(kw in low for kw in SegmentDataRepository._GEO_KEYWORDS)
 
     @staticmethod
     def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
@@ -9143,11 +9090,84 @@ class SegmentDataRepository:
             y: SegmentDataRepository._fye_display_date(y, _fye_m) for y in years
         }
 
-        # Classify rows into business / geo tables + consolidated metric_totals.
-        # Extracted to a shared method so the screening segment cache builds from
-        # the EXACT same logic (wrapper-unwrap, geo-routing, first-wins) — single
-        # source of truth, no drift between the Segments tab and the screener.
-        biz_data, geo_data, metric_totals = SegmentDataRepository._classify_segment_rows(filtered, years)
+        # Members this company reports on a genuine geographic axis (any metric, incl. non-monetary
+        # warehouse/store counts). Used to confirm that a member recovered from a multi-dimensional
+        # operating-segment fact is truly geographic before routing it to the Geographic table.
+        geo_member_set = set()
+        for row in filtered:
+            _dim = row.get('dimension') or ''
+            if any(g in _dim for g in SegmentDataRepository._SEGMENT_GEO_AXIS_KEYS):
+                for _fld in ('dimension_member_label', 'dimension_label'):
+                    _v = (row.get(_fld) or '').strip().lower()
+                    if _v:
+                        geo_member_set.add(_v)
+
+        # Classify each row into business or geo, and match to a metric group
+        biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
+        geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
+        metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
+
+        for row in filtered:
+            if not SegmentDataRepository._is_monetary_row(row):
+                continue
+            orig_label = row.get('original_label') or ''
+            row_year = SegmentDataRepository._get_row_year(row)
+            raw_val = row.get('numeric_value')
+            if raw_val is None or row_year not in years:
+                continue
+            scaled = raw_val / 1_000_000
+
+            # Non-dimensioned rows → metric_totals (exact consolidated totals)
+            if row.get('_is_ndim'):
+                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
+                    if SegmentDataRepository._matches_metric(orig_label, cfg):
+                        if metric_name not in metric_totals:
+                            metric_totals[metric_name] = {y: None for y in years}
+                        if metric_totals[metric_name].get(row_year) is None:
+                            metric_totals[metric_name][row_year] = scaled
+                        break
+                continue
+
+            # Dimensioned rows → segment members
+            fdl = row.get('full_dimension_label') or ''
+            member_raw = row.get('dimension_member_label') or ''
+            _forced_section = None
+            # Multi-dimensional operating-segment facts: the primary member is a generic wrapper
+            # ("Operating Segments") while the REAL segment is the second axis, surfaced in
+            # dimension_label (e.g. Costco geo revenue: ConsolidationItems=Operating Segments +
+            # Segments=United States). Recover the inner member; when it is a geography the company
+            # also reports on a geographic axis, route it to the Geographic table. Otherwise skip —
+            # the wrapper total is redundant with the 1-D segment facts captured above.
+            if member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
+                _inner = (row.get('dimension_label') or '').strip()
+                if (_inner and _inner.lower() != member_raw.lower().strip()
+                        and _inner.lower() in geo_member_set
+                        and SegmentDataRepository._looks_geographic(_inner)):
+                    member_raw = _inner
+                    _forced_section = "geo"
+                else:
+                    continue
+            if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+                continue
+            member = SegmentDataRepository._title_case_member(member_raw)
+            if not member:
+                continue
+            if _forced_section:
+                section = _forced_section
+            else:
+                heading = SegmentDataRepository._get_heading(fdl)
+                section = SegmentDataRepository._classify_heading(heading)
+
+            for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
+                if SegmentDataRepository._matches_metric(orig_label, cfg):
+                    target = geo_data if section == "geo" else biz_data
+                    if metric_name not in target:
+                        target[metric_name] = {}
+                    if member not in target[metric_name]:
+                        target[metric_name][member] = {y: None for y in years}
+                    if target[metric_name][member][row_year] is None:
+                        target[metric_name][member][row_year] = scaled
+                    break
 
         # If we found absolutely nothing useful, signal fallback
         if not biz_data and not geo_data:
@@ -9350,15 +9370,20 @@ class SegmentDataRepository:
         period_dates: Dict[int, date] = {_pe_key(pe): pe for pe in sorted_pes}
         key_set = set(period_keys)
 
+        # Members reported on a genuine geographic axis (see annual builder for rationale).
+        geo_member_set = set()
+        for row in all_rows:
+            _dim = row.get('dimension') or ''
+            if any(g in _dim for g in SegmentDataRepository._SEGMENT_GEO_AXIS_KEYS):
+                for _fld in ('dimension_member_label', 'dimension_label'):
+                    _v = (row.get(_fld) or '').strip().lower()
+                    if _v:
+                        geo_member_set.add(_v)
+
         biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
         geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
         # Exact filed totals per metric per period (from non-dimensioned rows)
         metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
-
-        # Strictly additive: single-axis rows first, wrapper rows last (see annual
-        # path) so unwrapped wrapper data only fills cells single-axis facts left empty.
-        all_rows.sort(key=lambda r: 1 if (r.get('dimension_member_label') or '').lower().strip()
-                      in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS else 0)
 
         for row in all_rows:
             if not SegmentDataRepository._is_monetary_row(row):
@@ -9391,26 +9416,31 @@ class SegmentDataRepository:
             # Dimensioned rows → segment members
             fdl = row.get('full_dimension_label') or ''
             member_raw = row.get('dimension_member_label') or ''
-            is_wrapper = member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS
-            if is_wrapper:
-                # Multi-axis wrapper fact — unwrap real breakdown (see annual path).
-                resolved = SegmentDataRepository._unwrap_wrapper_row(fdl)
-                if resolved is None:
+            _forced_section = None
+            # Recover the real geographic member from multi-dimensional operating-segment facts
+            # (see annual builder for the full rationale, e.g. Costco geo revenue).
+            if member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
+                _inner = (row.get('dimension_label') or '').strip()
+                if (_inner and _inner.lower() != member_raw.lower().strip()
+                        and _inner.lower() in geo_member_set
+                        and SegmentDataRepository._looks_geographic(_inner)):
+                    member_raw = _inner
+                    _forced_section = "geo"
+                else:
                     continue
-                member, section = resolved
+            if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+                continue
+            member = SegmentDataRepository._title_case_member(member_raw)
+            if not member:
+                continue
+            if _forced_section:
+                section = _forced_section
             else:
-                if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
-                    continue
-                member = SegmentDataRepository._title_case_member(member_raw)
-                if not member:
-                    continue
                 heading = SegmentDataRepository._get_heading(fdl)
                 section = SegmentDataRepository._classify_heading(heading)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
-                    if is_wrapper and metric_name == "Revenues" and scaled < 0:
-                        break  # negative revenue = intersegment/adjustment, skip
                     target = geo_data if section == "geo" else biz_data
                     if metric_name not in target:
                         target[metric_name] = {}
@@ -9577,7 +9607,7 @@ class SegmentDataRepository:
                 all_facts_biz.extend(biz_facts)
                 all_facts_geo.extend(geo_facts)
 
-        def _process_facts(facts_list, default_section):
+        def _process_facts(facts_list, target_dict):
             for fact in facts_list:
                 member_raw = fact.get('dimension_member_label') or ''
                 if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
@@ -9585,17 +9615,6 @@ class SegmentDataRepository:
                 member = SegmentDataRepository._title_case_member(member_raw)
                 if not member:
                     continue
-                # Geo-aware routing (mirror the DB path): a reportable segment that
-                # is actually a geography (Apple's Americas/Greater China tagged on
-                # the business axis) belongs in the Geographic table. Canonicalise
-                # geo members so cross-filing label drift ("United States Operations"
-                # vs "United States") isn't counted twice.
-                section = default_section
-                if section == 'business' and SegmentDataRepository._is_geo_member(member):
-                    section = 'geo'
-                if section == 'geo':
-                    member = SegmentDataRepository._canon_geo_member(member)
-                target_dict = geo_data if section == 'geo' else biz_data
                 fy = fact.get('fiscal_year')
                 if not fy:
                     continue
@@ -9642,8 +9661,8 @@ class SegmentDataRepository:
                             target_dict[metric_name][member][fy] = scaled
                         break
 
-        _process_facts(all_facts_biz, 'business')
-        _process_facts(all_facts_geo, 'geo')
+        _process_facts(all_facts_biz, biz_data)
+        _process_facts(all_facts_geo, geo_data)
 
         if not biz_data and not geo_data:
             return None

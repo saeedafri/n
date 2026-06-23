@@ -1842,9 +1842,9 @@ def _prefetch_ticker_filter_data(ticker: str):
     3 queries into 1 saves ~500ms on cold load.
 
     CACHE: @st.cache_data(ttl=300) - Cached for 5 minutes
-    TABLE: coreiq_filing_metrics_v5
+    TABLE: coreiq_filing_metrics_v5 (DEI-correct fiscal_year; storage_year = physical bucket)
     INDEX: idx_ticker_fiscal_doctype (covering index on ticker, storage_year, doc_type)
-    QUERY: SELECT DISTINCT doc_type, storage_year WHERE ticker = ? ORDER BY doc_type, storage_year DESC
+    QUERY: SELECT DISTINCT doc_type, storage_year, fiscal_year WHERE ticker = ? ORDER BY ...
     """
     _func_start = _perf_time.time()
 
@@ -1854,29 +1854,39 @@ def _prefetch_ticker_filter_data(ticker: str):
 
         _query_start = _perf_time.time()
         rows = db_manager.execute_query_readonly("""
-            SELECT DISTINCT doc_type, COALESCE(fiscal_year, storage_year, report_fiscal_year) AS effective_year
+            SELECT DISTINCT
+                   doc_type,
+                   COALESCE(storage_year, report_fiscal_year, fiscal_year) AS bucket_year,
+                   COALESCE(fiscal_year, storage_year, report_fiscal_year)  AS display_year
             FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
-            ORDER BY doc_type, effective_year DESC
+            ORDER BY doc_type, bucket_year DESC
         """, {"ticker": ticker})
         _query_elapsed = _perf_time.time() - _query_start
 
-        # Build lookup structures from single result set
+        # bucket_year = physical blob bucket → drives file loading and ALL plumbing
+        #               (unchanged from v4; the blob loader's year/year-1 fallback relies on it).
+        # display_year = the filing's OWN fiscal year, from its DEI cover-page tag → shown to user.
+        # They differ for non-December fiscal years (e.g. LULU Q3: bucket 2026 → displays 2025).
         doc_types = []
         all_years = set()
         years_by_doc_type = {}
+        fiscal_label_by_year = {}   # {doc_type: {bucket_year_str: display_year_str}}
         for row in rows:
             dt = row["doc_type"]
-            fy = row["effective_year"]
+            by = row["bucket_year"]
+            dy = row["display_year"]
             if dt and dt not in doc_types:
                 doc_types.append(dt)
-            if fy:
-                all_years.add(str(fy))
+            if by:
+                by_str = str(by)
+                all_years.add(by_str)
                 if dt:
                     years_by_doc_type.setdefault(dt, [])
-                    fy_str = str(fy)
-                    if fy_str not in years_by_doc_type[dt]:
-                        years_by_doc_type[dt].append(fy_str)
+                    if by_str not in years_by_doc_type[dt]:
+                        years_by_doc_type[dt].append(by_str)
+                    fiscal_label_by_year.setdefault(dt, {})
+                    fiscal_label_by_year[dt][by_str] = str(dy) if dy else by_str
 
         all_years_sorted = sorted(all_years, reverse=True)
 
@@ -1884,7 +1894,9 @@ def _prefetch_ticker_filter_data(ticker: str):
         for dt in years_by_doc_type:
             years_by_doc_type[dt] = sorted(years_by_doc_type[dt], reverse=True)
 
-        return {"doc_types": doc_types, "all_years": all_years_sorted, "years_by_doc_type": years_by_doc_type}
+        return {"doc_types": doc_types, "all_years": all_years_sorted,
+                "years_by_doc_type": years_by_doc_type,
+                "fiscal_label_by_year": fiscal_label_by_year}
     except Exception as e:
         log_structured_error(e, page="company_filings", component="_prefetch_ticker_filter_data", operation="DB_PREFETCH")
         _total_elapsed = _perf_time.time() - _func_start
@@ -1907,6 +1919,21 @@ def _get_available_years_for_doc_type(ticker: str, doc_type: str):
 
         return result
     return []
+
+
+def _fiscal_label_for(ticker: str, doc_type: str, bucket_year) -> str:
+    """Map a physical bucket (storage) year to the filing's OWN fiscal year for DISPLAY.
+
+    The dropdown/plumbing carry the bucket year (so blob loading is unchanged); this
+    converts it to the DEI-declared fiscal year purely for what the user sees. Falls
+    back to the bucket year when no fiscal label is known (e.g. 8-K, non-SEC, no DEI).
+    """
+    if bucket_year in (None, ""):
+        return ""
+    prefetch = _prefetch_ticker_filter_data(ticker)
+    if prefetch:
+        return prefetch.get("fiscal_label_by_year", {}).get(doc_type, {}).get(str(bucket_year), str(bucket_year))
+    return str(bucket_year)
 
 
 # Module-level cache variable - populated lazily on first use
@@ -1959,7 +1986,10 @@ def _render_filing_header_html(
     filing_date = _format_header_date((metadata or {}).get("filing_date"))
     fiscal_period_label = (metadata or {}).get("fiscal_period_label") or ""
 
-    meta_parts = [str(year), period_display]
+    # Show the filing's OWN fiscal year (DEI), not the physical storage bucket.
+    display_year = _fiscal_label_for(ticker, doc_type, year) or str(year)
+
+    meta_parts = [str(display_year), period_display]
     if filing_date:
         meta_parts.append(filing_date)
     if fiscal_period_label:
@@ -3244,6 +3274,7 @@ def main():
                 options=available_years,
                 key="cf_year_select",
                 on_change=_on_year_change,
+                format_func=lambda y: _fiscal_label_for(company, doc_type, y),
             )
         _dd3_render_elapsed = _perf_time.time() - _dropdown_render_start
         _dd3_total_elapsed = _perf_time.time() - _dd3_start
