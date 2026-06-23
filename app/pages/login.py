@@ -687,8 +687,21 @@ def _complete_oidc_login(token_data: Dict[str, Any]) -> None:
 
     if not user_email or not user_email.lower().endswith("@coresight.com"):
         slog_error(f"[OIDC] access denied — email={user_email!r}")
-        st.error("Access restricted to Coresight employees only.")
-        return
+        # Clear all OIDC callback state to prevent infinite loop
+        for _key in [
+            "__oidc_cb_code", "__oidc_cb_state", "__oidc_cb_error",
+            "__oidc_cb_error_desc", "__oidc_cb_captured", "__oidc_processing_code",
+            "__oidc_processing_started_at", "__completed_oidc_handoff_key",
+            "__completed_oidc_handoff_token_data", "__failed_oidc_handoff_key",
+            "__completed_oidc_post_logout_key"
+        ]:
+            st.session_state.pop(_key, None)
+        st.session_state.pop("_auth_invalidated", None)
+        st.error("❌ Access Denied: Only Coresight employees (@coresight.com) can access this portal. Please try again with your Coresight email.")
+        st.info("Redirecting to login page in 2 seconds...")
+        sleep(2)
+        st.switch_page("pages/login.py")
+        st.stop()
 
     login_start = perf_counter()
     result = login_user(user_email=user_email, user_nicename=user_nicename,

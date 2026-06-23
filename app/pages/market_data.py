@@ -646,6 +646,9 @@ def render_segment_data(ticker: str, start_date: date, end_date: date, conversio
 
         years = data["years"]
         period_dates = data.get("period_dates", {})
+        # Headers use FYE-normalised display dates (annual); falls back to raw
+        # period_dates for the quarterly path, which already has correct dates.
+        period_display_dates = data.get("period_display_dates") or period_dates
         biz = data.get("business_segments", {})
         geo = data.get("geo_segments", {})
         source = data.get("source", "none")
@@ -678,7 +681,7 @@ def render_segment_data(ticker: str, start_date: date, end_date: date, conversio
             _is_quarterly = period_type.lower() == "quarterly"
             parts.append(f'<tr class="row-grey-separator"><th>For Fiscal Period Ending<span class="header-subtext">{html_escape(units_label)} of {html_escape(target_ccy)}, except per share items.</span></th>')
             for yr in years:
-                pd = period_dates.get(yr)
+                pd = period_display_dates.get(yr)
                 if pd:
                     if _is_quarterly:
                         from data.models import FiscalPeriod as _FP
@@ -3992,6 +3995,7 @@ def render_page():
                 _seg_biz = _seg_data.get("business_segments", {})
                 _seg_geo = _seg_data.get("geo_segments", {})
                 _seg_period_dates = _seg_data.get("period_dates", {})
+                _seg_period_display = _seg_data.get("period_display_dates") or _seg_period_dates
                 if not sort_ascending:
                     _seg_years = list(reversed(_seg_years))
                 if _seg_years and (_seg_biz or _seg_geo):
@@ -4032,7 +4036,7 @@ def render_page():
                     # Format year headers
                     _seg_col_headers = []
                     for yr in _seg_years:
-                        pd = _seg_period_dates.get(yr)
+                        pd = _seg_period_display.get(yr)
                         if pd:
                             if _seg_period_type == "quarterly":
                                 from data.models import FiscalPeriod as _FP2

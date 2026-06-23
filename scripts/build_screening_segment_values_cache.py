@@ -221,64 +221,47 @@ def _print_cache_status() -> None:
 
 
 def main() -> int:
+    """Full rebuild of the screening segment values cache.
+
+    Delegates to ``screening_service.build_segment_values_cache`` so the offline
+    build uses the EXACT same wrapper-unwrap / geo-routing classifier as the
+    market-data Segments tab and the in-app background rebuild (single source of
+    truth). The granular ``--segment-type/--metric/--year`` flags are no longer
+    supported — the build is always a whole-table replace — and error out so a
+    stale invocation can't silently do a partial (and now-incorrect) rebuild.
+    """
     from data.screening_service import (
-        _bulk_fetch_segment_v4_rows,
+        build_segment_values_cache,
         ensure_segment_values_cache_table,
-        get_base_company_universe,
     )
 
     args = _parse_args()
-    started = time.perf_counter()
+    if args.segment_type or args.metric or args.year or args.latest_only:
+        print(
+            "Partial rebuild flags (--segment-type/--metric/--year/--latest-only) "
+            "are no longer supported: the cache is now built as one atomic whole-"
+            "table replace via the shared Segments classifier. Re-run with no flags."
+        )
+        return 2
 
+    started = time.perf_counter()
     if not ensure_segment_values_cache_table():
         print("Failed to ensure segment values cache table.")
         return 1
 
-    tickers = list(get_base_company_universe()["ticker"].dropna().unique())
-    year_sel = str(args.year) if args.year else "Latest"
-    mode = f"FY {args.year}" if args.year else "latest-only"
-    print(f"Universe tickers: {len(tickers)}")
-    print(f"Build mode: {mode}")
     if args.dry_run:
-        print("Dry run: no rows will be deleted or inserted.")
+        from data.screening_service import _segment_cache_universe
 
-    total_inserted = 0
-    for stmt_name, segment_type in _target_segment_types(args.segment_type):
-        print(f"\n=== {stmt_name} ({segment_type}) ===")
-        metrics = _target_metrics(stmt_name, args.metric)
-        for metric in metrics:
-            metric_key = metric.get("metric_key") or metric.get("label")
-            if not metric_key:
-                continue
+        print(f"Dry run: would rebuild {len(_segment_cache_universe())} tickers. No writes.")
+        return 0
 
-            metric_started = time.perf_counter()
-            print(f"\n{segment_type} / {metric_key} / {mode}")
-            rows = _bulk_fetch_segment_v4_rows(
-                tickers,
-                segment_type,
-                year_sel,
-                metric_key,
-                selected_segments=[],
-            )
-            entries = _rows_to_cache_entries(rows, segment_type, metric_key)
-            print(f"  rows fetched from filings: {len(rows)}")
-            print(f"  cache rows prepared: {len(entries)}")
+    def _cb(done: int, total: int) -> None:
+        print(f"  processed {done}/{total} tickers", end="\r", flush=True)
 
-            deleted = 0
-            inserted = 0
-            if not args.dry_run:
-                deleted = _delete_existing_rows(segment_type, metric_key, args.year)
-                print(f"  old cache rows cleared: {deleted}")
-                inserted = _upsert_entries(entries, segment_type, metric_key)
-                total_inserted += inserted
-                print(f"  rows inserted/upserted: {inserted}")
-            else:
-                print("  old cache rows cleared: 0 (dry-run)")
-                print(f"  rows inserted/upserted: {len(entries)} (dry-run)")
-
-            print(f"  metric runtime: {(time.perf_counter() - metric_started):.1f}s")
-
-    print(f"\nTotal rows inserted/upserted: {total_inserted}")
+    stats = build_segment_values_cache(progress_cb=_cb)
+    print()
+    print(f"Tickers: {stats['tickers']}")
+    print(f"Cache rows written: {stats['rows']}")
     print(f"Total runtime: {(time.perf_counter() - started):.1f}s")
     _print_cache_status()
     return 0

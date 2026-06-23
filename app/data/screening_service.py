@@ -53,7 +53,7 @@ from data.repository import (
     _format_company_name,
     _get_fiscal_year_end_cached,
 )
-from data.models import get_fiscal_quarter
+from data.models import get_fiscal_quarter, parse_fiscal_year_end
 
 try:
     from utils.server_logger import (
@@ -102,7 +102,7 @@ def _get_segment_names_cached(ticker_sample: tuple) -> List[str]:
         try:
             rows = db_manager.execute_query_readonly(f"""
                 SELECT /*+ MAX_EXECUTION_TIME(3000) */ DISTINCT dimension_member_label
-                FROM coreiq_filing_metrics_v4
+                FROM coreiq_filing_metrics_v5
                 WHERE ticker IN ({ticker_sql})
                   AND is_dimensioned = 1
                   AND dimension_member_label IS NOT NULL
@@ -152,7 +152,7 @@ _GEO_SEGMENT_PRESETS: List[str] = sorted([
 
 
 def get_all_geo_segment_names(ticker_tuple: tuple = ()) -> List[str]:
-    """Return hardcoded geographic segment labels drawn from coreiq_filing_metrics_v4.
+    """Return hardcoded geographic segment labels drawn from coreiq_filing_metrics_v5.
 
     These are the actual dimension_member_label values on geo axes (StatementGeographicalAxis
     etc.) for revenue metrics — the same values shown in the market data Segments tab.
@@ -465,11 +465,13 @@ def _apply_trailing_quarters_criterion(
     }
 
 
-def _quarter_range_labels(from_q: int, from_y: int, to_q: int, to_y: int) -> List[str]:
-    """Calendar-quarter labels for every quarter in [from, to], chronological.
+def _quarter_range_labels(from_q: int, from_y: int, to_q: int, to_y: int,
+                          prefix: str = "Q") -> List[str]:
+    """Quarter labels for every quarter in [from, to], chronological.
 
     e.g. (1, 2023, 4, 2024) -> ['Q1 2023','Q2 2023',...,'Q4 2024']. Order-agnostic
-    (swaps if from > to). Mirrors `_calendar_quarter_label`'s 'Q{n} {year}' format.
+    (swaps if from > to). With prefix='Q' mirrors `_calendar_quarter_label`'s
+    'Q{n} {year}' format; with prefix='FQ' produces fiscal-quarter labels.
     """
     start = int(from_y) * 4 + (int(from_q) - 1)
     end = int(to_y) * 4 + (int(to_q) - 1)
@@ -478,7 +480,7 @@ def _quarter_range_labels(from_q: int, from_y: int, to_q: int, to_y: int) -> Lis
     labels: List[str] = []
     for idx in range(start, end + 1):
         y, q = divmod(idx, 4)
-        labels.append(f"Q{q + 1} {y}")
+        labels.append(f"{prefix}{q + 1} {y}")
     return labels
 
 
@@ -490,23 +492,35 @@ def _apply_quarter_range_criterion(
     tickers: List[str],
     rows_in: int,
 ) -> Tuple[pd.DataFrame, Dict]:
-    """Annotate the universe with one value column per calendar quarter in a range.
+    """Annotate the universe with one value column per quarter in a range.
 
-    Display-only (no operator/threshold). Like trailing-quarters, but the columns
-    are bounded by the analyst's chosen [from quarter, to quarter] instead of the
-    last N. EVERY quarter in the range gets a column (N/A where a company has no
-    data) so nothing in the window is missed. Columns are chronological (oldest →
-    newest). Produced names are stamped onto ``criterion['quarter_cols']`` so the
-    UI + Excel render them via the existing quarter pipeline.
+    Calendar Quarter (CQ) buckets by calendar quarter of the period-end date;
+    Fiscal Quarter (FQ) buckets by each company's fiscal quarter (using its
+    fiscal_year_end). EVERY quarter in the range gets a column (N/A where a
+    company has no data) so nothing in the window is missed; columns are
+    chronological (oldest → newest) and stamped onto ``criterion['quarter_cols']``
+    for the UI + Excel pipeline.
+
+    A value filter (operator/value) gates the result on the LATEST in-range
+    quarter: companies that fail show N/A across the window (rows are never
+    dropped — the screen is non-filtering).
     """
     t_total = time.perf_counter()
     qr = criterion.get("quarter_range") or {}
+    period_type = criterion.get("period_type") or "CQ"
+    is_fq = (period_type == "FQ")
+    _prefix = "FQ" if is_fq else "Q"
     target = _quarter_range_labels(
         qr.get("from_q", 1), qr.get("from_y"), qr.get("to_q", 4), qr.get("to_y"),
+        prefix=_prefix,
     )
     target_set = set(target)
     label = metric_info["label"]
     unit = metric_info.get("unit", "$mm") or "$mm"
+
+    operator = criterion.get("operator") or "Greater Than"
+    threshold1_raw = float(criterion.get("value1") or 0.0) * DB_SCALE
+    threshold2_raw = float(criterion.get("value2") or 0.0) * DB_SCALE
 
     companies_map = CompanyRepository.get_companies_map()
     sec_tickers = [t for t in tickers if companies_map.get(t, {}).get("source") == "SEC"]
@@ -532,7 +546,19 @@ def _apply_quarter_range_criterion(
             except Exception as exc:
                 log_error(f"[SCREENING] quarter-range {k} query failed: {exc}")
 
-    # Per ticker: value per in-range calendar quarter (latest date wins per quarter).
+    def _label_for(ticker: str, dt) -> str:
+        """Bucket a period-end date into its in-range quarter label."""
+        if not is_fq:
+            return _calendar_quarter_label(dt)   # 'Q{cq} {cal_year}'
+        fy_end_str = _get_fiscal_year_end_cached(ticker)
+        fy_end_month = parse_fiscal_year_end(fy_end_str) if fy_end_str else None
+        if fy_end_month:
+            fq = get_fiscal_quarter(dt.month, fy_end_month)
+        else:
+            fq = (dt.month - 1) // 3 + 1   # fall back to calendar quarter
+        return f"FQ{fq} {dt.year}"
+
+    # Per ticker: value per in-range quarter (latest date wins per quarter).
     per_ticker: Dict[str, list] = {}
     for ticker, dt, val in all_rows:
         per_ticker.setdefault(ticker, []).append((dt, val))
@@ -540,7 +566,7 @@ def _apply_quarter_range_criterion(
     for ticker, rows_list in per_ticker.items():
         lv: Dict[str, float] = {}
         for dt, val in sorted(rows_list, key=lambda x: x[0], reverse=True):
-            lbl = _calendar_quarter_label(dt)
+            lbl = _label_for(ticker, dt)
             if lbl not in target_set or lbl in lv:
                 continue
             try:
@@ -548,6 +574,22 @@ def _apply_quarter_range_criterion(
             except (TypeError, ValueError):
                 continue
         ticker_label_val[ticker] = lv
+
+    # Value filter gates on the latest in-range quarter (target is chronological,
+    # so the last present label is the most recent). Failing companies → blank.
+    passing = 0
+    for ticker, lv in ticker_label_val.items():
+        latest_val = None
+        for lbl in reversed(target):
+            if lbl in lv:
+                latest_val = lv[lbl]
+                break
+        if latest_val is None or not _apply_operator(
+            latest_val * DB_SCALE, operator, threshold1_raw, threshold2_raw,
+        ):
+            ticker_label_val[ticker] = {}   # all quarter cells → N/A
+        else:
+            passing += 1
 
     col_names = [f"{label} ({unit}) [{lbl}]" for lbl in target]
     out = working_df.copy()
@@ -557,19 +599,23 @@ def _apply_quarter_range_criterion(
         )
 
     criterion["quarter_cols"] = col_names
-    with_data = sum(1 for t in tickers if ticker_label_val.get(t))
+    with_data = passing
     ms_total = (time.perf_counter() - t_total) * 1000
     log_timing("SCREENING_FIN_QRANGE_TOTAL", ms_total,
-               f"metric={label} cols={len(col_names)} sec={len(sec_tickers)} "
-               f"yf={len(yf_tickers)} with_data={with_data}")
+               f"metric={label} pt={period_type} cols={len(col_names)} "
+               f"sec={len(sec_tickers)} yf={len(yf_tickers)} "
+               f"op={operator} passing={passing}")
 
     return out, {
         "type":          "financial",
         "statement":     criterion.get("statement"),
         "metric":        label,
-        "period_type":   "QR",
+        "period_type":   period_type,
         "quarter_range": qr,
         "quarter_cols":  col_names,
+        "operator":      operator,
+        "value1":        criterion.get("value1"),
+        "value2":        criterion.get("value2"),
         "rows_in":       rows_in,
         "rows_out":      len(out),
         "sec_tickers":   len(sec_tickers),
@@ -721,10 +767,10 @@ def apply_financial_criterion(
             criterion, working_df, cfg, metric_info, tickers, rows_in,
         )
 
-    # Quarter-range mode: one display-only column per calendar quarter in the
-    # chosen [from, to] range (no operator filter) — the bounded analog of
-    # trailing-quarters. Reuses the quarter_cols pipeline (render + Excel).
-    if period_type == "QR" or criterion.get("quarter_range"):
+    # Quarter-range mode (CQ/FQ): one column per quarter in the chosen [from, to]
+    # window, gated by the value filter on the latest in-range quarter. Reuses the
+    # quarter_cols pipeline (render + Excel).
+    if criterion.get("quarter_range"):
         return _apply_quarter_range_criterion(
             criterion, working_df, cfg, metric_info, tickers, rows_in,
         )
@@ -1625,6 +1671,172 @@ def get_segment_cache_build_state() -> dict:
         return dict(_segment_cache_build_state)
 
 
+# Columns the shared classifier (SegmentDataRepository._classify_segment_rows) reads.
+_SEGMENT_CACHE_FETCH_COLS = (
+    "original_label, numeric_value, unit_ref, report_fiscal_year, "
+    "dimension_label, dimension_member_label, concept, period_type, "
+    "period_start, period_end, period_instant, dimension, "
+    "full_dimension_label, filing_date"
+)
+
+
+def _segment_cache_recency_key(row: Dict) -> tuple:
+    """Sort key matching SegmentDataRepository._fetch_all_db_rows: ascending
+    (year, full_dimension_label, original_label) then filing_date DESC, so the
+    shared classifier's first-wins merge keeps the most recent filing's value."""
+    fd = row.get("filing_date")
+    if fd is None:
+        fd_neg = 0
+    else:
+        s = fd.isoformat() if hasattr(fd, "isoformat") else str(fd)[:10]
+        try:
+            fd_neg = -int(s.replace("-", "")[:8])
+        except (ValueError, TypeError):
+            fd_neg = 0
+    return (
+        row.get("report_fiscal_year") or 0,
+        row.get("full_dimension_label") or "",
+        row.get("original_label") or "",
+        fd_neg,
+    )
+
+
+def _segment_cache_universe() -> List[str]:
+    """All SEC tickers with dimensioned 10-K segment facts (the cache universe)."""
+    from utils.constants import SEGMENT_ALL_AXES
+
+    clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
+    sql = f"""
+        SELECT DISTINCT ticker
+        FROM coreiq_filing_metrics_v5
+        WHERE is_dimensioned = 1 AND doc_type = '10-K'
+          AND numeric_value IS NOT NULL AND ({clause})
+    """
+    rows = db_manager.execute_query_readonly(sql, params) or []
+    return sorted(r["ticker"] for r in rows if r.get("ticker"))
+
+
+def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict[str, int]:
+    """Rebuild the screening segment values cache from the SAME classification
+    logic the market-data Segments tab uses.
+
+    Replays ``SegmentDataRepository._classify_segment_rows`` (wrapper-unwrap +
+    geo-routing + canonicalisation + first-wins) over every SEC ticker, so the
+    screener can never drift from the Segments tab. Unlike the old pure-SQL
+    ``REPLACE INTO ... SELECT`` build, this correctly:
+      • unwraps multi-axis 'Operating Segments' wrapper facts (Costco geo,
+        Honeywell/AMD business segments that live only on the wrapper),
+      • routes business-tagged geographies to the geo table,
+      • canonicalises geo drift ('United States Operations' → 'United States'),
+      • drops aggregate/elimination/pension members that polluted the cache
+        (e.g. the 114 tickers previously cached under member 'Operating Segments').
+
+    The whole table is replaced (not upserted) so stale members are removed, then
+    the member cache is refreshed. Returns {'tickers','rows','entries'} counts.
+    """
+    from utils.constants import SEGMENT_ALL_AXES
+
+    ensure_segment_values_cache_table()
+    ensure_segment_member_cache_table()
+
+    tickers = _segment_cache_universe()
+    total_t = len(tickers)
+    clause, base_params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
+
+    entries: List[tuple] = []  # (ticker, segment_type, metric_key, member, year, value_mm)
+    processed = 0
+    for start in range(0, total_t, ticker_chunk):
+        chunk = tickers[start:start + ticker_chunk]
+        params = dict(base_params)
+        qmarks = []
+        for i, t in enumerate(chunk):
+            params[f"ct{i}"] = t
+            qmarks.append(f":ct{i}")
+        sql = f"""
+            SELECT ticker, {_SEGMENT_CACHE_FETCH_COLS}
+            FROM coreiq_filing_metrics_v5
+            WHERE is_dimensioned = 1 AND doc_type = '10-K'
+              AND numeric_value IS NOT NULL
+              AND ticker IN ({", ".join(qmarks)}) AND ({clause})
+        """
+        rows = db_manager.execute_query_readonly(sql, params) or []
+        by_ticker: Dict[str, List[dict]] = {}
+        for r in rows:
+            by_ticker.setdefault(r["ticker"], []).append(r)
+        for tk, trows in by_ticker.items():
+            trows.sort(key=_segment_cache_recency_key)
+            years = sorted(
+                {y for y in (SegmentDataRepository._get_row_year(r) for r in trows) if y is not None}
+            )
+            if not years:
+                continue
+            biz, geo, _ = SegmentDataRepository._classify_segment_rows(trows, years)
+            for seg_type, data in (("business", biz), ("geographical", geo)):
+                for metric_key, members in data.items():
+                    for member, yv in members.items():
+                        for yr, val in yv.items():
+                            if val is None:
+                                continue
+                            entries.append((tk, seg_type, metric_key, member, int(yr), float(val)))
+        processed += len(chunk)
+        if progress_cb:
+            try:
+                progress_cb(processed, total_t)
+            except Exception:
+                pass
+
+    # Full replace: clear the table then bulk insert. REPLACE INTO alone would
+    # leave stale members behind (that is how the garbage 'Operating Segments'
+    # members accumulated). PK collisions within the fresh set are deduped via
+    # ON DUPLICATE KEY (last-wins; entries already first-wins-ordered upstream).
+    db_manager.execute_delete(f"DELETE FROM {SEGMENT_VALUES_CACHE_TABLE}")
+    inserted = 0
+    ch = _SEGMENT_VALUES_CACHE_CHUNK
+    for off in range(0, len(entries), ch):
+        block = entries[off:off + ch]
+        vals, p = [], {}
+        for i, (tk, st_, mk, mem, yr, val) in enumerate(block):
+            vals.append(f"(:tk{i}, :st{i}, :mk{i}, :mem{i}, :yr{i}, :val{i})")
+            p[f"tk{i}"] = tk
+            p[f"st{i}"] = st_
+            p[f"mk{i}"] = mk
+            p[f"mem{i}"] = mem
+            p[f"yr{i}"] = yr
+            p[f"val{i}"] = val
+        db_manager.execute_insert(
+            f"""
+            INSERT INTO {SEGMENT_VALUES_CACHE_TABLE}
+                (ticker, segment_type, metric_key, member_label, report_fiscal_year, value_mm)
+            VALUES {", ".join(vals)}
+            ON DUPLICATE KEY UPDATE value_mm = VALUES(value_mm), updated_at = CURRENT_TIMESTAMP
+            """,
+            p,
+        )
+        inserted += len(block)
+
+    # Refresh the member dropdown cache from the freshly built values cache.
+    db_manager.execute_delete(f"DELETE FROM {SEGMENT_MEMBER_CACHE_TABLE}")
+    db_manager.execute_insert(
+        f"""
+        INSERT INTO {SEGMENT_MEMBER_CACHE_TABLE}
+            (segment_type, member_label, member_label_normalized, company_count)
+        SELECT segment_type, member_label, LOWER(TRIM(member_label)),
+               COUNT(DISTINCT ticker)
+        FROM {SEGMENT_VALUES_CACHE_TABLE}
+        WHERE metric_key = 'Revenues'
+        GROUP BY segment_type, member_label
+        ON DUPLICATE KEY UPDATE
+            company_count = GREATEST(company_count, VALUES(company_count)),
+            updated_at = CURRENT_TIMESTAMP
+        """
+    )
+    log_info(
+        f"[SCREENING] build_segment_values_cache: {total_t} tickers → "
+        f"{inserted} rows ({len(entries)} entries)"
+    )
+    return {"tickers": total_t, "rows": inserted, "entries": len(entries)}
+
+
 def rebuild_segment_values_cache_async() -> bool:
     """Start the segment values cache build in a background thread.
 
@@ -1638,107 +1850,27 @@ def rebuild_segment_values_cache_async() -> bool:
 
     def _run():
         try:
-            from utils.constants import SEGMENT_GEO_AXES, SEGMENT_BUSINESS_AXES, SEGMENT_PRODUCT_AXES
+            # Single source of truth: replay the Segments-tab classifier over the
+            # whole universe (wrapper-unwrap + geo-routing + first-wins). Replaces
+            # the old pure-SQL build that missed wrapper-only segments (Costco geo,
+            # Honeywell business) and cached garbage 'Operating Segments' members.
+            def _cb(done: int, total: int) -> None:
+                with _segment_cache_build_lock:
+                    _segment_cache_build_state["progress"] = done
+                    _segment_cache_build_state["total"] = total
 
-            ensure_segment_values_cache_table()
-
-            geo_axes_expr = " OR ".join(
-                f"dimension LIKE '{ax}'" for ax in SEGMENT_GEO_AXES
+            log_info("[SCREENING] rebuild_segment_cache: building from shared classifier...")
+            stats = build_segment_values_cache(progress_cb=_cb)
+            log_info(
+                f"[SCREENING] rebuild_segment_cache done: "
+                f"{stats['tickers']} tickers, {stats['rows']} rows"
             )
-            biz_axes_expr = " OR ".join(
-                f"dimension LIKE '{ax}'" for ax in SEGMENT_BUSINESS_AXES + SEGMENT_PRODUCT_AXES
-            )
-
-            # Step 1: business segments
-            log_info("[SCREENING] rebuild_segment_cache: building business segments...")
-            with _segment_cache_build_lock:
-                _segment_cache_build_state["progress"] = 1
-
-            biz_sql = f"""
-                REPLACE INTO {SEGMENT_VALUES_CACHE_TABLE}
-                    (ticker, segment_type, metric_key, member_label,
-                     report_fiscal_year, value_mm)
-                SELECT
-                    ticker,
-                    'business'  AS segment_type,
-                    CASE
-                        WHEN LOWER(original_label) REGEXP 'revenue|sales'          THEN 'Revenues'
-                        WHEN LOWER(original_label) REGEXP 'operating.*(profit|income)' THEN 'Operating Profit Before Tax'
-                        WHEN LOWER(original_label) REGEXP 'depreciation|amortization' THEN 'Depreciation & Amortization'
-                        WHEN LOWER(original_label) REGEXP 'capital.expend|capex'    THEN 'Capital Expenditure'
-                        WHEN LOWER(original_label) = 'assets'                      THEN 'Assets'
-                        ELSE NULL
-                    END                AS metric_key,
-                    dimension_member_label AS member_label,
-                    report_fiscal_year,
-                    SUM(numeric_value) / 1000000 AS value_mm
-                FROM coreiq_filing_metrics_v4
-                WHERE is_dimensioned = 1
-                  AND doc_type       = '10-K'
-                  AND numeric_value  > 0
-                  AND dimension_member_label IS NOT NULL
-                  AND ({biz_axes_expr})
-                GROUP BY ticker, metric_key, dimension_member_label, report_fiscal_year
-                HAVING metric_key IS NOT NULL
-            """
-            db_manager.execute_insert(biz_sql)
-            log_info("[SCREENING] rebuild_segment_cache: business segments done")
-
-            # Step 2: geographical segments
-            log_info("[SCREENING] rebuild_segment_cache: building geographical segments...")
-            with _segment_cache_build_lock:
-                _segment_cache_build_state["progress"] = 2
-
-            geo_sql = f"""
-                REPLACE INTO {SEGMENT_VALUES_CACHE_TABLE}
-                    (ticker, segment_type, metric_key, member_label,
-                     report_fiscal_year, value_mm)
-                SELECT
-                    ticker,
-                    'geographical' AS segment_type,
-                    CASE
-                        WHEN LOWER(original_label) REGEXP 'revenue|sales'          THEN 'Revenues'
-                        WHEN LOWER(original_label) REGEXP 'operating.*(profit|income)' THEN 'Operating Profit Before Tax'
-                        WHEN LOWER(original_label) REGEXP 'depreciation|amortization' THEN 'Depreciation & Amortization'
-                        WHEN LOWER(original_label) REGEXP 'capital.expend|capex'    THEN 'Capital Expenditure'
-                        WHEN LOWER(original_label) = 'assets'                      THEN 'Assets'
-                        ELSE NULL
-                    END                AS metric_key,
-                    dimension_member_label AS member_label,
-                    report_fiscal_year,
-                    SUM(numeric_value) / 1000000 AS value_mm
-                FROM coreiq_filing_metrics_v4
-                WHERE is_dimensioned = 1
-                  AND doc_type       = '10-K'
-                  AND numeric_value  > 0
-                  AND dimension_member_label IS NOT NULL
-                  AND ({geo_axes_expr})
-                  AND LOWER(dimension_member_label) NOT REGEXP
-                      ' plans?$|defined benefit|\\bpension\\b|salaried.{{1,30}}hourly'
-                GROUP BY ticker, metric_key, dimension_member_label, report_fiscal_year
-                HAVING metric_key IS NOT NULL
-            """
-            db_manager.execute_insert(geo_sql)
-            log_info("[SCREENING] rebuild_segment_cache: geographical segments done")
-
-            # Step 3: refresh member cache from values cache
-            member_sql = f"""
-                REPLACE INTO {SEGMENT_MEMBER_CACHE_TABLE}
-                    (segment_type, member_label, member_label_normalized, company_count)
-                SELECT
-                    segment_type,
-                    member_label,
-                    LOWER(TRIM(member_label)) AS member_label_normalized,
-                    COUNT(DISTINCT ticker)    AS company_count
-                FROM {SEGMENT_VALUES_CACHE_TABLE}
-                WHERE metric_key = 'Revenues'
-                GROUP BY segment_type, member_label
-            """
-            db_manager.execute_insert(member_sql)
-            log_info("[SCREENING] rebuild_segment_cache: member cache refreshed")
 
             with _segment_cache_build_lock:
-                _segment_cache_build_state.update(running=False, progress=2, total=2, last_error="")
+                _segment_cache_build_state.update(
+                    running=False, progress=stats["tickers"],
+                    total=stats["tickers"], last_error="",
+                )
 
         except Exception as exc:
             err = str(exc)
@@ -2352,7 +2484,7 @@ def _fetch_segment_options_aggregated_sql(
                 f.dimension_member_label,
                 MAX(f.full_dimension_label) AS full_dimension_label,
                 COUNT(DISTINCT f.ticker) AS company_count
-            FROM coreiq_filing_metrics_v4 f
+            FROM coreiq_filing_metrics_v5 f
             WHERE f.ticker IN ({ticker_sql})
               AND f.is_dimensioned = 1
               AND f.numeric_value IS NOT NULL
@@ -2401,7 +2533,7 @@ def _bulk_fetch_segment_v4_rows(
             latest_join = f"""
             INNER JOIN (
                 SELECT ticker, MAX(report_fiscal_year) AS latest_year
-                FROM coreiq_filing_metrics_v4
+                FROM coreiq_filing_metrics_v5
                 WHERE ticker IN ({ticker_sql})
                   AND is_dimensioned = 1
                   AND numeric_value IS NOT NULL
@@ -2416,7 +2548,7 @@ def _bulk_fetch_segment_v4_rows(
                 f.report_fiscal_year, f.dimension_member_label, f.full_dimension_label,
                 f.dimension, f.period_type, f.period_start, f.period_end,
                 f.period_instant, f.filing_date
-            FROM coreiq_filing_metrics_v4 f
+            FROM coreiq_filing_metrics_v5 f
             {latest_join}
             WHERE f.ticker IN ({ticker_sql})
               AND f.is_dimensioned = 1
@@ -3622,7 +3754,7 @@ def _fetch_segment_revenue_v4(
     year: Optional[int],
     use_geo_axes: bool = False,
 ) -> Dict[str, float]:
-    """Query coreiq_filing_metrics_v4 for segment revenue by selected dimension_member_labels.
+    """Query coreiq_filing_metrics_v5 for segment revenue by selected dimension_member_labels.
 
     Fast approach: no subquery JOIN.
     - Specific year: single WHERE filter.
@@ -3652,7 +3784,7 @@ def _fetch_segment_revenue_v4(
             query = f"""
                 SELECT /*+ MAX_EXECUTION_TIME(30000) */
                     ticker, SUM(numeric_value) / {DB_SCALE} AS revenue_mm
-                FROM coreiq_filing_metrics_v4
+                FROM coreiq_filing_metrics_v5
                 WHERE ticker IN ({ticker_sql})
                   AND is_dimensioned = 1
                   AND doc_type = '10-K'
@@ -3671,7 +3803,7 @@ def _fetch_segment_revenue_v4(
                 SELECT /*+ MAX_EXECUTION_TIME(30000) */
                     ticker, report_fiscal_year,
                     SUM(numeric_value) / {DB_SCALE} AS revenue_mm
-                FROM coreiq_filing_metrics_v4
+                FROM coreiq_filing_metrics_v5
                 WHERE ticker IN ({ticker_sql})
                   AND is_dimensioned = 1
                   AND doc_type = '10-K'
@@ -3696,7 +3828,7 @@ def _fetch_segment_revenue_v4(
 
 
 # ── Fast IS-table revenue path ────────────────────────────────────────────────
-# instead of coreiq_filing_metrics_v4 (7.75M rows, no suitable composite index
+# instead of coreiq_filing_metrics_v5 (7.75M rows, no suitable composite index
 # for ticker+is_dimensioned+doc_type — full scans take 90-430 seconds on Azure).
 # Revenue from IS tables == sum of all segments, which is what the column shows.
 
@@ -3754,7 +3886,7 @@ def _fetch_additional_tickers(ticker_tuple: tuple, source_val: str) -> set:
     try:
         rows = db_manager.execute_query_readonly(f"""
             SELECT DISTINCT ticker
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             WHERE ticker IN ({ticker_sql})
               AND source = '{source_val}'
         """)
@@ -3772,10 +3904,10 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
         if data_type == "credit_ratings":
             rows = db_manager.execute_query_readonly(f"""
                 SELECT fmv.ticker, fmv.value AS rating_val
-                FROM coreiq_filing_metrics_v4 fmv
+                FROM coreiq_filing_metrics_v5 fmv
                 INNER JOIN (
                     SELECT ticker, MAX(report_fiscal_year) AS yr
-                    FROM coreiq_filing_metrics_v4
+                    FROM coreiq_filing_metrics_v5
                     WHERE ticker IN ({ticker_sql})
                       AND source = 'credit_rating'
                     GROUP BY ticker
@@ -3793,10 +3925,10 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
         else:
             rows = db_manager.execute_query_readonly(f"""
                 SELECT fmv.ticker, SUM(fmv.numeric_value) AS store_total
-                FROM coreiq_filing_metrics_v4 fmv
+                FROM coreiq_filing_metrics_v5 fmv
                 INNER JOIN (
                     SELECT ticker, MAX(report_fiscal_year) AS yr
-                    FROM coreiq_filing_metrics_v4
+                    FROM coreiq_filing_metrics_v5
                     WHERE ticker IN ({ticker_sql})
                       AND source = 'store_count'
                     GROUP BY ticker

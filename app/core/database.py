@@ -610,3 +610,16 @@ def warmup_av_fulltext():
         )
     except Exception:
         pass
+
+    try:
+        # Warm the transcript FULLTEXT index (idx_transcript_fulltext_search) into
+        # the buffer pool. Without this, the FIRST keyword search pays a cold
+        # FTS-index load (~30-60s on Azure). Uses NATURAL LANGUAGE mode to match
+        # the exact path the cross-transcript search runs.
+        db_manager.execute_query_readonly(
+            "SELECT id FROM coreiq_av_earnings_call_transcripts "
+            "WHERE MATCH(transcript_text) AGAINST ('revenue' IN NATURAL LANGUAGE MODE) "
+            "AND has_transcript = 1 LIMIT 1"
+        )
+    except Exception:
+        pass

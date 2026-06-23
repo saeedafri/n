@@ -1511,6 +1511,68 @@ def _get_ec_excel_executor() -> ThreadPoolExecutor:
     return ThreadPoolExecutor(max_workers=2)
 
 
+# ── Cross-transcript Excel job registry ──────────────────────────────────────
+# MODULE-LEVEL (not st.session_state) so an in-flight build SURVIVES filter
+# changes, reruns, and page navigation — it keeps running and its result is held
+# here until the user is back on a page that can fire the download. Keyed by the
+# export signature. A run_every fragment polls this and auto-downloads when ready.
+import threading as _ec_threading
+
+_EC_EXCEL_JOBS: Dict[str, dict] = {}   # sig_key -> {future, bytes, downloaded, filename, error}
+_EC_EXCEL_JOBS_LOCK = _ec_threading.Lock()
+_EC_EXCEL_JOBS_MAX = 12
+
+
+def _ec_excel_job_get(sig_key: str) -> Optional[dict]:
+    with _EC_EXCEL_JOBS_LOCK:
+        j = _EC_EXCEL_JOBS.get(sig_key)
+        return dict(j) if j else None
+
+
+def _ec_excel_jobs_snapshot() -> List[tuple]:
+    """Return a list of (sig_key, job-copy) for safe iteration outside the lock."""
+    with _EC_EXCEL_JOBS_LOCK:
+        return [(k, dict(v)) for k, v in _EC_EXCEL_JOBS.items()]
+
+
+def _ec_excel_job_start(sig_key: str, filename: str, submit) -> None:
+    """Start a build for sig_key once. `submit` is a zero-arg callable returning a Future."""
+    with _EC_EXCEL_JOBS_LOCK:
+        existing = _EC_EXCEL_JOBS.get(sig_key)
+        if existing and (existing.get("bytes") or existing.get("error") or
+                         (existing.get("future") is not None and not existing["future"].done())):
+            return  # already done / building — don't resubmit
+        if len(_EC_EXCEL_JOBS) >= _EC_EXCEL_JOBS_MAX:
+            for old in list(_EC_EXCEL_JOBS.keys())[: len(_EC_EXCEL_JOBS) - _EC_EXCEL_JOBS_MAX + 1]:
+                _EC_EXCEL_JOBS.pop(old, None)
+        _EC_EXCEL_JOBS[sig_key] = {
+            "future": submit(), "bytes": None, "downloaded": False,
+            "filename": filename, "error": False,
+        }
+
+
+def _ec_excel_jobs_collect() -> None:
+    """Move any finished futures' results into the registry (called from the poller)."""
+    with _EC_EXCEL_JOBS_LOCK:
+        items = list(_EC_EXCEL_JOBS.items())
+    for k, j in items:
+        if j.get("bytes") is None and not j.get("error"):
+            fut = j.get("future")
+            if fut is not None and fut.done():
+                try:
+                    data = fut.result() or b""
+                except Exception as exc:
+                    log_structured_error(exc, page="earnings_calls",
+                                         component="_ec_excel_jobs_collect", operation="collect_background_excel")
+                    data = b""
+                with _EC_EXCEL_JOBS_LOCK:
+                    if k in _EC_EXCEL_JOBS:
+                        if data:
+                            _EC_EXCEL_JOBS[k]["bytes"] = data
+                        else:
+                            _EC_EXCEL_JOBS[k]["error"] = True
+
+
 def _build_cross_excel_job(
     keyword: str,
     company: str,
@@ -2487,90 +2549,79 @@ def render_earnings_calls(active_ticker: str = None):
         # interactive; once ready the download fires automatically.
         # ===================================================================
         if is_cross_search and active_keyword and cross_results:
-            _xl_sig = (active_keyword, company, str(year), quarter, _applied_watchlist_id)
+            _xl_sig_key = repr((active_keyword, company, str(year), quarter, _applied_watchlist_id))
             _xl_filename = (
                 f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}"
                 "_Keyword_Results.xlsx"
             )
 
-            # Drop any prepared bytes / in-flight future that belong to a previous
-            # search signature so we never auto-download stale results.
-            if (st.session_state.get("ec_cross_excel_sig") not in (None, _xl_sig)):
-                st.session_state.pop("ec_cross_excel_bytes", None)
-                st.session_state.pop("ec_cross_excel_sig", None)
-                st.session_state.pop("ec_cross_excel_auto_click", None)
-            if (st.session_state.get("ec_cross_excel_future_sig") not in (None, _xl_sig)):
-                st.session_state.pop("ec_cross_excel_future", None)
-                st.session_state.pop("ec_cross_excel_future_sig", None)
-
-            _xl_ready = (
-                st.session_state.get("ec_cross_excel_sig") == _xl_sig
-                and st.session_state.get("ec_cross_excel_bytes")
-            )
-            _xl_future = st.session_state.get("ec_cross_excel_future")
-
-            if _xl_ready:
-                _auto_click = bool(st.session_state.pop("ec_cross_excel_auto_click", False))
-                _render_excel_js_download(
-                    st.session_state.ec_cross_excel_bytes,
-                    _xl_filename,
-                    "Excel",
-                    auto_click=_auto_click,
-                )
-            elif _xl_future is not None:
-                if _xl_future.done():
-                    try:
-                        _xl_bytes_done = _xl_future.result()
-                    except Exception as _xl_err:
-                        log_structured_error(_xl_err, page="earnings_calls",
-                                             component="cross_excel_future", operation="collect_background_excel")
-                        _xl_bytes_done = b""
-                    st.session_state.pop("ec_cross_excel_future", None)
-                    st.session_state.pop("ec_cross_excel_future_sig", None)
-                    if _xl_bytes_done:
-                        st.session_state.ec_cross_excel_sig = _xl_sig
-                        st.session_state.ec_cross_excel_bytes = _xl_bytes_done
-                        st.session_state.ec_cross_excel_auto_click = True
-                        st.rerun()
-                    else:
-                        st.markdown(
-                            '<div class="transcript-search-count" style="color:#D62E2F;">'
-                            'Could not build the Excel file — please try again.</div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    st.markdown(
-                        '<div class="transcript-search-count">'
-                        '<span style="display:inline-flex;align-items:center;gap:8px;">'
-                        '<span style="width:14px;height:14px;border:2px solid #eee;'
-                        'border-top:2px solid #d62e2f;border-radius:50%;'
-                        'display:inline-block;animation:ec-spin 0.8s linear infinite;"></span>'
-                        'Preparing Excel in the background — the page stays responsive. '
-                        'Your download starts automatically when it\'s ready.</span></div>'
-                        '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
-                        unsafe_allow_html=True,
-                    )
-                    # Lightweight poll: the heavy build runs OFF this thread, so
-                    # each cycle just re-checks the future and returns immediately.
-                    _time.sleep(0.8)
-                    st.rerun()
-            else:
-                _dl_l, _dl_r = st.columns([1, 1])
-                with _dl_r:
+            _dl_l, _dl_r = st.columns([1, 1])
+            with _dl_r:
+                _job = _ec_excel_job_get(_xl_sig_key)
+                if _job is None:
+                    # ONE click → start the background build + toast. No full-page
+                    # rerun loop: the poller fragment below does isolated polling,
+                    # so the rest of the page stays fully interactive.
                     if st.button(
                         "▦  Excel",
-                        key=f"ec_cross_excel_prepare_{hash(_xl_sig)}",
+                        key=f"ec_cross_excel_{hash(_xl_sig_key)}",
                         width="stretch",
-                        help="Build an Excel of all matching results — runs in the background; download is automatic.",
+                        help="Build an Excel of ALL matching results — runs in the background; download starts automatically.",
                     ):
-                        _fut = _get_ec_excel_executor().submit(
-                            _build_cross_excel_job,
-                            active_keyword, company, str(year), quarter,
-                            _applied_watchlist_id, _active_watchlist_tickers, dict(ticker_display),
+                        _kw, _co, _yr, _qt = active_keyword, company, str(year), quarter
+                        _wl, _wt, _td = _applied_watchlist_id, _active_watchlist_tickers, dict(ticker_display)
+                        _ec_excel_job_start(
+                            _xl_sig_key, _xl_filename,
+                            lambda: _get_ec_excel_executor().submit(
+                                _build_cross_excel_job, _kw, _co, _yr, _qt, _wl, _wt, _td,
+                            ),
                         )
-                        st.session_state.ec_cross_excel_future = _fut
-                        st.session_state.ec_cross_excel_future_sig = _xl_sig
-                        st.rerun()
+                        st.toast("Preparing Excel in the background — download starts automatically.", icon="⏳")
+                        # No st.rerun(): the button click already triggers one rerun,
+                        # and the poller fragment below picks up the new job. Calling
+                        # st.rerun() here would cancel the toast before it shows.
+                elif _job.get("bytes"):
+                    # Ready (e.g. revisited after auto-download) — static re-download.
+                    _render_excel_js_download(_job["bytes"], _job.get("filename") or _xl_filename, "Excel")
+                elif _job.get("error"):
+                    st.markdown(
+                        '<div class="transcript-search-count" style="color:#D62E2F;">'
+                        'Could not build the Excel file — please try again.</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Poller fragment: reruns ONLY itself every ~1.2s (page stays
+            # responsive — no full-page rerun). It collects finished builds and
+            # fires the auto-download exactly once per job, for ANY job whose
+            # build has finished — so the download still happens even if you
+            # changed the keyword/filters while it was building.
+            if any(not j.get("downloaded") for _, j in _ec_excel_jobs_snapshot()):
+                @st.fragment(run_every="1.2s")
+                def _ec_excel_poller():
+                    _ec_excel_jobs_collect()
+                    # status line for the CURRENT search's job
+                    cur = _ec_excel_job_get(_xl_sig_key)
+                    if cur and cur.get("bytes") is None and not cur.get("error"):
+                        st.markdown(
+                            '<div class="transcript-search-count">'
+                            '<span style="display:inline-flex;align-items:center;gap:8px;">'
+                            '<span style="width:14px;height:14px;border:2px solid #eee;'
+                            'border-top:2px solid #d62e2f;border-radius:50%;'
+                            'display:inline-block;animation:ec-spin 0.8s linear infinite;"></span>'
+                            'Preparing Excel in the background — keep working; your '
+                            'download starts automatically when it\'s ready.</span></div>'
+                            '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
+                            unsafe_allow_html=True,
+                        )
+                    # auto-download ANY ready-but-not-downloaded job, exactly once
+                    for k, j in _ec_excel_jobs_snapshot():
+                        if j.get("bytes") and not j.get("downloaded"):
+                            _render_excel_js_download(j["bytes"], j.get("filename") or "Earnings_Calls.xlsx",
+                                                      "Excel", auto_click=True)
+                            with _EC_EXCEL_JOBS_LOCK:
+                                if k in _EC_EXCEL_JOBS:
+                                    _EC_EXCEL_JOBS[k]["downloaded"] = True
+                _ec_excel_poller()
 
         elif (not is_cross_search) and active_keyword and _single_matches:
             # Single-transcript export is small/fast — build inline (cached by sig).

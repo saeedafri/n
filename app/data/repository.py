@@ -2427,25 +2427,29 @@ class EarningsCallRepository:
         params: Dict = {}
         used_fallback = False
 
-        # FULLTEXT boolean mode with prefix wildcard (3+ chars)
+        # NATURAL LANGUAGE mode (3+ chars). BOOLEAN mode (+word / +word*) is
+        # pathologically slow on this table — a single common term forces a full
+        # FTS scan and takes 30–230s per query (every page + "Show more"). Natural
+        # language mode uses the ranked index path and returns in <1s. The Python
+        # segment scan below refines the exact keyword match, so the coarser NL
+        # recall is fine. Sub-3-char / stopword keywords fall back to LIKE below.
+        # IMPORTANT: never SELECT transcript_text in the FULLTEXT + ORDER BY query.
+        # MySQL filesort materialises the LONGTEXT for every matched row before
+        # LIMIT, which costs 30–260s for a common term. We fetch only light columns
+        # here (sorted page of ids), then look up transcript_text for the page's
+        # ids by primary key below — a cheap, bounded second query.
         if len(keyword) >= 3:
-            # Build boolean-mode query: single word → +word*, multi-word → +"w1" +"w2"
-            words = keyword.split()
-            if len(words) == 1:
-                ft_kw = f'+{words[0]}*'
-            else:
-                ft_kw = ' '.join(f'+"{w}"' for w in words if w)
             base_query = """
-                SELECT id, ticker, year, quarter, q, transcript_text
+                SELECT id, ticker, year, quarter, q
                 FROM coreiq_av_earnings_call_transcripts
-                WHERE MATCH(transcript_text) AGAINST (:kw IN BOOLEAN MODE)
+                WHERE MATCH(transcript_text) AGAINST (:kw IN NATURAL LANGUAGE MODE)
                   AND has_transcript = 1
             """
-            params['kw'] = ft_kw
+            params['kw'] = keyword
         else:
             # Short keyword: LIKE fallback (no index, but rare)
             base_query = """
-                SELECT id, ticker, year, quarter, q, transcript_text
+                SELECT id, ticker, year, quarter, q
                 FROM coreiq_av_earnings_call_transcripts
                 WHERE transcript_text LIKE :kw
                   AND has_transcript = 1
@@ -2476,7 +2480,18 @@ class EarningsCallRepository:
                 base_query += " AND q = :quarter_q"
                 params['quarter_q'] = q_int
 
-        base_query += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset"
+        # Bounded relevance pre-filter. An ORDER BY directly on a FULLTEXT query
+        # makes MySQL disable ranking and FILESORT every matched row (thousands
+        # for a common word → 170s+). Instead take the top N rows by relevance in
+        # an inner query (fast — FTS can early-terminate, no filesort), then sort
+        # that bounded set by date for "newest first" display + paginate.
+        _FTS_CANDIDATE_CAP = 500
+        base_query = (
+            "SELECT id, ticker, year, quarter, q FROM (" + base_query
+            + " LIMIT :cand_cap) s ORDER BY year DESC, q DESC, id DESC "
+              "LIMIT :limit OFFSET :offset"
+        )
+        params['cand_cap'] = _FTS_CANDIDATE_CAP
         params['limit'] = limit
         params['offset'] = offset
 
@@ -2490,7 +2505,7 @@ class EarningsCallRepository:
         if not results and len(keyword) >= 3:
             used_fallback = True
             fallback = """
-                SELECT id, ticker, year, quarter, q, transcript_text
+                SELECT id, ticker, year, quarter, q
                 FROM coreiq_av_earnings_call_transcripts
                 WHERE transcript_text LIKE :kw AND has_transcript = 1
             """
@@ -2516,7 +2531,12 @@ class EarningsCallRepository:
                 if q_int:
                     fallback += " AND q = :quarter_q"
                     fb_params['quarter_q'] = q_int
-            fallback += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset"
+            fallback = (
+                "SELECT id, ticker, year, quarter, q FROM (" + fallback
+                + " LIMIT :cand_cap) s ORDER BY year DESC, q DESC, id DESC "
+                  "LIMIT :limit OFFSET :offset"
+            )
+            fb_params['cand_cap'] = 500
             fb_params['limit'] = limit
             fb_params['offset'] = offset
 
@@ -2525,10 +2545,34 @@ class EarningsCallRepository:
             fb_ms = (time.perf_counter() - fb_start) * 1000
             log_db_timing("search_transcripts_fulltext.LIKE_fallback", "coreiq_av_earnings_call_transcripts", fb_ms, rows=len(results), ticker=str(ticker or ''))
 
-        total_ms = (time.perf_counter() - total_start) * 1000
-        log_db_timing("search_transcripts_fulltext.TOTAL", "coreiq_av_earnings_call_transcripts", total_ms, rows=len(results), ticker=str(ticker or ''))
+        rows = [dict(r) for r in results]
 
-        return [dict(r) for r in results]
+        # Deferred lookup: fetch transcript_text for ONLY this page's ids by primary
+        # key (cheap), instead of materialising it inside the sorted FULLTEXT query.
+        page_ids = [r["id"] for r in rows if r.get("id") is not None]
+        if page_ids:
+            text_start = time.perf_counter()
+            id_keys = []
+            text_params: Dict = {}
+            for idx, pid in enumerate(page_ids):
+                key = f"tid_{idx}"
+                id_keys.append(f":{key}")
+                text_params[key] = pid
+            text_rows = db_manager.execute_query_readonly(
+                "SELECT id, transcript_text FROM coreiq_av_earnings_call_transcripts "
+                f"WHERE id IN ({', '.join(id_keys)})",
+                text_params,
+            )
+            text_by_id = {tr["id"]: tr.get("transcript_text") for tr in text_rows}
+            for r in rows:
+                r["transcript_text"] = text_by_id.get(r.get("id"))
+            log_db_timing("search_transcripts_fulltext.text_lookup", "coreiq_av_earnings_call_transcripts",
+                          (time.perf_counter() - text_start) * 1000, rows=len(text_rows), ticker=str(ticker or ''))
+
+        total_ms = (time.perf_counter() - total_start) * 1000
+        log_db_timing("search_transcripts_fulltext.TOTAL", "coreiq_av_earnings_call_transcripts", total_ms, rows=len(rows), ticker=str(ticker or ''))
+
+        return rows
 
     @staticmethod
     def search_transcript_windows_for_export(
@@ -2563,25 +2607,20 @@ class EarningsCallRepository:
         needle = words[0] if words else keyword.lower()
         params: Dict = {"limit": limit}
 
+        # PASS 1 — fast: matching ids + metadata ONLY (no transcript_text).
+        # Selecting the LONGTEXT inside the FULLTEXT scan forces a random read of
+        # every matched row (~150s+ for a word in every transcript). Light columns
+        # return in ~2s; the keyword windows are fetched by primary key in pass 2.
+        _LIGHT = "SELECT id, ticker, year, quarter, q FROM coreiq_av_earnings_call_transcripts "
         if len(keyword) >= 3:
-            if len(words) == 1:
-                ft_kw = f'+{words[0]}*'
-            else:
-                ft_kw = ' '.join(f'+"{w}"' for w in words if w)
-            base_query = """
-                SELECT id, ticker, year, quarter, q
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE MATCH(transcript_text) AGAINST (:kw IN BOOLEAN MODE)
-                  AND has_transcript = 1
-            """
-            params["kw"] = ft_kw
+            # NATURAL LANGUAGE mode — BOOLEAN mode is 30–230s on this table.
+            base_query = _LIGHT + (
+                "WHERE MATCH(transcript_text) AGAINST (:kw IN NATURAL LANGUAGE MODE) "
+                "AND has_transcript = 1"
+            )
+            params["kw"] = keyword
         else:
-            base_query = """
-                SELECT id, ticker, year, quarter, q
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE transcript_text LIKE :kw
-                  AND has_transcript = 1
-            """
+            base_query = _LIGHT + "WHERE transcript_text LIKE :kw AND has_transcript = 1"
             params["kw"] = f"%{keyword}%"
 
         if ticker and ticker != 'ALL':
@@ -2608,18 +2647,17 @@ class EarningsCallRepository:
                 base_query += " AND q = :quarter_q"
                 params["quarter_q"] = q_int
 
-        base_query += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit"
+        # No SQL ORDER BY: ORDER BY on a FULLTEXT query disables ranking and
+        # filesorts every matched row (170s+ for a common word). Fetch by
+        # relevance (fast) and sort by date in Python below.
+        base_query += " LIMIT :limit"
 
         metadata_start = time.perf_counter()
         metadata_rows = db_manager.execute_query_readonly(base_query, params)
         metadata_ms = (time.perf_counter() - metadata_start) * 1000
 
         if not metadata_rows and len(keyword) >= 3:
-            fallback = """
-                SELECT id, ticker, year, quarter, q
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE transcript_text LIKE :kw AND has_transcript = 1
-            """
+            fallback = _LIGHT + "WHERE transcript_text LIKE :kw AND has_transcript = 1"
             fb_params: Dict = {"kw": f"%{keyword}%", "limit": limit}
             if ticker and ticker != 'ALL':
                 clean_ticker = str(ticker).strip().upper()
@@ -2642,7 +2680,7 @@ class EarningsCallRepository:
                 if q_int:
                     fallback += " AND q = :quarter_q"
                     fb_params["quarter_q"] = q_int
-            fallback += " ORDER BY year DESC, q DESC, id DESC LIMIT :limit"
+            fallback += " LIMIT :limit"
             fb_start = time.perf_counter()
             metadata_rows = db_manager.execute_query_readonly(fallback, fb_params)
             metadata_ms += (time.perf_counter() - fb_start) * 1000
@@ -2652,38 +2690,26 @@ class EarningsCallRepository:
 
         rows_by_id = {int(r["id"]): dict(r) for r in metadata_rows}
         ordered_ids = [int(r["id"]) for r in metadata_rows]
-        window_rows: List[Dict] = []
-        batch_size = 100
 
-        # Window extraction is the dominant cost. Two fixes here:
-        #   1. LOCATE(:needle, transcript_text) WITHOUT LOWER() — the column
-        #      collation is *_ci (case-insensitive), so the explicit LOWER()
-        #      forced MySQL to materialise a lowercased copy of every full
-        #      LONGTEXT row (the single biggest cost; ~36% slower per batch).
-        #   2. Run the per-100 batches CONCURRENTLY — each batch is an
-        #      independent read on its own pooled connection, so a small pool
-        #      collapses ~N serial round-trips into N/workers.
+        # PASS 2 — parallel: fetch the keyword window per id BY PRIMARY KEY.
+        # PK batches parallelise across pooled connections (~26s for ~8.5k rows),
+        # far faster than reading the LONGTEXT inside the FULLTEXT scan (~190s).
+        # LOCATE has no LOWER() (column collation is *_ci). Window kept tight
+        # (before/window) to bound transfer, which dominates per-row cost.
+        _BEFORE, _WINDOW = 3000, 8000
+
         def _fetch_window_batch(batch_ids: List[int]) -> List[Dict]:
-            batch_params: Dict = {
-                "needle": needle,
-                "before_chars": 6000,
-                "window_chars": 16000,
-            }
+            batch_params: Dict = {"needle": needle, "bc": _BEFORE, "wc": _WINDOW}
             id_keys = []
             for idx, row_id in enumerate(batch_ids):
                 key = f"id_{idx}"
                 id_keys.append(f":{key}")
                 batch_params[key] = row_id
-            batch_sql = f"""
-                SELECT id,
-                       SUBSTRING(
-                           transcript_text,
-                           GREATEST(1, LOCATE(:needle, transcript_text) - :before_chars),
-                           :window_chars
-                       ) AS transcript_text
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE id IN ({', '.join(id_keys)})
-            """
+            batch_sql = (
+                "SELECT id, SUBSTRING(transcript_text, "
+                "GREATEST(1, LOCATE(:needle, transcript_text) - :bc), :wc) AS transcript_text "
+                f"FROM coreiq_av_earnings_call_transcripts WHERE id IN ({', '.join(id_keys)})"
+            )
             out: List[Dict] = []
             for row in db_manager.execute_query_readonly(batch_sql, batch_params):
                 meta = rows_by_id.get(int(row["id"]), {}).copy()
@@ -2691,22 +2717,26 @@ class EarningsCallRepository:
                 out.append(meta)
             return out
 
-        batches = [
-            ordered_ids[i:i + batch_size]
-            for i in range(0, len(ordered_ids), batch_size)
-        ]
+        batch_size = 100
+        batches = [ordered_ids[i:i + batch_size] for i in range(0, len(ordered_ids), batch_size)]
+        window_rows: List[Dict] = []
         if len(batches) <= 1:
-            for batch in batches:
-                window_rows.extend(_fetch_window_batch(batch))
+            for b in batches:
+                window_rows.extend(_fetch_window_batch(b))
         else:
             from concurrent.futures import ThreadPoolExecutor
-            _workers = min(6, len(batches))
-            with ThreadPoolExecutor(max_workers=_workers) as _pool:
-                for batch_out in _pool.map(_fetch_window_batch, batches):
-                    window_rows.extend(batch_out)
+            with ThreadPoolExecutor(max_workers=min(10, len(batches))) as _pool:
+                for out in _pool.map(_fetch_window_batch, batches):
+                    window_rows.extend(out)
 
-        order = {row_id: idx for idx, row_id in enumerate(ordered_ids)}
-        window_rows.sort(key=lambda r: order.get(int(r.get("id", 0)), len(order)))
+        # Date order (newest first): metadata_rows is unsorted (no SQL ORDER BY,
+        # which would filesort the full match set), so order by (year, q, id) here.
+        def _sort_key(r):
+            try:
+                return (int(r.get("year") or 0), int(r.get("q") or 0), int(r.get("id") or 0))
+            except (TypeError, ValueError):
+                return (0, 0, 0)
+        window_rows.sort(key=_sort_key, reverse=True)
 
         total_ms = (time.perf_counter() - total_start) * 1000
         log_db_timing(
@@ -2719,16 +2749,16 @@ class EarningsCallRepository:
         return window_rows
 
     # ------------------------------------------------------------------
-    # NON-SEC Transcript PDFs  (from coreiq_filing_metrics_v4)
+    # NON-SEC Transcript PDFs  (from coreiq_filing_metrics_v5)
     # ------------------------------------------------------------------
     _TRANSCRIPT_DOC_TYPES = ('transcript-Q1', 'transcript-Q2', 'transcript-Q3', 'transcript-Q4')
 
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
     def get_non_sec_transcript_companies() -> List[Dict[str, str]]:
-        """Get companies that have transcript PDFs in coreiq_filing_metrics_v4 (cached 10 min).
+        """Get companies that have transcript PDFs in coreiq_filing_metrics_v5 (cached 10 min).
 
-        Uses company_name directly from coreiq_filing_metrics_v4 (ticker+company_name is
+        Uses company_name directly from coreiq_filing_metrics_v5 (ticker+company_name is
         the unique composite — ticker alone is NOT unique across sources).
         """
         from utils.server_logger import log_db_timing
@@ -2736,7 +2766,7 @@ class EarningsCallRepository:
         _start = _t.perf_counter()
 
         query = """
-            SELECT DISTINCT ticker, company_name FROM coreiq_filing_metrics_v4
+            SELECT DISTINCT ticker, company_name FROM coreiq_filing_metrics_v5
             WHERE doc_type IN ('transcript-Q1','transcript-Q2','transcript-Q3','transcript-Q4')
             ORDER BY company_name
         """
@@ -2752,7 +2782,7 @@ class EarningsCallRepository:
         companies.sort(key=lambda x: x['name'].lower())
 
         _elapsed_ms = (_t.perf_counter() - _start) * 1000
-        log_db_timing("get_non_sec_transcript_companies", "coreiq_filing_metrics_v4", _elapsed_ms, rows=len(companies))
+        log_db_timing("get_non_sec_transcript_companies", "coreiq_filing_metrics_v5", _elapsed_ms, rows=len(companies))
         return companies
 
     @staticmethod
@@ -2767,7 +2797,7 @@ class EarningsCallRepository:
         _start = _t.perf_counter()
 
         query = """
-            SELECT DISTINCT report_fiscal_year, doc_type FROM coreiq_filing_metrics_v4
+            SELECT DISTINCT report_fiscal_year, doc_type FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND doc_type IN ('transcript-Q1','transcript-Q2','transcript-Q3','transcript-Q4')
             ORDER BY report_fiscal_year DESC, doc_type ASC
@@ -2781,7 +2811,7 @@ class EarningsCallRepository:
                 mapping.setdefault(yr, []).append(dt.replace('transcript-', ''))
 
         _elapsed_ms = (_t.perf_counter() - _start) * 1000
-        log_db_timing("get_non_sec_transcript_years_and_quarters", "coreiq_filing_metrics_v4", _elapsed_ms, rows=len(results), ticker=ticker)
+        log_db_timing("get_non_sec_transcript_years_and_quarters", "coreiq_filing_metrics_v5", _elapsed_ms, rows=len(results), ticker=ticker)
         return mapping
 
 class BalanceSheetRepository:
@@ -6492,7 +6522,7 @@ class FilingMetricRepository:
                 COALESCE(fiscal_year, storage_year, report_fiscal_year) AS effective_year,
                 report_fiscal_year,
                 storage_year
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
               AND doc_type = :doc_type
@@ -6731,7 +6761,7 @@ class FilingMetricRepository:
         t0 = time.perf_counter()
         sql = f"""
             SELECT {FilingMetricRepository._SELECT_COLS_RAW}
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
               AND doc_type = :doc_type
@@ -6935,7 +6965,7 @@ class FilingMetricRepository:
                                             COALESCE(dimension_label, '')
                                ORDER BY COALESCE(period_end, period_instant) DESC
                            ) AS rn
-                    FROM coreiq_filing_metrics_v4
+                    FROM coreiq_filing_metrics_v5
                     WHERE ticker = :ticker
                       AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
                       AND doc_type = :doc_type
@@ -6971,7 +7001,7 @@ class FilingMetricRepository:
                                         COALESCE(dimension_label, '')
                            ORDER BY COALESCE(period_end, period_instant) DESC
                        ) AS rn
-                FROM coreiq_filing_metrics_v4
+                FROM coreiq_filing_metrics_v5
                 WHERE ticker = :ticker
                   AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
                   AND doc_type = :doc_type
@@ -8536,14 +8566,14 @@ class EarningsCalendarRepository:
 # SEGMENT DATA REPOSITORY — Business & Geographic segments (CapIQ-style)
 # =============================================================================
 class SegmentDataRepository:
-    """Repository for segment data from DB (coreiq_filing_metrics_v4) with
+    """Repository for segment data from DB (coreiq_filing_metrics_v5) with
     edgartools fallback.
 
     Returns two separate tables matching CapitalIQ format:
       1. Business Segments — Revenue, Operating Profit, Assets, D&A, CapEx by segment
       2. Geographic Segments — Revenue by country/region
 
-    DB-first: parallel year queries from coreiq_filing_metrics_v4.
+    DB-first: parallel year queries from coreiq_filing_metrics_v5.
     If DB has no segment data, fall back to edgartools XBRL parsing.
     """
 
@@ -8568,7 +8598,7 @@ class SegmentDataRepository:
 
     _YEAR_SQL_TPL = """
         SELECT DISTINCT report_fiscal_year
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND is_dimensioned = 1
           AND numeric_value IS NOT NULL
@@ -8582,7 +8612,7 @@ class SegmentDataRepository:
                dimension_label, dimension_member_label, concept,
                period_type, period_start, period_end, period_instant,
                dimension, full_dimension_label, filing_date
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND is_dimensioned = 1
           AND numeric_value IS NOT NULL
@@ -8595,7 +8625,7 @@ class SegmentDataRepository:
     # Quarterly: distinct 3-month period_end dates in date range
     _QUARTER_PERIODS_SQL_TPL = """
         SELECT DISTINCT period_end
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND is_dimensioned = 1
           AND numeric_value IS NOT NULL
@@ -8613,7 +8643,7 @@ class SegmentDataRepository:
                dimension_label, dimension_member_label, concept,
                period_type, period_start, period_end,
                dimension, full_dimension_label, filing_date
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND is_dimensioned = 1
           AND numeric_value IS NOT NULL
@@ -8628,7 +8658,7 @@ class SegmentDataRepository:
     # Non-dimensioned (consolidated) rows — used as exact totals per metric per period
     _QUARTER_TOTAL_SQL_TPL = """
         SELECT original_label, numeric_value, unit_ref, period_end
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND is_dimensioned = 0
           AND numeric_value IS NOT NULL
@@ -8746,7 +8776,7 @@ class SegmentDataRepository:
                    NULL AS dimension_label, NULL AS dimension_member_label, NULL AS concept,
                    period_type, period_start, period_end, period_instant,
                    NULL AS dimension, NULL AS full_dimension_label, filing_date
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND is_dimensioned = 0
               AND numeric_value IS NOT NULL
@@ -8856,6 +8886,227 @@ class SegmentDataRepository:
             return "geo"
         return "business"  # Business, Product and Service, etc.
 
+    # Aggregate "wrapper" members: a fact tagged with one of these on the primary
+    # axis is a multi-axis segment cross-section whose REAL breakdown lives in the
+    # secondary clause of full_dimension_label (e.g. Costco / Apple report segment
+    # revenue as "Consolidation Items: Operating Segments, Geographical: <region>").
+    _SEGMENT_WRAPPER_MEMBERS = {
+        'operating segments', 'reportable segments', 'reportable segment',
+    }
+
+    @staticmethod
+    def _is_segment_heading(heading: str) -> bool:
+        """True if a normalised secondary-axis heading is a real reportable-segment
+        dimension (Geographical / Business / Product / *Segments) — not an
+        unrelated disaggregation axis (Counterparty, Sales Channel, Restructuring…)."""
+        if heading in ("Geographical", "Business", "Product and Service"):
+            return True
+        h = (heading or "").lower()
+        return h.endswith("segments") or h.endswith("segment")
+
+    # Strong geographic tokens (a member must contain at least one of these to be
+    # geo) and weak/connector tokens that are allowed alongside them.
+    _GEO_STRONG_TOKENS = {
+        'us', 'usa', 'u.s', 'u.s.', 'domestic', 'canada', 'canadian',
+        'america', 'americas', 'european', 'europe', 'emea', 'apac', 'asia',
+        'asian', 'pacific', 'africa', 'african', 'oceania', 'china', 'chinese',
+        'japan', 'japanese', 'korea', 'korean', 'india', 'indian', 'mexico',
+        'mexican', 'brazil', 'foreign', 'overseas', 'international', 'intl',
+        'eurasia', 'caribbean', 'nordic', 'benelux', 'iberia', 'latam',
+    }
+    _GEO_WEAK_TOKENS = {
+        'and', '&', 'the', 'of', 'other', 'rest', 'world', 'region', 'regions',
+        'operations', 'operation', 'markets', 'market', 'states', 'united',
+        'kingdom', 'east', 'west', 'north', 'south', 'central', 'eastern',
+        'western', 'northern', 'southern', 'middle', 'greater', 'latin',
+        'primarily', 'including', 'excluding', 'all', 'segment', 'segments',
+    }
+
+    @staticmethod
+    def _is_geo_member(member: str) -> bool:
+        """Is this reportable-segment member a country/region? Used so geographies
+        tagged on the generic 'Segments' axis (Costco's United States / Canada,
+        Apple's Americas / Greater China) route to the Geographic table — while
+        brand-named operating segments that merely CONTAIN a geo word ("Walmart
+        U.S.", "Walmart International") stay in the Business table.
+
+        Token-based (not substring): a member qualifies only if EVERY word is a
+        recognised geo/connector token AND at least one is a strong geo token.
+        Country full names from COUNTRY_NAMES are also accepted verbatim."""
+        if not member:
+            return False
+        from utils.constants import COUNTRY_NAMES
+        m = member.lower().strip()
+        if m.lower().endswith(" operations"):
+            m = m[:-len(" operations")].strip()
+        # Whole-string match against known country full names (handles multi-word
+        # names like "united kingdom", "south korea", "united arab emirates").
+        country_full = {nm.lower() for nm in COUNTRY_NAMES.values()}
+        if m in country_full:
+            return True
+        import re
+        tokens = [t for t in re.split(r'[\s,/\-]+', m) if t]
+        if not tokens:
+            return False
+        strong = SegmentDataRepository._GEO_STRONG_TOKENS
+        weak = SegmentDataRepository._GEO_WEAK_TOKENS
+        has_strong = False
+        for t in tokens:
+            t = t.strip('.')
+            if t in strong or (t + '.') in strong:
+                has_strong = True
+            elif t in weak:
+                continue
+            elif t in {w.strip('.') for w in strong}:
+                has_strong = True
+            else:
+                return False  # a non-geo word (e.g. a brand) → not a geography
+        return has_strong
+
+    @staticmethod
+    def _canon_geo_member(member: str) -> str:
+        """Collapse cross-filing geo label drift so the same region isn't counted
+        twice (Costco tags US as 'United States Operations' in older filings and
+        'United States' in FY2025). Strip trailing 'Operations'; map adjectives."""
+        m = (member or "").strip()
+        if m.lower().endswith(" operations"):
+            m = m[:-len(" operations")].strip()
+        repl = {"canadian": "Canada", "u.s.": "United States",
+                "us": "United States", "usa": "United States"}
+        return repl.get(m.lower(), m)
+
+    @staticmethod
+    def _unwrap_wrapper_row(fdl: str):
+        """For a multi-axis 'Operating Segments' wrapper fact, return (member,
+        section) from its secondary clause, or None to skip.
+
+        Only the clean 2-clause shape is unwrapped
+        ("Consolidation Items: Operating Segments, <Axis>: <member>"). 3+ clause
+        cross-tabs (channel / restructuring / sub-segment splits) are skipped to
+        avoid double-counting the same revenue across multiple disaggregations.
+        Member is the trailing clause, so commas inside member names
+        ("KOREA, REPUBLIC OF") are preserved."""
+        parts = (fdl or "").split(": ")
+        if len(parts) - 1 != 2:
+            return None  # bare aggregate (no breakdown) or cross-tab → skip
+        mid, member = parts[1], parts[2].strip()
+        sec_heading_raw = mid.rsplit(", ", 1)[-1] if ", " in mid else mid
+        heading = SegmentDataRepository._normalize_heading(sec_heading_raw)
+        ml = member.lower().strip()
+        if not member or ml in SegmentDataRepository.SEGMENT_SKIP_MEMBERS:
+            return None
+        # Drop elimination / corporate-adjustment cross-sections (e.g. Hasbro's
+        # "Corporate Elimination") — these are not reportable segments and carry
+        # negative/contra values that would pollute the table.
+        if 'elimination' in ml or 'intersegment' in ml or 'inter-segment' in ml:
+            return None
+        if not SegmentDataRepository._is_segment_heading(heading):
+            return None
+        member = SegmentDataRepository._title_case_member(member)
+        if heading == "Geographical" or SegmentDataRepository._is_geo_member(member):
+            return (SegmentDataRepository._canon_geo_member(member), "geo")
+        return (member, "business")
+
+    @staticmethod
+    def _classify_segment_rows(
+        filtered: List[Dict[str, Any]],
+        years: List[int],
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        """Classify pre-fetched rows into (business_data, geo_data, metric_totals).
+
+        SINGLE SOURCE OF TRUTH for segment-member classification, shared by the
+        annual Segments tab (``_build_segment_tables_from_db``) AND the screening
+        segment values cache (``screening_service.build_segment_values_cache``).
+        Any change to wrapper-unwrap / geo-routing / metric-matching here flows
+        to both, so the screener can never drift from what the tab shows.
+
+        The caller MUST pass ``filtered`` already ordered by
+        ``(report_fiscal_year, full_dimension_label, original_label, filing_date DESC)``
+        so the first-wins merge keeps the most recent filing's value. Rows whose
+        derived year is not in ``years`` are skipped. Pass non-dimensioned rows
+        (``_is_ndim=True``) to populate ``metric_totals``; omit them (the cache
+        path does) to leave it empty.
+        """
+        from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
+
+        biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
+        geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
+        metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
+
+        # STRICTLY ADDITIVE: process ordinary single-axis rows FIRST, multi-axis
+        # "Operating Segments" wrapper rows LAST. Combined with the first-wins
+        # ("only set when None") merge below, this guarantees unwrapped wrapper
+        # data can only FILL empty cells — it can never override a value an
+        # existing single-axis fact already produced. No regression to current
+        # business/geo numbers; wrapper data only adds what was missing.
+        # `sorted` (not in-place) keeps the caller's list intact; Python's stable
+        # sort preserves the caller's recency ordering within each group.
+        filtered = sorted(
+            filtered,
+            key=lambda r: 1 if (r.get('dimension_member_label') or '').lower().strip()
+            in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS else 0,
+        )
+
+        for row in filtered:
+            if not SegmentDataRepository._is_monetary_row(row):
+                continue
+            orig_label = row.get('original_label') or ''
+            row_year = SegmentDataRepository._get_row_year(row)
+            raw_val = row.get('numeric_value')
+            if raw_val is None or row_year not in years:
+                continue
+            scaled = raw_val / 1_000_000
+
+            # Non-dimensioned rows → metric_totals (exact consolidated totals)
+            if row.get('_is_ndim'):
+                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
+                    if SegmentDataRepository._matches_metric(orig_label, cfg):
+                        if metric_name not in metric_totals:
+                            metric_totals[metric_name] = {y: None for y in years}
+                        if metric_totals[metric_name].get(row_year) is None:
+                            metric_totals[metric_name][row_year] = scaled
+                        break
+                continue
+
+            # Dimensioned rows → segment members
+            fdl = row.get('full_dimension_label') or ''
+            member_raw = row.get('dimension_member_label') or ''
+            is_wrapper = member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS
+            if is_wrapper:
+                # Multi-axis wrapper fact (e.g. Costco/Apple report segment revenue
+                # as "Operating Segments × <region/segment>"). Unwrap the real
+                # breakdown from full_dimension_label; previously these were dropped.
+                resolved = SegmentDataRepository._unwrap_wrapper_row(fdl)
+                if resolved is None:
+                    continue
+                member, section = resolved
+            else:
+                if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+                    continue
+                member = SegmentDataRepository._title_case_member(member_raw)
+                if not member:
+                    continue
+                heading = SegmentDataRepository._get_heading(fdl)
+                section = SegmentDataRepository._classify_heading(heading)
+
+            for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
+                if SegmentDataRepository._matches_metric(orig_label, cfg):
+                    # Wrapper-only guard: revenue is never negative; a negative
+                    # "Revenues" cross-section is an intersegment/adjustment line,
+                    # not a real segment value — skip so it can't add a bad member.
+                    if is_wrapper and metric_name == "Revenues" and scaled < 0:
+                        break
+                    target = geo_data if section == "geo" else biz_data
+                    if metric_name not in target:
+                        target[metric_name] = {}
+                    if member not in target[metric_name]:
+                        target[metric_name][member] = {y: None for y in years}
+                    if target[metric_name][member][row_year] is None:
+                        target[metric_name][member][row_year] = scaled
+                    break
+
+        return biz_data, geo_data, metric_totals
+
     @staticmethod
     def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
         """Process DB rows into CapIQ-style Business + Geographic tables."""
@@ -8883,53 +9134,20 @@ class SegmentDataRepository:
                 if yr not in period_dates or pe > period_dates[yr]:
                     period_dates[yr] = pe
 
-        # Classify each row into business or geo, and match to a metric group
-        biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
+        # Display-only dates for headers/dropdown: normalise to the company's
+        # fiscal-year-end month so the Segments tab matches Income Statement /
+        # Key Stats / Cash Flow. `period_dates` (raw period_end) is intentionally
+        # left untouched — it still drives revenue-total proximity matching below.
+        _fye_m = SegmentDataRepository._fye_month(ticker)
+        period_display_dates: Dict[int, date] = {
+            y: SegmentDataRepository._fye_display_date(y, _fye_m) for y in years
+        }
 
-        for row in filtered:
-            if not SegmentDataRepository._is_monetary_row(row):
-                continue
-            orig_label = row.get('original_label') or ''
-            row_year = SegmentDataRepository._get_row_year(row)
-            raw_val = row.get('numeric_value')
-            if raw_val is None or row_year not in years:
-                continue
-            scaled = raw_val / 1_000_000
-
-            # Non-dimensioned rows → metric_totals (exact consolidated totals)
-            if row.get('_is_ndim'):
-                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                    if SegmentDataRepository._matches_metric(orig_label, cfg):
-                        if metric_name not in metric_totals:
-                            metric_totals[metric_name] = {y: None for y in years}
-                        if metric_totals[metric_name].get(row_year) is None:
-                            metric_totals[metric_name][row_year] = scaled
-                        break
-                continue
-
-            # Dimensioned rows → segment members
-            fdl = row.get('full_dimension_label') or ''
-            member_raw = row.get('dimension_member_label') or ''
-            if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
-                continue
-            member = SegmentDataRepository._title_case_member(member_raw)
-            if not member:
-                continue
-            heading = SegmentDataRepository._get_heading(fdl)
-            section = SegmentDataRepository._classify_heading(heading)
-
-            for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                if SegmentDataRepository._matches_metric(orig_label, cfg):
-                    target = geo_data if section == "geo" else biz_data
-                    if metric_name not in target:
-                        target[metric_name] = {}
-                    if member not in target[metric_name]:
-                        target[metric_name][member] = {y: None for y in years}
-                    if target[metric_name][member][row_year] is None:
-                        target[metric_name][member][row_year] = scaled
-                    break
+        # Classify rows into business / geo tables + consolidated metric_totals.
+        # Extracted to a shared method so the screening segment cache builds from
+        # the EXACT same logic (wrapper-unwrap, geo-routing, first-wins) — single
+        # source of truth, no drift between the Segments tab and the screener.
+        biz_data, geo_data, metric_totals = SegmentDataRepository._classify_segment_rows(filtered, years)
 
         # If we found absolutely nothing useful, signal fallback
         if not biz_data and not geo_data:
@@ -8954,7 +9172,7 @@ class SegmentDataRepository:
                 # and pension/pool labels that appear in US-only companies.
                 _intl_check_sql = """
                     SELECT COUNT(*) as cnt
-                    FROM coreiq_filing_metrics_v4
+                    FROM coreiq_filing_metrics_v5
                     WHERE ticker = :ticker
                       AND is_dimensioned = 1
                       AND doc_type = '10-K'
@@ -9091,6 +9309,7 @@ class SegmentDataRepository:
         return {
             "years": years,
             "period_dates": period_dates,
+            "period_display_dates": period_display_dates,
             "business_segments": biz_data,
             "geo_segments": geo_data,
             "revenue_totals": revenue_totals,
@@ -9136,6 +9355,11 @@ class SegmentDataRepository:
         # Exact filed totals per metric per period (from non-dimensioned rows)
         metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
 
+        # Strictly additive: single-axis rows first, wrapper rows last (see annual
+        # path) so unwrapped wrapper data only fills cells single-axis facts left empty.
+        all_rows.sort(key=lambda r: 1 if (r.get('dimension_member_label') or '').lower().strip()
+                      in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS else 0)
+
         for row in all_rows:
             if not SegmentDataRepository._is_monetary_row(row):
                 continue
@@ -9167,16 +9391,26 @@ class SegmentDataRepository:
             # Dimensioned rows → segment members
             fdl = row.get('full_dimension_label') or ''
             member_raw = row.get('dimension_member_label') or ''
-            if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
-                continue
-            member = SegmentDataRepository._title_case_member(member_raw)
-            if not member:
-                continue
-            heading = SegmentDataRepository._get_heading(fdl)
-            section = SegmentDataRepository._classify_heading(heading)
+            is_wrapper = member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS
+            if is_wrapper:
+                # Multi-axis wrapper fact — unwrap real breakdown (see annual path).
+                resolved = SegmentDataRepository._unwrap_wrapper_row(fdl)
+                if resolved is None:
+                    continue
+                member, section = resolved
+            else:
+                if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+                    continue
+                member = SegmentDataRepository._title_case_member(member_raw)
+                if not member:
+                    continue
+                heading = SegmentDataRepository._get_heading(fdl)
+                section = SegmentDataRepository._classify_heading(heading)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
+                    if is_wrapper and metric_name == "Revenues" and scaled < 0:
+                        break  # negative revenue = intersegment/adjustment, skip
                     target = geo_data if section == "geo" else biz_data
                     if metric_name not in target:
                         target[metric_name] = {}
@@ -9343,7 +9577,7 @@ class SegmentDataRepository:
                 all_facts_biz.extend(biz_facts)
                 all_facts_geo.extend(geo_facts)
 
-        def _process_facts(facts_list, target_dict):
+        def _process_facts(facts_list, default_section):
             for fact in facts_list:
                 member_raw = fact.get('dimension_member_label') or ''
                 if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
@@ -9351,6 +9585,17 @@ class SegmentDataRepository:
                 member = SegmentDataRepository._title_case_member(member_raw)
                 if not member:
                     continue
+                # Geo-aware routing (mirror the DB path): a reportable segment that
+                # is actually a geography (Apple's Americas/Greater China tagged on
+                # the business axis) belongs in the Geographic table. Canonicalise
+                # geo members so cross-filing label drift ("United States Operations"
+                # vs "United States") isn't counted twice.
+                section = default_section
+                if section == 'business' and SegmentDataRepository._is_geo_member(member):
+                    section = 'geo'
+                if section == 'geo':
+                    member = SegmentDataRepository._canon_geo_member(member)
+                target_dict = geo_data if section == 'geo' else biz_data
                 fy = fact.get('fiscal_year')
                 if not fy:
                     continue
@@ -9397,8 +9642,8 @@ class SegmentDataRepository:
                             target_dict[metric_name][member][fy] = scaled
                         break
 
-        _process_facts(all_facts_biz, biz_data)
-        _process_facts(all_facts_geo, geo_data)
+        _process_facts(all_facts_biz, 'business')
+        _process_facts(all_facts_geo, 'geo')
 
         if not biz_data and not geo_data:
             return None
@@ -9419,6 +9664,34 @@ class SegmentDataRepository:
             "geo_segments": geo_data,
             "source": "edgartools",
         }
+
+    # ── Fiscal-year-end display helpers ─────────────────────────────────────
+    # Annual segment rows are keyed only by `report_fiscal_year` (an integer);
+    # the table has no clean fiscal-end date column (raw XBRL period_end is
+    # noisy). For the dropdown + column headers we synthesise a display date
+    # from the company's real fiscal-year-end month so it matches the Income
+    # Statement / Key Stats / Cash Flow tabs. These dates are DISPLAY ONLY —
+    # data selection filters by .year, so the underlying values are unchanged.
+    @staticmethod
+    def _fye_month(ticker: str) -> Optional[int]:
+        """Company fiscal-year-end month (1-12) from cached overview; None if unknown."""
+        from data.models import parse_fiscal_year_end
+        try:
+            return parse_fiscal_year_end(_get_fiscal_year_end_cached(ticker))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _fye_display_date(year: int, fye_month: Optional[int]) -> date:
+        """Display date for an annual fiscal year = last day of the FYE month.
+        Falls back to Dec-31 (legacy behaviour) when the FYE month is unknown,
+        so this never crashes and degrades gracefully."""
+        import calendar
+        m = fye_month if (fye_month and 1 <= fye_month <= 12) else 12
+        try:
+            return date(year, m, calendar.monthrange(year, m)[1])
+        except (ValueError, TypeError):
+            return date(year, 12, 31)
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -9444,7 +9717,9 @@ class SegmentDataRepository:
         years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
         if not years:
             return None, None
-        return date(years[0], 1, 31), date(years[-1], 12, 31)
+        _fye_m = SegmentDataRepository._fye_month(ticker)
+        return (SegmentDataRepository._fye_display_date(years[0], _fye_m),
+                SegmentDataRepository._fye_display_date(years[-1], _fye_m))
 
     @staticmethod
     def get_available_dates(ticker: str, period_type: str = "annual") -> List[date]:
@@ -9458,7 +9733,8 @@ class SegmentDataRepository:
             ))
         rows = SegmentDataRepository._fetch_all_db_rows(ticker)
         years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
-        return [date(y, 12, 31) for y in years]
+        _fye_m = SegmentDataRepository._fye_month(ticker)
+        return [SegmentDataRepository._fye_display_date(y, _fye_m) for y in years]
 
     @staticmethod
     def has_quarterly_segment_data(ticker: str) -> bool:
@@ -9467,7 +9743,7 @@ class SegmentDataRepository:
         clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
         sql = f"""
             SELECT COUNT(*) as cnt
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND is_dimensioned = 1
               AND numeric_value IS NOT NULL
@@ -9637,7 +9913,7 @@ def preload_edgartools_ratings(ticker: str) -> None:
 # RATINGS & STORE COUNT REPOSITORY — credit ratings + store counts
 # =============================================================================
 class RatingsDataRepository:
-    """Repository for credit ratings and store counts from coreiq_filing_metrics_v4.
+    """Repository for credit ratings and store counts from coreiq_filing_metrics_v5.
 
     Queries source IN ('credit_rating', 'store_count') with parallel year-fetches for speed.
     Falls back to edgartools real-time extraction when DB has no credit_rating data.
@@ -9659,7 +9935,7 @@ class RatingsDataRepository:
 
     _YEAR_QUERY = """
         SELECT DISTINCT report_fiscal_year
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND source IN ('credit_rating', 'store_count')
         ORDER BY report_fiscal_year ASC
@@ -9673,7 +9949,7 @@ class RatingsDataRepository:
                statement_type, source, dimension, member,
                dimension_label, dimension_member_label, full_dimension_label,
                llm_query, filing_date
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND source IN ('credit_rating', 'store_count')
           AND report_fiscal_year = :year
@@ -10047,7 +10323,7 @@ class RatingsDataRepository:
         SELECT ticker, concept, label, numeric_value, unit_ref,
                report_fiscal_year, fiscal_period, doc_type, is_dimensioned,
                dimension_member_label, full_dimension_label
-        FROM coreiq_filing_metrics_v4
+        FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND (concept IN (
                   'us-gaap:AreaOfRealEstateProperty',
@@ -10066,7 +10342,7 @@ class RatingsDataRepository:
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
     def _fetch_sqft_from_db(ticker: str) -> List[Dict[str, Any]]:
-        """Fetch square footage XBRL facts from coreiq_filing_metrics_v4."""
+        """Fetch square footage XBRL facts from coreiq_filing_metrics_v5."""
         raw = db_manager.execute_query_readonly(
             RatingsDataRepository._SQFT_DB_QUERY, {"ticker": ticker},
         )
@@ -10151,7 +10427,7 @@ class RatingsDataRepository:
     def get_square_footage_data(ticker: str, start_year: int, end_year: int) -> Dict[str, Any]:
         """Get square footage / property area data organized by metric and year.
 
-        DB-first from coreiq_filing_metrics_v4, with edgartools
+        DB-first from coreiq_filing_metrics_v5, with edgartools
         fallback via SEC EDGAR company facts API.
 
         Returns:
@@ -10224,7 +10500,7 @@ class RatingsDataRepository:
             'NumberOfRealEstateProperties': 'properties',
             'LandSubjectToGroundLeases': 'sq ft',
         }
-        # Normalise raw unit_ref values from coreiq_filing_metrics_v4
+        # Normalise raw unit_ref values from coreiq_filing_metrics_v5
         _UNIT_NORMALIZE = {
             'sqft': 'sq ft', 'sqf': 'sq ft', 'u_sqft': 'sq ft',
             'acre': 'acres', 'u_acre': 'acres',

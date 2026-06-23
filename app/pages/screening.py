@@ -412,7 +412,6 @@ def _init_state():
             "scr_fin_timeframe":    "Latest",
             "scr_geo_available":    None,      # None = not checked yet; True/False
             "scr_criterion_cache":  {},        # criterion-level result cache (see screening_service)
-            "scr_excel_cache":      None,      # bytes | None — built on demand only
             # ── Watchlist ──
             "scr_active_watchlist_id":   None,   # int | None — active watchlist filter
             "scr_active_watchlist_name": None,   # str | None — display name
@@ -448,7 +447,6 @@ def _reset_criteria():
         st.session_state.scr_show_results = False
         st.session_state.scr_active_form = None
         st.session_state.scr_criterion_cache = {}
-        st.session_state.scr_excel_cache = None
         st.session_state.scr_results_error = None
         st.session_state.scr_results_loading = False
         st.session_state.scr_show_results_requested = False
@@ -3396,7 +3394,9 @@ def _submit_financial_criterion(
     is_year_range = bool(year_range)
     is_qrange = bool(quarter_range)
 
-    if not is_trailing and not is_year_range and not is_qrange and operator == "Between":
+    # Quarter range keeps a real operator/value (gates the latest in-range
+    # quarter), so it is validated like a normal criterion — not display-only.
+    if not is_trailing and not is_year_range and operator == "Between":
         lo, hi = min(val1, val2), max(val1, val2)
         if lo == hi:
             st.error("Between: Min and Max values must differ.")
@@ -3410,8 +3410,9 @@ def _submit_financial_criterion(
         _ys = sorted(int(y) for y in year_range)
         timeframe = f"FY {_ys[0]}–{_ys[-1]}"
     elif is_qrange:
-        timeframe = (f"Q{quarter_range['from_q']} {quarter_range['from_y']}–"
-                     f"Q{quarter_range['to_q']} {quarter_range['to_y']}")
+        _qp = "FQ" if period_type == "FQ" else "Q"
+        timeframe = (f"{_qp}{quarter_range['from_q']} {quarter_range['from_y']}–"
+                     f"{_qp}{quarter_range['to_q']} {quarter_range['to_y']}")
     elif period_type in ("CQ", "FQ") and quarter:
         q_num = quarter.replace("Q", "")
         if year_sel == "Latest":
@@ -3437,7 +3438,8 @@ def _submit_financial_criterion(
     elif is_year_range:
         summary = f"{stmt} / {metric_label}: {timeframe} (year-by-year columns)"
     elif is_qrange:
-        summary = f"{stmt} / {metric_label}: {timeframe} (quarter-by-quarter columns)"
+        summary = (f"{stmt} / {metric_label}: {timeframe} (quarter columns; "
+                   f"{operator} {val1} on latest quarter)")
     else:
         summary = build_financial_summary(
             stmt, metric_label, operator, val1, val2, timeframe, unit=unit,
@@ -3629,7 +3631,7 @@ def _render_financial_form():
             # quarterly SEC/YF tables (Income Statement, Balance Sheet, Cash Flow).
             period_options = list(PERIOD_TYPES)
             if stmt in TRAILING_QUARTERS_STMTS:
-                period_options = period_options + ["TQ", "QR"]
+                period_options = period_options + ["TQ"]
             if default_period_type not in period_options:
                 default_period_type = "FY"
             # If a prior selection (e.g. "TQ") is no longer valid for this
@@ -3648,7 +3650,6 @@ def _render_financial_form():
             _years = FORWARD_SCREENING_YEARS if stmt in FORWARD_LOOKING_STMTS else SCREENING_YEARS
             year_options = ["Latest"] + _years
             is_trailing = (period_type == "TQ")
-            is_qrange = (period_type == "QR")
             is_quarterly = (period_type in ("CQ", "FQ"))
             num_quarters = None
             year_range = None
@@ -3671,55 +3672,68 @@ def _render_financial_form():
                     help="Shows the last N quarterly values as separate columns "
                          "(display-only — no value filter is applied).",
                 )
-            elif is_qrange:
-                # Display-only: pick a calendar quarter+year range; one column per
-                # quarter in [from, to]. No value filter.
-                quarter = None
-                year_sel = "Latest"
-                _qs = list(QUARTERS)
-                _qr_years = [int(y) for y in _years]
-                _dqr = default_quarter_range or {}
-                def _q_idx(qv, fallback):
-                    try:
-                        return _qs.index(f"Q{int(qv)}")
-                    except Exception:
-                        return fallback
-                _qc1, _qc2, _qc3, _qc4 = st.columns(4)
-                with _qc1:
-                    _fq = st.selectbox("From quarter", options=_qs,
-                                       index=_q_idx(_dqr.get("from_q"), 0),
-                                       key="scr_fin_qr_from_q")
-                with _qc2:
-                    _fy = st.selectbox(
-                        "From year", options=_qr_years,
-                        index=(_qr_years.index(int(_dqr["from_y"]))
-                               if _dqr.get("from_y") in _qr_years
-                               else min(2, len(_qr_years) - 1)),
-                        key="scr_fin_qr_from_y")
-                with _qc3:
-                    _tq = st.selectbox("To quarter", options=_qs,
-                                       index=_q_idx(_dqr.get("to_q"), len(_qs) - 1),
-                                       key="scr_fin_qr_to_q")
-                with _qc4:
-                    _ty = st.selectbox(
-                        "To year", options=_qr_years,
-                        index=(_qr_years.index(int(_dqr["to_y"]))
-                               if _dqr.get("to_y") in _qr_years else 0),
-                        key="scr_fin_qr_to_y")
-                quarter_range = {
-                    "from_q": int(str(_fq).replace("Q", "")), "from_y": int(_fy),
-                    "to_q": int(str(_tq).replace("Q", "")), "to_y": int(_ty),
-                }
             elif is_quarterly:
-                col_q, col_y = st.columns(2)
-                with col_q:
-                    q_idx = QUARTERS.index(default_quarter) if default_quarter in QUARTERS else 0
-                    quarter = st.selectbox("Quarter", options=QUARTERS, index=q_idx,
-                                           key="scr_fin_quarter_sel")
-                with col_y:
-                    yr_idx = year_options.index(default_year_val) if default_year_val in year_options else 0
-                    year_sel = st.selectbox("Year", options=year_options, index=yr_idx,
-                                            key="scr_fin_year_sel")
+                # CQ/FQ each offer a Single quarter or a Quarter range. Range mode
+                # shows one column per quarter in [from, to] (CQ → calendar
+                # quarters, FQ → fiscal quarters); the value filter (Step 4) gates
+                # which companies' quarter values are shown, on the latest quarter
+                # in the window.
+                _q_label = "Calendar quarters" if period_type == "CQ" else "Fiscal quarters"
+                _qmode = st.radio(
+                    "Quarter selection", ["Single quarter", "Quarter range"],
+                    horizontal=True, key="scr_fin_quarter_mode",
+                    index=(1 if default_quarter_range else 0),
+                    help=f"{_q_label}. Quarter range shows the metric for each "
+                         "quarter side by side; the value filter applies to the "
+                         "latest quarter in the range.",
+                )
+                if _qmode == "Quarter range":
+                    quarter = None
+                    year_sel = "Latest"
+                    _qs = list(QUARTERS)
+                    _qr_years = [int(y) for y in _years]
+                    _dqr = default_quarter_range or {}
+                    def _q_idx(qv, fallback):
+                        try:
+                            return _qs.index(f"Q{int(qv)}")
+                        except Exception:
+                            return fallback
+                    _qc1, _qc2, _qc3, _qc4 = st.columns(4)
+                    with _qc1:
+                        _fq = st.selectbox("From quarter", options=_qs,
+                                           index=_q_idx(_dqr.get("from_q"), 0),
+                                           key="scr_fin_qr_from_q")
+                    with _qc2:
+                        _fy = st.selectbox(
+                            "From year", options=_qr_years,
+                            index=(_qr_years.index(int(_dqr["from_y"]))
+                                   if _dqr.get("from_y") in _qr_years
+                                   else min(2, len(_qr_years) - 1)),
+                            key="scr_fin_qr_from_y")
+                    with _qc3:
+                        _tq = st.selectbox("To quarter", options=_qs,
+                                           index=_q_idx(_dqr.get("to_q"), len(_qs) - 1),
+                                           key="scr_fin_qr_to_q")
+                    with _qc4:
+                        _ty = st.selectbox(
+                            "To year", options=_qr_years,
+                            index=(_qr_years.index(int(_dqr["to_y"]))
+                                   if _dqr.get("to_y") in _qr_years else 0),
+                            key="scr_fin_qr_to_y")
+                    quarter_range = {
+                        "from_q": int(str(_fq).replace("Q", "")), "from_y": int(_fy),
+                        "to_q": int(str(_tq).replace("Q", "")), "to_y": int(_ty),
+                    }
+                else:
+                    col_q, col_y = st.columns(2)
+                    with col_q:
+                        q_idx = QUARTERS.index(default_quarter) if default_quarter in QUARTERS else 0
+                        quarter = st.selectbox("Quarter", options=QUARTERS, index=q_idx,
+                                               key="scr_fin_quarter_sel")
+                    with col_y:
+                        yr_idx = year_options.index(default_year_val) if default_year_val in year_options else 0
+                        year_sel = st.selectbox("Year", options=year_options, index=yr_idx,
+                                                key="scr_fin_year_sel")
             else:
                 quarter = None
                 _ymode = "Single year"
@@ -3771,15 +3785,16 @@ def _render_financial_form():
                     "shown as separate year columns. No value filter is applied."
                 )
                 operator = "Greater Than"
-            elif quarter_range:
-                # Display-only mode: one column per quarter in the range, no value filter.
-                st.caption(
-                    f"{metric_label} from Q{quarter_range['from_q']} {quarter_range['from_y']} "
-                    f"to Q{quarter_range['to_q']} {quarter_range['to_y']} will be shown as "
-                    "separate quarter columns. No value filter is applied."
-                )
-                operator = "Greater Than"
             else:
+                if quarter_range:
+                    _qlbl = "calendar" if period_type == "CQ" else "fiscal"
+                    _qp = "FQ" if period_type == "FQ" else "Q"
+                    st.caption(
+                        f"{metric_label} from {_qp}{quarter_range['from_q']} {quarter_range['from_y']} "
+                        f"to {_qp}{quarter_range['to_q']} {quarter_range['to_y']} will be shown as "
+                        f"separate {_qlbl}-quarter columns. The filter below applies to the "
+                        "latest quarter in the range."
+                    )
                 st.markdown(
                     f'<p class="form-section-label" style="margin-top:12px;">{_op_step} — Set Operator &amp; Value</p>',
                     unsafe_allow_html=True,
@@ -3791,27 +3806,13 @@ def _render_financial_form():
 
             add_credit_ratings = False
             add_store_counts = False
-            if show_additional_data:
-                st.markdown("---")
-                st.markdown("**Additional Data** *(optional)*")
-                _col_cr, _col_sc = st.columns(2)
-                with _col_cr:
-                    add_credit_ratings = st.checkbox(
-                        "Credit Ratings", value=False, key="scr_fin_add_credit",
-                        help="Show latest S&P rating per company.",
-                    )
-                with _col_sc:
-                    add_store_counts = st.checkbox(
-                        "Store Counts", value=False, key="scr_fin_add_stores",
-                        help="Show latest total store count per company.",
-                    )
 
             with st.form(
                 "scr_financial_form",
                 clear_on_submit=True,
                 border=False,
             ):
-                if is_trailing or year_range or quarter_range:
+                if is_trailing or year_range:
                     # Display-only: no value inputs.
                     val1 = 0.0
                     val2 = 0.0
@@ -3833,6 +3834,22 @@ def _render_financial_form():
                         format="%.2f", key="scr_fin_val1",
                     )
                     val2 = 0.0
+
+                # Additional Data sits AFTER the value filter, before the actions.
+                if show_additional_data:
+                    st.markdown("---")
+                    st.markdown("**Additional Data** *(optional)*")
+                    _col_cr, _col_sc = st.columns(2)
+                    with _col_cr:
+                        add_credit_ratings = st.checkbox(
+                            "Credit Ratings", value=False, key="scr_fin_add_credit",
+                            help="Show latest S&P rating per company.",
+                        )
+                    with _col_sc:
+                        add_store_counts = st.checkbox(
+                            "Store Counts", value=False, key="scr_fin_add_stores",
+                            help="Show latest total store count per company.",
+                        )
 
                 col_add, col_cancel, _space = st.columns([1.5, 2, 6.5])
                 with col_add:
@@ -4683,6 +4700,49 @@ def _render_keydevs_results():
 # =============================================================================
 # EXCEL DOWNLOAD HELPERS
 # =============================================================================
+
+# ── One-step Excel download ──────────────────────────────────────────────────
+# Building the workbook is cheap (~30-75ms even for ~900 rows), so it is built
+# inline and memoised by a signature of the current result set — the first
+# render of a given result set pays the build once; later reruns (sorting,
+# selecting, etc.) hit the cache. A single JS download button is rendered; the
+# download itself is client-side, so clicking it never triggers a rerun.
+_EXCEL_BUILD_CACHE: Dict[str, bytes] = {}   # sig -> workbook bytes
+_EXCEL_BUILD_MAX = 8
+
+
+def _render_excel_download(sig: str, builder) -> None:
+    """Render the single Excel download button, building (once) on demand.
+
+    `builder` is a zero-arg callable returning the workbook bytes.
+    """
+    from datetime import datetime
+
+    data = _EXCEL_BUILD_CACHE.get(sig)
+    if not isinstance(data, (bytes, bytearray)):
+        t_xl = time.perf_counter()
+        try:
+            data = builder() or b""
+        except Exception as exc:
+            log_structured_error(exc, page="screening",
+                                 component="_render_excel_download", operation="build_excel")
+            data = b""
+        # Bound the cache to the few most-recent result sets.
+        if len(_EXCEL_BUILD_CACHE) >= _EXCEL_BUILD_MAX:
+            for old in list(_EXCEL_BUILD_CACHE.keys())[: len(_EXCEL_BUILD_CACHE) - _EXCEL_BUILD_MAX + 1]:
+                _EXCEL_BUILD_CACHE.pop(old, None)
+        _EXCEL_BUILD_CACHE[sig] = data
+        log_timing("SCREENING_RESULTS_EXCEL_BUILD",
+                   (time.perf_counter() - t_xl) * 1000, f"bytes={len(data)}")
+
+    if data:
+        _ts = datetime.now().strftime("%Y%m%d_%H%M")
+        _render_excel_js_download(
+            data, f"Screening_Results_{_ts}.xlsx", label="Excel",
+        )
+    else:
+        st.caption("Excel unavailable — check logs.")
+
 
 def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "Excel") -> None:
     """Client-side Excel download button via JS Blob API — same pattern as market_data.py."""
@@ -5832,30 +5892,25 @@ def _render_results():
                 unsafe_allow_html=True,
             )
         with _dl_col:
-            if st.button("Prepare Excel", key="scr_prepare_excel", width="stretch"):
-                t_xl = time.perf_counter()
-                if has_segment_results:
-                    st.session_state.scr_excel_cache = _build_segment_excel(
-                        df, criteria, seg_criteria
-                    )
-                else:
-                    st.session_state.scr_excel_cache = _build_screening_excel(
-                        display_df, len(criteria)
-                    )
-                log_timing(
-                    "SCREENING_RESULTS_EXCEL_BUILD",
-                    (time.perf_counter() - t_xl) * 1000,
-                    f"rows={len(display_df)} cols={len(display_df.columns)}",
-                )
-            xl_bytes = st.session_state.get("scr_excel_cache")
-            if xl_bytes:
-                from datetime import datetime
-                _ts = datetime.now().strftime("%Y%m%d_%H%M")
-                _render_excel_js_download(
-                    xl_bytes,
-                    f"Screening_Results_{_ts}.xlsx",
-                    label="Excel",
-                )
+            # One-step download: build the workbook in a background thread keyed
+            # by a signature of the current result set, then surface the download
+            # button the moment it is ready — the page never blocks on it.
+            import hashlib as _hashlib
+            _sig_src = "|".join([
+                str(len(display_df)),
+                ",".join(map(str, display_df.columns)),
+                "seg" if has_segment_results else "flat",
+                ",".join(
+                    f"{c.get('display_col')}:{c.get('operator')}:{c.get('value1')}:{c.get('value2')}"
+                    for c in criteria
+                ),
+            ])
+            _sig = _hashlib.md5(_sig_src.encode("utf-8")).hexdigest()
+            if has_segment_results:
+                _builder = lambda: _build_segment_excel(df, criteria, seg_criteria)
+            else:
+                _builder = lambda: _build_screening_excel(display_df, len(criteria))
+            _render_excel_download(_sig, _builder)
 
         t_table = time.perf_counter()
         if has_segment_results:
@@ -5882,9 +5937,11 @@ def _render_results():
                 empty_message="No matching companies found.",
                 pinned_column="Company Name",
                 hidden_columns=_hidden,
-                enable_selection=True,
+                # DEFERRED to next release — multi-select (row checkboxes + select-all) disabled.
+                # enable_selection=True,
             )
-            _render_save_as_watchlist_panel(_grid_resp)
+            # DEFERRED to next release — "Save selection as Watchlist" panel disabled.
+            # _render_save_as_watchlist_panel(_grid_resp)
         log_timing(
             "SCREENING_RESULTS_TABLE_RENDER",
             (time.perf_counter() - t_table) * 1000,

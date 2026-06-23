@@ -71,10 +71,10 @@ TRAILING_QUARTERS_DEFAULT = 8
 # Statement types that support trailing-quarters (have quarterly SEC/YF tables).
 TRAILING_QUARTERS_STMTS = {"Income Statement", "Balance Sheet", "Cash Flow"}
 
-# Quarter Range = one display-only column per calendar quarter in a chosen
-# [from, to] window. Same quarterly tables as TQ; bounded by the analyst's range
-# instead of "last N". Reuses the quarter_cols pipeline.
-QUARTER_RANGE = "QR"
+# Quarter range is no longer a distinct period type. Calendar Quarter (CQ) and
+# Fiscal Quarter (FQ) each offer a Single quarter / Quarter range toggle; range
+# mode emits one column per quarter in the chosen [from, to] window (CQ →
+# calendar quarters, FQ → fiscal quarters) and reuses the quarter_cols pipeline.
 
 # Friendly labels for the Period Type selector.
 PERIOD_TYPE_LABELS = {
@@ -82,7 +82,6 @@ PERIOD_TYPE_LABELS = {
     "CQ": "Calendar Quarter",
     "FQ": "Fiscal Quarter",
     "TQ": "Last N Quarters",
-    "QR": "Quarter Range",
 }
 
 # Year range for financial screening (historical statements)
@@ -403,7 +402,7 @@ STATEMENT_CONFIG = {
         ],
     },
 
-    # Business Segments — Segment tab business/product members (coreiq_filing_metrics_v4).
+    # Business Segments — Segment tab business/product members (coreiq_filing_metrics_v5).
     "Business Segments": {
         "segment_statement": True,
         "segment_type": "business",
@@ -416,7 +415,7 @@ STATEMENT_CONFIG = {
         ],
     },
 
-    # Geographical Segments — Segment tab geographic members (coreiq_filing_metrics_v4).
+    # Geographical Segments — Segment tab geographic members (coreiq_filing_metrics_v5).
     "Geographical Segments": {
         "segment_statement": True,
         "segment_type": "geographical",

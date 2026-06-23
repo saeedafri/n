@@ -716,7 +716,7 @@ def _is_non_sec_company(ticker: str) -> bool:
 
         with db_manager.get_session() as session:
             result = session.execute(text("""
-                SELECT COUNT(*) FROM coreiq_filing_metrics_v4
+                SELECT COUNT(*) FROM coreiq_filing_metrics_v5
                 WHERE ticker = :ticker
                 AND (doc_type = 'annual-report' OR doc_type LIKE 'interim-report-Q%' OR doc_type = 'half-yearly')
                 LIMIT 1
@@ -1430,7 +1430,7 @@ _COMPANY_NAMES_CACHE = None
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_company_names_from_db():
-    """Load ticker→company_name map directly from coreiq_filing_metrics_v4 with proper formatting.
+    """Load ticker→company_name map directly from coreiq_filing_metrics_v5 with proper formatting.
 
     OPTIMIZED: Using DISTINCT instead of MAX() - simpler and faster
     Gets one company_name per ticker (any one, since they're usually consistent).
@@ -1446,7 +1446,7 @@ def _load_company_names_from_db():
         _query_start = _perf_time.time()
         rows = db_manager.execute_query_readonly("""
             SELECT DISTINCT ticker, company_name
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             ORDER BY ticker
         """)
 
@@ -1694,7 +1694,7 @@ from data.repository import FilingMetricRepository
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_companies_from_db():
-    """Get (ticker, display_label) for companies that have data in coreiq_filing_metrics_v4.
+    """Get (ticker, display_label) for companies that have data in coreiq_filing_metrics_v5.
     Uses DISTINCT for unique tickers + COMPANY_NAMES for display names.
     Display format: "Company Name (TICKER)"
 
@@ -1716,7 +1716,7 @@ def _load_companies_from_db():
 
         rows = db_manager.execute_query_readonly("""
             SELECT DISTINCT ticker, company_name
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             ORDER BY ticker
         """)
         _query_elapsed = _perf_time.time() - _query_start
@@ -1842,7 +1842,7 @@ def _prefetch_ticker_filter_data(ticker: str):
     3 queries into 1 saves ~500ms on cold load.
 
     CACHE: @st.cache_data(ttl=300) - Cached for 5 minutes
-    TABLE: coreiq_filing_metrics_v4
+    TABLE: coreiq_filing_metrics_v5
     INDEX: idx_ticker_fiscal_doctype (covering index on ticker, storage_year, doc_type)
     QUERY: SELECT DISTINCT doc_type, storage_year WHERE ticker = ? ORDER BY doc_type, storage_year DESC
     """
@@ -1855,7 +1855,7 @@ def _prefetch_ticker_filter_data(ticker: str):
         _query_start = _perf_time.time()
         rows = db_manager.execute_query_readonly("""
             SELECT DISTINCT doc_type, COALESCE(fiscal_year, storage_year, report_fiscal_year) AS effective_year
-            FROM coreiq_filing_metrics_v4
+            FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
             ORDER BY doc_type, effective_year DESC
         """, {"ticker": ticker})
