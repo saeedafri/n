@@ -1,0 +1,50 @@
+ticker,company,reason,reason_detail,feed,days_old_as_of_2026-06-16
+AAP,"Advance Auto Parts, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,475
+AKA,a.k.a. Brands Holding Corp,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,467
+CMG,"Chipotle Mexican Grill, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,497
+CRI,Carter's,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,476
+DDS,Dillard's,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,476
+DPZ,"Domino's Pizza, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,477
+FOSL,"Fossil Group, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,461
+HLN,Haleon plc,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,474
+KHC,The Kraft Heinz Company,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,489
+KTB,"Kontoor Brands, Inc",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,476
+MCD,McDonald's Corporation,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,491
+MUSA,Murphy USA Inc.,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,496
+QSR,Restaurant Brands International Inc.,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,489
+REAL,"The RealReal, Inc",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,481
+SBH,Sally Beauty,Outdated calendar,Latest annual Nov 14 2024 (>460d); current-FY date missing from NASDAQ feed,NASDAQ,579
+SHAK,Shake Shack Inc.,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,481
+SHOO,"Steven Madden, Ltd.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,475
+SHW,Sherwin-Williams,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,502
+SNBR,Sleep Number,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,468
+TDUP,ThredUp Inc.,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,470
+TXRH,"Texas Roadhouse, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,481
+VYX,NCR Voyix,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,474
+WEN,The Wendy's Company,Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,488
+WWW,"Wolverine World Wide, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,482
+YUM,"Yum! Brands, Inc.",Outdated calendar,Latest annual is prior FY (>460d); current-FY date missing from NASDAQ feed,NASDAQ,495
+1913.HK,Prada S.p.A.,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+2020.HK,ANTA Sports Products Limited,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+2331.HK,Li Ning Company Limited ,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+BEI.DE,Beiersdorf Aktiengesellschaft,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+BN.PA,Danone S.A.,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+CA.PA,CARREFOUR SA,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+JD.L,JD Sports Fashion Plc,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+KER.PA,Kering SA,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+MC.PA,"LVMH Moët Hennessy - Louis Vuitton, Société Européenne ",No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+MONC.MI,Moncler,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+NESN.SW,Nestlé S.A.,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+NXT.L,Next PLC,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+OCDO.L,Ocado Group,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+OR.PA,L'Oréal S.A.,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+PVH,PVH CORP. /DE/,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+RKT.L,Reckitt Benckiser Group plc,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+RMS.PA,Hermès International Société en commandite par actions,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+TSCO.L,Tesco PLC,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+VNCE,Vince Holding Corp.,No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+VRA,"Vera Bradley, Inc.",No full-year (Q4) date,Only interim/half-year dates in Yahoo feed; no identifiable full-year date,Yahoo,
+3998.HK,Bosideng International Holdings Limited,Not in calendar,No earnings-calendar rows at all for the ticker,Yahoo,
+QRTEA,QVC Group,Not in calendar,No earnings-calendar rows at all for the ticker,NASDAQ,
+SCVL,"Shoe Carnival, Inc.",Missing fiscal year-end,No fiscal_year_end on file; Q4 period cannot be identified,NASDAQ,
+VSCO,Victoria's Secret,Missing fiscal year-end,No fiscal_year_end on file; Q4 period cannot be identified,NASDAQ,
