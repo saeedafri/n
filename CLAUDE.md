@@ -34,6 +34,11 @@
    `superpowers:*` for process. Keep output terse. Do NOT add new MCP servers/skills.
 4. **Scope discipline.** Fix exactly what was asked; flag unrelated issues separately
    (background-task chip) instead of bundling them.
+5. **Always write detailed documentation.** Every non-trivial feature or change gets a
+   written design spec under `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+   (architecture, data flow, DB schema, testing plan, rollout). This OVERRIDES the
+   global "never create documentation files unless asked" rule — for this repo,
+   documentation is mandatory. Keep docs human-readable and current.
 
 ---
 
