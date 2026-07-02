@@ -355,6 +355,28 @@ def _background_warmup_thread():
         _warm_date_to   = date.today()
         _warm_date_from = _warm_date_to - timedelta(days=7)
 
+        # ── Track 0: Earnings Calendar warmup (FIRST — it's the slowest page) ──
+        # The calendar page runs three independent slow queries on a cold cache
+        # (events UNION ~8.8s, fiscal-year-end map ~7.1s, tickers ~6.6s). Warm
+        # them up front so EC is cached within ~15s of boot — before real users
+        # navigate to it. Run SEQUENTIALLY (not a parallel pool): the page itself
+        # already parallelizes these four queries, so a concurrent warmup would
+        # double DB load (thundering herd) for any visit during the warmup window
+        # and run SLOWER than no warmup at all. Sequential keeps DB pressure low.
+        try:
+            from data.repository import EarningsCalendarRepository
+            for _warm_fn in (
+                EarningsCalendarRepository.get_available_tickers,
+                EarningsCalendarRepository._get_fiscal_year_end_map,
+                EarningsCalendarRepository.get_calendar_events,  # also warms IR + companies map
+            ):
+                try:
+                    _warm_fn()
+                except Exception:
+                    pass
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Earnings calendar warmup error: {e}")
+
         # ── Track 1: populate @st.cache_data for static dropdowns (PARALLEL) ──
         # All 4 calls fire concurrently. Total = max(individual) ≈ 2.7s
         # instead of sum ≈ 3.7s when sequential.

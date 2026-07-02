@@ -19,7 +19,12 @@ import streamlit as st
 from core.database import db_manager
 from data.source_router import get_company_source
 from utils.retailer_forecaster import RetailerForecaster
+from utils.retailer_quarterly_forecaster import RetailerQuarterlyForecaster
 from utils.server_logger import log_structured_error, log_timing
+
+# Quarterly forecast frame columns that are not persisted as model rows
+# (mirrors the annual store, which keeps only models + ensemble + scenarios).
+_QUARTERLY_NON_MODEL_COLS = ("fiscal_year", "fiscal_quarter", "label", "ci_lower", "ci_upper")
 
 
 SEC_SOURCE_TABLE = "coreiq_av_financials_income_statement"
@@ -677,6 +682,280 @@ class RevenueForecastService:
                 "source_columns": source_columns,
                 "latest_period_label": latest_actual.get("period_label"),
                 "reported_currency": reported_currency,
+            },
+        }
+
+    # =====================================================================
+    # QUARTERLY  — sibling of get_company_dashboard, never touches the
+    # annual code path. Reads quarterly actuals and runs the seasonal engine.
+    # =====================================================================
+
+    @staticmethod
+    def _fetch_quarterly_rows(ticker: str, source: str) -> List[Dict[str, Any]]:
+        if source == "SEC":
+            base = ticker.split('.')[0] if '.' in ticker else ticker
+            return db_manager.execute_query_readonly(
+                f"""
+                SELECT DISTINCT fiscal_date_ending AS period_date, total_revenue,
+                       reported_currency
+                FROM {SEC_SOURCE_TABLE}
+                WHERE ticker = :ticker AND report_type = 'quarterly'
+                  AND total_revenue IS NOT NULL
+                ORDER BY fiscal_date_ending ASC
+                """,
+                {"ticker": base},
+            )
+        # YFinance: composite tickers match yf_symbol; plain tickers use the ticker column
+        col = "yf_symbol" if '.' in ticker else "ticker"
+        return db_manager.execute_query_readonly(
+            f"""
+            SELECT period_end AS period_date,
+                   MAX(CASE WHEN line_item = 'Total Revenue' THEN value END) AS total_revenue
+            FROM {YF_SOURCE_TABLE}
+            WHERE {col} = :ticker AND frequency = 'quarterly'
+            GROUP BY period_end
+            ORDER BY period_end ASC
+            """,
+            {"ticker": ticker},
+        )
+
+    @staticmethod
+    def _normalize_quarterly_rows(
+        raw_rows: List[Dict[str, Any]],
+        source: str,
+        reported_currency: str,
+    ) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        prev_revenue: Optional[float] = None
+        for row in raw_rows:
+            period_date = _to_date(row.get("period_date"))
+            revenue = _safe_float(row.get("total_revenue"))
+            if period_date is None or revenue is None:
+                continue
+            quarter = (period_date.month - 1) // 3 + 1
+            growth_pct = None
+            if prev_revenue not in (None, 0):
+                growth_pct = ((revenue - prev_revenue) / abs(prev_revenue)) * 100
+            rows.append({
+                "period_date": period_date,
+                "fiscal_year": period_date.year,
+                "fiscal_quarter": quarter,
+                "label": f"Q{quarter} {period_date.year}",
+                "period_label": period_date.strftime("%b %Y"),
+                "reported_currency": reported_currency,
+                "source": source,
+                "source_label": _source_label(source),
+                "total_revenue": revenue,
+                "total_revenue_billions": revenue / 1_000_000_000,
+                "growth_pct": growth_pct,
+            })
+            prev_revenue = revenue
+        return rows
+
+    @staticmethod
+    @st.cache_data(ttl=86400 * 7, show_spinner=False)
+    def get_quarterly_dashboard(ticker: str, periods: int = 20) -> Dict[str, Any]:
+        """Quarterly revenue forecast dashboard. Same shape as get_company_dashboard,
+        with forecast rows carrying fiscal_quarter + a 'Qx YYYY' label."""
+        start = perf_counter()
+        source = get_company_source(ticker)
+        source_candidates = [source] if source in ("SEC", "YFinance") else ["SEC", "YFinance"]
+        company_map = {row["ticker"]: row for row in RevenueForecastService.get_companies()}
+        company_name = company_map.get(ticker, {}).get("name", ticker)
+        _base_ticker = ticker.split('.')[0] if '.' in ticker else ticker
+
+        # Composite ticker for the quarterly store (e.g. 'ADS.DE' not 'ADS')
+        if source == 'YFinance' and '.' not in ticker:
+            from data.repository import CompanyRepository as _CR
+            _exch = (_CR.get_companies_map().get(ticker) or {}).get('exchange_acronym')
+            _forecast_ticker = f"{ticker}.{_exch}" if _exch else ticker
+        else:
+            _forecast_ticker = ticker
+
+        empty = {
+            "ticker": ticker, "company_name": company_name,
+            "source": source or "unknown", "source_label": _source_label(source),
+            "reported_currency": "USD", "display_currency": "USD",
+            "period_type": "quarterly", "actual_rows": [], "historical_rows": [],
+            "backtest_rows": [], "forecast_rows": [], "best_method": None, "summary": {},
+        }
+
+        raw_rows: List[Dict[str, Any]] = []
+        resolved_source = None
+        reported_currency = "USD"
+        for candidate in source_candidates:
+            try:
+                if candidate == "YFinance":
+                    reported_currency = _yf_reported_currency(_base_ticker)
+                candidate_rows = RevenueForecastService._fetch_quarterly_rows(ticker, candidate)
+                if candidate_rows:
+                    raw_rows = candidate_rows
+                    resolved_source = candidate
+                    if candidate == "SEC":
+                        reported_currency = candidate_rows[0].get("reported_currency") or "USD"
+                    break
+            except Exception as exc:
+                log_structured_error(
+                    exc, page="estimates", component="RevenueForecastService",
+                    operation="FETCH_QUARTERLY_ROWS", context={"ticker": ticker, "source": candidate},
+                )
+
+        if not raw_rows or resolved_source is None:
+            return empty
+        if not reported_currency:
+            reported_currency = "USD"
+
+        actual_rows = RevenueForecastService._normalize_quarterly_rows(
+            raw_rows=raw_rows, source=resolved_source, reported_currency=reported_currency,
+        )
+
+        _raw_df = pd.DataFrame({
+            "year": [r["fiscal_year"] for r in actual_rows],
+            "quarter": [r["fiscal_quarter"] for r in actual_rows],
+            "sales": [r["total_revenue_billions"] for r in actual_rows],
+        }).dropna()
+        _deduped = (
+            _raw_df.loc[_raw_df.groupby(["year", "quarter"])["sales"].transform("max") == _raw_df["sales"]]
+            .drop_duplicates(subset=["year", "quarter"], keep="last")
+            .sort_values(["year", "quarter"])
+            .reset_index(drop=True)
+        )
+        if not _deduped.empty:
+            _threshold = _deduped["sales"].max() * 0.10
+            _deduped = _deduped[_deduped["sales"] >= _threshold].reset_index(drop=True)
+        if len(_deduped) < 8:
+            empty["summary"] = {"actual_rows": len(actual_rows),
+                                "note": "Need >=8 quarters of revenue for a quarterly forecast."}
+            empty["actual_rows"] = actual_rows
+            return empty
+
+        engine = RetailerQuarterlyForecaster.from_dataframe(_deduped)
+        summary_stats = engine.summary_stats()
+        historical = engine.clean_data.copy()
+        historical["growth_pct"] = (historical["sales"].pct_change() * 100).round(1)
+        historical["is_outlier"] = historical["qidx"].isin(engine.outliers)
+
+        _last_actual_date = actual_rows[-1]["period_date"] if actual_rows else None
+        forecast_df: pd.DataFrame = pd.DataFrame()
+        backtest_df: pd.DataFrame = pd.DataFrame()
+        _store_hit = False
+
+        # ── DB fast path: serve from the quarterly store when data is current ──
+        if _last_actual_date:
+            try:
+                from data.quarterly_forecast_store import (
+                    needs_update as _needs_update, get_all_model_forecasts as _get_all_mf,
+                )
+                if not _needs_update(_forecast_ticker, _last_actual_date):
+                    stored = _get_all_mf(_forecast_ticker, max_periods=periods)
+                    if stored:
+                        _keys = sorted({(int(r["fiscal_year"]), int(r["fiscal_quarter"]))
+                                        for rows in stored.values() for r in rows})[:periods]
+                        fdict: Dict[str, Any] = {
+                            "fiscal_year": [k[0] for k in _keys],
+                            "fiscal_quarter": [k[1] for k in _keys],
+                            "label": [f"Q{k[1]} {k[0]}" for k in _keys],
+                        }
+                        for mkey, mrows in stored.items():
+                            by_key = {(int(r["fiscal_year"]), int(r["fiscal_quarter"])):
+                                      (float(r["value_millions"]) / 1000 if r["value_millions"] is not None else None)
+                                      for r in mrows}
+                            fdict[mkey] = [by_key.get(k) for k in _keys]
+                        forecast_df = pd.DataFrame(fdict)
+                        _bt_rows = []
+                        for mkey, mrows in stored.items():
+                            if mrows and mrows[0].get("mape") is not None:
+                                _bt_rows.append({"method_key": mkey, "method": mkey,
+                                                 "mape": float(mrows[0]["mape"])})
+                        if _bt_rows:
+                            backtest_df = pd.DataFrame(_bt_rows).sort_values("mape")
+                        _store_hit = True
+            except Exception:
+                pass  # fall through to a full engine run
+
+        if not _store_hit:
+            backtest_df = engine.backtest(holdout_quarters=4)
+            forecast_df = engine.forecast(periods=periods)
+
+        backtest_rows = backtest_df.to_dict("records") if not backtest_df.empty else []
+        forecast_rows = forecast_df.to_dict("records") if not forecast_df.empty else []
+        historical_rows = historical.to_dict("records") if not historical.empty else []
+
+        best_method_key: Optional[str] = engine.best_method
+        if best_method_key is None and backtest_rows:
+            _valid = [r for r in backtest_rows if r.get("mape") is not None]
+            if _valid:
+                best_method_key = min(_valid, key=lambda r: r["mape"]).get("method_key") \
+                    or min(_valid, key=lambda r: r["mape"]).get("method")
+
+        available_models = [c for c in forecast_df.columns if c not in _QUARTERLY_NON_MODEL_COLS]
+
+        # Fire-and-forget upsert only on a full engine run (mirrors annual path)
+        if not _store_hit and forecast_rows:
+            _df_copy = forecast_df.copy()
+            _bt_copy = [{"method_key": r.get("method"), "mape": r.get("mape")} for r in backtest_rows]
+            _models = list(available_models)
+            _best = best_method_key or ""
+
+            def _smart_upsert():
+                try:
+                    from data.quarterly_forecast_store import (
+                        ensure_quarterly_forecast_table, upsert_forecasts as _do_upsert,
+                    )
+                    ensure_quarterly_forecast_table()
+                    _do_upsert(
+                        ticker=_forecast_ticker, forecast_df=_df_copy, model_keys=_models,
+                        best_method_key=_best, backtest_rows=_bt_copy, metric="total_revenue",
+                        last_actual_date=_last_actual_date,
+                        company_name=company_name or None,
+                    )
+                except Exception:
+                    pass
+
+            try:
+                threading.Thread(target=_smart_upsert, daemon=True,
+                                 name=f"q_fcst_upsert_{ticker}").start()
+            except Exception:
+                pass
+
+        next_q = forecast_rows[0] if forecast_rows else {}
+        latest_actual = actual_rows[-1] if actual_rows else {}
+        log_timing("FORECAST_QUARTERLY_TOTAL", (perf_counter() - start) * 1000,
+                   f"ticker={ticker} source={resolved_source} store_hit={_store_hit} "
+                   f"quarters={len(forecast_rows)}")
+
+        return {
+            "ticker": ticker,
+            "company_name": company_name,
+            "source": resolved_source,
+            "source_label": _source_label(resolved_source),
+            "reported_currency": reported_currency,
+            "display_currency": reported_currency,
+            "period_type": "quarterly",
+            "actual_rows": actual_rows,
+            "historical_rows": historical_rows,
+            "backtest_rows": backtest_rows,
+            "forecast_rows": forecast_rows,
+            "best_method": best_method_key,
+            "available_models": available_models,
+            "outlier_quarters": list(engine.outliers),
+            "summary": {
+                "latest_actual_date": latest_actual.get("period_date"),
+                "latest_actual_label": latest_actual.get("label"),
+                "latest_actual_revenue_billions": latest_actual.get("total_revenue_billions"),
+                "reported_currency": reported_currency,
+                "next_forecast_label": next_q.get("label"),
+                "next_forecast_value_billions": next_q.get("ensemble"),
+                "forecast_start_label": forecast_rows[0].get("label") if forecast_rows else None,
+                "forecast_end_label": forecast_rows[-1].get("label") if forecast_rows else None,
+                "forecast_periods": len(forecast_rows),
+                "historical_rows": len(historical_rows),
+                "actual_rows": len(actual_rows),
+                "outliers_excluded": len(engine.outliers),
+                "annual_cagr_pct": summary_stats.get("annual_cagr_pct"),
+                "avg_qoq_growth_pct": summary_stats.get("avg_qoq_growth_pct"),
+                "growth_volatility_pct": summary_stats.get("growth_volatility_pct"),
+                "seasonal_indices": summary_stats.get("seasonal_indices"),
             },
         }
 

@@ -1920,9 +1920,16 @@ def render_earnings_calls(active_ticker: str = None):
     # in on_company_change (the ACTION of selecting ALL) — NOT here on every render,
     # so the user can still narrow Year/Quarter while keeping Company on ALL.
     _ec_company_is_all = (st.session_state.ec_company == 'ALL')
-    if "ec_year" not in st.session_state or st.session_state.ec_year not in year_options:
-        # Default to first real year (skip 'ALL')
-        st.session_state.ec_year = year_options[1] if len(year_options) > 1 else year_options[0]
+
+    # If we've landed with a fresh URL ticker parameter (different from session state),
+    # reset the year to the latest available for that ticker
+    _fresh_ticker = (st.query_params.get("ticker") and st.query_params.get("ticker") != st.session_state.get("_ec_last_url_ticker"))
+
+    if "ec_year" not in st.session_state or st.session_state.ec_year not in year_options or _fresh_ticker:
+        # Default to LATEST real year (last item, since available_years is sorted reverse)
+        st.session_state.ec_year = year_options[-1] if year_options[-1] != 'ALL' else (year_options[1] if len(year_options) > 1 else year_options[0])
+        if _fresh_ticker:
+            st.session_state._ec_last_url_ticker = st.query_params.get("ticker")
 
     # Derive quarters from the combined result (no extra DB call)
     if st.session_state.ec_company != 'ALL' and str(st.session_state.ec_year) != 'ALL' and _yq_map is not None:
@@ -1943,7 +1950,9 @@ def render_earnings_calls(active_ticker: str = None):
     _qp_from = st.query_params.get("from", "")
     _just_from_calendar = _qp_from == "calendar" and st.session_state.get("_ec_nav_id") == f"nav_{_qp_ticker}_{_qp_year}_{_qp_quarter}__calendar"
 
-    if "ec_quarter" not in st.session_state or st.session_state.ec_quarter not in quarter_options:
+    # If we've landed with a fresh URL ticker, reset quarter to latest
+    if "ec_quarter" not in st.session_state or st.session_state.ec_quarter not in quarter_options or _fresh_ticker:
+        # Default to LATEST quarter (last item in sorted list)
         st.session_state.ec_quarter = quarter_options[-1] if len(quarter_options) > 1 else quarter_options[0]
     elif not _ec_company_is_all:
         # Even if ec_quarter exists, default to latest on fresh page load

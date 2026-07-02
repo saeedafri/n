@@ -32,15 +32,22 @@ from markdown.extensions.nl2br import Nl2BrExtension
 from markdown.extensions.toc import TocExtension
 from playwright.sync_api import sync_playwright
 
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from sync_technical_pdfs_sharepoint import sync_technical_sharepoint  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 DOC_DIR = REPO / "docs" / "technical-documentation"
 ASSETS_DIR = DOC_DIR / "_assets"
 LOGO_PATH = ASSETS_DIR / "coresight-logo.png"
-TEMPLATE_PATH = DOC_DIR / "_pdf_template.html"
-STYLES_PATH = DOC_DIR / "_pdf_styles.css"
+TEMPLATE_PATH = DOC_DIR / "_templates" / "_pdf_template.html"
+STYLES_PATH = DOC_DIR / "_templates" / "_pdf_styles.css"
 MERMAID_CONFIG_PATH = DOC_DIR / "_mermaid_config.json"
 MERMAID_CSS_PATH = DOC_DIR / "_mermaid_theme.css"
 DIAGRAM_CACHE_DIR = DOC_DIR / "_diagram_cache"
+PDF_DIR = DOC_DIR / "_pdf" / "individual"
 DIAGRAM_MAX_HEIGHT_PX = 420
 
 MERMAID_FENCE = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL)
@@ -59,31 +66,63 @@ def _is_content_page(page: fitz.Page) -> bool:
     long_lines = [ln for ln in text.splitlines() if len(ln.strip()) > 90]
     return len(long_lines) >= 2
 
-# All 22 source documents
+# All 22 source documents (paths relative to DOC_DIR)
 ALL_DOCS = [
     "README.md",
-    "00-app-bootstrap-and-auth.md",
-    "01-shared-components.md",
-    "02-core-infrastructure.md",
-    "03-data-layer.md",
-    "04-utils-and-caching.md",
-    "login.md",
-    "logout-bridge.md",
-    "home.md",
-    "market-data.md",
-    "newsroom.md",
-    "earnings-calls.md",
-    "live-earnings-transcript.md",
-    "earnings-calendar.md",
-    "screening.md",
-    "company-filings.md",
-    "company-filings-add-files.md",
-    "logs.md",
-    "retailer-adding.md",
-    "forecasting.md",
-    "forecasting-admin.md",
-    "access-management.md",
+    "00-infrastructure/00-app-bootstrap-and-auth.md",
+    "00-infrastructure/01-shared-components.md",
+    "00-infrastructure/02-core-infrastructure.md",
+    "00-infrastructure/03-data-layer.md",
+    "00-infrastructure/04-utils-and-caching.md",
+    "pages/login.md",
+    "pages/logout-bridge.md",
+    "pages/home.md",
+    "pages/market-data.md",
+    "pages/newsroom.md",
+    "pages/earnings-calls.md",
+    "pages/live-earnings-transcript.md",
+    "pages/earnings-calendar.md",
+    "pages/screening.md",
+    "pages/company-filings.md",
+    "pages/company-filings-add-files.md",
+    "pages/logs.md",
+    "pages/retailer-adding.md",
+    "pages/forecasting.md",
+    "pages/forecasting-admin.md",
+    "pages/access-management.md",
 ]
+
+
+def _discover_md_files() -> list[Path]:
+    """Return all markdown sources in canonical merge order."""
+    return [DOC_DIR / rel for rel in ALL_DOCS]
+
+
+def _resolve_md_path(target: str) -> Path:
+    """Resolve a CLI target (filename or relative path) to an absolute markdown path."""
+    p = Path(target)
+    if p.is_absolute():
+        return p
+    if p.suffix != ".md":
+        p = p.with_suffix(".md")
+    if "/" in target or "\\" in target:
+        return DOC_DIR / p
+    for candidate in (DOC_DIR / p.name, DOC_DIR / "pages" / p.name):
+        if candidate.exists():
+            return candidate
+    for match in DOC_DIR.rglob(p.name):
+        if match.is_file():
+            return match
+    return DOC_DIR / p.name
+
+
+def _resolve_pdf_path(target: str) -> Path:
+    """Resolve a CLI target to an individual PDF under _pdf/individual/."""
+    p = Path(target)
+    if p.is_absolute():
+        return p
+    name = p.name if p.suffix == ".pdf" else f"{p.stem}.pdf"
+    return PDF_DIR / name
 
 MMDC_BIN = shutil.which("mmdc")
 if not MMDC_BIN:
@@ -640,7 +679,8 @@ def _header_footer_templates(title: str) -> tuple[str, str]:
 
 def generate_pdf(md_path: Path, pdf_path: Path | None = None) -> tuple[Path, int, list[tuple[int, str, str]]]:
     if pdf_path is None:
-        pdf_path = md_path.with_suffix(".pdf")
+        PDF_DIR.mkdir(parents=True, exist_ok=True)
+        pdf_path = PDF_DIR / f"{md_path.stem}.pdf"
 
     html, title, headings = _build_html(md_path)
 
@@ -769,12 +809,13 @@ def main(argv: list[str] | None = None) -> int:
         targets = args.targets or ["screening.pdf"]
         ok = True
         for t in targets:
-            pdf = DOC_DIR / t if not Path(t).is_absolute() else Path(t)
+            pdf = _resolve_pdf_path(t)
             if not pdf.exists():
                 print(f"{pdf.name}: MISSING", file=sys.stderr)
                 ok = False
                 continue
-            result = verify_pdf(pdf)
+            md_path = _resolve_md_path(Path(t).stem if Path(t).suffix == ".pdf" else t)
+            result = verify_pdf(pdf, md_path if md_path.exists() else None)
             size = pdf.stat().st_size
             if result["ok"]:
                 status = (
@@ -794,18 +835,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if ok else 1
 
     if args.targets:
-        md_files = []
-        for t in args.targets:
-            p = Path(t)
-            if not p.suffix:
-                p = DOC_DIR / f"{t}.md"
-            elif p.suffix == ".pdf":
-                p = DOC_DIR / f"{p.stem}.md"
-            elif not p.is_absolute():
-                p = DOC_DIR / p.name
-            md_files.append(p)
+        md_files = [_resolve_md_path(t) for t in args.targets]
     else:
-        md_files = [DOC_DIR / name for name in ALL_DOCS]
+        md_files = _discover_md_files()
 
     missing = [p for p in md_files if not p.exists()]
     if missing:
@@ -813,7 +845,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: missing {p}", file=sys.stderr)
         return 1
 
-    print(f"Generating {len(md_files)} PDF(s) → {DOC_DIR}")
+    print(f"Generating {len(md_files)} PDF(s) → {PDF_DIR}")
     print(f"Mermaid CLI: {' '.join(MMDC_CMD or ['NOT FOUND'])}")
 
     ok_count = 0
@@ -841,6 +873,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  ✗ {md_path.name}: {exc}", file=sys.stderr)
 
     print(f"\nDone: {ok_count}/{len(md_files)} succeeded")
+
+    if ok_count == len(md_files):
+        sp = sync_technical_sharepoint()
+        print(
+            f"SharePoint mirror → {sp['dest'].relative_to(REPO)} "
+            f"({sp['infra_count']} infra + {sp['pages_count']} pages + merged)"
+        )
+
     return 0 if ok_count == len(md_files) else 1
 
 

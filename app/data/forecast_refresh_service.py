@@ -576,6 +576,195 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     return result
 
 
+def _fiscal_q_from_months(fqe_month: int, fye_month: int) -> int:
+    """Fiscal quarter (1-4) of a quarter-ending month given the fiscal-year-end month."""
+    if not fqe_month or not fye_month:
+        return 0
+    fy_start = (fye_month % 12) + 1
+    months_into_fy = (fqe_month - fy_start) % 12 + 1
+    return (months_into_fy + 2) // 3
+
+
+def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
+    """
+    Reporting date for the *relevant* fiscal quarter per ticker — Q1/Q2/Q3/Q4 all
+    eligible (unlike the annual helper, which is Q4/full-year only).
+
+    Returns Dict[ticker, info_dict] with the same keys as _annual_q4_report_dates_bulk
+    (date, fiscal_quarter_ending, source, fetched_at_utc, fqe_month, fye_month, fiscal_q),
+    selecting the nearest upcoming earnings date of any quarter (>= today), else the
+    most recent past one. NASDAQ keys on `ticker`; YF keys on the composite `yf_symbol`.
+    """
+    _t = perf_counter()
+    _MONTH_NUM_TO_ABB = {
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+    }
+    today = date.today()
+
+    def _pick(candidates: list) -> Optional[Dict[str, Any]]:
+        upcoming = [c for c in candidates if c["date"] >= today]
+        past = [c for c in candidates if c["date"] < today]
+        if upcoming:
+            return min(upcoming, key=lambda c: c["date"])
+        if past:
+            return max(past, key=lambda c: c["date"])
+        return None
+
+    # ── NASDAQ path (non-composite tickers) ─────────────────────────────────────
+    nasdaq_result: Dict[str, Dict[str, Any]] = {}
+    try:
+        nasdaq_rows = db_manager.execute_query_readonly(
+            """
+            SELECT lc.ticker, lc.earnings_date, lc.fiscal_quarter_ending, lc.fetched_at_utc,
+                CASE SUBSTRING_INDEX(lc.fiscal_quarter_ending, '/', 1)
+                    WHEN 'Jan' THEN 1  WHEN 'Feb' THEN 2  WHEN 'Mar' THEN 3
+                    WHEN 'Apr' THEN 4  WHEN 'May' THEN 5  WHEN 'Jun' THEN 6
+                    WHEN 'Jul' THEN 7  WHEN 'Aug' THEN 8  WHEN 'Sep' THEN 9
+                    WHEN 'Oct' THEN 10 WHEN 'Nov' THEN 11 WHEN 'Dec' THEN 12
+                    ELSE 0 END AS fqe_month_num,
+                CASE LOWER(LEFT(TRIM(ov.fiscal_year_end), 3))
+                    WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
+                    WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
+                    WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
+                    WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
+                    ELSE -1 END AS fye_month_num
+            FROM (
+                SELECT ticker, earnings_date, fiscal_quarter_ending, fetched_at_utc, id
+                FROM (
+                    SELECT ticker, earnings_date, fiscal_quarter_ending, fetched_at_utc, id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY ticker, fiscal_quarter_ending
+                            ORDER BY fetched_at_utc DESC, earnings_date DESC, id DESC
+                        ) AS rn
+                    FROM coreiq_nasdaq_earnings_calendar
+                    WHERE fiscal_quarter_ending IS NOT NULL
+                      AND earnings_date IS NOT NULL
+                      AND ticker NOT LIKE '%.%'
+                ) ranked
+                WHERE rn = 1
+            ) lc
+            JOIN (
+                SELECT ticker, fiscal_year_end FROM (
+                    SELECT ticker, fiscal_year_end,
+                        ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY fetched_at_utc DESC) AS rn
+                    FROM coreiq_av_company_overview
+                    WHERE ticker IS NOT NULL AND fiscal_year_end IS NOT NULL AND fiscal_year_end <> ''
+                ) fye_ranked WHERE rn = 1
+            ) ov ON ov.ticker = lc.ticker
+            """,
+            {},
+        )
+        ticker_candidates: Dict[str, list] = defaultdict(list)
+        for r in nasdaq_rows:
+            tk = (r.get("ticker") or "").strip()
+            fqe_m = r.get("fqe_month_num") or 0
+            fye_m = r.get("fye_month_num") or -1
+            if fqe_m == 0:
+                continue
+            raw_dt = r.get("earnings_date")
+            ed = raw_dt.date() if raw_dt and hasattr(raw_dt, "date") else raw_dt
+            if ed is None:
+                continue
+            ticker_candidates[tk].append({
+                "date": ed,
+                "fiscal_quarter_ending": (r.get("fiscal_quarter_ending") or ""),
+                "fetched_at_utc": r.get("fetched_at_utc"),
+                "fqe_month": fqe_m,
+                "fye_month": fye_m,
+                "fiscal_q": _fiscal_q_from_months(fqe_m, fye_m),
+            })
+        for tk, candidates in ticker_candidates.items():
+            chosen = _pick(candidates)
+            if chosen:
+                nasdaq_result[tk] = {**chosen, "source": "nasdaq"}
+        log_timing("_quarterly_dates.nasdaq", (perf_counter() - _t) * 1000,
+                   f"tickers={len(nasdaq_result)}", level="INFO")
+    except Exception as exc:
+        log_structured_error(exc, page="forecast_refresh_service",
+                             component="_quarterly_report_dates_bulk", operation="SELECT_NASDAQ")
+
+    # ── YF path (composite tickers, exact yf_symbol match) ──────────────────────
+    _t1 = perf_counter()
+    yf_result: Dict[str, Dict[str, Any]] = {}
+    try:
+        yf_cal_rows = db_manager.execute_query_readonly(
+            """
+            SELECT yf_symbol AS ticker, earnings_date, ingested_at
+            FROM coreiq_yf_earnings_calendar
+            WHERE yf_symbol LIKE '%.%' AND earnings_date IS NOT NULL
+            """,
+            {},
+        )
+        if yf_cal_rows:
+            fye_fc_rows = db_manager.execute_query_readonly(
+                """
+                SELECT ticker, MONTH(MAX(last_actual_date)) AS fye_month
+                FROM coreiq_model_forecasts_quarterly
+                WHERE ticker LIKE '%.%' AND last_actual_date IS NOT NULL
+                GROUP BY ticker
+                """,
+                {},
+            )
+            fye_by_symbol: Dict[str, int] = {
+                (r.get("ticker") or "").strip(): r.get("fye_month")
+                for r in (fye_fc_rows or []) if r.get("fye_month")
+            }
+            fye_bulk = _fiscal_year_end_bulk()
+
+            ticker_raw: Dict[str, list] = defaultdict(list)
+            for r in yf_cal_rows:
+                tk = (r.get("ticker") or "").strip()
+                raw_dt = r.get("earnings_date")
+                ed = raw_dt.date() if raw_dt and hasattr(raw_dt, "date") else raw_dt
+                if tk and ed is not None:
+                    ticker_raw[tk].append({"date": ed, "ingested_at": r.get("ingested_at")})
+
+            for tk, rows_list in ticker_raw.items():
+                fye_month = fye_by_symbol.get(tk) or _fye_name_to_month_num(fye_bulk.get(tk))
+                if not fye_month:
+                    continue
+                fqe_groups: Dict[date, Dict] = {}
+                for row in rows_list:
+                    fqe_date = _yf_fqe_date_for_earnings_date(row["date"], fye_month)
+                    if fqe_date is None:
+                        continue
+                    prev = fqe_groups.get(fqe_date)
+                    if prev is None or (row["ingested_at"] or "") > (prev["ingested_at"] or ""):
+                        fqe_groups[fqe_date] = row
+                candidates = []
+                for fqe_date, row in fqe_groups.items():
+                    candidates.append({
+                        "date": row["date"],
+                        "fiscal_quarter_ending": f"{_MONTH_NUM_TO_ABB[fqe_date.month]}/{fqe_date.year}",
+                        "fetched_at_utc": row["ingested_at"],
+                        "fqe_month": fqe_date.month,
+                        "fye_month": fye_month,
+                        "fiscal_q": _fiscal_q_from_months(fqe_date.month, fye_month),
+                        "source": "yf",
+                    })
+                chosen = _pick(candidates)
+                if chosen:
+                    yf_result[tk] = chosen
+        log_timing("_quarterly_dates.yf", (perf_counter() - _t1) * 1000,
+                   f"tickers={len(yf_result)}", level="INFO")
+    except Exception as exc:
+        log_structured_error(exc, page="forecast_refresh_service",
+                             component="_quarterly_report_dates_bulk", operation="SELECT_YF")
+
+    result: Dict[str, Dict[str, Any]] = {**yf_result, **nasdaq_result}
+
+    # Staleness guard: drop past dates older than ~15 months (quarterly reporters
+    # that have gone quiet). Upcoming dates are always kept.
+    _stale_cutoff = date.today() - timedelta(days=460)
+    _before_guard = len(result)
+    result = {tk: info for tk, info in result.items() if info["date"] >= _stale_cutoff}
+    log_timing("_quarterly_dates.TOTAL", (perf_counter() - _t) * 1000,
+               f"nasdaq={len(nasdaq_result)} yf={len(yf_result)} total={len(result)} "
+               f"dropped_stale={_before_guard - len(result)}", level="INFO")
+    return result
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _fiscal_year_end_bulk() -> Dict[str, Optional[str]]:
     """ticker → fiscal_year_end string (month name), one row per ticker using latest fetch.
@@ -718,6 +907,90 @@ def _fmt_fiscal_year_end(raw: Optional[str]) -> str:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+def _get_quarterly_refresh_table_data() -> List[Dict[str, Any]]:
+    """Assemble Refresh popup rows for quarterly forecasts.
+
+    Reads coreiq_model_forecasts_quarterly for last_refresh + the quarter-end the
+    forecast used, and _quarterly_report_dates_bulk() for the relevant quarter's
+    reporting date. Same row shape as the annual branch so the UI renders both.
+    """
+    _t0 = perf_counter()
+    rows = db_manager.execute_query_readonly(
+        """
+        SELECT ticker,
+               MAX(computed_at)      AS last_refresh,
+               MAX(last_actual_date) AS fiscal_period_end
+        FROM coreiq_model_forecasts_quarterly
+        GROUP BY ticker
+        ORDER BY ticker ASC
+        """,
+        {},
+    )
+    if not rows:
+        return []
+
+    meta_rows = db_manager.execute_query_readonly(
+        """
+        SELECT ticker, company_name, exchange
+        FROM coreiq_model_forecasts_quarterly
+        WHERE is_best_model = 1 AND metric = 'total_revenue'
+        ORDER BY ticker ASC
+        """,
+        {},
+    )
+    meta: Dict[str, Dict[str, str]] = {}
+    for r in (meta_rows or []):
+        tk = (r.get("ticker") or "").strip()
+        if tk and tk not in meta:
+            meta[tk] = {
+                "company_name": (r.get("company_name") or "").strip(),
+                "exchange": (r.get("exchange") or "").strip(),
+            }
+
+    quarterly_map = _quarterly_report_dates_bulk()
+
+    result: List[Dict[str, Any]] = []
+    for row in rows:
+        ticker = (row.get("ticker") or "").strip()
+        if not ticker:
+            continue
+        base = ticker.split(".")[0] if "." in ticker else ticker
+        m = meta.get(ticker, {})
+
+        info = quarterly_map.get(ticker) if "." in ticker else quarterly_map.get(base)
+        rep = info["date"] if info else None
+        reported_str = rep.strftime("%b %d, %Y") if rep else "—"
+        fiscal_q = info.get("fiscal_q") if info else None
+
+        fp = row.get("fiscal_period_end")
+        if fp and hasattr(fp, "strftime"):
+            fiscal_period_str = fp.strftime("%b %d")
+        else:
+            fiscal_period_str = str(fp)[5:10] if fp else "—"
+
+        lr = row.get("last_refresh")
+        if lr and hasattr(lr, "strftime"):
+            lr_str = lr.strftime("%b %d, %Y %H:%M UTC")
+        else:
+            lr_str = str(lr)[:16] if lr else "—"
+
+        result.append({
+            "ticker": ticker,
+            "company_name": m.get("company_name", ""),
+            "exchange": m.get("exchange", ""),
+            "annual_reported_on": reported_str,   # generic "Reporting Date" column
+            "fiscal_period": fiscal_period_str,
+            "last_refresh": lr_str,
+            "annual_reporting_quarter": f"Q{fiscal_q}" if fiscal_q else "",
+            "annual_reporting_source": info.get("source", "") if info else "",
+            "annual_fiscal_quarter_ending": info.get("fiscal_quarter_ending", "") if info else "",
+        })
+
+    log_timing("DIALOG_TOTAL_get_refresh_table_data_quarterly", (perf_counter() - _t0) * 1000,
+               f"result_rows={len(result)}", level="INFO")
+    return result
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
     """
@@ -729,14 +1002,15 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
         fiscal_period (str — annual fiscal period end the forecast used),
         last_refresh (str — formatted datetime)
 
-    ``period_type`` — 'annual' (only supported now) or 'quarterly' (empty result).
+    ``period_type`` — 'annual' (Q4/full-year reporting date) or 'quarterly'
+    (the relevant fiscal quarter's reporting date).
 
     Performance: two narrow queries instead of one wide GROUP BY to exploit
     the idx_ticker_computed loose-index-scan for MAX(computed_at) and the
     idx_best_metric_ticker covering index for company metadata.
     """
     if period_type.lower() == "quarterly":
-        return []
+        return _get_quarterly_refresh_table_data()
 
     _t0 = perf_counter()
 
@@ -918,15 +1192,19 @@ def send_model_refresh_email(
     triggered_by: str,
     results: List[Dict[str, Any]],
     recipients: Optional[List[str]] = None,
+    period_type: str = "annual",
 ) -> bool:
     """
     Send a formatted HTML notification email when model refresh runs complete.
-    ``results`` should be list of dicts from sync_forecast_for_ticker / sync_all_eligible,
-    optionally enriched with company_name, exchange, reporting_date, fiscal_ending_date.
-    To: all admin + super_user accounts.  Cc: dataautomation@coresight.com.
+    ``results`` should be list of dicts from sync_forecast_for_ticker / sync_all_eligible
+    (or their quarterly siblings), optionally enriched with company_name, exchange.
+    ``period_type`` selects the reporting-date source: 'annual' (Q4 only) or
+    'quarterly' (the relevant fiscal quarter). To: all admin + super_user accounts.
+    Cc: dataautomation@coresight.com.
     """
     if not results:
         return False
+    _is_quarterly = period_type.lower() == "quarterly"
 
     smtp_host = os.getenv("SMTP_SERVER", "smtp.office365.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
@@ -956,10 +1234,9 @@ def send_model_refresh_email(
     errors  = [r for r in results if r.get("status") == "error"]
     skipped = [r for r in results if r.get("status") not in ("updated", "error")]
 
-    # Enrich results with Q4-only annual reporting date.
-    # Annual forecast refresh is full-year only; _next_reporting_dates_bulk()
-    # picks any quarterly date and must NOT be used here.
-    reporting_map = _annual_q4_report_dates_bulk()
+    # Reporting date source depends on cadence: annual → Q4/full-year only;
+    # quarterly → the relevant fiscal quarter (any of Q1–Q4).
+    reporting_map = _quarterly_report_dates_bulk() if _is_quarterly else _annual_q4_report_dates_bulk()
     fiscal_map    = _fiscal_year_end_bulk()
 
     def _enrich(r: Dict[str, Any]) -> Dict[str, Any]:
@@ -997,7 +1274,7 @@ def send_model_refresh_email(
     html_body = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:Arial,sans-serif;font-size:13px;color:#222;padding:20px;">
-  <p><strong>Forecasting Model Refresh</strong></p>
+  <p><strong>Forecasting Model Refresh — {"Quarterly" if _is_quarterly else "Annual"}</strong></p>
   <p>Triggered by: {triggered_by}<br>Time: {now_str}<br>
   Updated: {len(updated)} &nbsp; Errors: {len(errors)} &nbsp; Skipped: {len(skipped)}</p>
   <table style="border-collapse:collapse;width:100%;font-size:13px;">
@@ -1006,7 +1283,7 @@ def send_model_refresh_email(
         <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Ticker</th>
         <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Company Name</th>
         <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Exchange</th>
-        <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Reporting Date (Q4)</th>
+        <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">{"Reporting Date (Quarter)" if _is_quarterly else "Reporting Date (Q4)"}</th>
         <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Fiscal Ending</th>
         <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Last Refresh</th>
         <th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Status</th>

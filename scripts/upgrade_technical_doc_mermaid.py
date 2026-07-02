@@ -201,7 +201,7 @@ def main() -> int:
     total_after = 0
     edited: list[str] = []
 
-    for path in sorted(DOC_DIR.glob("*.md")):
+    for path in sorted(DOC_DIR.rglob("*.md")):
         before, after, changed = process_file(path)
         total_before += before
         total_after += after

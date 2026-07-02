@@ -592,7 +592,7 @@ def main():
                     col_a, col_b = st.columns(2)
                     with col_a:
                         if st.button("🔄 Rebuild Full Segment Cache",
-                                     help="Runs INSERT...SELECT server-side for all companies (~5–15 min). Non-blocking.",
+                                     help="Replays the Segments-tab classifier over all companies from coreiq_filing_metrics_v5 (~15–25 min). Runs in the background; non-blocking.",
                                      type="primary", width="stretch"):
                             started = rebuild_segment_values_cache_async()
                             if started:

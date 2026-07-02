@@ -22,10 +22,46 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "scripts"))
+from business_screenshot_callouts import CALLOUTS_BY_FILE  # noqa: E402
+
 OUT = REPO / "docs/business-documentation/_screenshots/v2"
 ANNOTATE = REPO / "scripts/annotate_business_screenshot.py"
 PY = REPO / ".venv/bin/python"
 BASE = os.environ.get("MDP_BASE_URL", "https://marketdata.coresight.com").rstrip("/")
+
+def _base_hostname() -> str:
+    return re.sub(r"^https?://", "", BASE).split("/")[0].split(":")[0]
+
+
+def _resolve_host_ip(hostname: str) -> str | None:
+    dns = os.environ.get("MDP_DNS_SERVER", "8.8.8.8").strip() or "8.8.8.8"
+    try:
+        proc = subprocess.run(
+            ["dig", f"@{dns}", "+short", hostname],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        for line in (proc.stdout or "").strip().splitlines():
+            candidate = line.strip().rstrip(".")
+            if re.match(r"^\d+\.\d+\.\d+\.\d+$", candidate):
+                return candidate
+    except Exception:
+        pass
+    return None
+
+
+def _launch_browser(playwright):
+    hostname = _base_hostname()
+    launch_kwargs: dict = {"headless": True}
+    ip = _resolve_host_ip(hostname)
+    if ip:
+        launch_kwargs["args"] = [f"--host-resolver-rules=MAP {hostname} {ip}"]
+        log(f"Chromium DNS MAP {hostname} -> {ip} (via dig @{os.environ.get('MDP_DNS_SERVER', '8.8.8.8')})")
+    return playwright.chromium.launch(**launch_kwargs)
+
 TICKERS = ("WMT", "TGT", "AMZN")
 
 ERROR_NEEDLES = (
@@ -61,7 +97,7 @@ class ShotSpec:
     filename: str
     success_needles: tuple[str, ...]
     error_extra: tuple[str, ...] = ()
-    wait_ms: int = 4000
+    wait_ms: int = 5000
     full_page: bool = True
     click: str | None = None
     click_selector: str | None = None
@@ -70,6 +106,12 @@ class ShotSpec:
     min_body_len: int = 200
     prepare: str | None = None
     ticker_fallback: bool = False
+    clip: dict[str, int] | None = None
+    markers_file: str | None = None
+
+
+def _markers_for(filename: str, fallback: list[str] | None = None) -> list[str]:
+    return CALLOUTS_BY_FILE.get(filename, fallback or [])
 
 
 def _body_text(page) -> str:
@@ -106,19 +148,12 @@ def _page_ready(text: str, spec: ShotSpec) -> str | None:
     return None
 
 
-def _to_arrow(raw: str) -> str:
-    parts = [p.strip() for p in raw.split(",")]
-    bx, by, num, tx, ty = parts[0], parts[1], parts[2], parts[3], parts[4]
-    label = ",".join(parts[5:]) if len(parts) > 5 else ""
-    return f"{bx},{by},{tx},{ty},{num},{label}"
-
-
 def _annotate(src: Path, dst: Path, markers: list[str]) -> None:
     if not markers:
         return
     cmd = [str(PY), str(ANNOTATE), str(src), "--output", str(dst)]
     for marker in markers:
-        cmd.extend(["--arrow", _to_arrow(marker)])
+        cmd.extend(["--badge", marker])
     subprocess.run(cmd, check=True, cwd=REPO)
 
 
@@ -204,9 +239,78 @@ def _select_company_home(page, ticker: str) -> None:
     page.wait_for_timeout(6000)
 
 
+def _select_company_only(page, ticker: str) -> None:
+    page.goto(f"{BASE}/home", wait_until="domcontentloaded", timeout=120000)
+    page.wait_for_timeout(4000)
+    selects = page.locator("[data-baseweb='select']")
+    if selects.count() >= 1:
+        selects.first.click()
+        page.wait_for_timeout(500)
+        page.keyboard.type(ticker)
+        page.wait_for_timeout(2000)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(2000)
+
+
+def _open_baseselect_by_label(page, label: str) -> bool:
+    for sel in (
+        f"[data-baseweb='select']:near(:text('{label}'))",
+        f"div:has(> label:has-text('{label}')) [data-baseweb='select']",
+        f"label:has-text('{label}')",
+    ):
+        loc = page.locator(sel).first
+        if loc.count():
+            loc.click(timeout=10000)
+            page.wait_for_timeout(1500)
+            return True
+    return False
+
+
+def _open_screening_watchlist_dropdown(page) -> bool:
+    """Open the collapsed Watchlists bar selectbox (label is not a <label> element)."""
+    title = page.locator("p.watchlist-bar-title")
+    if not title.count():
+        return False
+    for sel in (
+        "div:has(p.watchlist-bar-title) [data-baseweb='select']",
+        "[data-testid='stHorizontalBlock']:has(p.watchlist-bar-title) [data-baseweb='select']",
+        "[data-testid='column']:has(p.watchlist-bar-title) + [data-testid='column'] [data-baseweb='select']",
+    ):
+        loc = page.locator(sel).first
+        if loc.count():
+            loc.click(timeout=15000)
+            page.wait_for_timeout(1500)
+            return True
+    return False
+
+
+def _open_screening_financial(page) -> None:
+    page.locator("button:has-text('Financial Information')").first.click(timeout=30000)
+    page.wait_for_timeout(2000)
+
+
+def _screening_financial_advance(page, steps: int) -> None:
+    _open_screening_financial(page)
+    for _ in range(steps):
+        for sel in (
+            "button:has-text('Next')",
+            "button:has-text('Continue')",
+            "[data-testid='stButton'] button:has-text('Next')",
+        ):
+            btn = page.locator(sel)
+            if btn.count():
+                btn.first.click(timeout=10000)
+                page.wait_for_timeout(1500)
+                break
+
+
 def _prepare(page, spec: ShotSpec, ticker: str) -> None:
     if spec.prepare == "home_select_view":
         _select_company_home(page, ticker)
+    elif spec.prepare == "home_select_company":
+        _select_company_only(page, ticker)
+    elif spec.prepare == "newsroom_from_date":
+        _open_baseselect_by_label(page, "From")
     elif spec.prepare == "earnings_search":
         box = page.locator("input").filter(has_text="").first
         for sel in (
@@ -226,6 +330,43 @@ def _prepare(page, spec: ShotSpec, ticker: str) -> None:
                 loc.first.fill("revenue")
                 page.wait_for_timeout(5000)
                 break
+    elif spec.prepare == "filings_open_doc":
+        for sel in ("button:has-text('10-K')", "button:has-text('10-Q')", "div[data-testid='stButton'] button"):
+            rows = page.locator("button:has-text('10-K'), button:has-text('10-Q')")
+            if rows.count():
+                rows.first.click(timeout=10000)
+                page.wait_for_timeout(5000)
+                break
+    elif spec.prepare == "screening_watchlist_dropdown":
+        if not _open_screening_watchlist_dropdown(page):
+            raise RuntimeError("screening watchlist selectbox not found")
+    elif spec.prepare == "screening_financial_step0":
+        _open_screening_financial(page)
+    elif spec.prepare == "screening_financial_step1":
+        _screening_financial_advance(page, 1)
+    elif spec.prepare == "screening_financial_step2":
+        _screening_financial_advance(page, 2)
+    elif spec.prepare == "screening_financial_step3":
+        _screening_financial_advance(page, 3)
+    elif spec.prepare == "screening_financial_step4":
+        _screening_financial_advance(page, 4)
+    elif spec.prepare == "forecasting_quarterly":
+        for sel in (
+            "label:has-text('Quarterly')",
+            "div[data-baseweb='radio'] >> text=Quarterly",
+            "[data-testid='stRadio'] label:has-text('Quarterly')",
+        ):
+            loc = page.locator(sel).first
+            if loc.count():
+                loc.click(timeout=10000)
+                page.wait_for_timeout(4000)
+                break
+    elif spec.prepare == "earnings_calendar_legend":
+        try:
+            page.locator("text=Show types").first.wait_for(state="visible", timeout=8000)
+            page.wait_for_timeout(2000)
+        except Exception:
+            pass
 
 
 def _do_click(page, spec: ShotSpec) -> tuple[bool, str]:
@@ -279,6 +420,8 @@ def _capture_page(page, spec: ShotSpec, out_path: Path, ticker: str) -> tuple[bo
                         target = page.query_selector("div[role='dialog']") if spec.dialog else None
                         if target:
                             target.screenshot(path=str(out_path))
+                        elif spec.clip:
+                            page.screenshot(path=str(out_path), clip=spec.clip)
                         else:
                             page.screenshot(path=str(out_path), full_page=spec.full_page)
                         return True, "ok"
@@ -287,7 +430,8 @@ def _capture_page(page, spec: ShotSpec, out_path: Path, ticker: str) -> tuple[bo
             except Exception as exc:
                 last_reason = str(exc)
             if attempt < 3:
-                time.sleep(2)
+                backoff = 10 if "ERR_NAME_NOT_RESOLVED" in last_reason else 2
+                time.sleep(backoff)
     return False, last_reason
 
 
@@ -330,7 +474,206 @@ def _login_specs() -> list[ShotSpec]:
 
 def _gap_specs() -> list[ShotSpec]:
     t = TICKERS[0]
+    nav_clip = {"x": 0, "y": 0, "width": 1500, "height": 220}
     return [
+        # HOME — unique captures (not copies of user batch)
+        ShotSpec(
+            "home", "/home", "home-01.png",
+            ("CORESIGHT MARKET DATA", "Company"),
+            wait_ms=5000,
+            markers=_markers_for("home-01.png"),
+        ),
+        ShotSpec(
+            "home", "/home", "home-02-company-selected.png",
+            ("Company",), wait_ms=5000,
+            prepare="home_select_company",
+            markers=_markers_for("home-02-company-selected.png"),
+            ticker_fallback=True,
+        ),
+        ShotSpec(
+            "home", "/home", "market-data-entry-from-home.png",
+            ("Company", "View"), wait_ms=5000,
+            prepare="home_select_company",
+            markers=_markers_for("market-data-entry-from-home.png"),
+            ticker_fallback=True,
+        ),
+        ShotSpec(
+            "home", "/home", "home-04-nav-highlight.png",
+            ("CORESIGHT MARKET DATA", "Market Data"),
+            wait_ms=5000,
+            clip=nav_clip,
+            markers=_markers_for("home-04-nav-highlight.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "nav-portal-overview.png",
+            ("Screen For", "Market Data"),
+            wait_ms=8000, min_body_len=300,
+            clip=nav_clip,
+            markers=_markers_for("nav-portal-overview.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-nav-context.png",
+            ("Screen For", "Companies"), wait_ms=12000, min_body_len=300,
+            markers=_markers_for("screening-nav-context.png"),
+        ),
+        # NEWSROOM — full set
+        ShotSpec(
+            "newsroom", "/newsroom", "newsroom-01.png",
+            ("Search News",), wait_ms=8000, min_body_len=400,
+            markers=_markers_for("newsroom-01.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom", "nav-newsroom-layout.png",
+            ("Search News", "News Results"), wait_ms=8000, min_body_len=400,
+            markers=_markers_for("nav-newsroom-layout.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom?ticker=WMT", "newsroom-02-filters.png",
+            ("Search News",), wait_ms=8000, min_body_len=400,
+            markers=_markers_for("newsroom-02-filters.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom?ticker=WMT", "nav-newsroom-filters.png",
+            ("Search News",), wait_ms=8000, min_body_len=400,
+            markers=_markers_for("nav-newsroom-filters.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom", "newsroom-03-articles.png",
+            ("News Results",), wait_ms=10000, min_body_len=600,
+            markers=_markers_for("newsroom-03-articles.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom", "newsroom-04-sort.png",
+            ("Search News",), wait_ms=8000,
+            click_selector="label:has-text('Sort')",
+            markers=_markers_for("newsroom-04-sort.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom", "newsroom-05-category.png",
+            ("Search News",), wait_ms=8000,
+            click_selector="label:has-text('Category')",
+            markers=_markers_for("newsroom-05-category.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom", "newsroom-06-watchlist.png",
+            ("Search News",), wait_ms=8000,
+            click_selector="label:has-text('Watchlist')",
+            markers=_markers_for("newsroom-06-watchlist.png"),
+        ),
+        ShotSpec(
+            "newsroom", "/newsroom", "newsroom-07-date-picker.png",
+            ("Search News",), wait_ms=8000,
+            prepare="newsroom_from_date",
+            markers=_markers_for("newsroom-07-date-picker.png"),
+        ),
+        # SCREENING — full builder set
+        ShotSpec(
+            "screening", "/screening", "screening-01-default.png",
+            ("Screen For", "Companies"), wait_ms=12000, min_body_len=300,
+            markers=_markers_for("screening-01-default.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-05-watchlists-dropdown.png",
+            ("Screen For",), wait_ms=12000,
+            prepare="screening_watchlist_dropdown",
+            markers=_markers_for("screening-05-watchlists-dropdown.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-04-watchlist.png",
+            ("Watchlist",), wait_ms=12000,
+            click="Edit / Manage", dialog=True,
+            markers=_markers_for("screening-04-watchlist.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-watchlist-dialog-new.png",
+            ("New Watchlist", "Watchlist"), wait_ms=12000,
+            click="Edit / Manage", dialog=True,
+            markers=_markers_for("screening-watchlist-dialog-new.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-03-industry.png",
+            ("Industry",), wait_ms=12000,
+            click="Industry Classifications",
+            markers=_markers_for("screening-03-industry.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-industry-form.png",
+            ("Industry",), wait_ms=12000,
+            click="Industry Classifications",
+            markers=_markers_for("screening-industry-form.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-geographic.png",
+            ("Geographic", "Countries"), wait_ms=12000,
+            click="Geographic Locations",
+            markers=_markers_for("screening-geographic.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-geographic-countries.png",
+            ("Geographic",), wait_ms=12000,
+            click="Geographic Locations",
+            markers=_markers_for("screening-geographic-countries.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-02-financial.png",
+            ("Statement Type", "Financial"), wait_ms=12000,
+            prepare="screening_financial_step0",
+            markers=_markers_for("screening-02-financial.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-statement-type.png",
+            ("Statement Type",), wait_ms=12000,
+            prepare="screening_financial_step0",
+            markers=_markers_for("screening-financial-statement-type.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-metric.png",
+            ("Select Metric", "Statement"), wait_ms=12000,
+            prepare="screening_financial_step1",
+            markers=_markers_for("screening-financial-metric.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-period-type.png",
+            ("Period Type",), wait_ms=12000,
+            prepare="screening_financial_step2",
+            markers=_markers_for("screening-financial-period-type.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-year-range.png",
+            ("Period Type", "Year"), wait_ms=12000,
+            prepare="screening_financial_step3",
+            markers=_markers_for("screening-financial-year-range.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-year.png",
+            ("Year",), wait_ms=12000,
+            prepare="screening_financial_step3",
+            markers=_markers_for("screening-financial-year.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-operator.png",
+            ("Operator",), wait_ms=12000,
+            prepare="screening_financial_step4",
+            markers=_markers_for("screening-financial-operator.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-financial-value.png",
+            ("Value",), wait_ms=12000,
+            prepare="screening_financial_step4",
+            markers=_markers_for("screening-financial-value.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-key-devs-mode.png",
+            ("Key Developments",), wait_ms=12000,
+            click_selector="text=Key Devs",
+            markers=_markers_for("screening-key-devs-mode.png"),
+        ),
+        ShotSpec(
+            "screening", "/screening", "screening-key-devs-categories.png",
+            ("Key Developments", "Categories"), wait_ms=12000,
+            click_selector="text=Key Devs",
+            markers=_markers_for("screening-key-devs-categories.png"),
+        ),
         ShotSpec(
             "home", "/home", "home-03-landing.png",
             ("Market Data", "Income Statement"),
@@ -414,7 +757,8 @@ def _gap_specs() -> list[ShotSpec]:
         ),
         ShotSpec(
             "earnings-calendar", "/earnings_calendar", "earnings-calendar-02-events.png",
-            ("Q1", "Q2", "M&A"), wait_ms=12000, min_body_len=400,
+            ("Earnings Calendar", "Month Wise", "Show types"), wait_ms=12000, min_body_len=400,
+            prepare="earnings_calendar_legend",
             markers=["200,220,1,300,260,Legend chips",
                      "500,350,2,600,400,Day event markers",
                      "900,300,3,1000,350,Event colors"],
@@ -436,7 +780,8 @@ def _gap_specs() -> list[ShotSpec]:
         ),
         ShotSpec(
             "forecasting", "/forecasting?ticker={ticker}&period_type=Quarterly", "forecasting-02.png",
-            ("Quarterly", "Quarter"), wait_ms=12000,
+            ("Quarterly", "Quarter", "REVENUE FORECASTING"), wait_ms=12000,
+            prepare="forecasting_quarterly",
             markers=["400,200,1,500,240,Quarterly period toggle",
                      "600,350,2,700,400,Quarterly forecast table"],
             ticker_fallback=True,
@@ -467,6 +812,7 @@ def _gap_specs() -> list[ShotSpec]:
         ShotSpec(
             "company-filings", "/company_filings?ticker={ticker}", "company-filings-02.png",
             ("Download", "10-K"), wait_ms=15000, min_body_len=400,
+            prepare="filings_open_doc",
             markers=["80,210,1,900,210,Filing header",
                      "80,290,2,1380,175,Download button",
                      "80,370,3,850,450,Document viewer"],
@@ -546,7 +892,8 @@ def _capture_login_sso(browser, manifest: list[dict]) -> None:
         if ok:
             ann = spec.filename.replace(".png", "-annotated.png")
             try:
-                _annotate(out_path, OUT / ann, spec.markers)
+                markers = spec.markers or _markers_for(spec.filename)
+                _annotate(out_path, OUT / ann, markers)
                 entry["annotated"] = ann
             except Exception as exc:
                 entry["annotation_error"] = str(exc)
@@ -558,12 +905,13 @@ def _capture_login_sso(browser, manifest: list[dict]) -> None:
     page.goto(f"{BASE}/", wait_until="domcontentloaded", timeout=120000)
     page.wait_for_timeout(3000)
     try:
-        with page.expect_navigation(timeout=90000, wait_until="domcontentloaded"):
-            page.locator("#csr-sso-btn").click()
-        page.wait_for_timeout(2000)
+        sso = page.locator("#csr-sso-btn, button:has-text('Sign in with Coresight')")
+        sso.first.wait_for(state="visible", timeout=30000)
+        sso.first.click(timeout=30000)
+        page.wait_for_timeout(5000)
         sso_path = OUT / "login-02-sso.png"
         page.screenshot(path=str(sso_path), full_page=True)
-        markers = ["120,293,1,749,293,Email", "120,336,2,749,336,Password", "120,527,4,749,527,Log In"]
+        markers = _markers_for("login-02-sso.png")
         ann = "login-02-sso-annotated.png"
         _annotate(sso_path, OUT / ann, markers)
         manifest.append({"page": "login", "file": "login-02-sso.png", "status": "ok", "annotated": ann, "source": "production", "reason": "ok"})
@@ -608,6 +956,11 @@ def main() -> int:
         action="store_true",
         help="Skip login SSO screenshot captures (use with --only for gap pages)",
     )
+    parser.add_argument(
+        "--no-auth",
+        action="store_true",
+        help="Skip OIDC login (localhost LOCAL bypass — server must already authenticate)",
+    )
     args = parser.parse_args()
 
     email = os.environ.get("MDP_EMAIL", "").strip()
@@ -615,10 +968,11 @@ def main() -> int:
     alt = os.environ.get("MDP_EMAIL_ALT", "mohdsaeedafri@coresight.com").strip()
     emails = [e for e in dict.fromkeys((alt, email)) if e]
     if not password or not emails:
-        log("Set MDP_EMAIL and MDP_PASSWORD environment variables.")
-        return 1
+        if not args.no_auth:
+            log("Set MDP_EMAIL and MDP_PASSWORD environment variables.")
+            return 1
 
-    source = "staging" if "stg" in BASE else "production"
+    source = "local" if "localhost" in BASE or "127.0.0.1" in BASE else ("staging" if "stg" in BASE else "production")
     specs = _filter_specs(args.only)
     if args.only and not specs:
         log(f"No specs matched --only={args.only!r}")
@@ -630,17 +984,21 @@ def main() -> int:
     fail_count = 0
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = _launch_browser(p)
         if not args.skip_login_captures:
             _capture_login_sso(browser, manifest)
 
         ctx = browser.new_context(viewport=VIEWPORT)
-        ok, who = _login(ctx, emails, password)
-        if not ok:
-            log(f"FATAL: {who}")
-            browser.close()
-            return 2
-        log(f"Authenticated as {who} via {BASE}")
+        if args.no_auth:
+            ok, who = True, "local-bypass"
+            log(f"Skipping OIDC login (--no-auth); using {BASE} LOCAL bypass")
+        else:
+            ok, who = _login(ctx, emails, password)
+            if not ok:
+                log(f"FATAL: {who}")
+                browser.close()
+                return 2
+            log(f"Authenticated as {who} via {BASE}")
 
         page = ctx.new_page()
         for spec in specs:
@@ -652,7 +1010,8 @@ def main() -> int:
                 ok_count += 1
                 ann = spec.filename.replace(".png", "-annotated.png")
                 try:
-                    _annotate(out_path, OUT / ann, spec.markers)
+                    markers = spec.markers or _markers_for(spec.filename)
+                    _annotate(out_path, OUT / ann, markers)
                     entry["annotated"] = ann
                 except Exception as exc:
                     entry["annotation_error"] = str(exc)

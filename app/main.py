@@ -45,6 +45,18 @@ _APP_DIR = Path(__file__).parent
 sys.path.insert(0, str(_APP_DIR))
 
 # =============================================================================
+# Patch Streamlit's static index.html so the grey boot skeleton never shows and
+# a branded Coresight loader covers the full-reload window on every page change.
+# Must run at process start (before the server hands index.html to the browser).
+# Best-effort, idempotent — see core/boot_overlay.py.
+# =============================================================================
+try:
+    from core.boot_overlay import patch_streamlit_index_html
+    patch_streamlit_index_html()
+except Exception:
+    pass
+
+# =============================================================================
 # ONLY USE SERVER_LOGGER - NO STANDARD LIBRARY LOGGING
 # =============================================================================
 try:
@@ -127,6 +139,23 @@ try:
 except Exception as e:
     print(f"FATAL: Cannot set page config: {e}", file=sys.stderr, flush=True)
     raise
+
+# =============================================================================
+# EARLY: suppress Streamlit's grey skeleton placeholders.
+# Injected here (top of every page's run, into the PARENT document) so it is in
+# effect before page content streams in — unlike navigation.py's CSS, which
+# rides in on a late components.html iframe and so misses the early flash. The
+# branded nav overlay + fade-in cover the load; the grey bars only add jank.
+# =============================================================================
+try:
+    st.markdown(
+        "<style>"
+        "[data-testid='stSkeleton'],[data-testid='stAppSkeleton']{display:none!important;}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+except Exception:
+    pass
 
 # =============================================================================
 # SSL SETUP

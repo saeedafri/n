@@ -19,13 +19,17 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from generate_technical_doc_pdf import (  # noqa: E402
+    ALL_DOCS,
+    DOC_DIR,
+    PDF_DIR,
     _build_html,
+    _resolve_md_path,
     validate_toc_links,
 )
 
-ALL_PDFS = sorted(DOC_DIR.glob("*.pdf"))
-ALL_MDS = sorted(DOC_DIR.glob("*.md"))
-ALL_MDS = [p for p in ALL_MDS if not p.name.startswith("_")]
+MERGED_PDF = DOC_DIR / "_pdf" / "Market-Data-Portal-Technical-Documentation-Complete.pdf"
+ALL_PDFS = sorted(PDF_DIR.glob("*.pdf"))
+ALL_MDS = [DOC_DIR / rel for rel in ALL_DOCS]
 
 MIN_VECTOR_PATHS = 50
 SPLIT_FRAC_THRESHOLD = 0.35
@@ -138,8 +142,8 @@ def validate_toc_samples() -> dict[str, object]:
     VALIDATION_TOC_DIR.mkdir(parents=True, exist_ok=True)
 
     for pdf_name in TOC_SAMPLE_PDFS:
-        pdf_path = DOC_DIR / pdf_name
-        md_path = DOC_DIR / f"{pdf_path.stem}.md"
+        pdf_path = PDF_DIR / pdf_name
+        md_path = _resolve_md_path(Path(pdf_name).stem)
         if not pdf_path.exists() or not md_path.exists():
             sample_results[pdf_name] = {"ok": False, "error": "missing file"}
             continue
@@ -186,7 +190,7 @@ def validate_all() -> dict:
     for pdf_path in ALL_PDFS:
         if pdf_path.name.startswith("_"):
             continue
-        if pdf_path.name == "Market-Data-Portal-Technical-Documentation-Complete.pdf":
+        if pdf_path.name == MERGED_PDF.name:
             continue
         doc = fitz.open(pdf_path)
         try:

@@ -26,10 +26,16 @@ _US_SAFE_ALIASES: FrozenSet[str] = frozenset([
     "In the U.S.",            # Home Depot current label
     "Inside the U.S.",        # Home Depot earlier label (FY2019-2022)
     "U.S. operations",        # IBM domestic operations
+    "United States Operations",  # Costco FY2022-2024 label (→ "United States" FY2025)
     "United States:",         # trailing colon artifact (JOUT)
     "United States Federal",  # US federal segment (Latham Group / SWIM)
     "Domestic/United States", # explicit US label (single filer)
     "pf0:US",                 # XBRL namespace-prefix artifact resolving to US
+])
+
+# Canonical "Canada" — single-country Canada labels (filing drift collapses to one).
+_CANADA_ALIASES: FrozenSet[str] = frozenset([
+    "Canada", "Canadian Operations", "Canada Operations",
 ])
 
 # Canonical "United Kingdom" — confirmed UK spelling variants.
@@ -60,6 +66,7 @@ _AMERICAS_ALIASES: FrozenSet[str] = frozenset([
 # canonical_label → frozenset of all raw aliases (case variants included).
 GEO_CANONICAL_GROUPS: Dict[str, FrozenSet[str]] = {
     "United States":  _US_SAFE_ALIASES,
+    "Canada":         _CANADA_ALIASES,
     "United Kingdom": _UK_ALIASES,
     "North America":  _NORTH_AMERICA_ALIASES,
     "Non-US":         _NON_US_ALIASES,

@@ -74,70 +74,46 @@ _FOOTER_SOCIAL_LI = _footer_social_icon_data_uri(
 
 def _inject_transition_js() -> None:
     """
-    Branded page-transition overlay for the Coresight portal.
+    Branded page-transition overlay + CLIENT-SIDE navigation for the portal.
 
-    How it works
-    ────────────
-    Runs inside a components.v1.html iframe that can reach window.parent.
-    st.html() renders nav links DIRECTLY in the parent document (not iframe),
-    so our JS can find and intercept them via window.parent.document.
+    Architecture (why it is the way it is)
+    ──────────────────────────────────────
+    Page changes used to be full browser reloads (the custom header's <a href>
+    links). A full reload re-downloads the JS bundle, reconnects the websocket
+    and re-runs warmups — i.e. the multi-second grey/blank screen. render_header
+    now also renders hidden st.page_link widgets; the driver below forwards nav
+    clicks to them, so a page change is a CLIENT-SIDE rerun (no reload, no boot
+    skeleton, session_state preserved).
 
-    Three-layer defence against blank/white screens:
+    The driver is injected ONCE into the PARENT document (parent realm), NOT run
+    inside the components.html iframe. This is critical: Streamlit destroys and
+    recreates that iframe on every client-side rerun, which kills any
+    iframe-scoped timer/listener (that is what left the overlay stuck on). A
+    parent-realm <script> with event-delegated click handling and window timers
+    survives every rerun.
 
-    Layer 1 — Click interceptor (primary, fires BEFORE navigation):
-      Attaches to all .coresight-header-nav anchors and .logout-btn in the
-      parent document.  On click: preventDefault → show overlay → 65ms later
-      navigate.  The 65ms gap lets the browser paint the overlay before the
-      page unloads.  Result: user sees branded overlay WITH logo+spinner
-      instead of any blank.
-
-    Layer 2 — Per-render content check (fires on every page LOAD):
-      render_header() is always the first Streamlit element on every page.
-      After rendering, _inject_transition_js() checks: does stMain have any
-      real content yet?  If not, show overlay immediately.  MutationObserver
-      auto-hides it the moment content arrives.  Covers the new-page load
-      period after navigation completes.
-
-    Layer 3 — URL-change poller (60 ms, secondary fallback):
-      Catches any pushState navigation that Layer 1 missed.
-      Skips /login to ensure the login form is never covered.
-
-    Critical constraints
-    ────────────────────
-    • Overlay is ALWAYS pointer-events:none — NEVER blocks user input.
-    • index.html has body{background:#f2f2f2} to kill the 0 ms white flash.
-    • 8-second safety timeout prevents overlay from getting stuck.
-    • All DOM setup is idempotent (guarded by window.parent.__csTI flag).
+    Lifecycle: click → show branded overlay → forward to hidden st.page_link →
+    Streamlit reruns in place → a settle-poll hides the overlay once the new
+    page's content has rendered. Overlay is always pointer-events:none and has a
+    hard safety timeout so it can never trap the user.
     """
-    script_html = """<script>
+    import json
+
+    # Driver runs in the PARENT realm (document/window are the parent's).
+    driver_src = r"""
 (function(){
-  var doc = window.parent.document;
-  var win = window.parent;
+  var doc = document, win = window;
 
-  /* ── Immediate: body stays grey even if CSS hasn't applied yet ────────── */
-  if (doc.body) {
-    doc.body.style.background = '#f2f2f2';
-    doc.documentElement.style.background = '#f2f2f2';
-  }
+  if (doc.body){ doc.body.style.background='#f2f2f2'; doc.documentElement.style.background='#f2f2f2'; }
 
-  /* ═══════════════════════════════════════════════════════════════════════
-     ONE-TIME SETUP — persists across Streamlit page changes.
-     (Streamlit uses full page reload for navigation, so this runs fresh
-      each load.  The guard prevents double-init within the same load.)
-     ═══════════════════════════════════════════════════════════════════════ */
-  if (!win.__csTI) {
-    win.__csTI = true;
-
-    /* ── CSS ─────────────────────────────────────────────────────────────── */
-    var el = doc.createElement('style');
-    el.id  = 'cs-styles';
+  /* ── Styles (once) ─────────────────────────────────────────────────────── */
+  if (!doc.getElementById('cs-styles')){
+    var el = doc.createElement('style'); el.id='cs-styles';
     el.textContent =
-      /* Overlay — pointer-events:none means it NEVER blocks clicks */
       '#cs-ov{position:fixed;inset:0;z-index:99998;background:#f2f2f2;' +
         'display:flex;align-items:center;justify-content:center;' +
         'opacity:0;pointer-events:none;transition:opacity 0.2s ease;}' +
       '#cs-ov.on{opacity:1;}' +
-      /* White card with logo, spinner, shimmer */
       '.cs-c{display:flex;flex-direction:column;align-items:center;gap:18px;' +
         'padding:32px 44px;background:#fff;border-radius:14px;' +
         'box-shadow:0 6px 40px rgba(0,0,0,0.10);}' +
@@ -150,165 +126,148 @@ def _inject_transition_js() -> None:
         'background:linear-gradient(90deg,#ebebeb 25%,#d62e2f 50%,#ebebeb 75%);' +
         'background-size:200% 100%;animation:cs-sh 1.6s ease infinite;}' +
       '@keyframes cs-sh{0%{background-position:200% 0}100%{background-position:-200% 0}}' +
-      /* YouTube-style red progress bar at top of viewport */
       '#cs-pb{position:fixed;top:0;left:0;height:3px;z-index:99999;' +
         'width:0%;opacity:0;pointer-events:none;' +
         'background:linear-gradient(90deg,#d62e2f,#ff7575);}' +
-      /* Page content fade-in animation (new page appears smoothly) */
       '.main .block-container{animation:cs-fi 0.32s ease both;}' +
-      '@keyframes cs-fi{from{opacity:0;transform:translateY(6px)}' +
-                        'to{opacity:1;transform:none}}';
+      '@keyframes cs-fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}' +
+      '[data-testid="stSkeleton"],[data-testid="stAppSkeleton"]{display:none!important;}';
     doc.head.appendChild(el);
+  }
 
-    /* ── Overlay + progress bar DOM elements ─────────────────────────────── */
-    var ov = doc.createElement('div'); ov.id = 'cs-ov';
+  /* ── Overlay + progress bar DOM (once) ─────────────────────────────────── */
+  var ov = doc.getElementById('cs-ov');
+  if (!ov){
+    ov = doc.createElement('div'); ov.id='cs-ov';
     ov.innerHTML =
       '<div class="cs-c">' +
         '<img src="https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net' +
-             '/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight">' +
-        '<div class="cs-r"></div>' +
-        '<div class="cs-s"></div>' +
+             '/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight" referrerpolicy="no-referrer">' +
+        '<div class="cs-r"></div><div class="cs-s"></div>' +
       '</div>';
     doc.body.appendChild(ov);
+  }
+  var pb = doc.getElementById('cs-pb');
+  if (!pb){ pb = doc.createElement('div'); pb.id='cs-pb'; doc.body.appendChild(pb); }
 
-    var pb = doc.createElement('div'); pb.id = 'cs-pb';
-    doc.body.appendChild(pb);
+  /* Concrete content widgets — NOT element-container (it also wraps skeletons). */
+  var READY =
+    '[data-testid="stMarkdownContainer"],[data-testid="stDataFrame"],' +
+    '[data-testid="stSelectbox"],[data-testid="stTable"],[data-testid="stMetric"],' +
+    '[data-testid="stTabs"],[data-testid="stImage"],[data-testid="stForm"],' +
+    '[data-testid="stTextInput"],[data-testid="stMultiSelect"],[data-testid="stSpinner"]';
 
-    var _st = null, _bt = null;   /* safety timer, bar timer */
-
-    /* Show the overlay + start progress bar sweep */
-    win.__csShow = function() {
-      if (ov.classList.contains('on')) return;
-      ov.classList.add('on');
-      pb.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:99999;' +
-        'pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);' +
-        'width:0%;opacity:1;transition:none;';
-      clearTimeout(_bt);
-      _bt = setTimeout(function(){
-        pb.style.transition = 'width 3s cubic-bezier(0.05,0.5,0.9,1)';
-        pb.style.width = '78%';
-      }, 35);
-      clearTimeout(_st);
-      _st = setTimeout(function(){ win.__csHide(); }, 8000); /* safety */
-    };
-
-    /* Hide overlay + complete progress bar */
-    win.__csHide = function() {
-      if (!ov.classList.contains('on')) return;
-      clearTimeout(_st); clearTimeout(_bt);
-      ov.classList.remove('on');
-      pb.style.transition = 'width 0.14s ease';
-      pb.style.width = '100%';
-      setTimeout(function(){
-        pb.style.transition = 'opacity 0.22s ease';
-        pb.style.opacity = '0';
-        setTimeout(function(){
-          pb.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:99999;' +
-            'pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);' +
-            'width:0%;opacity:0;transition:none;';
-        }, 260);
-      }, 150);
-    };
-
-    /* Selectors that mean "page has real content" */
-    var READY =
-      '[data-testid="stMarkdownContainer"],[data-testid="stDataFrame"],' +
-      '[data-testid="stSelectbox"],[data-testid="stTable"],[data-testid="stMetric"],' +
-      '[data-testid="stTabs"],[data-testid="stImage"],[data-testid="stForm"],' +
-      '[data-testid="stTextInput"],[data-testid="stMultiSelect"],' +
-      '[data-testid="stSpinner"],[data-testid="element-container"]';
-
-    /* MutationObserver: auto-hide overlay when content appears in stMain */
-    var mo = new MutationObserver(function(){
-      if (!ov.classList.contains('on')) return;
+  win.__csShow = function(){
+    ov.classList.add('on');
+    pb.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:99999;' +
+      'pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);' +
+      'width:0%;opacity:1;transition:none;';
+    clearTimeout(win.__csBt);
+    win.__csBt = setTimeout(function(){ pb.style.transition='width 3s cubic-bezier(0.05,0.5,0.9,1)'; pb.style.width='78%'; }, 35);
+    /* Settle-poll: on a page change Streamlit clears stMain then re-renders.
+       Hide once we've seen it clear AND content is back. Fallbacks: content
+       present continuously (~700ms) for a no-clear rerun; hard safety. */
+    clearInterval(win.__csPoll);
+    var sawEmpty=false, contentTicks=0, ticks=0;
+    win.__csPoll = setInterval(function(){
+      ticks++;
       var main = doc.querySelector('[data-testid="stMain"]');
-      if (main && main.querySelector(READY)) {
-        setTimeout(function(){ win.__csHide(); }, 55);
-      }
-    });
-    mo.observe(doc.querySelector('[data-testid="stAppViewContainer"]') || doc.body,
-               {childList:true, subtree:true});
+      var has = !!(main && main.querySelector(READY));
+      if (!has){ sawEmpty=true; contentTicks=0; } else { contentTicks++; }
+      if ((sawEmpty && has) || contentTicks>=7 || ticks>=150){ win.__csHide(); }
+    }, 100);
+    clearTimeout(win.__csSt);
+    win.__csSt = setTimeout(function(){ win.__csHide(); }, 15000);
+  };
 
-    /* ── Layer 3: URL-change poller (fallback for any pushState nav) ───────
-       IMPORTANT: Streamlit updates ONLY the query string when filters sync
-       (e.g. period_type=Quarterly). That must NOT show the full-page transition
-       overlay — it looks like an infinite loop / stuck load. Only react when
-       the path (multipage route) or hash changes. */
-    var _lhPath = win.location.pathname + win.location.hash;
-    setInterval(function(){
-      var curPath = win.location.pathname + win.location.hash;
-      if (curPath === _lhPath) return;
-      _lhPath = curPath;
-      if (win.location.href.indexOf('/login') !== -1) return; /* never overlay login */
+  win.__csHide = function(){
+    clearInterval(win.__csPoll); clearTimeout(win.__csSt); clearTimeout(win.__csBt);
+    if (!ov.classList.contains('on')) return;
+    ov.classList.remove('on');
+    pb.style.transition='width 0.14s ease'; pb.style.width='100%';
+    setTimeout(function(){
+      pb.style.transition='opacity 0.22s ease'; pb.style.opacity='0';
+      setTimeout(function(){ pb.style.cssText='position:fixed;top:0;left:0;height:3px;z-index:99999;pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);width:0%;opacity:0;transition:none;'; }, 260);
+    }, 150);
+  };
+
+  /* Hidden st.page_link whose route matches `path` → client-side nav target. */
+  function findClientLink(path){
+    var links = doc.querySelectorAll('a[data-testid="stPageLink-NavLink"],[data-testid="stPageLink"] a');
+    for (var i=0;i<links.length;i++){
+      try { if (new URL(links[i].href, win.location.origin).pathname === path) return links[i]; } catch(e){}
+    }
+    return null;
+  }
+
+  /* ── Click delegation (capture) — survives every re-render of the nav DOM ── */
+  doc.addEventListener('click', function(ev){
+    var a = ev.target && ev.target.closest ? ev.target.closest('.coresight-header-nav a, .logout-btn') : null;
+    if (!a) return;
+    if (a.classList && a.classList.contains('logout-btn')){ win.__csShow(); return; } /* full reload OK for logout */
+    if (a.classList && a.classList.contains('active')){ ev.preventDefault(); return; }
+    var path; try { path = new URL(a.href, win.location.origin).pathname; } catch(e){ return; }
+    var target = findClientLink(path);
+    if (target){
+      ev.preventDefault();
       win.__csShow();
-    }, 60);
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════
-     LAYER 1 — Click interceptors (runs EVERY render so they survive Streamlit
-     re-runs that regenerate the nav DOM).
-
-     st.html() renders directly in the parent document (NOT in a sandboxed
-     iframe), so window.parent.document.querySelectorAll finds these links.
-
-     Mechanism:
-       1. preventDefault stops the browser from navigating immediately.
-       2. overlay shows (browser paint happens synchronously in next frame).
-       3. After 65 ms the browser has painted the overlay → navigate.
-     ═══════════════════════════════════════════════════════════════════════ */
-  (function attachClicks(){
-    function intercept(el) {
-      if (el.__csI) return;   /* already intercepted this element */
-      el.__csI = true;
-      el.addEventListener('click', function() {
-        /* Skip active page — no transition needed */
-        if (el.classList && el.classList.contains('active')) return;
-        /* Just show overlay — do NOT preventDefault.
-           The iframe sandbox blocks win.location.href, so let the
-           browser handle the native <a> navigation while we show
-           the loading overlay. */
-        win.__csShow && win.__csShow();
-      });
+      /* NEVER-BLOCK fallback. A client-side switch is processed by the Streamlit
+         SERVER, which runs one script at a time per session. If the CURRENT page
+         is mid-run (e.g. earnings_calendar's slow data load) the switch is queued
+         and the user is stuck. Streamlit changes the URL optimistically even when
+         the switch is queued, so we CANNOT use the path as the success signal —
+         we watch the MAIN content instead. If it hasn't changed shortly after the
+         click, the server is busy → force a full browser navigation, which makes
+         the browser abandon the busy page immediately. */
+      var mainText = function(){ var m=doc.querySelector('[data-testid="stMain"]'); return m ? (m.innerText||'').slice(0,400) : ''; };
+      var before = mainText(), href = a.href;
+      target.click();   /* fast path: client-side rerun (no full reload) */
+      /* Watch the main area. On a busy server it goes empty and STAYS empty (the
+         new page can't render until the current run finishes). The moment new,
+         non-empty content appears the client-side switch succeeded — stop. If it
+         never appears within the budget, the server is busy → hard-navigate so
+         the browser abandons the stuck page immediately. */
+      win.clearInterval(win.__csNavWatch);
+      var ticks = 0;
+      win.__csNavWatch = win.setInterval(function(){
+        ticks++;
+        var now = mainText();
+        if (now.length > 0 && now !== before){ win.clearInterval(win.__csNavWatch); return; }
+        if (ticks >= 11){ win.clearInterval(win.__csNavWatch); win.location.href = href; }  /* ~1.4s */
+      }, 125);
     }
+    /* else: no client link → native navigation proceeds (link still works) */
+  }, true);
 
-    /* Nav links */
-    doc.querySelectorAll('.coresight-header-nav a').forEach(function(a){
-      intercept(a);
-    });
-    /* Logout button */
-    var lo = doc.querySelector('.logout-btn');
-    if (lo) intercept(lo);
-  })();
-
-  /* ═══════════════════════════════════════════════════════════════════════
-     LAYER 2 — Per-render content check.
-     After render_header() renders (every page), if stMain has no content
-     yet, show overlay immediately.  Covers the loading period after nav.
-     ═══════════════════════════════════════════════════════════════════════ */
-  (function perRenderCheck(){
+  /* ── URL-change poller: covers any pushState nav not from a header click ── */
+  win.__csLhPath = win.location.pathname + win.location.hash;
+  setInterval(function(){
+    var c = win.location.pathname + win.location.hash;
+    if (c === win.__csLhPath) return;
+    win.__csLhPath = c;
     if (win.location.href.indexOf('/login') !== -1) return;
-    var o2 = doc.getElementById('cs-ov');
-    if (!o2 || o2.classList.contains('on')) return;
-    var main = doc.querySelector('[data-testid="stMain"]');
-    var R2 =
-      '[data-testid="stMarkdownContainer"],[data-testid="stDataFrame"],' +
-      '[data-testid="stSelectbox"],[data-testid="stTabs"],[data-testid="stForm"],' +
-      '[data-testid="stTextInput"],[data-testid="stSpinner"],[data-testid="element-container"]';
-    if (!main || !main.querySelector(R2)) {
-      win.__csShow && win.__csShow();
-    }
-  })();
-
-  /* ── Collapse injector iframe to zero layout space ───────────────────── */
-  var f = window.frameElement;
-  if (f) {
-    f.style.cssText =
-      'height:0!important;max-height:0!important;min-height:0!important;' +
-      'border:none!important;display:block!important;overflow:hidden!important;' +
-      'margin:0!important;padding:0!important;visibility:hidden!important;';
-  }
+    win.__csShow();
+  }, 60);
 })();
-</script>"""
+"""
+    script_html = (
+        "<script>(function(){"
+        "var pd=window.parent.document, pw=window.parent;"
+        "if(pd.body){pd.body.style.background='#f2f2f2';"
+        "pd.documentElement.style.background='#f2f2f2';}"
+        "var f=window.frameElement;"
+        "if(f){f.style.cssText='height:0!important;max-height:0!important;"
+        "min-height:0!important;border:none!important;display:block!important;"
+        "overflow:hidden!important;margin:0!important;padding:0!important;"
+        "visibility:hidden!important;';}"
+        # Install the driver ONCE, in the PARENT realm (not this iframe), so its
+        # timers + delegated listeners survive every client-side rerun.
+        "if(pw.__csDriver)return; pw.__csDriver=true;"
+        "var s=pd.createElement('script'); s.id='cs-driver';"
+        "s.textContent=" + json.dumps(driver_src) + ";"
+        "(pd.head||pd.documentElement).appendChild(s);"
+        "})();</script>"
+    )
     try:
         _st_components.html(script_html, height=0)
     except Exception:
@@ -535,6 +494,37 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
             st.html(header_html)
         except AttributeError:
             st.markdown(header_html, unsafe_allow_html=True)
+
+    # ── CLIENT-SIDE navigation targets (visually hidden) ─────────────────────
+    # ROOT CAUSE of the grey/blank flash on page change: the custom header's
+    # <a href> links above trigger a FULL browser reload (Streamlit docs: URL
+    # links create a new session). A full reload re-downloads the JS bundle,
+    # reconnects the websocket and re-runs warmups — seconds of grey blank.
+    #
+    # FIX: st.page_link does CLIENT-SIDE navigation (a rerun, not a reload). We
+    # render one hidden page_link per nav destination; the header's JS click
+    # handler forwards clicks to the matching hidden link (see script_html →
+    # attachClicks). Page changes become instant in-app reruns — no reload, no
+    # boot skeleton, no grey blank, and st.session_state is preserved.
+    _NAV_TARGETS = [
+        ("market_data",       "pages/market_data.py"),
+        ("earnings_calls",    "pages/earnings_calls.py"),
+        ("earnings_calendar", "pages/earnings_calendar.py"),
+        ("screening",         "pages/screening.py"),
+        ("newsroom",          "pages/newsroom.py"),
+    ]
+    try:
+        st.markdown(
+            "<style>.st-key-cs_hidden_nav{position:fixed!important;left:-99999px!important;"
+            "top:0!important;width:1px!important;height:1px!important;overflow:hidden!important;"
+            "opacity:0!important;}</style>",
+            unsafe_allow_html=True,
+        )
+        with st.container(key="cs_hidden_nav"):
+            for _slug, _path in _NAV_TARGETS:
+                st.page_link(_path, label=_slug)
+    except Exception:
+        pass  # best-effort; never break the header over the hidden nav links
     except Exception as e:
         log_structured_error(e, page="navigation", component="render_header", operation="RENDER_HTML")
         st.markdown(header_html, unsafe_allow_html=True)

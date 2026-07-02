@@ -1,0 +1,426 @@
+/* Coresight Research Portal — Technical Documentation PDF Styles */
+
+@page {
+  size: letter;
+  margin: 0.85in 0.75in 0.85in 0.75in;
+}
+
+:root {
+  --cs-primary: #0066CC;
+  --cs-primary-dark: #1a365d;
+  --cs-red: #D62E2F;
+  --cs-red-light: #fde8e8;
+  --cs-gray-50: #F8F9FA;
+  --cs-gray-100: #F1F3F5;
+  --cs-gray-200: #E9ECEF;
+  --cs-gray-600: #6C757D;
+  --cs-gray-800: #343A40;
+  --cs-gray-900: #212529;
+  --cs-code-bg: #f4f6f8;
+  --cs-table-header: #E6F2FF;
+  --diagram-max-height: 420px;
+  --font-sans: "Inter", "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 11pt;
+  line-height: 1.55;
+  color: var(--cs-gray-900);
+  orphans: 3;
+  widows: 3;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Cover Page (legal notice lives in footer — no separate page) ── */
+.cover-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: calc(100vh - 1.7in);
+  padding: 0.25in 0 0.15in;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.cover-top {
+  text-align: center;
+  padding-top: 0.5in;
+  flex: 1 1 auto;
+}
+
+.cover-logo {
+  width: 220px;
+  height: auto;
+  margin-bottom: 0.4in;
+}
+
+.cover-title {
+  font-size: 26pt;
+  font-weight: 700;
+  color: var(--cs-primary-dark);
+  margin: 0 0 12pt;
+  line-height: 1.25;
+}
+
+.cover-subtitle {
+  font-size: 14pt;
+  font-weight: 500;
+  color: var(--cs-primary);
+  margin: 0 0 24pt;
+}
+
+.cover-meta {
+  font-size: 10pt;
+  color: var(--cs-gray-600);
+  margin-top: 0.25in;
+}
+
+.cover-meta p {
+  margin: 4pt 0;
+}
+
+.cover-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 0.35in;
+}
+
+.confidential-banner {
+  background: var(--cs-red);
+  color: #fff;
+  text-align: center;
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 12pt 20pt;
+  border-radius: 4pt;
+}
+
+.cover-footer-note {
+  text-align: center;
+  font-size: 8.5pt;
+  color: var(--cs-gray-600);
+  margin: 10pt 0 0;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+/* ── Table of Contents ── */
+.toc-page {
+  page-break-before: always;
+  break-before: page;
+  page-break-after: always;
+  break-after: page;
+}
+
+.toc-page h2 {
+  font-size: 18pt;
+  font-weight: 700;
+  color: var(--cs-primary-dark);
+  border-bottom: 2pt solid var(--cs-primary);
+  padding-bottom: 8pt;
+  margin-top: 0;
+  page-break-after: avoid;
+}
+
+.toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 16pt 0 0;
+}
+
+.toc-list li {
+  margin: 5pt 0;
+  line-height: 1.35;
+}
+
+.toc-list a {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  color: var(--cs-gray-900);
+  text-decoration: none;
+}
+
+.toc-entry-text {
+  flex: 0 1 auto;
+  padding-right: 6pt;
+}
+
+.toc-leader {
+  flex: 1 1 auto;
+  border-bottom: 0.75pt dotted var(--cs-gray-600);
+  margin: 0 6pt 2pt;
+  min-width: 16pt;
+  opacity: 0.55;
+}
+
+.toc-page-num {
+  flex: 0 0 auto;
+  min-width: 18pt;
+  text-align: right;
+  font-size: 9.5pt;
+  color: var(--cs-gray-600);
+  font-variant-numeric: tabular-nums;
+}
+
+.toc-h1 .toc-entry-text { font-weight: 700; font-size: 11pt; }
+.toc-h2 { padding-left: 16pt; }
+.toc-h2 .toc-entry-text { font-weight: 600; font-size: 10.5pt; }
+
+/* ── Main Content ── */
+.doc-content {
+  counter-reset: none;
+}
+
+/* Section blocks keep headings with their opening content */
+.section-block {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+.section-block > h2,
+.section-block > h3 {
+  page-break-before: auto;
+  break-before: auto;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.section-block > h2 + *,
+.section-block > h3 + * {
+  page-break-before: avoid;
+  break-before: avoid;
+}
+
+.doc-content h1 {
+  font-size: 22pt;
+  font-weight: 700;
+  color: var(--cs-primary-dark);
+  margin: 28pt 0 12pt;
+  padding-bottom: 6pt;
+  border-bottom: 2pt solid var(--cs-primary);
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.doc-content h2 {
+  font-size: 16pt;
+  font-weight: 700;
+  color: var(--cs-primary-dark);
+  margin: 22pt 0 10pt;
+  page-break-before: auto;
+  break-before: auto;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.doc-content h3 {
+  font-size: 13pt;
+  font-weight: 600;
+  color: var(--cs-gray-800);
+  margin: 16pt 0 8pt;
+  page-break-before: auto;
+  break-before: auto;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.doc-content h4 {
+  font-size: 11.5pt;
+  font-weight: 600;
+  color: var(--cs-gray-800);
+  margin: 12pt 0 6pt;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.doc-content p {
+  margin: 0 0 10pt;
+  text-align: left;
+  orphans: 3;
+  widows: 3;
+}
+
+.doc-content strong, .doc-content b {
+  font-weight: 700;
+}
+
+.doc-content em, .doc-content i {
+  font-style: italic;
+}
+
+.doc-content hr {
+  border: none;
+  border-top: 1pt solid var(--cs-gray-200);
+  margin: 16pt 0;
+}
+
+.doc-content ul, .doc-content ol {
+  margin: 0 0 10pt;
+  padding-left: 22pt;
+  orphans: 3;
+  widows: 3;
+}
+
+.doc-content li {
+  margin: 3pt 0;
+}
+
+.doc-content a {
+  color: var(--cs-primary);
+  text-decoration: none;
+}
+
+/* ── Code ── */
+.doc-content code {
+  font-family: var(--font-mono);
+  font-size: 9.5pt;
+  background: var(--cs-code-bg);
+  padding: 1pt 4pt;
+  border-radius: 3pt;
+  border: 0.5pt solid var(--cs-gray-200);
+}
+
+.doc-content pre {
+  background: var(--cs-code-bg);
+  border: 0.5pt solid var(--cs-gray-200);
+  border-left: 3pt solid var(--cs-primary);
+  border-radius: 4pt;
+  padding: 10pt 12pt;
+  margin: 10pt 0 14pt;
+  overflow-x: auto;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.doc-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 9pt;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Tables ── */
+.doc-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12pt 0 16pt;
+  font-size: 10pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.doc-content thead th {
+  background: var(--cs-table-header);
+  font-weight: 700;
+  text-align: left;
+  padding: 7pt 10pt;
+  border: 0.5pt solid var(--cs-gray-200);
+  color: var(--cs-primary-dark);
+}
+
+.doc-content tbody td {
+  padding: 6pt 10pt;
+  border: 0.5pt solid var(--cs-gray-200);
+  vertical-align: top;
+}
+
+.doc-content tbody tr:nth-child(even) {
+  background: var(--cs-gray-50);
+}
+
+/* ── Diagrams (caption + image kept together, no mid-diagram splits) ── */
+.diagram-block {
+  margin: 16pt 0 20pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  page-break-before: auto;
+  break-before: auto;
+}
+
+.diagram-block.diagram-oversized {
+  page-break-before: always;
+  break-before: page;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* Tall diagrams: keep caption + figure on one page */
+.diagram-block.diagram-oversized figure.diagram {
+  max-height: var(--diagram-max-height);
+  overflow: hidden;
+}
+
+.diagram-caption {
+  font-size: 9.5pt;
+  font-style: italic;
+  color: var(--cs-gray-600);
+  margin: 0 0 8pt;
+  text-align: center;
+  line-height: 1.4;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+figure.diagram {
+  margin: 0;
+  text-align: center;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+figure.diagram img,
+figure.diagram svg,
+.diagram-block img {
+  max-width: 100%;
+  max-height: var(--diagram-max-height);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+figure.diagram figcaption {
+  font-size: 9.5pt;
+  font-style: italic;
+  color: var(--cs-gray-600);
+  margin-top: 8pt;
+  text-align: center;
+  line-height: 1.4;
+  page-break-before: avoid;
+  break-before: avoid;
+}
+
+/* ── Watermark overlay (subtle) ── */
+body::before {
+  content: "";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-35deg);
+  font-size: 48pt;
+  color: rgba(214, 46, 47, 0.04);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Hide duplicate H1 from content (shown on cover) */
+.doc-content > h1:first-child {
+  display: none;
+}

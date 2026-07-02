@@ -959,6 +959,40 @@ div[data-testid="stRadio"] [role="radiogroup"] {
 @keyframes scr-spin {
   to { transform: rotate(360deg); }
 }
+/* ── Results grid: mask the AG Grid iframe bootstrap (~1s) ──
+   The component iframe reserves its height immediately but paints its rows a
+   beat later, flashing an empty grey box. We layer a white fill + centred
+   spinner BEHIND the iframe; once AG Grid paints its (opaque white) grid on
+   top, both are naturally covered — no JS timing needed. */
+[class*="st-key-scr_grid_shell"] {
+  position: relative;
+  min-height: 520px;
+}
+[class*="st-key-scr_grid_shell"]::before {   /* white fill replaces the grey flash */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  z-index: 0;
+}
+[class*="st-key-scr_grid_shell"]::after {    /* centred spinner during load */
+  content: "";
+  position: absolute;
+  top: 232px;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  border-radius: 50%;
+  border: 3px solid rgba(214, 46, 47, 0.12);
+  border-top-color: #d62e2f;
+  animation: scr-spin 0.7s linear infinite;
+  z-index: 1;
+}
+[class*="st-key-scr_grid_shell"] iframe[title="st_aggrid.AgGrid.agGrid"] {
+  position: relative;                   /* sits above fill + spinner once painted */
+  z-index: 2;
+}
 .scr-ov-msg {
   font-size: 0.95rem;
   font-weight: 600;
@@ -2164,7 +2198,14 @@ def _inline_add_keydevs(cid, working, wk_key, show_form_key):
                 st.rerun()
 
 
-@st.dialog("Saved Screenings", width="large")
+def _on_saved_dialog_dismiss():
+    """Clear the open-flag on built-in X / Escape / click-outside dismissal —
+    same fix as the watchlist dialog: prevents the modal from re-opening on the
+    next flag-preserving interaction. See _on_watchlist_dialog_dismiss."""
+    st.session_state["scr_saved_dlg_open"] = False
+
+
+@st.dialog("Saved Screenings", width="large", on_dismiss=_on_saved_dialog_dismiss)
 def _dialog_browse_saved_criteria():
     """Modal dialog: view, load, edit, delete saved criteria + access management."""
     # NOTE: Do NOT set scr_saved_dlg_open=True here. The flag is already True
@@ -2452,7 +2493,20 @@ def _dialog_save_criteria():
 # DIALOGS — Watchlist Manager
 # =============================================================================
 
-@st.dialog("Create/Edit Watchlist", width="large")
+def _on_watchlist_dialog_dismiss():
+    """Clear the open-flag when the dialog is dismissed via the built-in
+    X / Escape / click-outside gestures.
+
+    Without this, Streamlit's default on_dismiss='ignore' leaves wl_dlg_open
+    True after a built-in dismiss (no rerun fires), so the NEXT interaction
+    that does not itself reset the flag re-opens the dialog — the "popup keeps
+    reappearing" bug. The callback resets the gating state so dismissal sticks.
+    """
+    st.session_state["wl_dlg_open"] = False
+    st.session_state.pop("wl_dlg_mode", None)
+
+
+@st.dialog("Create/Edit Watchlist", width="large", on_dismiss=_on_watchlist_dialog_dismiss)
 def _dialog_watchlist_manager():
     """Watchlist manager — Create mode or Edit mode.
 
@@ -4684,14 +4738,42 @@ def _render_keydevs_results():
                 pass
 
         grid_df = _prepare_keydevs_grid_df(events_df)
-        _render_filterable_results_grid(
+
+        # Hidden identity columns so checkbox-selected event rows can be saved as
+        # a watchlist (the watchlist stores the companies behind the events).
+        # Ticker is parsed from the "Company Name(s)" label: "Name (EXCH:TICKER)".
+        _kd_hidden = ["_source_url"] if "_source_url" in grid_df.columns else []
+        try:
+            if "Company Name(s)" in grid_df.columns:
+                grid_df = grid_df.copy()
+
+                def _kd_ticker(lbl: str) -> str:
+                    s = str(lbl or "")
+                    if "(" in s and s.rstrip().endswith(")"):
+                        inside = s[s.rfind("(") + 1:s.rfind(")")]
+                        return inside.split(":")[-1].strip()
+                    return ""
+
+                def _kd_name(lbl: str) -> str:
+                    s = str(lbl or "")
+                    return s[:s.rfind("(")].strip() if "(" in s else s.strip()
+
+                grid_df["Ticker"] = grid_df["Company Name(s)"].apply(_kd_ticker)
+                grid_df["_CompanyName"] = grid_df["Company Name(s)"].apply(_kd_name)
+                _kd_hidden += ["Ticker", "_CompanyName"]
+        except Exception:
+            pass
+
+        _kd_resp = _render_filterable_results_grid(
             grid_df,
             key="keydevs_results_grid",
             empty_message="No key development events found for the matched companies.",
             pinned_column="Company Name(s)",
             link_columns=["Source Reference"] if "Source Reference" in grid_df.columns else None,
-            hidden_columns=["_source_url"] if "_source_url" in grid_df.columns else None,
+            hidden_columns=_kd_hidden or None,
+            enable_selection=True,
         )
+        _render_save_as_watchlist_panel(_kd_resp)
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_keydevs_results", operation="render_keydevs_results")
         st.error("Something went wrong. Please try again.")
@@ -5580,6 +5662,9 @@ def _render_filterable_results_grid(
         resizable=True,
         floatingFilter=False,
         menuTabs=["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
+        # Hover ANY cell to read its full (untruncated) value — e.g. the long
+        # Summary column. Native browser tooltip (enableBrowserTooltips below).
+        tooltipValueGetter=JsCode("function(p){return p.value;}"),
     )
     if pin_col:
         gb.configure_column(
@@ -5613,6 +5698,16 @@ def _render_filterable_results_grid(
             header_checkbox=True,
         )
     grid_options = gb.build()
+    # ── Read / copy long cells (e.g. Summary) ───────────────────────────────
+    # AG Grid cells are not editable here, so clicking does nothing by design.
+    # enableBrowserTooltips → hover a cell to read its FULL value in a tooltip.
+    # enableCellTextSelection + ensureDomOrder → select text in a cell with the
+    # mouse and copy it (Cmd/Ctrl+C). Together these answer "how do I see/copy
+    # the whole Summary" without an extra dialog.
+    grid_options["enableBrowserTooltips"] = True
+    grid_options["tooltipShowDelay"] = 200
+    grid_options["enableCellTextSelection"] = True
+    grid_options["ensureDomOrder"] = True
     _apply_grid_column_overrides(
         grid_options,
         link_columns=list(link_cols),
@@ -5644,21 +5739,25 @@ def _render_filterable_results_grid(
     ) if enable_selection else (
         GridUpdateMode.FILTERING_CHANGED | GridUpdateMode.SORTING_CHANGED
     )
-    grid_response = AgGrid(
-        display_df,
-        gridOptions=grid_options,
-        key=key,
-        width="100%",
-        height=height,
-        fit_columns_on_grid_load=False,
-        allow_unsafe_jscode=True,
-        show_search=False,
-        show_toolbar=False,
-        show_download_button=False,
-        update_mode=_update_mode,
-        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-        theme="streamlit",
-    )
+    # Keyed shell lets CSS mask the AG Grid iframe's grey bootstrap flash
+    # (white fill + spinner behind the iframe — see [class*="st-key-scr_grid_shell"]).
+    # Key is per-grid so segment mode (several grids in one run) never collides.
+    with st.container(key=f"scr_grid_shell_{key}"):
+        grid_response = AgGrid(
+            display_df,
+            gridOptions=grid_options,
+            key=key,
+            width="100%",
+            height=height,
+            fit_columns_on_grid_load=False,
+            allow_unsafe_jscode=True,
+            show_search=False,
+            show_toolbar=False,
+            show_download_button=False,
+            update_mode=_update_mode,
+            data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+            theme="streamlit",
+        )
     return grid_response if enable_selection else None
 
 
@@ -5712,12 +5811,21 @@ def _render_save_as_watchlist_panel(grid_resp) -> None:
                     if not new_id:
                         st.error("Could not create the watchlist. Please try again.")
                     else:
-                        companies = [{
-                            "ticker":       (r.get("Ticker") or "").strip(),
-                            "company_name": (r.get("_CompanyName") or r.get("Company Name") or "").strip(),
-                            "sector":       (r.get("_Sector") or "").strip(),
-                            "country":      (r.get("_Country") or "").strip(),
-                        } for r in sel if (r.get("Ticker") or "").strip()]
+                        # Dedupe by ticker — Key Devs selections can include
+                        # several event rows for the same company.
+                        companies = []
+                        _seen_tk = set()
+                        for r in sel:
+                            tk = (r.get("Ticker") or "").strip()
+                            if not tk or tk.upper() in _seen_tk:
+                                continue
+                            _seen_tk.add(tk.upper())
+                            companies.append({
+                                "ticker":       tk,
+                                "company_name": (r.get("_CompanyName") or r.get("Company Name") or "").strip(),
+                                "sector":       (r.get("_Sector") or "").strip(),
+                                "country":      (r.get("_Country") or "").strip(),
+                            })
                         added = _real_wl_add_companies(new_id, companies, email)
                         st.success(
                             f"Saved watchlist '{name.strip()}' with {added} "
@@ -5937,11 +6045,9 @@ def _render_results():
                 empty_message="No matching companies found.",
                 pinned_column="Company Name",
                 hidden_columns=_hidden,
-                # DEFERRED to next release — multi-select (row checkboxes + select-all) disabled.
-                # enable_selection=True,
+                enable_selection=True,
             )
-            # DEFERRED to next release — "Save selection as Watchlist" panel disabled.
-            # _render_save_as_watchlist_panel(_grid_resp)
+            _render_save_as_watchlist_panel(_grid_resp)
         log_timing(
             "SCREENING_RESULTS_TABLE_RENDER",
             (time.perf_counter() - t_table) * 1000,

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{DOC_TITLE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>{{CSS_CONTENT}}</style>
+</head>
+<body>
+  <!-- Cover Page -->
+  <section class="cover-page">
+    <div class="cover-top">
+      <img class="cover-logo" src="{{LOGO_DATA_URI}}" alt="Coresight Research">
+      <h1 class="cover-title">{{DOC_TITLE}}</h1>
+      <p class="cover-subtitle">Coresight Research Portal — Technical Documentation</p>
+      <div class="cover-meta">
+        <p><strong>Document version:</strong> {{DOC_VERSION}}</p>
+        <p><strong>Generated:</strong> {{GENERATED_DATE}}</p>
+        <p><strong>Classification:</strong> Internal — Engineering Reference</p>
+      </div>
+    </div>
+    <footer class="cover-footer">
+      <div class="confidential-banner">
+        CONFIDENTIAL — Internal Use Only — Do Not Distribute
+      </div>
+      <p class="cover-footer-note">
+        This document contains proprietary information belonging to Coresight Research.
+        Unauthorized disclosure, copying, or distribution is strictly prohibited.
+      </p>
+    </footer>
+  </section>
+
+  <!-- Table of Contents -->
+  <section class="toc-page">
+    <h2>Table of Contents</h2>
+    {{TOC_HTML}}
+  </section>
+
+  <!-- Main Content -->
+  <main class="doc-content">
+    {{CONTENT_HTML}}
+  </main>
+</body>
+</html>

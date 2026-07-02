@@ -1702,7 +1702,29 @@ def _segment_cache_recency_key(row: Dict) -> tuple:
 
 
 def _segment_cache_universe() -> List[str]:
-    """All SEC tickers with dimensioned 10-K segment facts (the cache universe)."""
+    """Tickers to (re)build the segment cache for.
+
+    Sourced from the small ``coreiq_companies`` master — a fast indexed read.
+    The previous approach did `SELECT DISTINCT ticker FROM coreiq_filing_metrics_v5`
+    with a leading-wildcard `dimension LIKE` over ~7.7M rows: an unindexable full
+    scan that is unreliable on Azure (minutes-to-timeout under IO throttling) and
+    repeatedly stalled the rebuild. Companies without dimensioned 10-K segment
+    facts simply yield zero entries in the per-ticker pass that follows, so using
+    the (slightly larger) company master here is harmless and far more robust.
+    Falls back to the filing-metrics scan only if the company master is empty/unavailable.
+    """
+    try:
+        rows = db_manager.execute_query_readonly(
+            "SELECT ticker FROM coreiq_companies "
+            "WHERE ticker IS NOT NULL AND TRIM(ticker) <> ''"
+        ) or []
+        tickers = sorted({r["ticker"] for r in rows if r.get("ticker")})
+        if tickers:
+            return tickers
+    except Exception as exc:
+        log_error(f"[SCREENING] _segment_cache_universe: company-master lookup failed: {exc}")
+
+    # Fallback: derive from filing metrics (slow full scan; last resort only).
     from utils.constants import SEGMENT_ALL_AXES
 
     clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)

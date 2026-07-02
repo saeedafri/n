@@ -35,9 +35,10 @@ from generate_technical_doc_pdf import (  # noqa: E402
     _replace_mermaid_blocks,
     _wrap_content_sections,
 )
+from sync_technical_pdfs_sharepoint import sync_technical_sharepoint  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
-OUTPUT_PDF = DOC_DIR / "Market-Data-Portal-Technical-Documentation-Complete.pdf"
+OUTPUT_PDF = DOC_DIR / "_pdf" / "Market-Data-Portal-Technical-Documentation-Complete.pdf"
 VALIDATION_DIR = DOC_DIR / "_validation-merged"
 
 MERGED_TITLE = "Market Data Portal (MDP) — Complete Technical Documentation"
@@ -49,107 +50,107 @@ MERGE_SEQUENCE: list[dict[str, str]] = [
         "description": "Master index — architecture overview, authentication summary, page registry, and warmup flags.",
     },
     {
-        "file": "00-app-bootstrap-and-auth.md",
+        "file": "00-infrastructure/00-app-bootstrap-and-auth.md",
         "slug": "app-bootstrap-and-auth",
         "description": "Application entry point, OIDC bootstrap, cookie hydration, and per-page auth enforcement.",
     },
     {
-        "file": "01-shared-components.md",
+        "file": "00-infrastructure/01-shared-components.md",
         "slug": "shared-components",
         "description": "Shared Streamlit UI — navigation, charts, tables, styles, and toolbar patterns.",
     },
     {
-        "file": "02-core-infrastructure.md",
+        "file": "00-infrastructure/02-core-infrastructure.md",
         "slug": "core-infrastructure",
         "description": "Core modules — configuration, database engines, auth manager, access control, and LLM extraction.",
     },
     {
-        "file": "03-data-layer.md",
+        "file": "00-infrastructure/03-data-layer.md",
         "slug": "data-layer",
         "description": "Data models, repositories, screening services, and forecast pipelines.",
     },
     {
-        "file": "04-utils-and-caching.md",
+        "file": "00-infrastructure/04-utils-and-caching.md",
         "slug": "utils-and-caching",
         "description": "Logging, caching, Azure Blob, PDF generation, email dispatch, and background warmups.",
     },
     {
-        "file": "login.md",
+        "file": "pages/login.md",
         "slug": "login",
         "description": "OIDC PKCE login flow, token exchange, and cookie handoff to Home.",
     },
     {
-        "file": "logout-bridge.md",
+        "file": "pages/logout-bridge.md",
         "slug": "logout-bridge",
         "description": "RP-initiated OIDC logout and IdP session termination.",
     },
     {
-        "file": "home.md",
+        "file": "pages/home.md",
         "slug": "home",
         "description": "Landing dashboard, company picker, and background filings scan initialization.",
     },
     {
-        "file": "market-data.md",
+        "file": "pages/market-data.md",
         "slug": "market-data",
         "description": "Financial statements, key stats, estimates, and cross-page ticker synchronization.",
     },
     {
-        "file": "newsroom.md",
+        "file": "pages/newsroom.md",
         "slug": "newsroom",
         "description": "News feed with sentiment scoring, ticker filters, and sector browsing.",
     },
     {
-        "file": "earnings-calls.md",
+        "file": "pages/earnings-calls.md",
         "slug": "earnings-calls",
         "description": "Earnings transcript browser with TF-IDF search and PDF download.",
     },
     {
-        "file": "live-earnings-transcript.md",
+        "file": "pages/live-earnings-transcript.md",
         "slug": "live-earnings-transcript",
         "description": "Live audio transcription pipeline and earnings call ingestion.",
     },
     {
-        "file": "earnings-calendar.md",
+        "file": "pages/earnings-calendar.md",
         "slug": "earnings-calendar",
         "description": "FullCalendar earnings schedule with watchlists and email alerts.",
     },
     {
-        "file": "screening.md",
+        "file": "pages/screening.md",
         "slug": "screening",
         "description": "Multi-criteria financial screener with saved criteria and watchlists.",
     },
     {
-        "file": "company-filings.md",
+        "file": "pages/company-filings.md",
         "slug": "company-filings",
         "description": "SEC filing browser with XBRL metrics and Azure blob PDF retrieval.",
     },
     {
-        "file": "company-filings-add-files.md",
+        "file": "pages/company-filings-add-files.md",
         "slug": "company-filings-add-files",
         "description": "Admin upload tool for non-SEC filings to Azure Blob Storage.",
     },
     {
-        "file": "logs.md",
+        "file": "pages/logs.md",
         "slug": "logs",
         "description": "Hidden operations surface — server log viewer and segment cache admin.",
     },
     {
-        "file": "retailer-adding.md",
+        "file": "pages/retailer-adding.md",
         "slug": "retailer-adding",
         "description": "Retail company master data management with ACL gating and audit trail.",
     },
     {
-        "file": "forecasting.md",
+        "file": "pages/forecasting.md",
         "slug": "forecasting",
         "description": "Revenue forecast viewer, refresh workflows, and quarterly estimates.",
     },
     {
-        "file": "access-management.md",
+        "file": "pages/access-management.md",
         "slug": "access-management",
         "description": "IAM console for system roles and page-level access control.",
     },
     {
-        "file": "forecasting-admin.md",
+        "file": "pages/forecasting-admin.md",
         "slug": "forecasting-admin",
         "description": "Unregistered appendix — forecast model administration and bulk refresh.",
     },
@@ -653,6 +654,11 @@ def main(argv: list[str] | None = None) -> int:
         generate_merged_pdf()
         size = OUTPUT_PDF.stat().st_size
         print(f"  ✓ {OUTPUT_PDF.name} ({size:,} bytes)")
+        sp = sync_technical_sharepoint()
+        print(
+            f"  SharePoint mirror → {sp['dest'].relative_to(REPO)} "
+            f"({sp['infra_count']} infra + {sp['pages_count']} pages + merged)"
+        )
 
     if not OUTPUT_PDF.exists():
         print(f"ERROR: merged PDF not found at {OUTPUT_PDF}", file=sys.stderr)

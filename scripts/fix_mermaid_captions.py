@@ -86,7 +86,7 @@ REPLACEMENTS = {
 
 
 def main() -> None:
-    for path in sorted(DOC_DIR.glob("*.md")):
+    for path in sorted(DOC_DIR.rglob("*.md")):
         text = path.read_text(encoding="utf-8")
         original = text
         for old, new in REPLACEMENTS.items():

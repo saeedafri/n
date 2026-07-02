@@ -4303,6 +4303,49 @@ class KeyStatsRepository:
 
                 if _rvm is not None: _last_rev_mm = _rvm
 
+        # ── Forward F- model revenue forecast (quarterly, next 8 quarters) ──
+        if period_type == 'quarterly' and periods:
+            _last_hist_date = _last_actual_hist_date
+            _n_actual = len(results)
+            _last_rev_mm = next(
+                (l['values'][_n_actual - 1] for l in line_items
+                 if l['label'] == 'Total Revenue' and len(l['values']) >= _n_actual),
+                None)
+            if source == 'YFinance' and '.' not in ticker:
+                _exch = (CompanyRepository.get_companies_map().get(ticker) or {}).get('exchange_acronym')
+                _forecast_ticker = f"{ticker}.{_exch}" if _exch else ticker
+            else:
+                _forecast_ticker = ticker
+            _fcst_rows = db_manager.execute_query_readonly(
+                "SELECT fiscal_year, fiscal_quarter, forecast_date, value_millions "
+                "FROM coreiq_model_forecasts_quarterly "
+                "WHERE ticker = :ticker AND metric = 'total_revenue' AND model_key = 'ensemble' "
+                "AND forecast_date > :last_date "
+                "ORDER BY fiscal_year ASC, fiscal_quarter ASC LIMIT 8",
+                {"ticker": _forecast_ticker, "last_date": _last_hist_date})
+            _f_growth_rows = [l for l in line_items
+                              if l['label'] == 'Growth Over Prior Year' and l.get('indent') == 1]
+            _f_rev_growth_row = _f_growth_rows[0] if _f_growth_rows else None
+            _q_end = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+            for _fr in _fcst_rows:
+                _rvm = float(_fr['value_millions']) if _fr.get('value_millions') is not None else None
+                _fdt = _fr.get('forecast_date')
+                if _fdt is None:
+                    _qm, _qd = _q_end.get(int(_fr['fiscal_quarter']), (12, 31))
+                    _fdt = date(int(_fr['fiscal_year']), _qm, _qd)
+                periods.append(FiscalPeriod(
+                    date=_fdt, label=f"3 Months\n{_fdt.strftime('%b-%d-%Y')}", is_forecast=True))
+                _rev_growth = ((_rvm - _last_rev_mm) / abs(_last_rev_mm) * 100) \
+                    if (_rvm is not None and _last_rev_mm not in (None, 0)) else None
+                for _li in line_items:
+                    if _li['label'] == 'Total Revenue':
+                        _li['values'].append(_rvm)
+                    elif _li is _f_rev_growth_row:
+                        _li['values'].append(_rev_growth)
+                    else:
+                        _li['values'].append(None)
+                if _rvm is not None: _last_rev_mm = _rvm
+
         _total_time = (_time.perf_counter() - _start) * 1000
         from utils.server_logger import log_warning as _slw
         _slw("[TIMING] KS_get_data | %.1fms | ticker=%s source=%s periods=%d line_items=%d fy=%.1f" % (
@@ -4913,6 +4956,125 @@ class ModelForecastsRepository:
             "model_keys": available_models,
             "scenario_keys": available_scenarios,
             "by_fy": by_fy,
+        }
+
+    # ── Quarterly siblings (read coreiq_model_forecasts_quarterly) ──────────────
+    _QUARTER_END = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+    # Quarterly adds the seasonal-naive model on top of the six annual models.
+    _QUARTERLY_MODEL_ORDER = ["ensemble", "linear", "cagr", "exp_smoothing",
+                              "holt", "ma_trend", "weighted_avg", "seasonal_naive"]
+    _QUARTERLY_MODEL_LABELS = {**_MODEL_LABELS, "seasonal_naive": "Seasonal Naive"}
+
+    @staticmethod
+    @st.cache_data(ttl=300, show_spinner=False)
+    def get_quarterly_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
+        ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
+        rows = db_manager.execute_query_readonly(
+            """
+            SELECT MIN(fiscal_year) AS mn_y, MAX(fiscal_year) AS mx_y
+            FROM coreiq_model_forecasts_quarterly WHERE ticker = :ticker
+            """,
+            {"ticker": ticker})
+        if rows and rows[0]["mn_y"] and rows[0]["mx_y"]:
+            return date(int(rows[0]["mn_y"]), 1, 1), date(int(rows[0]["mx_y"]), 12, 31)
+        return None, None
+
+    @staticmethod
+    @st.cache_data(ttl=300, show_spinner=False)
+    def get_quarterly_available_dates(ticker: str) -> List[date]:
+        ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
+        rows = db_manager.execute_query_readonly(
+            """
+            SELECT DISTINCT fiscal_year, fiscal_quarter
+            FROM coreiq_model_forecasts_quarterly WHERE ticker = :ticker
+            ORDER BY fiscal_year ASC, fiscal_quarter ASC
+            """,
+            {"ticker": ticker})
+        out = []
+        for r in rows:
+            m, d = ModelForecastsRepository._QUARTER_END.get(int(r["fiscal_quarter"]), (12, 31))
+            out.append(date(int(r["fiscal_year"]), m, d))
+        return out
+
+    @staticmethod
+    @st.cache_data(ttl=300, show_spinner=False)
+    def get_quarterly_forecasts_data(ticker: str, max_quarters: int = 8) -> Dict[str, Any]:
+        """Quarterly forecast data; sections has Revenue Forecast + Scenario Analysis,
+        one row per model, columns = the nearest `max_quarters` quarters."""
+        ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
+        rows = db_manager.execute_query_readonly(
+            """
+            SELECT fiscal_year, fiscal_quarter, model_key, value_millions,
+                   is_best_model, is_ensemble, mape, last_actual_date
+            FROM coreiq_model_forecasts_quarterly
+            WHERE ticker = :ticker AND metric = 'total_revenue'
+            ORDER BY fiscal_year ASC, fiscal_quarter ASC, model_key ASC
+            """,
+            {"ticker": ticker})
+        if not rows:
+            return {"periods": [], "sections": [], "reported_currency": "USD",
+                    "last_actual_date": None, "historical_rows": []}
+
+        all_periods = sorted({(int(r["fiscal_year"]), int(r["fiscal_quarter"])) for r in rows})[:max_quarters]
+        period_set = set(all_periods)
+        by_period: Dict[tuple, Dict[str, Any]] = {}
+        last_actual_date = None
+        for r in rows:
+            key = (int(r["fiscal_year"]), int(r["fiscal_quarter"]))
+            if key not in period_set:
+                continue
+            by_period.setdefault(key, {})[r["model_key"]] = r
+            if r.get("last_actual_date") and last_actual_date is None:
+                last_actual_date = r["last_actual_date"]
+                if hasattr(last_actual_date, "date"):
+                    last_actual_date = last_actual_date.date()
+
+        periods = [{"date": date(y, *ModelForecastsRepository._QUARTER_END.get(q, (12, 31))),
+                    "label": f"Q{q} {y}", "fiscal_year": y, "fiscal_quarter": q}
+                   for (y, q) in all_periods]
+
+        available_models = [mk for mk in ModelForecastsRepository._QUARTERLY_MODEL_ORDER
+                            if any(by_period.get(p, {}).get(mk) for p in all_periods)]
+        available_scenarios = [mk for mk in ModelForecastsRepository._SCENARIO_ORDER
+                               if any(by_period.get(p, {}).get(mk) for p in all_periods)]
+
+        def _build_rows(keys, labels, ensemble_key="ensemble"):
+            rows_out = []
+            for mk in keys:
+                vals = []
+                for p in all_periods:
+                    rd = by_period.get(p, {}).get(mk)
+                    vals.append(float(rd["value_millions"]) if rd and rd.get("value_millions") is not None else None)
+                rows_out.append({
+                    "label": labels.get(mk, mk), "values": vals,
+                    "is_header": False, "is_bold": (mk == ensemble_key), "has_grey_sep": False,
+                    "is_currency": True, "is_eps": False, "is_count": False, "is_percent": False,
+                    "model_key": mk, "indent": 0 if mk == ensemble_key else 1,
+                })
+            return rows_out
+
+        model_rows = _build_rows(available_models, ModelForecastsRepository._QUARTERLY_MODEL_LABELS)
+        scenario_rows = _build_rows(available_scenarios, ModelForecastsRepository._SCENARIO_LABELS, ensemble_key="")
+
+        section_hdr = {"label": "Total Revenue Forecast", "values": [None] * len(all_periods),
+                       "is_header": True, "is_bold": True, "has_grey_sep": True,
+                       "is_currency": False, "is_eps": False, "is_count": False, "is_percent": False, "indent": 0}
+        scenario_hdr = {"label": "Scenario Analysis", "values": [None] * len(all_periods),
+                        "is_header": True, "is_bold": True, "has_grey_sep": True,
+                        "is_currency": False, "is_eps": False, "is_count": False, "is_percent": False, "indent": 0}
+
+        sections = [[section_hdr] + model_rows]
+        if scenario_rows:
+            sections.append([scenario_hdr] + scenario_rows)
+
+        return {
+            "periods": periods,
+            "sections": sections,
+            "reported_currency": "USD",
+            "last_actual_date": last_actual_date,
+            "historical_rows": [],
+            "model_keys": available_models,
+            "scenario_keys": available_scenarios,
         }
 
 
@@ -7459,8 +7621,51 @@ class EarningsCalendarRepository:
             ) ranked
             WHERE rn = 1
         """
-        # RAISES on timeout/error — @st.cache_data will not cache error states
-        rows = db_manager.execute_query_readonly_raising(query, params)
+        import time as _ectime
+        from concurrent.futures import ThreadPoolExecutor as _ECThreadPool
+        from utils.server_logger import log_timing as _ec_log_timing
+
+        # PERFORMANCE: the four data sources below are INDEPENDENT, so run them
+        # concurrently instead of back-to-back. On a cold cache the events query
+        # (~8.8s) and the fiscal-year-end map (~7.1s) used to serialize (~16s);
+        # in parallel the wall time is just the single slowest (~8.8s).
+        #   • events UNION  (slow, scales with date window)
+        #   • IR website lookup  (~1s)
+        #   • companies map  (cached, ~0)
+        #   • fiscal-year-end map  (~7s cold, cached 1h)
+        def _ec_run_events():
+            _t = _ectime.perf_counter()
+            r = db_manager.execute_query_readonly_raising(query, params)  # RAISES → cache skips errors
+            _ec_log_timing("EC_QUERY_SQL_UNION", (_ectime.perf_counter() - _t) * 1000,
+                           details=f"rows={len(r)} scope={'all' if not tickers else len(tickers)} "
+                                   f"dates={start_date}..{end_date}", level="WARNING")
+            return r
+
+        def _ec_run_ir():
+            _t = _ectime.perf_counter()
+            r = EarningsCalendarRepository._build_ir_website_lookup()
+            _ec_log_timing("EC_QUERY_IR_LOOKUP", (_ectime.perf_counter() - _t) * 1000, level="WARNING")
+            return r
+
+        def _ec_run_fye():
+            _t = _ectime.perf_counter()
+            r = EarningsCalendarRepository._get_fiscal_year_end_map()
+            _ec_log_timing("EC_QUERY_FYE_MAP", (_ectime.perf_counter() - _t) * 1000, level="WARNING")
+            return r
+
+        _t_par = _ectime.perf_counter()
+        with _ECThreadPool(max_workers=4) as _ec_pool:
+            _f_rows = _ec_pool.submit(_ec_run_events)
+            _f_ir   = _ec_pool.submit(_ec_run_ir)
+            _f_cm   = _ec_pool.submit(CompanyRepository.get_companies_map)
+            _f_fye  = _ec_pool.submit(_ec_run_fye)
+            rows          = _f_rows.result()
+            ir_lookup     = _f_ir.result()
+            companies_map = _f_cm.result()
+            fye_map       = _f_fye.result()
+        _ec_log_timing("EC_QUERY_PARALLEL_FETCH", (_ectime.perf_counter() - _t_par) * 1000,
+                       details=f"rows={len(rows)}", level="WARNING")
+
         if not rows:
             try:
                 from utils.server_logger import log_warning as _lw_opt
@@ -7470,16 +7675,7 @@ class EarningsCalendarRepository:
                 )
             except Exception:
                 pass
-        ir_lookup = EarningsCalendarRepository._build_ir_website_lookup()
-
-        # Load cached companies map for name lookup (FAST - no DB query!)
-        companies_map = CompanyRepository.get_companies_map()
-
-        # Load fiscal year end months per ticker from AV/YF overview.
-        # Used to correctly compute fiscal quarter number and fiscal year for
-        # companies whose fiscal year does NOT end in December.
-        # e.g. M and LULU have FYE = January: "Jan/2026" = Q4 of FY2025, not Q1 2026.
-        fye_map = EarningsCalendarRepository._get_fiscal_year_end_map()
+        _t_pyloop = _ectime.perf_counter()
 
         _MONTH_NAME_TO_NUM = {
             "january": 1, "february": 2, "march": 3, "april": 4,
@@ -7705,7 +7901,13 @@ class EarningsCalendarRepository:
                 "beat_miss": beat_miss,
                 "ir_website_url": ir_website_url,
             })
-        return _dedupe_close_events(results)
+        _ec_log_timing("EC_QUERY_PY_ROWLOOP", (_ectime.perf_counter() - _t_pyloop) * 1000,
+                       details=f"rows={len(results)}", level="WARNING")
+        _t_dedup = _ectime.perf_counter()
+        _final = _dedupe_close_events(results)
+        _ec_log_timing("EC_QUERY_PY_DEDUP", (_ectime.perf_counter() - _t_dedup) * 1000,
+                       details=f"in={len(results)} out={len(_final)}", level="WARNING")
+        return _final
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -7770,6 +7972,89 @@ class EarningsCalendarRepository:
                                  operation="_get_fiscal_year_end_map",
                                  context="fiscal year end map fetch failed — falling back to calendar quarters")
             return {}
+
+    @staticmethod
+    @st.cache_data(ttl=300, show_spinner=False)
+    @_log_query_time
+    def get_ma_completion_events() -> List[Dict[str, Any]]:
+        """Return COMPLETED M&A events for calendar overlay (additive to earnings).
+
+        Source: coreiq_company_events (canonical key-developments table), the same
+        table Screening uses. We surface ONLY genuine M&A *completion* dates:
+
+            event_category = 'M&A Activity'
+            event_subtype  = 'M&A Closing'      -- the "M&A Closing" key-dev type
+            ma_is_closed   = 1                  -- excludes announcement-only rows
+            ma_deal_type  <> 'spin-off'         -- spin-offs excluded (separate event)
+
+        This rule reproduces the data team's manual review (red = announcement
+        dates → excluded via ma_is_closed; yellow = spin-offs → excluded via
+        ma_deal_type) without any per-row curation, and re-runs live on the DB.
+
+        The earnings-calendar date-derivation logic is NOT touched — this is a
+        separate, parallel feed merged into the calendar at render time.
+
+        Returns list of dicts with keys:
+            id, ticker, company_name, earnings_date (the completion date),
+            ma_acquirer, ma_target, ma_deal_type, ma_transaction_value_usd_m,
+            ma_close_date, ma_announce_date, source, source_ref, headline
+        """
+        query = """
+            SELECT
+                e.event_id                       AS id,
+                e.ticker                         AS ticker,
+                COALESCE(c.name_coresight, e.ticker) AS company_name,
+                e.event_date                     AS event_date,
+                e.ma_acquirer                    AS ma_acquirer,
+                e.ma_target                      AS ma_target,
+                e.ma_deal_type                   AS ma_deal_type,
+                e.ma_transaction_value_usd_m     AS ma_transaction_value_usd_m,
+                e.ma_close_date                  AS ma_close_date,
+                e.ma_announce_date               AS ma_announce_date,
+                e.source                         AS source,
+                e.source_ref                     AS source_ref,
+                e.headline                       AS headline
+            FROM coreiq_company_events e
+            LEFT JOIN coreiq_companies c ON e.ticker = c.ticker
+            WHERE e.event_category = 'M&A Activity'
+              AND e.event_subtype  = 'M&A Closing'
+              AND e.is_active = 1
+              AND e.ma_is_closed = 1
+              AND (e.ma_deal_type IS NULL OR e.ma_deal_type <> 'spin-off')
+              AND e.event_date IS NOT NULL
+            ORDER BY e.event_date DESC, e.event_id DESC
+        """
+        try:
+            rows = db_manager.execute_query_readonly_raising(query, {})
+        except Exception as exc:
+            log_structured_error(
+                exc, page="repository", component="EarningsCalendarRepository",
+                operation="get_ma_completion_events",
+                context="M&A completion events fetch failed",
+            )
+            return []
+
+        events: List[Dict[str, Any]] = []
+        for r in rows:
+            t = r.get("ticker")
+            if not t:
+                continue
+            events.append({
+                "id":            r.get("id"),
+                "ticker":        t,
+                "company_name":  r.get("company_name") or t,
+                "earnings_date": r.get("event_date"),   # reuse key so shared filters work
+                "ma_acquirer":   r.get("ma_acquirer"),
+                "ma_target":     r.get("ma_target"),
+                "ma_deal_type":  r.get("ma_deal_type"),
+                "ma_value_usd_m": r.get("ma_transaction_value_usd_m"),
+                "ma_close_date": r.get("ma_close_date"),
+                "ma_announce_date": r.get("ma_announce_date"),
+                "source":        r.get("source"),
+                "source_ref":    r.get("source_ref"),
+                "headline":      r.get("headline"),
+            })
+        return events
 
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
@@ -9055,40 +9340,25 @@ class SegmentDataRepository:
         return any(kw in low for kw in SegmentDataRepository._GEO_KEYWORDS)
 
     @staticmethod
-    def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
-        """Process DB rows into CapIQ-style Business + Geographic tables."""
+    def _classify_segment_rows(
+        filtered: List[Dict[str, Any]],
+        years: List[int],
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        """Classify pre-fetched rows into (business_data, geo_data, metric_totals).
+
+        SINGLE SOURCE OF TRUTH for segment-member classification, shared by the
+        annual Segments tab (``_build_segment_tables_from_db``) AND the screening
+        segment values cache (``screening_service.build_segment_values_cache``),
+        so the screener can never drift from what the Segments tab shows. The
+        caller MUST pass ``filtered`` already ordered by (report_fiscal_year,
+        full_dimension_label, original_label, filing_date DESC) so the first-wins
+        ("only set when None") merge keeps the most recent filing's value. Rows
+        whose derived year is not in ``years`` are skipped. Pass non-dimensioned
+        rows (``_is_ndim=True``) to populate ``metric_totals``; omit them (the
+        cache path does) to leave it empty.
+        """
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
-
-        all_rows = SegmentDataRepository._fetch_all_db_rows(ticker)
-        if not all_rows:
-            return None  # Signal to fall back to edgartools
-
-        start_year, end_year = start_date.year, end_date.year
-        _get_ey = SegmentDataRepository._get_row_year
-        filtered = [r for r in all_rows if _get_ey(r) is not None and start_year <= _get_ey(r) <= end_year]
-
-        if not filtered:
-            return None
-
-        years = sorted(set(_get_ey(r) for r in filtered if _get_ey(r) is not None))
-
-        # Build period_dates
-        period_dates: Dict[int, date] = {}
-        for row in filtered:
-            yr = _get_ey(row)
-            pe = row.get('period_end')
-            if yr and pe and hasattr(pe, 'year'):
-                if yr not in period_dates or pe > period_dates[yr]:
-                    period_dates[yr] = pe
-
-        # Display-only dates for headers/dropdown: normalise to the company's
-        # fiscal-year-end month so the Segments tab matches Income Statement /
-        # Key Stats / Cash Flow. `period_dates` (raw period_end) is intentionally
-        # left untouched — it still drives revenue-total proximity matching below.
-        _fye_m = SegmentDataRepository._fye_month(ticker)
-        period_display_dates: Dict[int, date] = {
-            y: SegmentDataRepository._fye_display_date(y, _fye_m) for y in years
-        }
+        from data.segment_aliases import canonicalize_geo_label
 
         # Members this company reports on a genuine geographic axis (any metric, incl. non-monetary
         # warehouse/store counts). Used to confirm that a member recovered from a multi-dimensional
@@ -9149,6 +9419,12 @@ class SegmentDataRepository:
                     continue
             if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
                 continue
+            # Aggregate XBRL "operating segment" roll-up members ("Operating
+            # segment", "Total for operating segments", "Reportable Operating
+            # Segments", …) are totals/wrappers, never a real product or geo
+            # segment — they double-count, so drop them.
+            if "operating segment" in member_raw.lower():
+                continue
             member = SegmentDataRepository._title_case_member(member_raw)
             if not member:
                 continue
@@ -9157,6 +9433,12 @@ class SegmentDataRepository:
             else:
                 heading = SegmentDataRepository._get_heading(fdl)
                 section = SegmentDataRepository._classify_heading(heading)
+            # Canonicalise geographic labels so filing-to-filing drift collapses
+            # to one member (e.g. "United States Operations" → "United States",
+            # "Canadian Operations" → "Canada") — keeps the Segments tab and the
+            # screening cache from listing the same geography twice.
+            if section == "geo":
+                member = canonicalize_geo_label(member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
@@ -9168,6 +9450,50 @@ class SegmentDataRepository:
                     if target[metric_name][member][row_year] is None:
                         target[metric_name][member][row_year] = scaled
                     break
+
+        return biz_data, geo_data, metric_totals
+
+    @staticmethod
+    def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
+        """Process DB rows into CapIQ-style Business + Geographic tables."""
+        from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
+
+        all_rows = SegmentDataRepository._fetch_all_db_rows(ticker)
+        if not all_rows:
+            return None  # Signal to fall back to edgartools
+
+        start_year, end_year = start_date.year, end_date.year
+        _get_ey = SegmentDataRepository._get_row_year
+        filtered = [r for r in all_rows if _get_ey(r) is not None and start_year <= _get_ey(r) <= end_year]
+
+        if not filtered:
+            return None
+
+        years = sorted(set(_get_ey(r) for r in filtered if _get_ey(r) is not None))
+
+        # Build period_dates
+        period_dates: Dict[int, date] = {}
+        for row in filtered:
+            yr = _get_ey(row)
+            pe = row.get('period_end')
+            if yr and pe and hasattr(pe, 'year'):
+                if yr not in period_dates or pe > period_dates[yr]:
+                    period_dates[yr] = pe
+
+        # Display-only dates for headers/dropdown: normalise to the company's
+        # fiscal-year-end month so the Segments tab matches Income Statement /
+        # Key Stats / Cash Flow. `period_dates` (raw period_end) is intentionally
+        # left untouched — it still drives revenue-total proximity matching below.
+        _fye_m = SegmentDataRepository._fye_month(ticker)
+        period_display_dates: Dict[int, date] = {
+            y: SegmentDataRepository._fye_display_date(y, _fye_m) for y in years
+        }
+
+        # Classify rows into business / geo tables + consolidated metric_totals.
+        # Extracted to a shared method so the screening segment values cache builds
+        # from the EXACT same logic (wrapper-unwrap, geo-routing, first-wins) —
+        # single source of truth, no drift between the Segments tab and screener.
+        biz_data, geo_data, metric_totals = SegmentDataRepository._classify_segment_rows(filtered, years)
 
         # If we found absolutely nothing useful, signal fallback
         if not biz_data and not geo_data:

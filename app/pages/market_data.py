@@ -263,8 +263,14 @@ def get_available_period_types(ticker: str, tab: str) -> list:
     if tab == "ratings":
         return ["Annual"]
 
-    # Forecasting is always annual
+    # Forecasting: Annual always; Quarterly only when quarterly forecasts exist.
     if tab == "forecasting":
+        try:
+            from data.repository import ModelForecastsRepository
+            if ModelForecastsRepository.get_quarterly_date_range(ticker)[0] is not None:
+                return ["Annual", "Quarterly"]
+        except Exception:
+            pass
         return ["Annual"]
 
     # Estimates always have both (AV has both horizons; YF has quarterly and annual labels)
@@ -1894,8 +1900,12 @@ def render_page():
                 else:
                     min_date, max_date, available_dates = _est_min, _est_max, _est_dates
             elif selected_tab == "forecasting":
-                min_date, max_date = ModelForecastsRepository.get_date_range(selected_ticker)
-                available_dates = ModelForecastsRepository.get_available_dates(selected_ticker)
+                if _period_type_db == "quarterly":
+                    min_date, max_date = ModelForecastsRepository.get_quarterly_date_range(selected_ticker)
+                    available_dates = ModelForecastsRepository.get_quarterly_available_dates(selected_ticker)
+                else:
+                    min_date, max_date = ModelForecastsRepository.get_date_range(selected_ticker)
+                    available_dates = ModelForecastsRepository.get_available_dates(selected_ticker)
             else:
                 min_date, max_date = IncomeStatementRepository.get_date_range(selected_ticker, _period_type_db)
                 available_dates = IncomeStatementRepository.get_available_dates(selected_ticker, _period_type_db)
@@ -3858,8 +3868,13 @@ def render_page():
         _t0_tab = _time.perf_counter()
         try:
             _t0 = _time.perf_counter()
-            _fcst_data = ModelForecastsRepository.get_forecasts_data(selected_ticker)
+            _is_quarterly_fcst = _period_type_db == "quarterly"
+            if _is_quarterly_fcst:
+                _fcst_data = ModelForecastsRepository.get_quarterly_forecasts_data(selected_ticker, max_quarters=8)
+            else:
+                _fcst_data = ModelForecastsRepository.get_forecasts_data(selected_ticker)
             _timings['forecasting_fetch'] = (_time.perf_counter() - _t0) * 1000
+            _fcst_period_label = "Quarterly" if _is_quarterly_fcst else "Annual"
 
             _fcst_periods  = _fcst_data.get("periods", [])
             _fcst_sections = _fcst_data.get("sections", [])
@@ -3874,7 +3889,7 @@ def render_page():
 
             if _fcst_periods and _fcst_sections:
                 # ── HTML table (with session-state cache) ─────────────────
-                _fcst_ck = f"_fcst_html_v3_{selected_ticker}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}"
+                _fcst_ck = f"_fcst_html_v3_{selected_ticker}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}"
                 _fcst_cached = st.session_state.get(_fcst_ck)
                 if _fcst_cached is not None:
                     st.html(_fcst_cached)
@@ -3900,10 +3915,13 @@ def render_page():
                               + (f' Last actual: {_last_actual.strftime("%b %d, %Y")}' if _last_actual else '')
                               + '</span></th>']
                     for _p in _fcst_periods:
-                        _lbl = str(_p.get("fiscal_year", _p.get("label", "")))
+                        if _is_quarterly_fcst:
+                            _lbl = str(_p.get("label", ""))
+                        else:
+                            _lbl = str(_p.get("fiscal_year", _p.get("label", "")))
                         _parts.append(
                             f'<th class="data-col fcst-tab-col">'
-                            f'<span class="period-label">Annual</span>'
+                            f'<span class="period-label">{_fcst_period_label}</span>'
                             f'<span class="period-date">{_lbl}</span></th>'
                         )
                     _parts.append('</tr></thead><tbody>')
@@ -3961,7 +3979,7 @@ def render_page():
                     '<strong>Ensemble</strong> blends the top-3 backtested models '
                     '(by lowest MAPE (Mean Absolute Percentage Error)). '
                     'Scenario band shows the pessimistic–optimistic range. Only Total Revenue is forecasted. '
-                    f'<a href="/forecasting?ticker={selected_ticker}" target="_blank" rel="noopener noreferrer" '
+                    f'<a href="/forecasting?ticker={selected_ticker}&period_type={_fcst_period_label}" target="_blank" rel="noopener noreferrer" '
                     'style="color:#1B6B24;font-weight:700;text-decoration:none;'
                     'border-bottom:1.5px solid rgba(27,107,36,0.4);'
                     'transition:border-color 0.15s;cursor:pointer;">'

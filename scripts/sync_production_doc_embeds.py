@@ -54,52 +54,51 @@ def rebuild_verification(entries: list[dict]) -> None:
 
 
 def rebuild_gaps() -> None:
-    all_ann = {p.name for p in V2.glob("*-annotated.png")}
+    all_ann = sorted(p.name for p in V2.glob("*-annotated.png"))
     still_missing = []
     for base, reason in STAGING_ONLY.items():
         ann = base.replace(".png", "-annotated.png")
         if ann not in all_ann:
             still_missing.append((ann, reason))
 
-    prod_count = len([a for a in all_ann if not any(a.startswith(k.replace(".png", "")) for k in STAGING_ONLY)])
     text = f"""# Business documentation — screenshot inventory
 
-Last updated: 2026-06-27 (production MDP capture run)
+Last updated: 2026-06-30 (rebuild — numbers-only badges)
 
-## Production capture (this run)
+## Status
 
-Automated via `scripts/capture_production_screenshots.py` against **https://marketdata.coresight.com/**.
+- **Annotated screenshots:** {len(all_ann)} `-annotated.png` files in `_screenshots/v2/`
+- **Annotation style:** Red numbered circle badges in left margin only (no arrows)
+- **Production capture:** See `REBUILD-REPORT.md` for login test and capture source
 
-- **Captured and annotated:** {len(all_ann)} total `-annotated.png` files in `_screenshots/v2/`
-- **Production-authenticated pages:** login, home (gaps), market-data tabs, earnings calls/calendar, forecasting, company filings, access management, live earnings transcript
-- **Login account used:** Coresight SSO (alternate spelling email; primary spelling rejected by IdP)
+Regenerate captures (production, when reachable):
 
-Regenerate captures: `MDP_EMAIL=... MDP_PASSWORD=... .venv/bin/python scripts/capture_production_screenshots.py`
+```bash
+MDP_EMAIL=... MDP_PASSWORD=... .venv/bin/python scripts/capture_production_screenshots.py
+```
+
+Local staging DB capture (when production DNS unreachable):
+
+```bash
+MDP_BASE_URL=http://localhost:8501 .venv/bin/python scripts/capture_production_screenshots.py --no-auth --skip-login-captures
+```
+
+Re-annotate all badges:
+
+```bash
+.venv/bin/python scripts/batch_annotate_business_screenshots.py
+```
 
 ---
 
-## User-provided batch (prior run)
+## Staging-only admin pages
 
-30 user PNGs → 31 annotated outputs (home, newsroom, screening). See git history for mapping.
-
----
-
-## Remaining gaps
-
-| Annotated file | Reason |
+| Annotated file | Notes |
 |----------------|--------|
-| `retailer-adding-annotated.png` | {STAGING_ONLY['retailer-adding.png']} |
-| `company-filings-add-files-annotated.png` | {STAGING_ONLY['company-filings-add-files.png']} |
+| `retailer-adding-annotated.png` | Capture on staging/local when prod redirects to Home |
+| `company-filings-add-files-annotated.png` | Capture on staging/local when prod redirects to Home |
 
-**Gap count:** {len(still_missing)} annotated files still needed (capture on **staging** MDP or waive).
-
----
-
-## Fixed this run
-
-- Added `scripts/capture_production_screenshots.py` — OIDC login, validation, arrow annotation
-- Filled **{len(all_ann) - 31}** new production screenshots (31 from prior user batch retained)
-- Updated business guides with v2 embeds; regenerated merged + individual PDFs
+**Gap count:** {len(still_missing)} (0 when both admin PNGs exist in v2/)
 """
     GAPS.write_text(text, encoding="utf-8")
 

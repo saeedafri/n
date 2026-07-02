@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
-"""Add numbered badge + curved arrow callouts to business documentation screenshots.
+"""Add numbered badge callouts to business documentation screenshots.
 
 Each callout draws:
-  1. Numbered badge circle (①②③ or 1,2,3) in the margin
-  2. Curved (quadratic bezier) arrow from badge to target point
-  3. Optional short label text beside the badge
+  1. Red numbered circle badge (①②③) in the left margin
+  2. Optional short label text beside the badge
 
-NO bounding boxes — arrows only.
+NO arrows, NO curved lines, NO bounding boxes.
 
 Usage:
   .venv/bin/python scripts/annotate_business_screenshot.py input.png -o output.png \\
-      --arrow "80,120,280,145,1,Email field" \\
-      --arrow "80,200,280,225,2,Password"
+      --badge "80,120,1,Email field" \\
+      --badge "80,200,2,Password"
 
-Arrow format: badge_x,badge_y,target_x,target_y,number[,label]
-  - badge_x,badge_y   = badge position (left/top margin, clear of content)
-  - target_x,target_y = arrow tip lands ON the target control center
-  - number            = callout number (1-15 → circled digits)
-  - label             = optional short text beside badge
+Badge format: badge_x,badge_y,number[,label]
+  - badge_x,badge_y = badge center in left margin (clear of main content)
+  - number          = callout number (1-15 → circled digits)
+  - label           = optional short text beside badge
+
+Legacy arrow format (target coords ignored): badge_x,badge_y,number,target_x,target_y[,label]
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,21 +30,16 @@ from PIL import Image, ImageDraw, ImageFont
 
 CIRCLED_NUMBERS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
 RED = (214, 46, 47, 255)
-ARROW_COLOR = (214, 46, 47, 230)
 WHITE = (255, 255, 255, 255)
 BADGE_TEXT = (255, 255, 255, 255)
 LABEL_TEXT = (40, 40, 40, 255)
 BADGE_RADIUS = 18
-ARROW_WIDTH = 2
-BEZIER_SAMPLES = 32
 
 
 @dataclass(frozen=True)
-class ArrowCallout:
-    sx: int
-    sy: int
-    tx: int
-    ty: int
+class BadgeCallout:
+    x: int
+    y: int
     num: int
     label: str = ""
 
@@ -69,96 +63,17 @@ def _circled_label(num: int) -> str:
     return str(num)
 
 
-def _edge_point_from_center(
-    cx: float,
-    cy: float,
-    tx: float,
-    ty: float,
-    radius: float,
-) -> tuple[float, float]:
-    dx, dy = tx - cx, ty - cy
-    length = math.hypot(dx, dy)
-    if length < 1:
-        return cx, cy
-    return cx + dx * radius / length, cy + dy * radius / length
-
-
-def _quadratic_bezier(
-    p0: tuple[float, float],
-    p1: tuple[float, float],
-    p2: tuple[float, float],
-    samples: int = BEZIER_SAMPLES,
-) -> list[tuple[float, float]]:
-    points: list[tuple[float, float]] = []
-    for i in range(samples + 1):
-        t = i / samples
-        u = 1 - t
-        x = u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0]
-        y = u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]
-        points.append((x, y))
-    return points
-
-
-def _control_point(
-    start: tuple[float, float],
-    end: tuple[float, float],
-    curvature: float = 0.35,
-) -> tuple[float, float]:
-    mx = (start[0] + end[0]) / 2
-    my = (start[1] + end[1]) / 2
-    dx = end[0] - start[0]
-    dy = end[1] - start[1]
-    length = math.hypot(dx, dy) or 1.0
-    nx, ny = -dy / length, dx / length
-    offset = length * curvature
-    return mx + nx * offset, my + ny * offset
-
-
-def _draw_arrowhead(
+def _draw_badge(
     draw: ImageDraw.ImageDraw,
-    tip: tuple[float, float],
-    prev: tuple[float, float],
-    color: tuple[int, int, int, int],
-    size: float = 11,
-) -> None:
-    angle = math.atan2(tip[1] - prev[1], tip[0] - prev[0])
-    left = (
-        tip[0] - size * math.cos(angle - math.pi / 7),
-        tip[1] - size * math.sin(angle - math.pi / 7),
-    )
-    right = (
-        tip[0] - size * math.cos(angle + math.pi / 7),
-        tip[1] - size * math.sin(angle + math.pi / 7),
-    )
-    draw.polygon([tip, left, right], fill=color)
-
-
-def _draw_callout(
-    draw: ImageDraw.ImageDraw,
-    callout: ArrowCallout,
+    callout: BadgeCallout,
     badge_font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     label_font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
 ) -> None:
-    target = (float(callout.tx), float(callout.ty))
-    badge_edge = _edge_point_from_center(
-        callout.sx,
-        callout.sy,
-        target[0],
-        target[1],
-        BADGE_RADIUS + 2,
-    )
-    control = _control_point(badge_edge, target, curvature=0.38)
-    curve = _quadratic_bezier(badge_edge, control, target)
-
-    for i in range(len(curve) - 1):
-        draw.line([curve[i], curve[i + 1]], fill=ARROW_COLOR, width=ARROW_WIDTH)
-    _draw_arrowhead(draw, curve[-1], curve[-2], ARROW_COLOR)
-
     badge_bbox = (
-        callout.sx - BADGE_RADIUS,
-        callout.sy - BADGE_RADIUS,
-        callout.sx + BADGE_RADIUS,
-        callout.sy + BADGE_RADIUS,
+        callout.x - BADGE_RADIUS,
+        callout.y - BADGE_RADIUS,
+        callout.x + BADGE_RADIUS,
+        callout.y + BADGE_RADIUS,
     )
     draw.ellipse(badge_bbox, fill=RED, outline=WHITE, width=2)
 
@@ -167,36 +82,22 @@ def _draw_callout(
     tw = text_bbox[2] - text_bbox[0]
     th = text_bbox[3] - text_bbox[1]
     draw.text(
-        (callout.sx - tw / 2, callout.sy - th / 2 - 1),
+        (callout.x - tw / 2, callout.y - th / 2 - 1),
         text,
         fill=BADGE_TEXT,
         font=badge_font,
     )
 
     if callout.label:
-        label_x = callout.sx + BADGE_RADIUS + 8
-        label_y = callout.sy - 8
-        pad_x, pad_y = 6, 3
-        lb = draw.textbbox((label_x, label_y), callout.label, font=label_font)
-        draw.rounded_rectangle(
-            (
-                lb[0] - pad_x,
-                lb[1] - pad_y,
-                lb[2] + pad_x,
-                lb[3] + pad_y,
-            ),
-            radius=4,
-            fill=(255, 255, 255, 220),
-            outline=RED,
-            width=1,
-        )
+        label_x = callout.x + BADGE_RADIUS + 8
+        label_y = callout.y - 8
         draw.text((label_x, label_y), callout.label, fill=LABEL_TEXT, font=label_font)
 
 
 def annotate(
     input_path: Path,
     output_path: Path,
-    callouts: list[ArrowCallout],
+    callouts: list[BadgeCallout],
 ) -> None:
     base = Image.open(input_path).convert("RGBA")
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
@@ -205,28 +106,25 @@ def annotate(
     label_font = _load_font(13)
 
     for callout in callouts:
-        _draw_callout(draw, callout, badge_font, label_font)
+        _draw_badge(draw, callout, badge_font, label_font)
 
     composed = Image.alpha_composite(base, overlay)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     composed.convert("RGB").save(output_path, format="PNG", optimize=True)
 
 
-def _parse_arrow(raw: str) -> ArrowCallout:
+def _parse_badge(raw: str) -> BadgeCallout:
     parts = [p.strip() for p in raw.split(",")]
-    if len(parts) < 5:
+    if len(parts) < 3:
         raise argparse.ArgumentTypeError(
-            f"Arrow must be badge_x,badge_y,target_x,target_y,number[,label] — got {raw!r}"
+            f"Badge must be badge_x,badge_y,number[,label] — got {raw!r}"
         )
-    label = ",".join(parts[5:]) if len(parts) > 5 else ""
-    return ArrowCallout(
-        sx=int(parts[0]),
-        sy=int(parts[1]),
-        tx=int(parts[2]),
-        ty=int(parts[3]),
-        num=int(parts[4]),
-        label=label,
-    )
+    # Legacy arrow format: bx,by,num,tx,ty[,label]
+    if len(parts) >= 5 and parts[3].lstrip("-").isdigit() and parts[4].lstrip("-").isdigit():
+        label = ",".join(parts[5:]) if len(parts) > 5 else ""
+        return BadgeCallout(x=int(parts[0]), y=int(parts[1]), num=int(parts[2]), label=label)
+    label = ",".join(parts[3:]) if len(parts) > 3 else ""
+    return BadgeCallout(x=int(parts[0]), y=int(parts[1]), num=int(parts[2]), label=label)
 
 
 def main() -> None:
@@ -239,23 +137,32 @@ def main() -> None:
         help="Output PNG path (default: <input>-annotated.png)",
     )
     parser.add_argument(
+        "--badge",
+        action="append",
+        type=_parse_badge,
+        default=[],
+        dest="badges",
+        help='Badge as "badge_x,badge_y,number[,label]"',
+    )
+    parser.add_argument(
         "--arrow",
         action="append",
-        type=_parse_arrow,
+        type=_parse_badge,
         default=[],
-        dest="arrows",
-        help='Arrow as "badge_x,badge_y,target_x,target_y,number[,label]"',
+        dest="legacy_arrows",
+        help="Deprecated alias for --badge (target coords ignored)",
     )
     args = parser.parse_args()
 
-    if not args.arrows:
-        parser.error("At least one --arrow is required")
+    badges = args.badges + args.legacy_arrows
+    if not badges:
+        parser.error("At least one --badge is required")
 
     output = args.output or args.input.with_name(
         f"{args.input.stem}-annotated{args.input.suffix}"
     )
-    annotate(args.input, output, args.arrows)
-    print(json.dumps({"input": str(args.input), "output": str(output), "count": len(args.arrows)}))
+    annotate(args.input, output, badges)
+    print(json.dumps({"input": str(args.input), "output": str(output), "count": len(badges)}))
 
 
 if __name__ == "__main__":

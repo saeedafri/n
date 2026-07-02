@@ -687,20 +687,50 @@ def _complete_oidc_login(token_data: Dict[str, Any]) -> None:
 
     if not user_email or not user_email.lower().endswith("@coresight.com"):
         slog_error(f"[OIDC] access denied — email={user_email!r}")
-        # Clear all OIDC callback state to prevent infinite loop
+
+        # ======================================================================
+        # CRITICAL: Mark this code as DENIED to prevent infinite reprocessing
+        # ======================================================================
+        _denied_code = st.session_state.get("__oidc_processing_code") or _cb_code
+        if _denied_code:
+            _denied_dict = st.session_state.get("__oidc_denied_codes_dict", {})
+            _denied_dict[_denied_code] = True
+            st.session_state["__oidc_denied_codes_dict"] = _denied_dict
+            slog_warning(f"[OIDC_DENY] marked code as denied | code={_denied_code[:16]}... | denied_codes_count={len(_denied_dict)}")
+
+        # Clear all OIDC processing state to prevent re-entry
         for _key in [
-            "__oidc_cb_code", "__oidc_cb_state", "__oidc_cb_error",
-            "__oidc_cb_error_desc", "__oidc_cb_captured", "__oidc_processing_code",
-            "__oidc_processing_started_at", "__completed_oidc_handoff_key",
-            "__completed_oidc_handoff_token_data", "__failed_oidc_handoff_key",
-            "__completed_oidc_post_logout_key"
+            "__oidc_processing_code",
+            "__oidc_processing_started_at",
+            "__completed_oidc_code",
+            "__completed_oidc_token_data",
+            "__oidc_exchange_result",
         ]:
             st.session_state.pop(_key, None)
-        st.session_state.pop("_auth_invalidated", None)
-        st.error("❌ Access Denied: Only Coresight employees (@coresight.com) can access this portal. Please try again with your Coresight email.")
-        st.info("Redirecting to login page in 2 seconds...")
-        sleep(2)
-        st.switch_page("pages/login.py")
+
+        slog_warning(f"[OIDC_DENY] access denied | user={user_email} | logging_out_from_idp")
+        # CRITICAL: Redirect to IdP logout to clear the user's session at coresight.com
+        # Otherwise the IdP will keep returning codes for the same user on next login attempt
+
+        # Build logout URL with id_token_hint for proper IdP logout
+        id_token = token_data.get("id_token", "") if isinstance(token_data, dict) else ""
+        logout_params = {"post_logout_redirect_uri": OIDC_REDIRECT_URI}
+        if id_token:
+            logout_params["id_token_hint"] = id_token
+            slog_warning(f"[OIDC_DENY] id_token found for logout hint")
+        else:
+            slog_warning(f"[OIDC_DENY] WARNING: id_token NOT found - IdP logout may not work properly")
+
+        query_string = urlencode(logout_params)
+        idp_logout_url = f"{IDP_BASE_URL}/csr-idp/logout/?{query_string}"
+        slog_warning(f"[OIDC_DENY] IdP logout URL built | url={idp_logout_url[:100]}...")
+
+        # Use meta refresh (DOMPurify allows it, unlike scripts)
+        st.markdown(
+            f'<meta http-equiv="refresh" content="0; url={idp_logout_url}">',
+            unsafe_allow_html=True
+        )
+        slog_warning(f"[OIDC_DENY] meta refresh logout redirect injected")
         st.stop()
 
     login_start = perf_counter()
@@ -1090,6 +1120,19 @@ if IS_OIDC_ENV:
             st.session_state.pop(_k, None)
 
     elif _cb_code:
+        # ════════════════════════════════════════════════════════════════
+        # CHECK: Has this code been previously denied? If so, redirect away.
+        # ════════════════════════════════════════════════════════════════
+        _denied_dict = st.session_state.get("__oidc_denied_codes_dict", {})
+        if _cb_code in _denied_dict:
+            slog_warning(f"[OIDC] SKIPPING previously denied code | code={_cb_code[:16]}... | reason=access_denied | redirecting_to_login")
+            # Use HTML meta refresh to redirect back to login (removes code/state from URL)
+            st.markdown(
+                '<meta http-equiv="refresh" content="0; url=/">',
+                unsafe_allow_html=True
+            )
+            st.stop()
+
         _completed = st.session_state.get("__completed_oidc_code")
         _processing = st.session_state.get("__oidc_processing_code")
         _cached_state_payload = _decode_state_payload(_cb_state or "") if _cb_state else None

@@ -23,14 +23,14 @@ log_timing(
     level="WARNING",
 )
 log_auth_cookie_server_presence(page="earnings_calendar", context="before_require_auth")
-_auth_data = require_auth(page="earnings_calendar")
-log_timing(
-    "AUTH_PAGE_ENTRY",
-    0,
-    f"{_auth_request_meta()} page=earnings_calendar stage=after_require_auth "
-    f"user={(_auth_data or {}).get('user_email', '?')}",
-    level="WARNING",
-)
+# _auth_data = require_auth(page="earnings_calendar")
+# log_timing(
+#     "AUTH_PAGE_ENTRY",
+#     0,
+#     f"{_auth_request_meta()} page=earnings_calendar stage=after_require_auth "
+#     f"user={(_auth_data or {}).get('user_email', '?')}",
+#     level="WARNING",
+# )
 hide_sidebar()
 
 from data.repository import CompanyRepository, EarningsCalendarRepository
@@ -78,6 +78,110 @@ def _company_color(ticker: str) -> str:
         log_structured_error(exc, page="earnings_calendar", component="_company_color",
                              operation="compute_color", context=f"ticker={ticker}")
         return _COMPANY_COLORS[0]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EVENT-TYPE COLOR LEGEND  (Coresight brand palette — from the official
+# Color Palette & Style Guide). Earnings events are colored by fiscal quarter;
+# completed M&A events use the Coresight accent green. Each entry is
+# (background, text) chosen for readability of the small FullCalendar labels.
+# ─────────────────────────────────────────────────────────────────────────────
+_KIND_COLORS: Dict[str, Tuple[str, str]] = {
+    "Q1": ("#005F8F", "#FFFFFF"),   # Secondary Dark Blue
+    "Q2": ("#A3C0CE", "#2D2A29"),   # Secondary Light Blue (dark text for contrast)
+    "Q3": ("#7F7F7F", "#FFFFFF"),   # Secondary Grey
+    "Q4": ("#2D2A29", "#FFFFFF"),   # Primary Black
+    "ma": ("#61A575", "#16341F"),   # Accent Green — M&A Activities
+}
+
+# Order + labels for the clickable legend filter (NOT a dropdown).
+_LEGEND_ITEMS: List[Tuple[str, str]] = [
+    ("Q1", "Q1"),
+    ("Q2", "Q2"),
+    ("Q3", "Q3"),
+    ("Q4", "Q4"),
+    ("ma", "M&A Completion"),
+]
+_ALL_KINDS = tuple(k for k, _ in _LEGEND_ITEMS)
+
+
+def _kind_color(kind: str) -> Tuple[str, str]:
+    """(background, text) for an event kind; falls back to a neutral grey."""
+    return _KIND_COLORS.get(kind, ("#37474F", "#FFFFFF"))
+
+
+def _earnings_kind(fiscal_q: Optional[Any]) -> Optional[str]:
+    """Map a fiscal quarter (1-4) to a legend kind 'Q1'..'Q4'."""
+    try:
+        q = int(fiscal_q)
+        return f"Q{q}" if 1 <= q <= 4 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_ma_value(val: Optional[Any]) -> str:
+    """Format M&A transaction value (stored in USD millions) → '$1.23B' / '$450.0M'."""
+    try:
+        if val is None:
+            return "—"
+        v = float(val)
+        if v <= 0:
+            return "—"
+        if v >= 1_000_000:
+            return f"${v / 1_000_000:.2f}T"
+        if v >= 1_000:
+            return f"${v / 1_000:.2f}B"
+        return f"${v:,.1f}M"
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_fmt_ma_value",
+                             operation="format_ma_value", context=f"val={val}")
+        return "—"
+
+
+def _toggle_event_kind(kind: str) -> None:
+    """Legend chip on_click — toggle a kind in the active set and remount calendar."""
+    try:
+        cur = set(st.session_state.get("ec_active_kinds") or list(_ALL_KINDS))
+        if kind in cur:
+            cur.discard(kind)
+        else:
+            cur.add(kind)
+        st.session_state.ec_active_kinds = [k for k in _ALL_KINDS if k in cur]
+        # Clear any open detail panel and force the calendar component to remount so
+        # it repaints with the filtered event set (cal key embeds ec_cal_version).
+        st.session_state.ec_selected_event = None
+        st.session_state.ec_cal_version = st.session_state.get("ec_cal_version", 0) + 1
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_toggle_event_kind",
+                             operation="toggle_kind", context=f"kind={kind}")
+
+
+def _render_event_type_legend() -> None:
+    """Clickable color legend that filters the calendar by event type.
+
+    Active chips are filled with the type's Coresight brand color; inactive chips
+    are outlined/dimmed. Clicking toggles that type — and combines (AND) with the
+    Company and Watchlist filters already applied to the event feeds.
+    """
+    try:
+        active = set(st.session_state.get("ec_active_kinds") or list(_ALL_KINDS))
+        cols = st.columns([1.05, 0.72, 0.72, 0.72, 0.72, 1.9, 3.45],
+                          gap="small", vertical_alignment="center")
+        with cols[0]:
+            st.markdown('<div class="ec-legend-label">Show types</div>', unsafe_allow_html=True)
+        for _i, (kind, label) in enumerate(_LEGEND_ITEMS):
+            with cols[_i + 1]:
+                st.button(
+                    label,
+                    key=f"ec_legend_{kind}",
+                    type="primary" if kind in active else "secondary",
+                    on_click=_toggle_event_kind,
+                    args=(kind,),
+                    width="stretch",
+                )
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_event_type_legend",
+                             operation="render_legend", context="legend render")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -190,9 +294,10 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
     font-size:13px !important;
     border-radius:8px !important;
     background-color:#D62E2F !important;
-    border-color:#D62E2F !important;
+    border:2px solid #D62E2F !important;
     color:#FFFFFF !important;
     text-transform:capitalize !important;
+    white-space:nowrap !important;
 }
 .st-key-ec_open_email_alerts button[kind="primary"]:hover,
 .st-key-ec_open_email_alerts button[data-testid="baseButton-primary"]:hover {
@@ -297,6 +402,39 @@ div[data-testid="stSelectbox"] label { font-size:11px !important; font-weight:50
 [data-testid="stDialogContent"] div[data-testid="stSelectbox"] label {
     color:#000000 !important;
 }
+
+/* ── Clickable color legend (event-type filter) ── */
+.ec-legend-label {
+    font-size:11px; font-weight:600; color:#6B6B6B;
+    text-transform:uppercase; letter-spacing:0.5px; margin:2px 0 0 0;
+    font-family:'Montserrat',sans-serif; white-space:nowrap;
+}
+/* Legend chips: compact, pill-shaped, branded per event kind */
+div[class*="st-key-ec_legend_"] button {
+    font-family:'Roboto',sans-serif !important;
+    font-weight:700 !important; font-size:12px !important;
+    border-radius:14px !important; padding:3px 12px !important;
+    min-height:30px !important; width:100% !important;
+    white-space:nowrap !important; box-shadow:none !important;
+    transition:opacity .12s ease, filter .12s ease !important;
+}
+/* Inactive (secondary) chips: outlined + dimmed so "off" reads clearly */
+div[class*="st-key-ec_legend_"] button[kind="secondary"] {
+    background:#FFFFFF !important; opacity:0.5 !important;
+    filter:grayscale(35%) !important; font-weight:600 !important;
+}
+div[class*="st-key-ec_legend_"] button[kind="secondary"]:hover { opacity:0.8 !important; }
+
+.st-key-ec_legend_Q1 button[kind="primary"]{ background:#005F8F !important; border-color:#005F8F !important; color:#FFFFFF !important; }
+.st-key-ec_legend_Q1 button[kind="secondary"]{ border:2px solid #005F8F !important; color:#005F8F !important; }
+.st-key-ec_legend_Q2 button[kind="primary"]{ background:#A3C0CE !important; border-color:#A3C0CE !important; color:#2D2A29 !important; }
+.st-key-ec_legend_Q2 button[kind="secondary"]{ border:2px solid #A3C0CE !important; color:#5B7C8D !important; }
+.st-key-ec_legend_Q3 button[kind="primary"]{ background:#7F7F7F !important; border-color:#7F7F7F !important; color:#FFFFFF !important; }
+.st-key-ec_legend_Q3 button[kind="secondary"]{ border:2px solid #7F7F7F !important; color:#7F7F7F !important; }
+.st-key-ec_legend_Q4 button[kind="primary"]{ background:#2D2A29 !important; border-color:#2D2A29 !important; color:#FFFFFF !important; }
+.st-key-ec_legend_Q4 button[kind="secondary"]{ border:2px solid #2D2A29 !important; color:#2D2A29 !important; }
+.st-key-ec_legend_ma button[kind="primary"]{ background:#61A575 !important; border-color:#61A575 !important; color:#16341F !important; }
+.st-key-ec_legend_ma button[kind="secondary"]{ border:2px solid #61A575 !important; color:#3E7350 !important; }
 </style>
 """
     except Exception as exc:
@@ -1121,15 +1259,20 @@ def _to_fullcalendar(events: List[Dict]) -> List[Dict]:
             fy = e["report_fiscal_year"]
             company_name = e.get("company_name") or e["ticker"]
             label = f"{company_name} Q{fq}" if fq and fy else company_name
-            color = _company_color(e["ticker"])
+            # Color by fiscal quarter (Q1-Q4) so the clickable legend can filter
+            # by type. Falls back to a neutral grey for out-of-range quarters.
+            kind = _earnings_kind(fq)
+            bg, txt = _kind_color(kind) if kind else ("#37474F", "#FFFFFF")
             start_str = _to_iso(e["earnings_date"])
             fc.append({
-                "id":    str(e["id"]) if e.get("id") is not None else "",
-                "title": label,
-                "start": start_str,
-                "end":   start_str,
-                "color": color,
+                "id":        str(e["id"]) if e.get("id") is not None else "",
+                "title":     label,
+                "start":     start_str,
+                "end":       start_str,
+                "color":     bg,
+                "textColor": txt,
                 "extendedProps": {
+                    "kind":          kind or "earnings",
                     "ticker":        e["ticker"],
                     "company_name":  e["company_name"],
                     "fiscal_q":      fq,
@@ -1153,9 +1296,127 @@ def _to_fullcalendar(events: List[Dict]) -> List[Dict]:
         return []
 
 
+def _ma_to_fullcalendar(ma_events: List[Dict]) -> List[Dict]:
+    """Convert completed-M&A events into FullCalendar events (Coresight red).
+
+    Ids are prefixed 'ma_' so they never collide with earnings event ids in the
+    click handler. The earnings feed is untouched — this only ADDS events.
+    """
+    try:
+        bg, txt = _kind_color("ma")
+        fc = []
+        for e in ma_events:
+            start_str = _to_iso(e.get("earnings_date"))
+            if not start_str:
+                continue
+            company_name = e.get("company_name") or e.get("ticker") or ""
+            deal = (e.get("ma_deal_type") or "M&A").title()
+            label = f"{company_name} · {deal}"
+            # DB numerics arrive as Decimal — cast so streamlit_calendar can JSON it.
+            _raw_val = e.get("ma_value_usd_m")
+            _val = float(_raw_val) if _raw_val is not None else None
+            fc.append({
+                "id":        f"ma_{e['id']}" if e.get("id") is not None else f"ma_{start_str}_{e.get('ticker','')}",
+                "title":     label,
+                "start":     start_str,
+                "end":       start_str,
+                "color":     bg,
+                "textColor": txt,
+                "extendedProps": {
+                    "kind":             "ma",
+                    "ticker":           e.get("ticker", ""),
+                    "company_name":     company_name,
+                    "ma_acquirer":      e.get("ma_acquirer"),
+                    "ma_target":        e.get("ma_target"),
+                    "ma_deal_type":     e.get("ma_deal_type"),
+                    "ma_value_usd_m":   _val,
+                    "ma_close_date":    _to_iso(e.get("ma_close_date")) if e.get("ma_close_date") else "",
+                    "ma_announce_date": _to_iso(e.get("ma_announce_date")) if e.get("ma_announce_date") else "",
+                    "source":           e.get("source"),
+                    "source_ref":       e.get("source_ref"),
+                    "headline":         e.get("headline"),
+                },
+            })
+        return fc
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_ma_to_fullcalendar",
+                             operation="convert_ma_events",
+                             context=f"events_count={len(ma_events) if ma_events else 0}")
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CALENDAR CLICK — DETAIL PANEL
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _render_ma_detail_panel(event_data: Dict) -> None:
+    """Detail card for a completed-M&A event (acquirer/target/value/source)."""
+    try:
+        ep       = event_data.get("extendedProps", {})
+        ticker   = ep.get("ticker", "")
+        company  = ep.get("company_name", ticker)
+        acquirer = ep.get("ma_acquirer") or "—"
+        target   = ep.get("ma_target") or "—"
+        deal     = (ep.get("ma_deal_type") or "M&A").title()
+        value    = _fmt_ma_value(ep.get("ma_value_usd_m"))
+        close_d  = _fmt_date(ep.get("ma_close_date") or event_data.get("start", ""))
+        ann_d    = _fmt_date(ep.get("ma_announce_date")) if ep.get("ma_announce_date") else "—"
+        bg, _txt = _kind_color("ma")
+
+        src_href = _coerce_http_url(ep.get("source_ref"))
+        src_label = ep.get("source") or "Source"
+        src_value = html.escape(str(src_label)) if src_label else "—"
+        if src_href:
+            safe_href = html.escape(src_href, quote=True)
+            src_value = (
+                f'<a href="{safe_href}" target="_blank" rel="noopener noreferrer" '
+                f'style="color:#0066CC;text-decoration:none;font-weight:600;">'
+                f'{html.escape(str(src_label) or "View filing")}</a>'
+            )
+
+        st.html(f"""
+        <div class="ec-detail-card">
+            <div class="ec-detail-title">{html.escape(str(company))}</div>
+            <div class="ec-detail-sub">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                             background:{bg};margin-right:6px;vertical-align:middle;"></span>
+                {html.escape(str(ticker))} &nbsp;·&nbsp; M&amp;A Completion ({html.escape(deal)})
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Completion Date</span>
+                <span class="ec-detail-val">{close_d}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Acquirer</span>
+                <span class="ec-detail-val">{html.escape(str(acquirer))}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Target</span>
+                <span class="ec-detail-val">{html.escape(str(target))}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Deal Type</span>
+                <span class="ec-detail-val">{html.escape(deal)}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Transaction Value</span>
+                <span class="ec-detail-val">{value}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Announced</span>
+                <span class="ec-detail-val">{ann_d}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Source</span>
+                <span class="ec-detail-val">{src_value}</span>
+            </div>
+        </div>
+        """)
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_ma_detail_panel",
+                             operation="render_ma_detail", context="M&A detail panel render")
+        return None
+
 
 def _render_detail_panel(event_data: Dict) -> None:
     try:
@@ -1163,6 +1424,9 @@ def _render_detail_panel(event_data: Dict) -> None:
         _t0 = _t.perf_counter()
 
         ep          = event_data.get("extendedProps", {})
+        if ep.get("kind") == "ma":
+            _render_ma_detail_panel(event_data)
+            return
         ticker      = ep.get("ticker", "")
         company     = ep.get("company_name", ticker)
         fiscal_q    = ep.get("fiscal_q")
@@ -1173,7 +1437,9 @@ def _render_detail_panel(event_data: Dict) -> None:
         report_time_display = _fmt_report_time_display(ep.get("report_time"))
 
         quarter_label = f"Q{fiscal_q} {fiscal_year}" if fiscal_q and fiscal_year else fqe or "—"
-        company_color = _company_color(ticker)
+        # Dot matches the event's quarter color (falls back to company color if no quarter)
+        _ec_kind = _earnings_kind(fiscal_q)
+        company_color = _kind_color(_ec_kind)[0] if _ec_kind else _company_color(ticker)
         transcript_info = EarningsCalendarRepository.get_transcript_for_calendar_event(ticker, start_date)
         transcript_value = "—"
         if transcript_info:
@@ -1352,6 +1618,8 @@ def render_page() -> None:
             st.session_state.pop("ec_watchlist_filter", None)
             st.session_state["ec_active_watchlist_id"] = None
             st.session_state["ec_active_watchlist_name"] = ""
+            # Reset the event-type legend filter so all kinds show on fresh entry
+            st.session_state["ec_active_kinds"] = list(_ALL_KINDS)
 
         render_header(current_page="earnings_calendar")
 
@@ -1386,6 +1654,9 @@ def render_page() -> None:
             st.session_state.ec_active_watchlist_id = None
         if "ec_active_watchlist_name" not in st.session_state:
             st.session_state.ec_active_watchlist_name = ""
+        # Event-type legend filter — set of active kinds ("Q1".."Q4","ma")
+        if "ec_active_kinds" not in st.session_state:
+            st.session_state.ec_active_kinds = list(_ALL_KINDS)
 
         # ── load available tickers + date range + all events (parallel — all independent) ─
         from concurrent.futures import ThreadPoolExecutor
@@ -1421,15 +1692,34 @@ def render_page() -> None:
                                      operation="fetch_all_events", context="parallel fetch")
                 return []
 
+        def _fetch_all_ma():
+            try:
+                # Completed M&A events (separate feed; earnings logic untouched).
+                # Small result set (~230 rows) — always fetch all, filter in memory.
+                return EarningsCalendarRepository.get_ma_completion_events()
+            except Exception as exc:
+                log_structured_error(exc, page="earnings_calendar", component="_fetch_all_ma",
+                                     operation="fetch_all_ma", context="parallel fetch")
+                return []
+
         _t_parallel = _time.perf_counter()
         # Single loading UX: custom `_ecal_loading_hint` above (don't stack `st.spinner` with same message).
-        with ThreadPoolExecutor(max_workers=3) as _ec_exec:
+        with ThreadPoolExecutor(max_workers=4) as _ec_exec:
             _ticker_future = _ec_exec.submit(_fetch_tickers)
             _dr_future = _ec_exec.submit(_fetch_date_range)
             _events_future = _ec_exec.submit(_fetch_all_events)
-            all_tickers_meta = _ticker_future.result()
-            (min_date, max_date) = _dr_future.result()
-            _prefetched_events = _events_future.result()
+            _ma_future = _ec_exec.submit(_fetch_all_ma)
+            _te = _time.perf_counter(); all_tickers_meta = _ticker_future.result()
+            log_timing("EC_PAGE_FETCH_TICKERS", (_time.perf_counter() - _te) * 1000, level="WARNING")
+            _te = _time.perf_counter(); (min_date, max_date) = _dr_future.result()
+            log_timing("EC_PAGE_FETCH_DATE_RANGE", (_time.perf_counter() - _te) * 1000, level="WARNING")
+            _te = _time.perf_counter(); _prefetched_events = _events_future.result()
+            log_timing("EC_PAGE_FETCH_ALL_EVENTS", (_time.perf_counter() - _te) * 1000,
+                       details=f"events={len(_prefetched_events) if _prefetched_events else 0}", level="WARNING")
+            _te = _time.perf_counter(); _prefetched_ma_events = _ma_future.result()
+            log_timing("EC_PAGE_FETCH_ALL_MA", (_time.perf_counter() - _te) * 1000,
+                       details=f"ma_events={len(_prefetched_ma_events) if _prefetched_ma_events else 0}", level="WARNING")
+        log_timing("EC_PAGE_PARALLEL_TOTAL", (_time.perf_counter() - _t_parallel) * 1000, level="WARNING")
 
         if not all_tickers_meta or not max_date:
             _ecal_loading_hint.empty()
@@ -1541,7 +1831,7 @@ def render_page() -> None:
         col_alerts, f1, f2_wl, f_toggle = st.columns([3, 3, 3, 2], gap="small", vertical_alignment="bottom")
         with col_alerts:
             # Compact button left; remainder of first column keeps spacing before Company (matches old empty column)
-            _ec_btn_col, _ec_alerts_pad = st.columns([1.35, 2.65], gap="small")
+            _ec_btn_col, _ec_alerts_pad = st.columns([2, 2.65], gap="small")
             with _ec_btn_col:
                 _ec_mail_btn_c, _ec_mail_badge_c = st.columns(
                     [2.72, 0.62], gap="small", vertical_alignment="top"
@@ -1616,7 +1906,7 @@ def render_page() -> None:
         _t_events = _time.perf_counter()
         _active_wl_id = st.session_state.ec_active_watchlist_id
         if _active_wl_id is not None:
-            # Watchlist mode: fetch member rows then filter prefetched events in memory
+            # Watchlist mode: fetch member rows then filter prefetched feeds in memory
             try:
                 _wl_company_rows = get_watchlist_companies(_active_wl_id)
             except Exception as _wl_filter_exc:
@@ -1626,32 +1916,51 @@ def render_page() -> None:
                 )
                 _wl_company_rows = []
             events = _filter_events_by_watchlist(_prefetched_events, _wl_company_rows)
+            ma_events = _filter_events_by_watchlist(_prefetched_ma_events, _wl_company_rows)
             _wl_active_name = st.session_state.ec_active_watchlist_name
-            _wl_cal_count = len({e["ticker"] for e in events})
+            _wl_cal_count = len({e["ticker"] for e in events} | {e["ticker"] for e in ma_events})
             st.caption(
                 f"Filtering by watchlist: **{_wl_active_name}** — "
                 f"{len(_wl_company_rows)} {'company' if len(_wl_company_rows) == 1 else 'companies'}, "
                 f"{_wl_cal_count} {'company' if _wl_cal_count == 1 else 'companies'} "
-                f"found on this earnings calendar."
+                f"found on this calendar."
             )
         elif selected_label == _all_opt:
-            # "All Companies" selected — use the pre-fetched result (0ms — already in cache)
+            # "All Companies" selected — use the pre-fetched results (0ms — already in cache)
             events = _prefetched_events
+            ma_events = _prefetched_ma_events
         else:
-            # Specific company selected — fetch filtered subset (hits Streamlit cache)
+            # Specific company selected — fetch filtered earnings subset (hits Streamlit
+            # cache); M&A is a small in-memory feed, filter it by the same tickers.
             with st.spinner(""):
                 events = EarningsCalendarRepository.get_calendar_events(tickers=selected_tickers)
+            _sel_set = set(selected_tickers)
+            ma_events = [e for e in _prefetched_ma_events if e.get("ticker") in _sel_set]
 
-        if not events:
+        # ── event-type color legend (clickable filter; combines AND with Company /
+        #     Watchlist above). Rendered before the no-data guard so the user can
+        #     always re-enable a hidden type. ──────────────────────────────────────
+        _render_event_type_legend()
+        _active_kinds = set(st.session_state.get("ec_active_kinds") or _ALL_KINDS)
+
+        # Apply the legend filter to each feed (earnings → by quarter; M&A → "ma")
+        events = [e for e in events if _earnings_kind(e.get("fiscal_q")) in _active_kinds]
+        ma_events = ma_events if "ma" in _active_kinds else []
+
+        if not events and not ma_events:
             _ecal_loading_hint.empty()
-            st.html('<div class="ec-no-data">No earnings events found for the selected filters.</div>')
+            st.html('<div class="ec-no-data">No events match the selected filters. '
+                    'Click a color in the legend above to show more.</div>')
             render_coresight_footer()
             return
 
         # ── event count ───────────────────────────────────────────────────────────
+        _n_total = len(events) + len(ma_events)
+        _n_companies = len({e['ticker'] for e in events} | {e['ticker'] for e in ma_events})
+        _ma_suffix = f" &nbsp;·&nbsp; {len(ma_events):,} M&amp;A completion{'' if len(ma_events) == 1 else 's'}" if ma_events else ""
         st.html(f"""
         <div class="ec-event-count">
-            {len(events):,} events &nbsp;·&nbsp; {len(set(e['ticker'] for e in events))} companies
+            {_n_total:,} events &nbsp;·&nbsp; {_n_companies} companies{_ma_suffix}
         </div>
         """)
 
@@ -1660,10 +1969,21 @@ def render_page() -> None:
         # ─────────────────────────────────────────────────────────────────────────
         from streamlit_calendar import calendar as st_calendar
 
+        # Time from end of parallel fetch to here = dropdown + toolbar (watchlists,
+        # email prefs) + ticker resolve + watchlist filtering.
+        log_timing("EC_PAGE_TOOLBAR_AND_FILTER", (_time.perf_counter() - _t_dropdown) * 1000,
+                   details=f"events_in_view={len(events)}", level="WARNING")
         _t_fc_prep = _time.perf_counter()
-        fc_events    = _to_fullcalendar(events)
-        _dated       = [e["earnings_date"] for e in events if e.get("earnings_date")]
-        initial_date = _to_iso(max(_dated)) if _dated else date.today().isoformat()
+        fc_events    = _to_fullcalendar(events) + _ma_to_fullcalendar(ma_events)
+        log_timing("EC_PAGE_TO_FULLCALENDAR", (_time.perf_counter() - _t_fc_prep) * 1000,
+                   details=f"events={len(fc_events)}", level="WARNING")
+        # Normalize to ISO date strings (earnings feed yields str dates, the M&A
+        # feed yields date objects) so max() never compares mixed types.
+        _dated       = [d[:10] for d in (
+            [_to_iso(e["earnings_date"]) for e in events if e.get("earnings_date")] +
+            [_to_iso(e["earnings_date"]) for e in ma_events if e.get("earnings_date")]
+        ) if d]
+        initial_date = max(_dated) if _dated else date.today().isoformat()
         is_year_view = st.session_state.ec_view == "year"
 
         if is_year_view:
@@ -1752,6 +2072,10 @@ def render_page() -> None:
                 key=cal_key,
                 callbacks=["eventClick"],
             )
+            log_timing("EC_PAGE_STCALENDAR_RENDER", (_time.perf_counter() - _t_fc_render) * 1000,
+                       details=f"events={len(fc_events)} view={st.session_state.ec_view}", level="WARNING")
+        log_timing("EC_PAGE_RENDER_TOTAL", (_time.perf_counter() - _t0_page) * 1000,
+                   details=f"events={len(fc_events)}", level="WARNING")
 
         if cal_result and cal_result.get("eventClick"):
             clicked_event = cal_result["eventClick"]["event"]

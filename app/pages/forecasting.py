@@ -21,7 +21,13 @@ from components.styles import hide_sidebar, render_styles, set_page_layout
 from core.access_control import AccessControlManager
 from core.access_control import UserRolesManager
 from core.auth_manager import get_current_user, require_auth
-from data.forecast_admin_service import sync_forecast_for_ticker, sync_all_eligible, clear_revenue_forecast_caches
+from data.forecast_admin_service import (
+    sync_forecast_for_ticker,
+    sync_all_eligible,
+    sync_quarterly_forecast_for_ticker,
+    sync_all_eligible_quarterly,
+    clear_revenue_forecast_caches,
+)
 from data.forecast_refresh_service import (
     ensure_forecast_columns,
     backfill_company_info,
@@ -458,7 +464,7 @@ SCENARIO_COLORS = {
 # Display currency for this page. Populated at runtime from the service payload.
 _EST_DISPLAY_CURRENCY = "USD"
 
-# require_auth(page="forecasting")
+require_auth(page="forecasting")
 
 hide_sidebar()
 render_styles()
@@ -2854,9 +2860,10 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
         key="refresh_dialog_period_type",
     )
 
-    if period_type == "Quarterly":
-        st.info("Quarterly forecast refresh is not yet supported.")
-        return
+    # Cadence-aware backend: annual vs quarterly forecast functions.
+    _is_quarterly = period_type == "Quarterly"
+    _sync_one = sync_quarterly_forecast_for_ticker if _is_quarterly else sync_forecast_for_ticker
+    _sync_all = sync_all_eligible_quarterly if _is_quarterly else sync_all_eligible
 
     with st.spinner("Loading forecast data…"):
         table_rows = get_refresh_table_data(period_type.lower())
@@ -2910,7 +2917,7 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
                 elif action_ph.button("Refresh Now", key=f"refresh_now_{ticker}"):
                     action_ph.markdown('<span style="font-size:12px;color:#6B7280">Running…</span>', unsafe_allow_html=True)
                     with st.spinner(""):
-                        result = sync_forecast_for_ticker(ticker, force=True)
+                        result = _sync_one(ticker, force=True)
                         clear_revenue_forecast_caches()
                         get_refresh_table_data.clear()
                     if result.get("status") == "updated":
@@ -2918,7 +2925,7 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
                         last_refresh_ph.markdown(f'<span style="{_CELL_STYLE};color:#22c55e">{now_utc}</span>', unsafe_allow_html=True)
                         action_ph.markdown('<span style="font-size:12px;font-weight:600;color:#22c55e">✓ Done</span>', unsafe_allow_html=True)
                         st.toast(f"✓ {ticker} models updated")
-                        send_model_refresh_email(triggered_by=user_email, results=[result])
+                        send_model_refresh_email(triggered_by=user_email, results=[result], period_type=period_type.lower())
                     elif result.get("status") == "up_to_date":
                         action_ph.markdown('<span style="font-size:12px;color:#3b82f6">Up to date</span>', unsafe_allow_html=True)
                     else:
@@ -2930,14 +2937,14 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
     if can_run:
         if st.button("Refresh All", key="refresh_all_btn"):
             with st.spinner("Running all forecast models — this may take several minutes…"):
-                results = sync_all_eligible(force=True, exclude_tickers=_blocked_tickers)
+                results = _sync_all(force=True, exclude_tickers=_blocked_tickers)
                 clear_revenue_forecast_caches()
                 get_refresh_table_data.clear()
             updated = sum(1 for r in results if r.get("status") == "updated")
             errors  = sum(1 for r in results if r.get("status") == "error")
             st.success(f"Refresh All complete — {updated} updated, {errors} errors.")
             st.toast(f"✓ Refresh All done: {updated} updated")
-            send_model_refresh_email(triggered_by=user_email, results=results)
+            send_model_refresh_email(triggered_by=user_email, results=results, period_type=period_type.lower())
 
     if _blocked_tickers:
         _n = len(_blocked_tickers)
@@ -2957,6 +2964,189 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
         )
 
 
+def _build_quarterly_overview_chart(
+    hist_df: pd.DataFrame,
+    forecast_rows: List[Dict[str, Any]],
+    model_keys: List[str],
+    scenario_keys: List[str],
+) -> go.Figure:
+    """Historical quarters + per-model forecast lines + ensemble + scenario band."""
+    fig = go.Figure()
+    hist_labels = hist_df['label'].tolist()
+    hist_vals = pd.to_numeric(hist_df['sales'], errors='coerce').tolist()
+
+    fc_labels = [r['label'] for r in forecast_rows]
+    bridge_x = ([hist_labels[-1]] + fc_labels) if hist_labels else fc_labels
+    last_hist = hist_vals[-1] if hist_vals else None
+
+    # Scenario band (drawn first so lines sit on top)
+    if 'scenario_pessimistic' in scenario_keys and 'scenario_optimistic' in scenario_keys:
+        pess = [r.get('scenario_pessimistic') for r in forecast_rows]
+        opti = [r.get('scenario_optimistic') for r in forecast_rows]
+        fig.add_trace(go.Scatter(
+            x=fc_labels + fc_labels[::-1], y=opti + pess[::-1],
+            fill='toself', fillcolor='rgba(214,46,47,0.08)', line=dict(width=0),
+            name='Scenario range', hoverinfo='skip', showlegend=True,
+        ))
+
+    # Individual models (faint)
+    for idx, key in enumerate(model_keys):
+        if key == 'ensemble':
+            continue
+        vals = [r.get(key) for r in forecast_rows]
+        fig.add_trace(go.Scatter(
+            x=fc_labels, y=vals, mode='lines', name=_model_label(key),
+            line=dict(color=_model_color(key, idx), width=1, dash=_model_dash(key)),
+            opacity=0.45,
+        ))
+
+    # Historical (solid black)
+    fig.add_trace(go.Scatter(
+        x=hist_labels, y=hist_vals, mode='lines+markers', name='Historical',
+        line=dict(color=INK, width=2), marker=dict(size=5),
+    ))
+
+    # Ensemble (bold dashed red), bridged from last actual
+    if any('ensemble' in r for r in forecast_rows):
+        ens = [r.get('ensemble') for r in forecast_rows]
+        fig.add_trace(go.Scatter(
+            x=bridge_x, y=([last_hist] + ens) if last_hist is not None else ens,
+            mode='lines+markers', name='Ensemble',
+            line=dict(color=BRAND_RED, width=2.5, dash='dash'), marker=dict(size=5),
+        ))
+
+    _cur = get_currency_symbol(_EST_DISPLAY_CURRENCY)
+    # Force chronological left→right order: history first, then forecast quarters.
+    # (Without this, Plotly orders categories by trace-add order and the forecast
+    # band — added first so it sits behind the lines — would jump to the left.)
+    _category_order = hist_labels + [l for l in fc_labels if l not in set(hist_labels)]
+    fig.update_layout(
+        height=420, margin=dict(l=10, r=10, t=30, b=80),
+        plot_bgcolor='white', paper_bgcolor='white',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='left', x=0),
+        yaxis=dict(title=f'Revenue ({_cur}B)', gridcolor='#ECECEE', zeroline=False),
+        xaxis=dict(tickangle=-45, showgrid=False,
+                   categoryorder='array', categoryarray=_category_order),
+        hovermode='x unified',
+    )
+    return fig
+
+
+def _build_quarterly_excel(
+    ticker: str, company_name: str,
+    hist_df: pd.DataFrame, forecast_rows: List[Dict[str, Any]],
+    backtest_rows: List[Dict[str, Any]], model_keys: List[str], scenario_keys: List[str],
+) -> bytes:
+    """Three-sheet workbook: Historical, Quarterly Forecast, Backtest."""
+    from io import BytesIO
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        if not hist_df.empty:
+            _h = hist_df[['label', 'sales']].rename(columns={'label': 'Quarter', 'sales': 'Revenue (B)'})
+            _h.to_excel(writer, sheet_name='Historical', index=False)
+
+        if forecast_rows:
+            cols = {'Quarter': [r['label'] for r in forecast_rows]}
+            for k in model_keys:
+                cols[_model_label(k)] = [r.get(k) for r in forecast_rows]
+            for k in scenario_keys:
+                cols[_model_label(k)] = [r.get(k) for r in forecast_rows]
+            pd.DataFrame(cols).to_excel(writer, sheet_name='Quarterly Forecast', index=False)
+
+        if backtest_rows:
+            pd.DataFrame(backtest_rows).to_excel(writer, sheet_name='Backtest', index=False)
+    return buf.getvalue()
+
+
+def _render_quarterly_view(selected_ticker: str) -> None:
+    """Self-contained quarterly forecast view (does not touch the annual render path)."""
+    with st.spinner(f'Loading quarterly forecasts for {selected_ticker}...'):
+        payload = RevenueForecastService.get_quarterly_dashboard(selected_ticker, periods=20)
+
+    summary = payload.get('summary', {})
+    global _EST_DISPLAY_CURRENCY
+    _EST_DISPLAY_CURRENCY = payload.get('reported_currency') or summary.get('reported_currency') or 'USD'
+    company_name = payload.get('company_name', selected_ticker)
+    forecast_rows = payload.get('forecast_rows', [])
+    backtest_rows = payload.get('backtest_rows', [])
+    hist_df = pd.DataFrame(payload.get('historical_rows', []))
+    model_keys = [k for k in ['linear', 'cagr', 'exp_smoothing', 'holt', 'ma_trend',
+                              'weighted_avg', 'seasonal_naive', 'ensemble']
+                  if forecast_rows and k in forecast_rows[0]]
+    scenario_keys = [k for k in ['scenario_pessimistic', 'scenario_baseline', 'scenario_optimistic']
+                     if forecast_rows and k in forecast_rows[0]]
+
+    st.markdown(
+        f'<div class="rev-hero"><span class="rev-hero-company">{company_name} ({selected_ticker})</span>'
+        f'<span class="rev-hero-divider"></span>'
+        f'<div class="rev-chip-row"><span class="rev-chip">Historical quarters: '
+        f'{_fmt_int(summary.get("historical_rows"))}</span>'
+        f'<span class="rev-chip">Quarterly · seasonally adjusted</span></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    if not forecast_rows:
+        st.info(summary.get('note') or
+                'No quarterly forecast available. The quarterly engine needs ≥ 8 quarters of revenue. '
+                'Use “Refresh Data → Quarterly” to compute it.')
+        return
+
+    best_key = payload.get('best_method') or ''
+    cards = st.columns(5)
+    with cards[0]:
+        _render_card('Latest Actual Revenue', _fmt_billions(summary.get('latest_actual_revenue_billions')),
+                     f"Quarter {summary.get('latest_actual_label', '—')}")
+    with cards[1]:
+        _render_card('Ensemble — Next Quarter', _fmt_billions(summary.get('next_forecast_value_billions')),
+                     f"Forecast {summary.get('next_forecast_label', '—')}")
+    with cards[2]:
+        _render_card('Best Forecasting Model', MODEL_FULL_LABELS.get(best_key, _model_label(best_key or '—')),
+                     'Lowest backtest MAPE')
+    with cards[3]:
+        _render_card('Quarters in Training', _fmt_int(summary.get('historical_rows')),
+                     f"Total rows loaded: {_fmt_int(summary.get('actual_rows'))}")
+    with cards[4]:
+        _render_card('Forecast Horizon', f"{_fmt_int(summary.get('forecast_periods'))} quarters",
+                     f"Through {summary.get('forecast_end_label', '—')}")
+
+    st.markdown('<h3 class="rev-section-title">Quarterly forecast overview</h3>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="rev-section-copy">Historical quarters feed the seasonal engine; the chart overlays every '
+        'model, the ensemble (dashed), and the pessimistic–optimistic scenario band.</p>',
+        unsafe_allow_html=True,
+    )
+    st.plotly_chart(
+        _build_quarterly_overview_chart(hist_df, forecast_rows, model_keys, scenario_keys),
+        use_container_width=True, config={'displayModeBar': False},
+    )
+
+    # Forecast table — quarters as rows, models as columns
+    tbl = {'Quarter': [r['label'] for r in forecast_rows]}
+    for k in model_keys:
+        tbl[_model_label(k)] = [_fmt_billions(r.get(k)) for r in forecast_rows]
+    for k in scenario_keys:
+        tbl[_model_label(k)] = [_fmt_billions(r.get(k)) for r in forecast_rows]
+    st.dataframe(pd.DataFrame(tbl), use_container_width=True, hide_index=True)
+
+    if backtest_rows:
+        st.markdown('<h3 class="rev-section-title" style="margin-top:28px;">Model backtest (MAPE)</h3>',
+                    unsafe_allow_html=True)
+        _bt = pd.DataFrame(backtest_rows)
+        _bt = _bt[[c for c in ['method', 'mape', 'bias', 'rmse'] if c in _bt.columns]]
+        _bt['method'] = _bt['method'].map(lambda k: _model_label(k))
+        _bt = _bt.rename(columns={'method': 'Model', 'mape': 'MAPE %', 'bias': 'Bias', 'rmse': 'RMSE'})
+        st.dataframe(_bt, use_container_width=True, hide_index=True)
+
+    # Excel export
+    try:
+        _xl = _build_quarterly_excel(selected_ticker, company_name, hist_df, forecast_rows,
+                                     backtest_rows, model_keys, scenario_keys)
+        _render_excel_js_download(_xl, f'{selected_ticker}_Quarterly_Revenue_Forecasting.xlsx', 'Excel')
+    except Exception as _exc:
+        log_structured_error(_exc, page='forecasting', component='_render_quarterly_view',
+                             operation='BUILD_QUARTERLY_EXCEL')
+
+
 def main() -> None:
     inject_red_spinner_css()
     page_start = perf_counter()
@@ -2967,6 +3157,8 @@ def main() -> None:
         try:
             ensure_forecast_columns()
             backfill_company_info()
+            from data.quarterly_forecast_store import ensure_quarterly_forecast_table
+            ensure_quarterly_forecast_table()
         except Exception as _exc:
             log_structured_error(_exc, page="forecasting", component="main", operation="schema_init")
         st.session_state["_forecast_schema_inited"] = True
@@ -3110,7 +3302,29 @@ def main() -> None:
         render_coresight_footer()
         return
 
-    # ── INDIVIDUAL TICKER view — slider only shown here ───────────────────
+    # ── INDIVIDUAL TICKER view ────────────────────────────────────────────
+    # Honor ?period_type=Quarterly from a cross-link, but only on first visit so
+    # it never overrides a selection the user made on this page.
+    if 'forecasting_period_type' not in st.session_state:
+        _qp_period = st.query_params.get('period_type')
+        st.session_state['forecasting_period_type'] = (
+            _qp_period if _qp_period in ('Annual', 'Quarterly') else 'Annual'
+        )
+    _pcol, _ = st.columns([1.4, 4])
+    with _pcol:
+        st.markdown('<div class="est-horizon-label">Period</div>', unsafe_allow_html=True)
+        forecasting_period_type = st.radio(
+            'Period type', options=['Annual', 'Quarterly'], horizontal=True,
+            key='forecasting_period_type', label_visibility='collapsed',
+        )
+
+    # Quarterly takes a dedicated, self-contained render path (zero annual regression).
+    if forecasting_period_type == 'Quarterly':
+        _render_quarterly_view(selected_ticker)
+        render_coresight_footer()
+        return
+
+    # ── ANNUAL view — horizon slider only shown here ──────────────────────
     with header_right:
         st.markdown('<div class="est-horizon-label">Forecast Horizon</div>', unsafe_allow_html=True)
         forecast_periods = st.slider(
