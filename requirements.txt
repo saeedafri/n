@@ -8,7 +8,7 @@
 # ───────────────────────────────────────────────────────────────────────────────
 # Core Framework (REQUIRED)
 # ───────────────────────────────────────────────────────────────────────────────
-streamlit>=1.54.0
+streamlit==1.55.0
 itsdangerous>=2.2.0  # Streamlit ASGI (SessionMiddleware) when using uvicorn app.asgi_app
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -33,7 +33,9 @@ cryptography>=46.0.0  # Required for MySQL SSL connections
 # SEC Filing Processing (REQUIRED)
 # Used by: scripts/export_xbrl_facts.py, scripts/enrich_from_edgartools.py
 # ───────────────────────────────────────────────────────────────────────────────
-edgartools>=3.0.0
+# Pinned: EntityFilings slice API and fact fiscal_year semantics change across
+# major versions (5.x broke `filings[:6]`); app code is tested against 5.16.0.
+edgartools==5.16.0
 requests>=2.31.0
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -61,7 +63,7 @@ fpdf2>=2.8.0  # PDF generation for transcript downloads
 pymupdf>=1.24.0  # HTML to PDF for filing downloads (pre-built wheels, no system deps)
 pdf2image>=1.16.0  # PDF to image conversion for company_filings.py (requires Poppler)
 openpyxl>=3.1.0  # Excel generation for market data downloads
-streamlit-aggrid>=1.2.0  # Column filtering in screening results grid
+streamlit-aggrid==1.2.1.post2  # Column filtering in screening results grid (PINNED: unpinned >=1.2.0 let STG install a build where enableCellTextSelection stopped working)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Standard Library Modules Used (No installation required):

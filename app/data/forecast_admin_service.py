@@ -183,9 +183,14 @@ def sync_forecast_for_ticker(
             company_name=company_info.get("company_name") or None,
             exchange=company_info.get("exchange") or None,
         )
+        # Drop annual forecast rows that have aged into the past (years now reported),
+        # mirroring the quarterly prune — prevents phantom past-year forecast columns.
+        from data.forecast_store import prune_stale_years
+        rows_pruned = prune_stale_years(store_ticker, last_actual_date)
         out["status"] = "updated"
         out["message"] = "Upserted model rows."
         out["rows_upserted"] = int(rows_affected or 0)
+        out["rows_pruned"] = int(rows_pruned or 0)
         return out
     except Exception as exc:
         log_structured_error(

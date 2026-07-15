@@ -22,6 +22,24 @@ RERUN ID:
   The ContextEnrichFilter injects rerun_id + page into every LogRecord automatically.
 """
 import os
+
+# Production defaults — explicit env always wins (setdefault only when unset).
+_MDP_BOOT_DEFAULTS = {
+    "MALLOC_ARENA_MAX": "2",
+    "SERVER_HEARTBEAT_SECS": "60",
+    "SERVER_RAM_CENSUS": "1",
+    "SERVER_TRIM_ON_HEARTBEAT": "1",
+    "PAGE_MATERIALIZE": "1",
+    "MDP_CATEGORICAL": "1",
+    "WARM_ON_BOOT": "1",
+    "APP_TIMING": "1",
+}
+_MDP_BOOT_APPLIED: list[str] = []
+for _dk, _dv in _MDP_BOOT_DEFAULTS.items():
+    if _dk not in os.environ:
+        os.environ.setdefault(_dk, _dv)
+        _MDP_BOOT_APPLIED.append(f"{_dk}={_dv}")
+
 import copy
 import logging
 import logging.handlers
@@ -39,9 +57,35 @@ from queue import Queue
 # IST timezone offset (UTC+5:30) — no external dependency
 _IST = timezone(timedelta(hours=5, minutes=30))
 
-# Server logs directory (at project root)
-SERVER_LOGS_DIR = Path(__file__).parent.parent.parent / "server-logs"
+# ── Log directory resolution — PERSIST ACROSS RESTARTS ──────────────────────
+# Prefer Azure persistent /home/LogFiles/mdp; fallback to project server-logs/.
+
+
+def _resolve_log_dir() -> Path:
+    candidates = []
+    _env = os.getenv("SERVER_LOG_DIR", "").strip()
+    if _env:
+        candidates.append(Path(_env))
+    candidates.append(Path("/home/LogFiles/mdp"))
+    candidates.append(Path("/home/mdp-logs"))
+    candidates.append(Path(__file__).parent.parent.parent / "server-logs")
+    for d in candidates:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            _probe = d / ".write_probe"
+            _probe.write_text("ok", encoding="utf-8")
+            _probe.unlink()
+            return d
+        except Exception:
+            continue
+    return Path(__file__).parent.parent.parent / "server-logs"
+
+
+SERVER_LOGS_DIR = _resolve_log_dir()
 SERVER_LOG_FILE = SERVER_LOGS_DIR / "server-log.log"
+
+_IMPORT_TS = time.time()
+_HEARTBEAT_STARTED = False
 
 # Thread-local storage — fallback for contexts where ContextVar isn't inherited
 _thread_local = threading.local()
@@ -65,6 +109,12 @@ _page_var: contextvars.ContextVar[str] = contextvars.ContextVar(
 # contextvars from the calling thread. _last_known_page is set in the main
 # request thread via new_rerun_id() and is readable by all threads.
 _last_known_page: str = '-'
+# NOTE: we deliberately do NOT cache the user/session id in a process-global. With many
+# concurrent users on the MDP a global would let one user's background thread read
+# another user's identity and MIS-ATTRIBUTE the event. User identity is read ONLY from
+# per-request sources (this session's auth_data, then this request's auth_session cookie)
+# — both are per-user, so an event is either correctly attributed or left blank, never
+# attributed to the WRONG user.
 
 
 def new_rerun_id(page: str = '') -> str:
@@ -87,6 +137,51 @@ def new_rerun_id(page: str = '') -> str:
         _last_known_page = page  # global fallback for st.cache_data background threads
         _page_var.set(page)
         _thread_local.page = page
+    try:
+        import streamlit as st
+        _now = time.time()
+        _rk, _lk = f"_rerun_count_{page or 'main'}", f"_rerun_last_{page or 'main'}"
+        _n = st.session_state.get(_rk, 0) + 1
+        _since = (_now - st.session_state[_lk]) * 1000 if _lk in st.session_state else -1.0
+        st.session_state[_rk] = _n
+        st.session_state[_lk] = _now
+        _g = st.session_state.get("_rerun_count_global", 0) + 1
+        st.session_state["_rerun_count_global"] = _g
+        _gap = "first-load" if _since < 0 else f"{_since:.0f}ms"
+        log_warning(
+            f"[RERUN] page={page or '-'} | page_rerun#={_n} | session_rerun#={_g} | since_last={_gap}"
+        )
+        # Capture the full filter state (the app encodes tab / ticker / period /
+        # sector / date range / keyword etc. in the URL query params) so the
+        # analytics feed records WHAT the user is looking at — which tab, which
+        # company, which filters — not just the page name. Emit on first load,
+        # after an idle gap, OR whenever any filter/tab changed, so every tab
+        # switch and filter change is captured (previously only coarse page
+        # views on >1.2s gaps were logged).
+        try:
+            _qp_now = {k: v for k, v in dict(st.query_params).items()}
+        except Exception:
+            _qp_now = {}
+        _qp_changed = st.session_state.get("_analytics_last_qp") != _qp_now
+        st.session_state["_analytics_last_qp"] = _qp_now
+        if page and (_since < 0 or _since > 1200.0 or _qp_changed):
+            _prev_pg = st.session_state.get("_analytics_prev_page")
+            log_user_event(
+                "page_view",
+                user=_get_user_email() if _get_user_email() != "-" else "",
+                session=rid,
+                page_title=page,
+                rerun=_n,
+                since_last_ms=None if _since < 0 else round(_since),
+                filters=_qp_now or None,
+                reason=("first-load" if _since < 0 else
+                        ("filter-change" if _qp_changed else "dwell-gap")),
+                prev_page=(_prev_pg if _prev_pg and _prev_pg != page else None),
+            )
+            if page != _prev_pg:
+                st.session_state["_analytics_prev_page"] = page
+    except Exception:
+        pass
     return rid
 
 
@@ -108,7 +203,59 @@ def _get_page_context() -> str:
     page = _page_var.get()
     if not page or page == '-':
         page = getattr(_thread_local, 'page', '-')
+    if not page or page == '-':
+        page = _last_known_page
     return page or '-'
+
+
+def _read_auth_identity():
+    """Return (user_email, session_id) for the CURRENT request only.
+
+    Reads this session's ``auth_data`` first, then this request's ``auth_session``
+    cookie (present even before auth_data is re-hydrated into session_state — this is
+    what fixed the empty-user 'main'/'logs' reruns). BOTH sources are per-user, so an
+    event is either correctly attributed or left blank — NEVER attributed to the wrong
+    user. Returns ('','') when truly unknown (e.g. the login page before auth).
+    """
+    try:
+        import streamlit as st
+        auth = st.session_state.get("auth_data") or {}
+        email = (auth.get("user_email") or "").strip()
+        sid = str(auth.get("session_id") or "").strip()
+        if email:
+            return email, sid
+        # Fall back to the auth_session cookie (urllib-quoted JSON — decode the same
+        # way auth_manager does).
+        try:
+            raw = st.context.cookies.get("auth_session")
+            if raw:
+                import urllib.parse as _up
+                dec = _up.unquote(raw) if isinstance(raw, str) else raw
+                if isinstance(dec, str) and len(dec) >= 2 and dec[0] == '"' and dec[-1] == '"':
+                    dec = dec[1:-1]
+                import json as _json
+                c = _json.loads(dec)
+                if isinstance(c, dict):
+                    email = (c.get("user_email") or email or "").strip()
+                    sid = str(c.get("session_id") or sid or "").strip()
+        except Exception:
+            pass
+        return email, sid
+    except Exception:
+        return "", ""
+
+
+def _get_user_email() -> str:
+    """Best-effort user email for log/analytics enrichment — per-request only."""
+    email, _ = _read_auth_identity()
+    return email or "-"
+
+
+def _get_session_id() -> str:
+    """Stable per-user auth session id (short) — lets analytics group all of ONE
+    user's events into their session and distinguish concurrent users. '' if unknown."""
+    _, sid = _read_auth_identity()
+    return sid[:16] if sid else ""
 
 
 # ============================================================================
@@ -128,24 +275,18 @@ class ISTFormatter(logging.Formatter):
 # ============================================================================
 
 class ContextEnrichFilter(logging.Filter):
-    """Inject page name from contextvars into every log record.
-
-    Attached to the QueueHandler (runs on the caller thread, before the record
-    is queued) so the background listener thread sees the enriched field.
-    """
+    """Inject rerun_id, page, and user email into every log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # Tier 1: contextvar (set on the Streamlit request thread)
         page = _page_var.get()
-        # Tier 2: thread-local (same thread, different call path)
         if not page or page == '-':
             page = getattr(_thread_local, 'page', None)
-        # Tier 3: module-level global (for st.cache_data background threads
-        #          that don't inherit contextvars from the calling thread)
         if not page or page == '-':
             page = _last_known_page
         record.page = page or '-'
-        return True  # always pass
+        record.rerun_id = get_rerun_id()
+        record.user_email = _get_user_email()
+        return True
 
 
 # ============================================================================
@@ -166,11 +307,144 @@ def ensure_log_dir():
     SERVER_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _proc_uptime_s() -> float:
+    try:
+        with open("/proc/self/stat") as _f:
+            _starttime_ticks = int(_f.read().split()[21])
+        _hz = os.sysconf("SC_CLK_TCK")
+        with open("/proc/uptime") as _f:
+            _sys_uptime = float(_f.read().split()[0])
+        return max(0.0, _sys_uptime - _starttime_ticks / _hz)
+    except Exception:
+        return time.time() - _IMPORT_TS
+
+
+def _malloc_trim() -> bool:
+    try:
+        import ctypes as _ct
+        _ct.CDLL("libc.so.6").malloc_trim(0)
+        return True
+    except Exception:
+        return False
+
+
+def _write_restart_ledger():
+    try:
+        _p = SERVER_LOGS_DIR / "restarts.log"
+        _ts = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime('%Y-%m-%d %H:%M:%S IST')
+        _arena = os.getenv("MALLOC_ARENA_MAX", "UNSET")
+        try:
+            _rss = ram_snapshot_mb()[0]
+        except Exception:
+            _rss = -1
+        with open(_p, "a", encoding="utf-8") as _f:
+            _f.write(f"{_ts} | pid={os.getpid()} | MALLOC_ARENA_MAX={_arena} | boot_rss={_rss}MB\n")
+    except Exception:
+        pass
+
+
+def _start_heartbeat():
+    global _HEARTBEAT_STARTED
+    if _HEARTBEAT_STARTED:
+        return
+    try:
+        _interval = int(os.getenv("SERVER_HEARTBEAT_SECS", "60"))
+    except (TypeError, ValueError):
+        _interval = 60
+    if _interval <= 0:
+        return
+    _HEARTBEAT_STARTED = True
+
+    def _beat():
+        _n = 0
+        while True:
+            try:
+                _n += 1
+                _up = _proc_uptime_s()
+                try:
+                    _rss, _used, _total, _avail = ram_snapshot_mb()
+                    _ram = f"app_rss={_rss}MB avail={_avail}MB"
+                except Exception:
+                    _ram = "app_rss=? avail=?"
+                log_warning(f"[HEARTBEAT] pid={os.getpid()} uptime={_up:.0f}s {_ram}")
+                if os.getenv("SERVER_TRIM_ON_HEARTBEAT", "1").strip().lower() in ("1", "true", "yes", "on"):
+                    try:
+                        _r0 = ram_snapshot_mb()[0]
+                        if _malloc_trim():
+                            _r1 = ram_snapshot_mb()[0]
+                            if _r0 is not None and _r1 is not None:
+                                log_warning(
+                                    f"[MALLOC_TRIM] rss {_r0:.0f}→{_r1:.0f}MB "
+                                    f"(released {max(0.0, _r0-_r1):.0f}MB) pid={os.getpid()}"
+                                )
+                    except Exception:
+                        pass
+                if _n % 3 == 0 and os.getenv("SERVER_RAM_CENSUS", "1").strip().lower() in ("1", "true", "yes", "on"):
+                    _ram_census()
+            except Exception:
+                pass
+            time.sleep(_interval)
+
+    threading.Thread(target=_beat, daemon=True, name="mdp_heartbeat").start()
+
+
+def _ram_census() -> None:
+    try:
+        import gc as _gc
+        import pandas as _pd
+        _tot = 0
+        _sizes = []
+        for _o in _gc.get_objects():
+            if type(_o) is _pd.DataFrame:
+                try:
+                    _b = int(_o.memory_usage(deep=True).sum())
+                    _shape = _o.shape
+                except Exception:
+                    continue
+                _tot += _b
+                _sizes.append((_b, _shape))
+        _n = len(_sizes)
+        _sizes.sort(reverse=True)
+        _top = "; ".join(f"{_b/1e6:.0f}MB{_sh}" for _b, _sh in _sizes[:6])
+        _rss, _used, _total, _avail = ram_snapshot_mb()
+        _rss_s = "?" if _rss is None else f"{_rss:.0f}"
+        _av_s = "?" if _avail is None else f"{_avail:.0f}"
+        _ret = "?" if _rss is None else f"{max(0.0, _rss - _tot/1e6):.0f}"
+        log_warning(
+            f"[RAM_CENSUS] live_frames={_n} data_total={_tot/1e6:.0f}MB "
+            f"rss={_rss_s}MB retained_glibc~{_ret}MB free={_av_s}MB | top: {_top}"
+        )
+        _sizes = None
+    except Exception as _e:
+        log_warning(f"[RAM_CENSUS] failed: {type(_e).__name__}: {str(_e)[:120]}")
+
+
+def log_render_complete(page: str, render_s: float, tab: str = "", data_status: str = "") -> None:
+    try:
+        _rss, _u, _lim, _av = ram_snapshot_mb()
+        _flag = ""
+        if render_s >= 2.0:
+            _flag = " | SLOW"
+            if _av is not None and _av < 800:
+                _flag = " | SLOW<-LOW-MEM"
+        _rss_s = "?" if _rss is None else f"{_rss:.0f}"
+        _av_s = "?" if _av is None else f"{_av:.0f}"
+        _tab_s = f" tab={tab}" if tab else ""
+        _d_s = f" data={data_status}" if data_status else ""
+        log_warning(
+            f"[CLICK->RENDER] page={page}{_tab_s} render={render_s:.2f}s"
+            f" rss={_rss_s}MB avail={_av_s}MB{_d_s}{_flag}"
+        )
+        if render_s >= 0.5 and os.getenv("SERVER_TRIM_ON_RENDER", "1").strip().lower() in ("1", "true", "yes", "on"):
+            _malloc_trim()
+    except Exception:
+        pass
+
+
 def get_server_logger():
-    """Get or create the server logger with synchronous FileHandler.
-    Synchronous so every log line is flushed to disk immediately — no messages
-    lost on crash or early exit.
-    """
+    """Get or create the server logger with QueueHandler for non-blocking I/O."""
+    global _queue_listener
+
     ensure_log_dir()
 
     logger = logging.getLogger("server_logger")
@@ -181,18 +455,45 @@ def get_server_logger():
                 logger.setLevel(logging.WARNING)
                 logger.propagate = False
 
+                _max_bytes = int(os.getenv("SERVER_LOG_MAX_BYTES", str(25 * 1024 * 1024)))
+                _backups = int(os.getenv("SERVER_LOG_BACKUPS", "8"))
+                fh = logging.handlers.RotatingFileHandler(
+                    SERVER_LOG_FILE, mode='a', maxBytes=_max_bytes,
+                    backupCount=_backups, encoding='utf-8'
+                )
+                fh.setLevel(logging.WARNING)
                 formatter = ISTFormatter(
-                    '%(asctime)s | %(levelname)-8s | %(page)-15s'
-                    ' | %(filename)s:%(lineno)d:%(funcName)s'
+                    '%(asctime)s | %(levelname)-8s | %(rerun_id)-8s | page=%(page)-15s'
+                    ' | user=%(user_email)-30s | %(filename)s:%(lineno)d:%(funcName)s'
                     ' | %(message)s'
                 )
-
-                # Synchronous file handler — writes immediately on every call
-                fh = logging.FileHandler(SERVER_LOG_FILE, mode='a', encoding='utf-8')
-                fh.setLevel(logging.WARNING)
                 fh.setFormatter(formatter)
-                fh.addFilter(ContextEnrichFilter())
-                logger.addHandler(fh)
+
+                log_queue: Queue = Queue(-1)
+                queue_handler = logging.handlers.QueueHandler(log_queue)
+                queue_handler.setLevel(logging.WARNING)
+                queue_handler.addFilter(ContextEnrichFilter())
+                logger.addHandler(queue_handler)
+
+                _queue_listener = logging.handlers.QueueListener(
+                    log_queue, fh, respect_handler_level=True
+                )
+                _queue_listener.start()
+
+                _persist = "yes" if str(SERVER_LOGS_DIR).startswith("/home") else "no (EPHEMERAL)"
+                _arena = os.getenv("MALLOC_ARENA_MAX", "<UNSET>")
+                _defaults_s = (
+                    ", ".join(_MDP_BOOT_APPLIED)
+                    if _MDP_BOOT_APPLIED
+                    else "all pre-set by environment"
+                )
+                logger.warning(
+                    f"[BOOT] server_logger up | pid={os.getpid()} | log_dir={SERVER_LOGS_DIR} "
+                    f"| persistent={_persist} | rotate={_max_bytes // (1024*1024)}MBx{_backups} "
+                    f"| MALLOC_ARENA_MAX={_arena} | defaults_applied=[{_defaults_s}]"
+                )
+                _write_restart_ledger()
+                _start_heartbeat()
 
     return logger
 
@@ -313,7 +614,15 @@ def log_structured_error(
 
     msg = " | ".join(parts) + f" | tb={tb_compact}"
     log_error(msg, _stacklevel=_stacklevel + 1)
-    return f"{origin_file}:{origin_func}:{origin_line}"
+    _origin = f"{origin_file}:{origin_func}:{origin_line}"
+    # Mirror into the user-analytics feed so failures are visible per-user/session
+    # (rate-limited per origin). Best-effort — never affects the caller.
+    _emit_analytics_error(
+        page=page, component=component, operation=operation,
+        error_type=type(exc).__name__, message=str(exc)[:200],
+        origin=_origin, context=context,
+    )
+    return _origin
 
 
 @contextmanager
@@ -357,6 +666,387 @@ def safe_execute(func, *args, page: str = "", component: str = "", fallback=None
 
 
 # ============================================================================
+# USER ANALYTICS — separate JSON-lines stream (non-blocking)
+# ============================================================================
+_analytics_logger: Optional[logging.Logger] = None
+_analytics_listener = None
+_analytics_lock = threading.Lock()
+
+
+def get_analytics_logger():
+    global _analytics_logger, _analytics_listener
+    if _analytics_logger is not None:
+        return _analytics_logger
+    with _analytics_lock:
+        if _analytics_logger is not None:
+            return _analytics_logger
+        ensure_log_dir()
+        lg = logging.getLogger("mdp_user_analytics")
+        lg.setLevel(logging.INFO)
+        lg.propagate = False
+        _file = SERVER_LOGS_DIR / "user_analytics.log"
+        _mb = int(os.getenv("ANALYTICS_LOG_MAX_BYTES", str(50 * 1024 * 1024)))
+        _bk = int(os.getenv("ANALYTICS_LOG_BACKUPS", "10"))
+        fh = logging.handlers.RotatingFileHandler(
+            _file, mode='a', maxBytes=_mb, backupCount=_bk, encoding='utf-8'
+        )
+        fh.setFormatter(logging.Formatter('%(message)s'))
+        _q: Queue = Queue(-1)
+        qh = logging.handlers.QueueHandler(_q)
+        lg.addHandler(qh)
+        _analytics_listener = logging.handlers.QueueListener(_q, fh, respect_handler_level=True)
+        _analytics_listener.start()
+        _analytics_logger = lg
+        return lg
+
+
+# ---------------------------------------------------------------------------
+# ANALYTICS ENVELOPE — constants + client/device context (computed once)
+# ---------------------------------------------------------------------------
+_ANALYTICS_SCHEMA_VERSION = 2
+_APP_ENV = (os.getenv("APP_ENV", "local") or "local").strip().lower()
+
+
+def _resolve_app_version() -> str:
+    """Best-effort build id: explicit env wins; else read the git HEAD sha ONCE
+    (no subprocess); else 'unknown'. Lets analytics correlate behavior with a release."""
+    v = (os.getenv("APP_VERSION") or os.getenv("GIT_SHA") or os.getenv("BUILD_ID") or "").strip()
+    if v:
+        return v[:40]
+    try:
+        _root = Path(__file__).resolve().parents[2]  # app/utils/ -> repo root
+        head = (_root / ".git" / "HEAD").read_text().strip()
+        if head.startswith("ref:"):
+            ref = head.split(" ", 1)[1].strip()
+            return (_root / ".git" / ref).read_text().strip()[:12]
+        return head[:12]
+    except Exception:
+        return "unknown"
+
+
+_APP_VERSION = _resolve_app_version()
+
+
+def _parse_user_agent(ua: str) -> dict:
+    """Dependency-free browser/os/device classification from a User-Agent string."""
+    ua_l = (ua or "").lower()
+    is_bot = any(k in ua_l for k in ("bot", "spider", "crawler", "headless", "python-requests", "curl"))
+    is_tablet = ("ipad" in ua_l) or ("tablet" in ua_l)
+    is_mobile = (not is_tablet) and any(k in ua_l for k in ("iphone", "android", "mobile", "ipod"))
+    device = "bot" if is_bot else ("tablet" if is_tablet else ("mobile" if is_mobile else "desktop"))
+    if "windows" in ua_l:
+        os_name = "Windows"
+    elif "iphone" in ua_l or "ipad" in ua_l or "; ios" in ua_l:
+        os_name = "iOS"
+    elif "mac os" in ua_l or "macintosh" in ua_l:
+        os_name = "macOS"
+    elif "android" in ua_l:
+        os_name = "Android"
+    elif "linux" in ua_l or "x11" in ua_l:
+        os_name = "Linux"
+    else:
+        os_name = "other"
+    if "edg" in ua_l:
+        br = "Edge"
+    elif "opr" in ua_l or "opera" in ua_l:
+        br = "Opera"
+    elif "chrome" in ua_l and "chromium" not in ua_l:
+        br = "Chrome"
+    elif "firefox" in ua_l or "fxios" in ua_l:
+        br = "Firefox"
+    elif "safari" in ua_l:
+        br = "Safari"
+    else:
+        br = "other"
+    return {"browser": br, "os": os_name, "device": device}
+
+
+def _get_client_context() -> dict:
+    """Parse {browser, os, device} from this session's UA header. Cached per session
+    (parsed once). Best-effort; returns {} off the script thread."""
+    try:
+        import streamlit as st
+        cached = st.session_state.get("_analytics_client_ctx")
+        if cached is not None:
+            return cached
+        ua = ""
+        try:
+            h = st.context.headers
+            ua = h.get("User-Agent", "") or h.get("user-agent", "") or ""
+        except Exception:
+            pass
+        ctx = _parse_user_agent(ua)
+        st.session_state["_analytics_client_ctx"] = ctx
+        return ctx
+    except Exception:
+        return {}
+
+
+def _analytics_should_emit(ns: str, val) -> bool:
+    """Session-scoped 'changed since last time' gate — returns True to emit.
+
+    Suppresses re-renders of the SAME download/search/action across Streamlit reruns,
+    but re-emits when the value genuinely changes. Off-thread (no session_state) → True."""
+    try:
+        import streamlit as st
+        d = st.session_state.get("_analytics_dedupe")
+        if d is None:
+            d = {}
+            st.session_state["_analytics_dedupe"] = d
+        if d.get(ns) == val:
+            return False
+        d[ns] = val
+        return True
+    except Exception:
+        return True
+
+
+def log_user_event(event: str, user: str = "", session: str = "", **fields) -> None:
+    try:
+        import json
+        import uuid
+        # ALWAYS stamp the best-available identity so every event is attributable to a
+        # specific user — critical with many concurrent MDP users. If the caller didn't
+        # pass a user, resolve it per-request (session/cookie). user_session is the
+        # STABLE auth session id (groups one user's events); `session` stays the
+        # per-rerun correlation id.
+        _email = (user or "").strip() or _get_user_email()
+        _usess = _get_session_id()
+        rec = {
+            "ts": datetime.now(tz=_IST).isoformat(),
+            "event": event,
+            "event_id": uuid.uuid4().hex[:16],
+            "schema": _ANALYTICS_SCHEMA_VERSION,
+            "env": _APP_ENV,
+            "app_version": _APP_VERSION,
+            "user": "" if _email in ("", "-") else _email,
+            "user_session": _usess or None,
+            "session": session or get_rerun_id(),
+            "page": _get_page_context(),
+        }
+        # Device/browser/os segmentation — cached per session, best-effort.
+        try:
+            for _ck, _cv in _get_client_context().items():
+                rec.setdefault(_ck, _cv)
+        except Exception:
+            pass
+        for _k, _v in fields.items():
+            if _v is None:
+                continue
+            if isinstance(_v, (set, tuple)):
+                _v = list(_v)
+            rec[_k] = _v
+        get_analytics_logger().info(json.dumps(rec, default=str, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# ANALYTICS EVENT HELPERS — session lifecycle, downloads, searches, actions
+# All best-effort, non-blocking; thin wrappers over log_user_event().
+# ---------------------------------------------------------------------------
+def track_login(user: str = "", method: str = "oidc", success: bool = True, reason: str = "") -> None:
+    """Emit `login` (success) or `login_failed`."""
+    try:
+        log_user_event(
+            "login" if success else "login_failed",
+            user=user, method=(method or None), reason=(reason or None),
+        )
+    except Exception:
+        pass
+
+
+def track_logout(user: str = "", route: str = "") -> None:
+    """Emit `logout` with the routing path (logout_bridge / local)."""
+    try:
+        log_user_event("logout", user=user, route=(route or None))
+    except Exception:
+        pass
+
+
+def track_download(kind: str, name: str = "", page: str = "", **props) -> None:
+    """Emit a `download` event (transcript / filing / export). Deduped per (kind,name)
+    within a session so button re-renders across reruns don't spam the feed."""
+    try:
+        if not _analytics_should_emit(f"dl:{kind}", name or kind):
+            return
+    except Exception:
+        pass
+    try:
+        log_user_event("download", kind=kind, name=(name or None),
+                       page_title=(page or None), **props)
+    except Exception:
+        pass
+
+
+def track_search(page: str, query: str, results=None, kind: str = "keyword", **props) -> None:
+    """Emit a `search` event with the ACTUAL query text + result count. Deduped per
+    (page,kind) on (query,results) so an identical re-render doesn't repeat, but a new
+    or repeated-after-different search does."""
+    try:
+        q = (query or "").strip()
+        if not q:
+            return
+        if not _analytics_should_emit(f"search:{page}:{kind}", (q, results)):
+            return
+        log_user_event("search", page_title=page, kind=kind, query=q[:200],
+                       results=(results if isinstance(results, int) else None), **props)
+    except Exception:
+        pass
+
+
+def track_action(action: str, page: str = "", dedupe_key: str = "", **props) -> None:
+    """Emit a generic `action` event (screen_run, watchlist_add, filing_open, …).
+    Pass dedupe_key to suppress identical re-renders within a session."""
+    try:
+        if dedupe_key and not _analytics_should_emit(f"action:{action}", dedupe_key):
+            return
+    except Exception:
+        pass
+    try:
+        log_user_event("action", action=action, page_title=(page or None), **props)
+    except Exception:
+        pass
+
+
+# Process-level rate-limit for auto error events (avoid flooding on repeated reruns).
+_ANALYTICS_ERR_LOCK = threading.Lock()
+_ANALYTICS_ERR_SEEN: Dict[str, float] = {}
+
+
+def _emit_analytics_error(page: str, component: str, operation: str,
+                          error_type: str, message: str, origin: str, context: str) -> None:
+    try:
+        now = time.time()
+        with _ANALYTICS_ERR_LOCK:
+            if now - _ANALYTICS_ERR_SEEN.get(origin, 0.0) < 5.0:
+                return
+            _ANALYTICS_ERR_SEEN[origin] = now
+            if len(_ANALYTICS_ERR_SEEN) > 500:
+                _ANALYTICS_ERR_SEEN.clear()
+        log_user_event(
+            "error",
+            page_title=(page or None), component=(component or None),
+            operation=(operation or None), error_type=error_type,
+            message=message, origin=origin, ctx=(context or None),
+        )
+    except Exception:
+        pass
+
+
+def log_filters_if_changed(page: str, **filters) -> None:
+    """Emit a `filter_change` analytics event when a page's filter state changes.
+
+    Complements the URL-based page_view capture for filters kept in SESSION-STATE
+    (screening criteria, newsroom keyword/sector, earnings_calls year/quarter,
+    market_data currency/units, calendar toggles) — so EVERY filter is captured, not
+    only the URL-encoded ones. Deduped per page so it fires only on an actual change,
+    and best-effort / non-blocking (never raises into the page render).
+    """
+    try:
+        import streamlit as st
+        cur = {}
+        for _k, _v in filters.items():
+            if _v in (None, "", [], ()):
+                continue
+            if isinstance(_v, (set, tuple)):
+                _v = list(_v)
+            cur[_k] = _v
+        _key = f"_analytics_filters_{page}"
+        if st.session_state.get(_key) == cur:
+            return  # unchanged — do not emit
+        _first = _key not in st.session_state
+        st.session_state[_key] = cur
+        log_user_event(
+            "filter_change",
+            user=_get_user_email() if _get_user_email() != "-" else "",
+            page_title=page,
+            filters=cur or None,
+            reason=("first-load" if _first else "filter-change"),
+        )
+    except Exception:
+        pass
+
+
+# ============================================================================
+# RAM MONITORING
+# ============================================================================
+
+def _read_int_file(path):
+    try:
+        with open(path) as _f:
+            return int(_f.read().strip())
+    except Exception:
+        return None
+
+
+def ram_snapshot_mb():
+    rss = None
+    try:
+        with open("/proc/self/status") as _f:
+            for _l in _f:
+                if _l.startswith("VmRSS:"):
+                    rss = int(_l.split()[1]) / 1024.0
+                    break
+    except Exception:
+        pass
+    _MB = 1024.0 ** 2
+    total_mb = avail_mb = None
+    try:
+        _mi = {}
+        with open("/proc/meminfo") as _f:
+            for _l in _f:
+                if _l.startswith("MemTotal:"):
+                    _mi["t"] = int(_l.split()[1]) / 1024.0
+                elif _l.startswith("MemAvailable:"):
+                    _mi["a"] = int(_l.split()[1]) / 1024.0
+                if len(_mi) == 2:
+                    break
+        total_mb, avail_mb = _mi.get("t"), _mi.get("a")
+    except Exception:
+        pass
+    if total_mb is None:
+        _lim = _read_int_file("/sys/fs/cgroup/memory.max") or _read_int_file(
+            "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+        )
+        if _lim is not None and _lim < 256 * 1024 ** 3:
+            total_mb = _lim / _MB
+    used_mb = (total_mb - avail_mb) if (total_mb is not None and avail_mb is not None) else None
+    return rss, used_mb, total_mb, avail_mb
+
+
+def log_ram(tag: str = "") -> None:
+    try:
+        rss, used, total, avail = ram_snapshot_mb()
+        anon = fdrss = None
+        try:
+            with open("/proc/self/status") as _f:
+                for _l in _f:
+                    if _l.startswith("RssAnon:"):
+                        anon = int(_l.split()[1]) / 1024.0
+                    elif _l.startswith("RssFile:"):
+                        fdrss = int(_l.split()[1]) / 1024.0
+        except Exception:
+            pass
+        _p = [f"[RAM]{(' ' + tag) if tag else ''}"]
+        if rss is not None:
+            _p.append(f"app_rss={rss:.0f}MB")
+        if anon is not None:
+            _p.append(f"rssAnon={anon:.0f}MB")
+        if fdrss is not None:
+            _p.append(f"rssFile={fdrss:.0f}MB")
+        if used is not None:
+            _p.append(f"used={used:.0f}MB")
+        if total is not None:
+            _p.append(f"total={total:.0f}MB")
+        if avail is not None and total:
+            _p.append(f"available={avail:.0f}MB ({100.0 * avail / total:.0f}% free)")
+        log_warning(" | ".join(_p), _stacklevel=3)
+    except Exception:
+        pass
+
+
+# ============================================================================
 # PERFORMANCE TIMING FUNCTIONS
 # ============================================================================
 
@@ -383,6 +1073,26 @@ def log_timing(operation: str, elapsed_ms: float, details: str = "", level: str 
     else:
         log_info(msg, _stacklevel=3)
 
+def log_data_volume(
+    table: str,
+    rows: int,
+    cols: int = 0,
+    operation: str = "",
+    details: str = "",
+) -> None:
+    """Log large result sets for STG diagnosis ([DATA_VOLUME] tag)."""
+    if rows < 1000:
+        return
+    parts = [f"[DATA_VOLUME] table={table}", f"rows={rows}"]
+    if cols > 0:
+        parts.append(f"cols={cols}")
+    if operation:
+        parts.append(f"op={operation}")
+    if details:
+        parts.append(details)
+    log_warning(" | ".join(parts), _stacklevel=3)
+
+
 def log_db_timing(query_type: str, table: str, elapsed_ms: float, rows: int = -1, ticker: str = ""):
     """Log database query timing."""
     details = f"table={table}"
@@ -397,6 +1107,8 @@ def log_db_timing(query_type: str, table: str, elapsed_ms: float, rows: int = -1
         log_warning(msg, _stacklevel=3)
     else:
         log_info(msg, _stacklevel=3)
+    if rows >= 1000:
+        log_data_volume(table, rows, operation=query_type, details=details)
 
 def log_render_timing(component: str, elapsed_ms: float, ticker: str = "", details: str = ""):
     """Log component rendering timing."""
@@ -649,7 +1361,13 @@ def clear_logs() -> bool:
             handler.close()
             logger.removeHandler(handler)
 
-        # Truncate and write cleared marker
+        for p in _rotated_log_files():
+            if p != SERVER_LOG_FILE:
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+
         ist_now = datetime.now(tz=_IST).strftime('%d-%b-%Y %I:%M:%S %p IST')
         with open(SERVER_LOG_FILE, 'w', encoding='utf-8') as f:
             f.write(
@@ -662,35 +1380,120 @@ def clear_logs() -> bool:
         print(f"Error clearing logs: {e}")
         return False
 
-def download_logs() -> bytes:
-    """Get log file content as bytes for download."""
-    ensure_log_dir()
-
-    if not SERVER_LOG_FILE.exists():
-        return b"No logs available."
-
+def _rotated_log_files() -> list:
+    base = SERVER_LOG_FILE
+    backups = []
     try:
-        with open(SERVER_LOG_FILE, 'rb') as f:
-            return f.read()
+        for p in base.parent.glob(base.name + ".*"):
+            suffix = p.name[len(base.name) + 1:]
+            if suffix.isdigit():
+                backups.append((int(suffix), p))
+    except Exception:
+        pass
+    ordered = [p for _, p in sorted(backups, key=lambda t: t[0], reverse=True)]
+    if base.exists():
+        ordered.append(base)
+    return ordered
+
+
+def download_logs() -> bytes:
+    ensure_log_dir()
+    files = _rotated_log_files()
+    if not files:
+        return b"No logs available."
+    cap = int(os.getenv("SERVER_LOG_DOWNLOAD_MAX_BYTES", str(80 * 1024 * 1024)))
+    try:
+        chunks = []
+        for p in files:
+            try:
+                sep = f"\n===== {p.name} =====\n".encode("utf-8")
+                with open(p, 'rb') as f:
+                    chunks.append(sep + f.read())
+            except Exception:
+                continue
+        blob = b"".join(chunks)
+        if len(blob) > cap:
+            blob = b"...[older log lines truncated to newest %dMB]...\n" % (cap // (1024 * 1024)) + blob[-cap:]
+        return blob if blob else b"No logs available."
     except Exception as e:
         return f"Error reading logs: {e}".encode('utf-8')
 
-def get_log_stats() -> dict:
-    """Get log file statistics."""
+
+def download_analytics_logs() -> bytes:
     ensure_log_dir()
+    _base = SERVER_LOGS_DIR / "user_analytics.log"
+    _files = []
+    try:
+        for p in _base.parent.glob(_base.name + ".*"):
+            _suf = p.name[len(_base.name) + 1:]
+            if _suf.isdigit():
+                _files.append((int(_suf), p))
+    except Exception:
+        pass
+    _ordered = [p for _, p in sorted(_files, key=lambda t: t[0], reverse=True)]
+    if _base.exists():
+        _ordered.append(_base)
+    if not _ordered:
+        return b"No analytics yet."
+    _cap = int(os.getenv("ANALYTICS_DOWNLOAD_MAX_BYTES", str(80 * 1024 * 1024)))
+    try:
+        _chunks = []
+        for p in _ordered:
+            try:
+                with open(p, 'rb') as f:
+                    _chunks.append(f.read())
+            except Exception:
+                continue
+        _blob = b"".join(_chunks)
+        if len(_blob) > _cap:
+            _blob = _blob[-_cap:]
+        return _blob if _blob else b"No analytics yet."
+    except Exception as e:
+        return f"Error reading analytics: {e}".encode('utf-8')
+
+
+def get_analytics_stats() -> dict:
+    ensure_log_dir()
+    _base = SERVER_LOGS_DIR / "user_analytics.log"
+    try:
+        _total = 0
+        _lines = 0
+        for p in _base.parent.glob(_base.name + "*"):
+            try:
+                _total += p.stat().st_size
+                with open(p, 'r', encoding='utf-8', errors='replace') as f:
+                    _lines += sum(1 for _ in f)
+            except Exception:
+                pass
+        return {'exists': _base.exists(), 'size': _total, 'events': _lines, 'path': str(_base)}
+    except Exception as e:
+        return {'exists': False, 'error': str(e)}
+
+
+def get_log_stats() -> dict:
+    ensure_log_dir()
+    segments = _rotated_log_files()
+    retained_bytes = 0
+    for p in segments:
+        try:
+            retained_bytes += p.stat().st_size
+        except Exception:
+            pass
 
     if not SERVER_LOG_FILE.exists():
         return {
             'exists': False,
             'size': 0,
             'lines': 0,
-            'modified': None
+            'modified': None,
+            'segments': len(segments),
+            'retained_size': retained_bytes,
+            'dir': str(SERVER_LOGS_DIR),
+            'persistent': str(SERVER_LOGS_DIR).startswith("/home"),
         }
 
     try:
         stat = SERVER_LOG_FILE.stat()
-
-        # Count lines
         with open(SERVER_LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
             lines = sum(1 for _ in f)
 
@@ -698,14 +1501,15 @@ def get_log_stats() -> dict:
             'exists': True,
             'size': stat.st_size,
             'lines': lines,
-            'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
-            'path': str(SERVER_LOG_FILE)
+            'modified': datetime.fromtimestamp(stat.st_mtime, tz=_IST).strftime('%d-%b-%Y %I:%M %p IST'),
+            'path': str(SERVER_LOG_FILE),
+            'segments': len(segments),
+            'retained_size': retained_bytes,
+            'dir': str(SERVER_LOGS_DIR),
+            'persistent': str(SERVER_LOGS_DIR).startswith("/home"),
         }
     except Exception as e:
-        return {
-            'exists': False,
-            'error': str(e)
-        }
+        return {'exists': False, 'error': str(e)}
 
 # ============================================================================
 # PERFORMANCE ANALYSIS HELPERS

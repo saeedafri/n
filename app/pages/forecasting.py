@@ -35,8 +35,8 @@ from data.forecast_refresh_service import (
     send_model_refresh_email,
 )
 from data.revenue_forecast_service import RevenueForecastService
-from utils.constants import get_currency_symbol
-from utils.server_logger import log_structured_error, log_timing
+from utils.constants import get_currency_symbol, QUARTERLY_FORECASTING_ENABLED
+from utils.server_logger import log_structured_error, log_timing, new_rerun_id, PageLoadTracker, log_render_complete
 
 
 BRAND_RED = '#D62E2F'
@@ -464,7 +464,7 @@ SCENARIO_COLORS = {
 # Display currency for this page. Populated at runtime from the service payload.
 _EST_DISPLAY_CURRENCY = "USD"
 
-require_auth(page="forecasting")
+# require_auth(page="forecasting")
 
 hide_sidebar()
 render_styles()
@@ -589,10 +589,17 @@ def _company_frame(payload: Dict[str, Any]) -> pd.DataFrame:
     if df.empty:
         return df
     df = df.copy()
-    df['year'] = pd.to_datetime(df['period_date'], errors='coerce').dt.year
+    # Quarterly rows carry a qidx (fiscal_year*4+quarter) so the x-axis is strictly
+    # ordered; annual rows derive the year from the period date.
+    if 'qidx' in df.columns:
+        df['year'] = pd.to_numeric(df['qidx'], errors='coerce')
+    else:
+        df['year'] = pd.to_datetime(df['period_date'], errors='coerce').dt.year
     df['sales_billions'] = pd.to_numeric(df['total_revenue_billions'], errors='coerce')
     df['is_outlier'] = df['year'].isin(set(payload.get('outlier_years', [])))
     df['growth_pct'] = df['sales_billions'].pct_change() * 100
+    if 'period_label' not in df.columns:
+        df['period_label'] = df['year'].astype('Int64').astype(str)
     return df.sort_values('year').reset_index(drop=True)
 
 
@@ -609,6 +616,8 @@ def _training_frame(payload: Dict[str, Any]) -> pd.DataFrame:
         df['growth_pct'] = pd.NA
     if 'is_outlier' not in df.columns:
         df['is_outlier'] = False
+    if 'period_label' not in df.columns:
+        df['period_label'] = df['year'].astype('Int64').astype(str)
     return df.dropna(subset=['year', 'sales_billions']).sort_values('year').reset_index(drop=True)
 
 
@@ -618,6 +627,8 @@ def _forecast_frame(payload: Dict[str, Any]) -> pd.DataFrame:
         return df
     df = df.copy()
     df['year'] = pd.to_numeric(df['year'], errors='coerce')
+    if 'period_label' not in df.columns:
+        df['period_label'] = df['year'].astype('Int64').astype(str)
     return df.dropna(subset=['year']).sort_values('year').reset_index(drop=True)
 
 
@@ -634,10 +645,11 @@ def _available_model_keys(forecast_df: pd.DataFrame) -> List[str]:
     if forecast_df.empty:
         return []
     ordered: List[str] = []
-    for key in ['linear', 'cagr', 'exp_smoothing', 'holt', 'ma_trend', 'weighted_avg', 'ensemble']:
+    for key in ['linear', 'cagr', 'exp_smoothing', 'holt', 'ma_trend', 'weighted_avg', 'seasonal_naive', 'ensemble']:
         if key in forecast_df.columns:
             ordered.append(key)
-    extras = [col for col in forecast_df.columns if col not in ordered and col != 'year' and not col.startswith('scenario_')]
+    extras = [col for col in forecast_df.columns
+              if col not in ordered and col not in ('year', 'period_label') and not col.startswith('scenario_')]
     return ordered + extras
 
 
@@ -741,16 +753,20 @@ def _model_popup(
     overview = MODEL_BUSINESS_OVERVIEW.get(model_key, '')
     if overview:
         st.markdown(f'<p style="color:#6B7280;font-size:14px;line-height:1.6;">{overview}</p>', unsafe_allow_html=True)
+    _is_q = payload.get('period_type') == 'quarterly'
+    _plabels = payload.get('period_labels') if _is_q else None
+    _punit = 'quarter' if _is_q else 'year'
     if not forecast_df.empty and model_key in forecast_df.columns:
         st.plotly_chart(
-            _build_model_chart(training_df, actual_df, forecast_df, payload.get('raw_forecasts', {}), model_key, model_keys),
+            _build_model_chart(training_df, actual_df, forecast_df, payload.get('raw_forecasts', {}),
+                               model_key, model_keys, period_labels=_plabels, period_unit=_punit),
             use_container_width=True,
             config={'displayModeBar': False},
         )
         summary = _model_summary_metrics(model_key, payload, forecast_df)
         c1, c2, c3 = st.columns(3)
         with c1:
-            _render_card('Forecast start', summary.get('start_year', '—'), 'First projected year')
+            _render_card('Forecast start', summary.get('start_year', '—'), f'First projected {_punit}')
         with c2:
             _render_card('First forecast', summary.get('first_value', '—'), f"{summary.get('vs_last_actual', '—')} vs last actual")
         with c3:
@@ -1195,12 +1211,36 @@ def _render_css() -> None:
     )
 
 
+def _apply_period_xaxis(
+    fig: go.Figure,
+    period_labels: 'Optional[Dict[int, str]]' = None,
+    period_unit: str = 'year',
+) -> None:
+    """Configure the x-axis: numeric years (annual) or qidx→'Q# YYYY' (quarterly).
+
+    Annual keeps its exact prior behaviour (period_labels=None → linear dtick=1).
+    Quarterly maps the numeric qidx positions to quarter labels, thinned to stay
+    readable across long histories.
+    """
+    title = 'Fiscal quarter' if period_unit == 'quarter' else 'Fiscal year'
+    if period_labels:
+        xs = sorted(period_labels)
+        step = max(1, (len(xs) + 23) // 24)   # ≤ ~24 tick labels
+        sel = xs[::step]
+        fig.update_xaxes(showgrid=False, tickmode='array', tickvals=sel,
+                         ticktext=[period_labels[x] for x in sel], title_text=title)
+    else:
+        fig.update_xaxes(showgrid=False, tickmode='linear', dtick=1, title_text=title)
+
+
 def _build_overview_chart(
     training_df: pd.DataFrame,
     actual_df: pd.DataFrame,
     forecast_df: pd.DataFrame,
     model_keys: List[str],
     scenario_keys: List[str],
+    period_labels: 'Optional[Dict[int, str]]' = None,
+    period_unit: str = 'year',
 ) -> go.Figure:
     fig = go.Figure()
 
@@ -1312,7 +1352,7 @@ def _build_overview_chart(
         xaxis_title='Fiscal year',
         yaxis_title='Revenue (USD, billions)',
     )
-    fig.update_xaxes(showgrid=False, tickmode='linear', dtick=1)
+    _apply_period_xaxis(fig, period_labels, period_unit)
     fig.update_yaxes(showgrid=True, gridcolor=GRID)
     return fig
 
@@ -1324,6 +1364,8 @@ def _build_model_chart(
     raw_forecasts: Dict[str, Dict[str, Any]],
     model_key: str,
     model_keys: List[str],
+    period_labels: 'Optional[Dict[int, str]]' = None,
+    period_unit: str = 'year',
 ) -> go.Figure:
     fig = go.Figure()
 
@@ -1468,7 +1510,7 @@ def _build_model_chart(
         xaxis_title='Fiscal year',
         yaxis_title='Revenue (USD, billions)',
     )
-    fig.update_xaxes(showgrid=False, tickmode='linear', dtick=1)
+    _apply_period_xaxis(fig, period_labels, period_unit)
     fig.update_yaxes(showgrid=True, gridcolor=GRID)
     return fig
 
@@ -1505,10 +1547,15 @@ def _build_backtest_chart(backtest_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def _forecast_table(forecast_df: pd.DataFrame, model_keys: List[str], scenario_keys: List[str]) -> pd.DataFrame:
+def _forecast_table(forecast_df: pd.DataFrame, model_keys: List[str], scenario_keys: List[str],
+                    period_unit: str = 'year') -> pd.DataFrame:
     if forecast_df.empty:
         return pd.DataFrame()
-    display = pd.DataFrame({'Forecast year': forecast_df['year'].astype(int)})
+    _hdr = 'Forecast quarter' if period_unit == 'quarter' else 'Forecast year'
+    if 'period_label' in forecast_df.columns:
+        display = pd.DataFrame({_hdr: forecast_df['period_label'].astype(str)})
+    else:
+        display = pd.DataFrame({_hdr: forecast_df['year'].astype(int)})
     for key in model_keys:
         if key in forecast_df.columns:
             display[_model_label(key)] = forecast_df[key].apply(_fmt_billions)
@@ -1524,14 +1571,19 @@ def _model_summary_metrics(model_key: str, payload: Dict[str, Any], forecast_df:
     result: Dict[str, str] = {}
     if forecast_df.empty or model_key not in forecast_df.columns:
         return result
-    series = forecast_df[['year', model_key]].dropna()
+    _cols = ['year', 'period_label', model_key] if 'period_label' in forecast_df.columns else ['year', model_key]
+    series = forecast_df[_cols].dropna(subset=['year', model_key])
     if series.empty:
         return result
     last_actual = summary.get('latest_actual_revenue_billions')
     first_value = float(series.iloc[0][model_key])
     last_value = float(series.iloc[-1][model_key])
-    result['start_year'] = _fmt_year(series.iloc[0]['year'])
-    result['end_year'] = _fmt_year(series.iloc[-1]['year'])
+    if 'period_label' in series.columns:
+        result['start_year'] = str(series.iloc[0]['period_label'])
+        result['end_year'] = str(series.iloc[-1]['period_label'])
+    else:
+        result['start_year'] = _fmt_year(series.iloc[0]['year'])
+        result['end_year'] = _fmt_year(series.iloc[-1]['year'])
     result['first_value'] = _fmt_billions(first_value)
     result['last_value'] = _fmt_billions(last_value)
     if last_actual not in (None, 0):
@@ -1549,6 +1601,8 @@ def _scenario_chart(
     forecast_df: pd.DataFrame,
     training_df: 'pd.DataFrame | None' = None,
     actual_df: 'pd.DataFrame | None' = None,
+    period_labels: 'Optional[Dict[int, str]]' = None,
+    period_unit: str = 'year',
 ) -> go.Figure:
     fig = go.Figure()
     if forecast_df.empty:
@@ -1646,7 +1700,7 @@ def _scenario_chart(
         xaxis_title='Fiscal year',
         yaxis_title='Revenue (USD, billions)',
     )
-    fig.update_xaxes(showgrid=False, tickmode='linear', dtick=1)
+    _apply_period_xaxis(fig, period_labels, period_unit)
     fig.update_yaxes(showgrid=True, gridcolor=GRID)
     return fig
 
@@ -1662,14 +1716,17 @@ def _render_historical_stats(payload: Dict[str, Any], training_df: pd.DataFrame)
         '<p class="rev-section-copy">Key growth metrics computed on the cleaned, outlier-excluded series — matching the notebook DATA SUMMARY output.</p>',
         unsafe_allow_html=True,
     )
+    _is_q = payload.get('period_type') == 'quarterly'
+    _per = 'Quarter' if _is_q else 'Year'
+    _rate = 'QoQ' if _is_q else 'YoY'
     stat_cols = st.columns(6)
     stats_data = [
         ('CAGR',              _fmt_pct(summary.get('cagr_pct')),                 'Compound annual growth rate'),
-        ('Avg Growth',        _fmt_pct(summary.get('avg_annual_growth_pct')),     'Arithmetic mean of YoY rates'),
-        ('Median Growth',     _fmt_pct(summary.get('median_annual_growth_pct')),  '50th percentile of YoY rates'),
-        ('Growth Volatility', _fmt_pct(summary.get('growth_volatility_pct')),     'Std deviation of YoY rates'),
-        ('Best Year',         _fmt_pct(summary.get('max_growth_pct')),            'Highest single-year growth'),
-        ('Worst Year',        _fmt_pct(summary.get('min_growth_pct')),            'Lowest single-year growth'),
+        ('Avg Growth',        _fmt_pct(summary.get('avg_annual_growth_pct')),     f'Arithmetic mean of {_rate} rates'),
+        ('Median Growth',     _fmt_pct(summary.get('median_annual_growth_pct')),  f'50th percentile of {_rate} rates'),
+        ('Growth Volatility', _fmt_pct(summary.get('growth_volatility_pct')),     f'Std deviation of {_rate} rates'),
+        (f'Best {_per}',      _fmt_pct(summary.get('max_growth_pct')),            f'Highest single-{_per.lower()} growth'),
+        (f'Worst {_per}',     _fmt_pct(summary.get('min_growth_pct')),            f'Lowest single-{_per.lower()} growth'),
     ]
     for col, (title, value, meta) in zip(stat_cols, stats_data):
         with col:
@@ -1678,19 +1735,23 @@ def _render_historical_stats(payload: Dict[str, Any], training_df: pd.DataFrame)
     # ── Historical data table with outlier markers ───────────────────────────
     st.markdown('<h3 class="rev-section-title" style="margin-top:20px;">Historical data</h3>', unsafe_allow_html=True)
     if not training_df.empty:
-        hist = training_df[['year', 'sales_billions', 'growth_pct', 'is_outlier']].copy()
-        hist['Year'] = hist['year'].astype(int).astype(str)  # string = left-aligned, narrow column
+        hist = training_df.copy()
+        _grow_col = f'{_rate} Growth'
+        if 'period_label' in hist.columns:
+            hist[_per] = hist['period_label'].astype(str)
+        else:
+            hist[_per] = hist['year'].astype(int).astype(str)  # string = left-aligned, narrow column
         hist['Revenue ($B)'] = hist['sales_billions'].apply(lambda v: f'${float(v):,.2f}B' if pd.notna(v) else '—')
-        hist['YoY Growth'] = hist['growth_pct'].apply(lambda v: f'{v:+.2f}%' if pd.notna(v) else '—')
+        hist[_grow_col] = hist['growth_pct'].apply(lambda v: f'{v:+.2f}%' if pd.notna(v) else '—')
         hist['Status'] = hist['is_outlier'].map({True: '⚠ Outlier — excluded from models', False: '✓ Normal'})
         st.dataframe(
-            hist[['Year', 'Revenue ($B)', 'YoY Growth', 'Status']],
+            hist[[_per, 'Revenue ($B)', _grow_col, 'Status']],
             use_container_width=True,
             hide_index=True,
             column_config={
-                'Year': st.column_config.TextColumn('Year', width='small'),
+                _per: st.column_config.TextColumn(_per, width='small'),
                 'Revenue ($B)': st.column_config.TextColumn('Revenue ($B)'),
-                'YoY Growth': st.column_config.TextColumn('YoY Growth', width='small'),
+                _grow_col: st.column_config.TextColumn(_grow_col, width='small'),
                 'Status': st.column_config.TextColumn('Status'),
             },
         )
@@ -1711,14 +1772,17 @@ def _render_implied_growth_table(forecast_df: pd.DataFrame, payload: Dict[str, A
         unsafe_allow_html=True,
     )
 
-    ens = forecast_df[['year', 'ensemble']].dropna().copy()
+    _is_q = payload.get('period_type') == 'quarterly'
+    _cols = ['year', 'period_label', 'ensemble'] if 'period_label' in forecast_df.columns else ['year', 'ensemble']
+    ens = forecast_df[_cols].dropna(subset=['year', 'ensemble']).copy()
     all_values = [float(last_actual)] + ens['ensemble'].tolist()
-    yoy = [(all_values[i + 1] / all_values[i] - 1) * 100 for i in range(len(all_values) - 1)]
-
+    growth = [(all_values[i + 1] / all_values[i] - 1) * 100 for i in range(len(all_values) - 1)]
+    _period_col = (ens['period_label'].astype(str).tolist()
+                   if 'period_label' in ens.columns else ens['year'].astype(int).tolist())
     implied = pd.DataFrame({
-        'Year': ens['year'].astype(int).tolist(),
+        ('Quarter' if _is_q else 'Year'): _period_col,
         'Ensemble Forecast ($B)': [f'${float(v):,.2f}B' for v in ens['ensemble'].tolist()],
-        'Implied YoY Growth': [f'{g:+.2f}%' for g in yoy],
+        ('Implied QoQ Growth' if _is_q else 'Implied YoY Growth'): [f'{g:+.2f}%' for g in growth],
     })
     st.dataframe(implied, use_container_width=True, hide_index=True)
 
@@ -1730,6 +1794,8 @@ def _render_model_panel(
     actual_df: pd.DataFrame,
     forecast_df: pd.DataFrame,
     model_keys: List[str],
+    period_labels: 'Optional[Dict[int, str]]' = None,
+    period_unit: str = 'year',
 ) -> None:
     model_name = _model_label(model_key)
     model_full_name = MODEL_FULL_LABELS.get(model_key, model_name)
@@ -1755,13 +1821,15 @@ def _render_model_panel(
                     st.divider()
                     st.markdown(note)
     st.plotly_chart(
-        _build_model_chart(training_df, actual_df, forecast_df, payload.get('raw_forecasts', {}), model_key, model_keys),
+        _build_model_chart(training_df, actual_df, forecast_df, payload.get('raw_forecasts', {}),
+                           model_key, model_keys, period_labels=period_labels, period_unit=period_unit),
         use_container_width=True,
         config={'displayModeBar': False},
     )
+    _proj = 'quarter' if period_unit == 'quarter' else 'year'
     cols = st.columns(3)
     with cols[0]:
-        _render_card('Forecast start', summary.get('start_year', '—'), 'First projected year')
+        _render_card('Forecast start', summary.get('start_year', '—'), f'First projected {_proj}')
     with cols[1]:
         _render_card('First forecast', summary.get('first_value', '—'), f"{summary.get('vs_last_actual', '—')} vs last actual")
     with cols[2]:
@@ -2299,6 +2367,15 @@ def _build_forecast_excel_single(
             ws.column_dimensions[get_column_letter(i)].width = w
 
     summary = payload.get("summary", {})
+    _is_q = payload.get("period_type") == "quarterly"
+    _period_hdr = "Quarter" if _is_q else "Year"
+
+    def _pcell(row):
+        """(value, number_format) for the period column — 'Q# YYYY' text (quarterly) or year (annual)."""
+        if _is_q and row.get("period_label"):
+            return str(row.get("period_label")), "@"
+        return int(row["year"]), "0000"
+
     wb = Workbook()
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -2320,7 +2397,7 @@ def _build_forecast_excel_single(
     scen_cols = ["scenario_pessimistic", "scenario_baseline", "scenario_optimistic"]
     scen_cols = [k for k in scen_cols if k in (scenario_keys or [])]
 
-    col_labels = ["Year", "Type", "Revenue (mm)"] + [MODEL_LABELS.get(k, k) for k in all_model_cols] + [MODEL_LABELS.get(k, k) for k in scen_cols]
+    col_labels = [_period_hdr, "Type", "Revenue (mm)"] + [MODEL_LABELS.get(k, k) for k in all_model_cols] + [MODEL_LABELS.get(k, k) for k in scen_cols]
 
     HDR_ROW = 4
     for ci, lbl in enumerate(col_labels, 1):
@@ -2340,11 +2417,11 @@ def _build_forecast_excel_single(
     r = HDR_ROW + 1
     # Historical rows — use actual_df so outliers are included
     for _, row in _actual_rows_sorted.iterrows():
-        yr = int(row["year"])
+        _pv, _pf = _pcell(row)
         rev_mm = float(row["sales_billions"]) * 1000.0  # exact, no rounding
         is_out = bool(row.get("is_outlier", False))
         bg = _WARN if is_out else _ACTUAL_BG
-        _val(ws1, r, 1, yr, fmt="0000", align="center", bg=bg)
+        _val(ws1, r, 1, _pv, fmt=_pf, align="center", bg=bg)
         typ = "Actual ✓" + (" ⚠ Outlier" if is_out else "")
         _val(ws1, r, 2, typ, fmt="@", align="center", bg=bg)
         _val(ws1, r, 3, rev_mm, fmt="#,##0.0000000000", bg=bg)  # exact, no format rounding
@@ -2354,8 +2431,8 @@ def _build_forecast_excel_single(
 
     # Forecast rows
     for _, row in _fcst_rows_sorted.iterrows():
-        yr = int(row["year"])
-        _val(ws1, r, 1, yr, fmt="0000", align="center", bg=_GREEN_LIGHT)
+        _pv, _pf = _pcell(row)
+        _val(ws1, r, 1, _pv, fmt=_pf, align="center", bg=_GREEN_LIGHT)
         _val(ws1, r, 2, "Forecast ▶", fmt="@", align="center", bg=_GREEN_LIGHT)
         _val(ws1, r, 3, None, fmt="#,##0.0000000000", bg=_GREEN_LIGHT)
         for ci, k in enumerate(all_model_cols, 4):
@@ -2427,7 +2504,7 @@ def _build_forecast_excel_single(
     ws3.merge_cells("A2:E2")
     ws3.cell(2, 1, "Pessimistic = 25th pct growth  ·  Baseline = 50th pct (median)  ·  Optimistic = 75th pct  ·  All values in USD Millions (mm)").font = Font(name="Calibri", size=9, italic=True, color=_GREY_MID)
 
-    sc_hdrs = ["Year", "Ensemble (mm)", "Pessimistic (mm)", "Baseline (mm)", "Optimistic (mm)"]
+    sc_hdrs = [_period_hdr, "Ensemble (mm)", "Pessimistic (mm)", "Baseline (mm)", "Optimistic (mm)"]
     sc_cols_map = {"Ensemble (mm)": "ensemble", "Pessimistic (mm)": "scenario_pessimistic", "Baseline (mm)": "scenario_baseline", "Optimistic (mm)": "scenario_optimistic"}
     for ci, h in enumerate(sc_hdrs, 1):
         bg = _GREEN if h.startswith("Ensemble") else _BLUE
@@ -2436,8 +2513,8 @@ def _build_forecast_excel_single(
 
     if not forecast_df.empty:
         for ri, (_, row) in enumerate(forecast_df.iterrows(), 5):
-            yr = int(row["year"])
-            _val(ws3, ri, 1, yr, fmt="0000", align="center")
+            _pv, _pf = _pcell(row)
+            _val(ws3, ri, 1, _pv, fmt=_pf, align="center")
             for ci, (hdr, key) in enumerate(sc_cols_map.items(), 2):
                 v = row.get(key)
                 val = float(v) * 1000.0 if v is not None and not pd.isna(v) else None
@@ -2460,20 +2537,22 @@ def _build_forecast_excel_single(
     ws4.merge_cells("A2:C2")
     ws4.cell(2, 1, "YoY growth implied by the ensemble forecast starting from the last actual revenue.").font = Font(name="Calibri", size=9, italic=True, color=_GREY_MID)
 
-    for ci, h in enumerate(["Year", "Ensemble Forecast (mm)", "Implied YoY Growth (%)"], 1):
+    _growth_hdr = "Implied QoQ Growth (%)" if _is_q else "Implied YoY Growth (%)"
+    for ci, h in enumerate([_period_hdr, "Ensemble Forecast (mm)", _growth_hdr], 1):
         _hdr(ws4, 4, ci, h, bg=_GREEN, size=10)
     ws4.freeze_panes = "A5"
 
     last_actual_b = summary.get("latest_actual_revenue_billions")
     if not forecast_df.empty and "ensemble" in forecast_df.columns and last_actual_b is not None:
-        ens = forecast_df[["year", "ensemble"]].dropna()
+        _ecols = ["year", "period_label", "ensemble"] if "period_label" in forecast_df.columns else ["year", "ensemble"]
+        ens = forecast_df[_ecols].dropna(subset=["year", "ensemble"])
         all_vals = [float(last_actual_b)] + ens["ensemble"].tolist()
         yoy = [(all_vals[i + 1] / all_vals[i] - 1) * 100 for i in range(len(all_vals) - 1)]
         for ri, (_, row) in enumerate(ens.iterrows(), 5):
-            yr = int(row["year"])
+            _pv, _pf = _pcell(row)
             v = float(row["ensemble"]) * 1000.0
             g = yoy[ri - 5]
-            _val(ws4, ri, 1, yr, fmt="0000", align="center")
+            _val(ws4, ri, 1, _pv, fmt=_pf, align="center")
             _val(ws4, ri, 2, v, fmt="#,##0.0000000000", bg=_GREEN_LIGHT)
             _val(ws4, ri, 3, g, fmt="0.0000000000", bg=_GREEN_LIGHT)
     else:
@@ -2852,13 +2931,18 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
 </style>
 """, unsafe_allow_html=True)
 
-    period_type = st.radio(
-        "Period Type",
-        options=["Annual", "Quarterly"],
-        index=0,
-        horizontal=True,
-        key="refresh_dialog_period_type",
-    )
+    # Quarterly forecasting paused (see constants.QUARTERLY_FORECASTING_ENABLED):
+    # hide the Period Type toggle so admin refresh runs the Annual cadence only.
+    if QUARTERLY_FORECASTING_ENABLED:
+        period_type = st.radio(
+            "Period Type",
+            options=["Annual", "Quarterly"],
+            index=0,
+            horizontal=True,
+            key="refresh_dialog_period_type",
+        )
+    else:
+        period_type = "Annual"
 
     # Cadence-aware backend: annual vs quarterly forecast functions.
     _is_quarterly = period_type == "Quarterly"
@@ -2964,192 +3048,12 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
         )
 
 
-def _build_quarterly_overview_chart(
-    hist_df: pd.DataFrame,
-    forecast_rows: List[Dict[str, Any]],
-    model_keys: List[str],
-    scenario_keys: List[str],
-) -> go.Figure:
-    """Historical quarters + per-model forecast lines + ensemble + scenario band."""
-    fig = go.Figure()
-    hist_labels = hist_df['label'].tolist()
-    hist_vals = pd.to_numeric(hist_df['sales'], errors='coerce').tolist()
-
-    fc_labels = [r['label'] for r in forecast_rows]
-    bridge_x = ([hist_labels[-1]] + fc_labels) if hist_labels else fc_labels
-    last_hist = hist_vals[-1] if hist_vals else None
-
-    # Scenario band (drawn first so lines sit on top)
-    if 'scenario_pessimistic' in scenario_keys and 'scenario_optimistic' in scenario_keys:
-        pess = [r.get('scenario_pessimistic') for r in forecast_rows]
-        opti = [r.get('scenario_optimistic') for r in forecast_rows]
-        fig.add_trace(go.Scatter(
-            x=fc_labels + fc_labels[::-1], y=opti + pess[::-1],
-            fill='toself', fillcolor='rgba(214,46,47,0.08)', line=dict(width=0),
-            name='Scenario range', hoverinfo='skip', showlegend=True,
-        ))
-
-    # Individual models (faint)
-    for idx, key in enumerate(model_keys):
-        if key == 'ensemble':
-            continue
-        vals = [r.get(key) for r in forecast_rows]
-        fig.add_trace(go.Scatter(
-            x=fc_labels, y=vals, mode='lines', name=_model_label(key),
-            line=dict(color=_model_color(key, idx), width=1, dash=_model_dash(key)),
-            opacity=0.45,
-        ))
-
-    # Historical (solid black)
-    fig.add_trace(go.Scatter(
-        x=hist_labels, y=hist_vals, mode='lines+markers', name='Historical',
-        line=dict(color=INK, width=2), marker=dict(size=5),
-    ))
-
-    # Ensemble (bold dashed red), bridged from last actual
-    if any('ensemble' in r for r in forecast_rows):
-        ens = [r.get('ensemble') for r in forecast_rows]
-        fig.add_trace(go.Scatter(
-            x=bridge_x, y=([last_hist] + ens) if last_hist is not None else ens,
-            mode='lines+markers', name='Ensemble',
-            line=dict(color=BRAND_RED, width=2.5, dash='dash'), marker=dict(size=5),
-        ))
-
-    _cur = get_currency_symbol(_EST_DISPLAY_CURRENCY)
-    # Force chronological left→right order: history first, then forecast quarters.
-    # (Without this, Plotly orders categories by trace-add order and the forecast
-    # band — added first so it sits behind the lines — would jump to the left.)
-    _category_order = hist_labels + [l for l in fc_labels if l not in set(hist_labels)]
-    fig.update_layout(
-        height=420, margin=dict(l=10, r=10, t=30, b=80),
-        plot_bgcolor='white', paper_bgcolor='white',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='left', x=0),
-        yaxis=dict(title=f'Revenue ({_cur}B)', gridcolor='#ECECEE', zeroline=False),
-        xaxis=dict(tickangle=-45, showgrid=False,
-                   categoryorder='array', categoryarray=_category_order),
-        hovermode='x unified',
-    )
-    return fig
-
-
-def _build_quarterly_excel(
-    ticker: str, company_name: str,
-    hist_df: pd.DataFrame, forecast_rows: List[Dict[str, Any]],
-    backtest_rows: List[Dict[str, Any]], model_keys: List[str], scenario_keys: List[str],
-) -> bytes:
-    """Three-sheet workbook: Historical, Quarterly Forecast, Backtest."""
-    from io import BytesIO
-    buf = BytesIO()
-    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-        if not hist_df.empty:
-            _h = hist_df[['label', 'sales']].rename(columns={'label': 'Quarter', 'sales': 'Revenue (B)'})
-            _h.to_excel(writer, sheet_name='Historical', index=False)
-
-        if forecast_rows:
-            cols = {'Quarter': [r['label'] for r in forecast_rows]}
-            for k in model_keys:
-                cols[_model_label(k)] = [r.get(k) for r in forecast_rows]
-            for k in scenario_keys:
-                cols[_model_label(k)] = [r.get(k) for r in forecast_rows]
-            pd.DataFrame(cols).to_excel(writer, sheet_name='Quarterly Forecast', index=False)
-
-        if backtest_rows:
-            pd.DataFrame(backtest_rows).to_excel(writer, sheet_name='Backtest', index=False)
-    return buf.getvalue()
-
-
-def _render_quarterly_view(selected_ticker: str) -> None:
-    """Self-contained quarterly forecast view (does not touch the annual render path)."""
-    with st.spinner(f'Loading quarterly forecasts for {selected_ticker}...'):
-        payload = RevenueForecastService.get_quarterly_dashboard(selected_ticker, periods=20)
-
-    summary = payload.get('summary', {})
-    global _EST_DISPLAY_CURRENCY
-    _EST_DISPLAY_CURRENCY = payload.get('reported_currency') or summary.get('reported_currency') or 'USD'
-    company_name = payload.get('company_name', selected_ticker)
-    forecast_rows = payload.get('forecast_rows', [])
-    backtest_rows = payload.get('backtest_rows', [])
-    hist_df = pd.DataFrame(payload.get('historical_rows', []))
-    model_keys = [k for k in ['linear', 'cagr', 'exp_smoothing', 'holt', 'ma_trend',
-                              'weighted_avg', 'seasonal_naive', 'ensemble']
-                  if forecast_rows and k in forecast_rows[0]]
-    scenario_keys = [k for k in ['scenario_pessimistic', 'scenario_baseline', 'scenario_optimistic']
-                     if forecast_rows and k in forecast_rows[0]]
-
-    st.markdown(
-        f'<div class="rev-hero"><span class="rev-hero-company">{company_name} ({selected_ticker})</span>'
-        f'<span class="rev-hero-divider"></span>'
-        f'<div class="rev-chip-row"><span class="rev-chip">Historical quarters: '
-        f'{_fmt_int(summary.get("historical_rows"))}</span>'
-        f'<span class="rev-chip">Quarterly · seasonally adjusted</span></div></div>',
-        unsafe_allow_html=True,
-    )
-
-    if not forecast_rows:
-        st.info(summary.get('note') or
-                'No quarterly forecast available. The quarterly engine needs ≥ 8 quarters of revenue. '
-                'Use “Refresh Data → Quarterly” to compute it.')
-        return
-
-    best_key = payload.get('best_method') or ''
-    cards = st.columns(5)
-    with cards[0]:
-        _render_card('Latest Actual Revenue', _fmt_billions(summary.get('latest_actual_revenue_billions')),
-                     f"Quarter {summary.get('latest_actual_label', '—')}")
-    with cards[1]:
-        _render_card('Ensemble — Next Quarter', _fmt_billions(summary.get('next_forecast_value_billions')),
-                     f"Forecast {summary.get('next_forecast_label', '—')}")
-    with cards[2]:
-        _render_card('Best Forecasting Model', MODEL_FULL_LABELS.get(best_key, _model_label(best_key or '—')),
-                     'Lowest backtest MAPE')
-    with cards[3]:
-        _render_card('Quarters in Training', _fmt_int(summary.get('historical_rows')),
-                     f"Total rows loaded: {_fmt_int(summary.get('actual_rows'))}")
-    with cards[4]:
-        _render_card('Forecast Horizon', f"{_fmt_int(summary.get('forecast_periods'))} quarters",
-                     f"Through {summary.get('forecast_end_label', '—')}")
-
-    st.markdown('<h3 class="rev-section-title">Quarterly forecast overview</h3>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="rev-section-copy">Historical quarters feed the seasonal engine; the chart overlays every '
-        'model, the ensemble (dashed), and the pessimistic–optimistic scenario band.</p>',
-        unsafe_allow_html=True,
-    )
-    st.plotly_chart(
-        _build_quarterly_overview_chart(hist_df, forecast_rows, model_keys, scenario_keys),
-        use_container_width=True, config={'displayModeBar': False},
-    )
-
-    # Forecast table — quarters as rows, models as columns
-    tbl = {'Quarter': [r['label'] for r in forecast_rows]}
-    for k in model_keys:
-        tbl[_model_label(k)] = [_fmt_billions(r.get(k)) for r in forecast_rows]
-    for k in scenario_keys:
-        tbl[_model_label(k)] = [_fmt_billions(r.get(k)) for r in forecast_rows]
-    st.dataframe(pd.DataFrame(tbl), use_container_width=True, hide_index=True)
-
-    if backtest_rows:
-        st.markdown('<h3 class="rev-section-title" style="margin-top:28px;">Model backtest (MAPE)</h3>',
-                    unsafe_allow_html=True)
-        _bt = pd.DataFrame(backtest_rows)
-        _bt = _bt[[c for c in ['method', 'mape', 'bias', 'rmse'] if c in _bt.columns]]
-        _bt['method'] = _bt['method'].map(lambda k: _model_label(k))
-        _bt = _bt.rename(columns={'method': 'Model', 'mape': 'MAPE %', 'bias': 'Bias', 'rmse': 'RMSE'})
-        st.dataframe(_bt, use_container_width=True, hide_index=True)
-
-    # Excel export
-    try:
-        _xl = _build_quarterly_excel(selected_ticker, company_name, hist_df, forecast_rows,
-                                     backtest_rows, model_keys, scenario_keys)
-        _render_excel_js_download(_xl, f'{selected_ticker}_Quarterly_Revenue_Forecasting.xlsx', 'Excel')
-    except Exception as _exc:
-        log_structured_error(_exc, page='forecasting', component='_render_quarterly_view',
-                             operation='BUILD_QUARTERLY_EXCEL')
-
 
 def main() -> None:
+    new_rerun_id("forecasting")
     inject_red_spinner_css()
     page_start = perf_counter()
+    _tracker = PageLoadTracker("forecasting")
 
     # Lazy schema init — runs once per session
     if not st.session_state.get("_forecast_schema_inited"):
@@ -3303,45 +3207,65 @@ def main() -> None:
         return
 
     # ── INDIVIDUAL TICKER view ────────────────────────────────────────────
-    # Honor ?period_type=Quarterly from a cross-link, but only on first visit so
-    # it never overrides a selection the user made on this page.
-    if 'forecasting_period_type' not in st.session_state:
-        _qp_period = st.query_params.get('period_type')
-        st.session_state['forecasting_period_type'] = (
-            _qp_period if _qp_period in ('Annual', 'Quarterly') else 'Annual'
-        )
-    _pcol, _ = st.columns([1.4, 4])
-    with _pcol:
-        st.markdown('<div class="est-horizon-label">Period</div>', unsafe_allow_html=True)
-        forecasting_period_type = st.radio(
-            'Period type', options=['Annual', 'Quarterly'], horizontal=True,
-            key='forecasting_period_type', label_visibility='collapsed',
-        )
+    # Quarterly forecasting paused (see constants.QUARTERLY_FORECASTING_ENABLED):
+    # hide the Period toggle and force Annual so the ?period_type=Quarterly
+    # deep-link cannot select it either. Annual is the only path when disabled.
+    if QUARTERLY_FORECASTING_ENABLED:
+        # Honor ?period_type=Quarterly from a cross-link, but only on first visit so
+        # it never overrides a selection the user made on this page.
+        if 'forecasting_period_type' not in st.session_state:
+            _qp_period = st.query_params.get('period_type')
+            st.session_state['forecasting_period_type'] = (
+                _qp_period if _qp_period in ('Annual', 'Quarterly') else 'Annual'
+            )
+        _pcol, _ = st.columns([1.4, 4])
+        with _pcol:
+            st.markdown('<div class="est-horizon-label">Period</div>', unsafe_allow_html=True)
+            forecasting_period_type = st.radio(
+                'Period type', options=['Annual', 'Quarterly'], horizontal=True,
+                key='forecasting_period_type', label_visibility='collapsed',
+            )
+    else:
+        forecasting_period_type = 'Annual'
 
-    # Quarterly takes a dedicated, self-contained render path (zero annual regression).
-    if forecasting_period_type == 'Quarterly':
-        _render_quarterly_view(selected_ticker)
-        render_coresight_footer()
-        return
+    # Quarterly and Annual share the SAME render path below — only the data source
+    # and the period units (year vs quarter) differ.
+    _is_quarterly = forecasting_period_type == 'Quarterly'
+    _period_unit = 'quarter' if _is_quarterly else 'year'
 
-    # ── ANNUAL view — horizon slider only shown here ──────────────────────
+    # ── Forecast horizon slider (period-aware units) ──────────────────────
     with header_right:
         st.markdown('<div class="est-horizon-label">Forecast Horizon</div>', unsafe_allow_html=True)
-        forecast_periods = st.slider(
-            'Forecast years',
-            min_value=1,
-            max_value=5,
-            value=st.session_state.get('estimates_forecast_periods', 5),
-            step=1,
-            key='estimates_forecast_periods',
-            label_visibility='collapsed',
-            format='%d yr',
-        )
+        if _is_quarterly:
+            forecast_periods = st.slider(
+                'Forecast quarters',
+                min_value=4,
+                max_value=20,
+                value=st.session_state.get('estimates_forecast_quarters', 20),
+                step=4,
+                key='estimates_forecast_quarters',
+                label_visibility='collapsed',
+                format='%d Q',
+            )
+        else:
+            forecast_periods = st.slider(
+                'Forecast years',
+                min_value=1,
+                max_value=5,
+                value=st.session_state.get('estimates_forecast_periods', 5),
+                step=1,
+                key='estimates_forecast_periods',
+                label_visibility='collapsed',
+                format='%d yr',
+            )
 
     dashboard_start = perf_counter()
     try:
         with st.spinner(f'Loading revenue forecasts for {selected_ticker}...'):
-            payload = RevenueForecastService.get_company_dashboard(selected_ticker, periods=forecast_periods)
+            if _is_quarterly:
+                payload = RevenueForecastService.get_quarterly_dashboard(selected_ticker, periods=forecast_periods)
+            else:
+                payload = RevenueForecastService.get_company_dashboard(selected_ticker, periods=forecast_periods)
     except Exception as exc:
         log_structured_error(
             exc,
@@ -3378,6 +3302,7 @@ def main() -> None:
         forecast_df = forecast_df.head(forecast_periods).reset_index(drop=True)
     backtest_df = _backtest_frame(payload)
     raw_forecasts = payload.get('raw_forecasts', {})
+    _period_labels = payload.get('period_labels') if _is_quarterly else None
     model_keys = _available_model_keys(forecast_df)
     scenario_keys = _available_scenario_keys(forecast_df)
     company_name = payload.get('company_name', selected_ticker)
@@ -3401,9 +3326,11 @@ def main() -> None:
 
     render_start = perf_counter()
 
-    chips_html = f'<span class="rev-chip">Historical years: {_fmt_int(summary.get("historical_rows"))}</span>'
+    _unit_plural = 'quarters' if _is_quarterly else 'years'
+    _unit_singular = 'quarter' if _is_quarterly else 'year'
+    chips_html = f'<span class="rev-chip">Historical {_unit_plural}: {_fmt_int(summary.get("historical_rows"))}</span>'
     if outlier_years:
-        chips_html += f'<span class="rev-chip">{_fmt_int(len(outlier_years))} outlier year(s) excluded</span>'
+        chips_html += f'<span class="rev-chip">{_fmt_int(len(outlier_years))} outlier {_unit_singular}(s) excluded</span>'
     st.markdown(
         f'<div class="rev-hero">'
         f'<span class="rev-hero-company">{company_name} ({selected_ticker})</span>'
@@ -3415,9 +3342,14 @@ def main() -> None:
 
     metric_cols = st.columns(5)
     with metric_cols[0]:
-        _render_card('Latest Actual Revenue', _fmt_billions(summary.get('latest_actual_revenue_billions')), f"Period ending {_fmt_year(summary.get('latest_actual_date'))}")
+        _latest_meta = (f"Quarter {summary.get('latest_actual_label', '—')}" if _is_quarterly
+                        else f"Period ending {_fmt_year(summary.get('latest_actual_date'))}")
+        _render_card('Latest Actual Revenue', _fmt_billions(summary.get('latest_actual_revenue_billions')), _latest_meta)
     with metric_cols[1]:
-        _render_card('Ensemble — Next Year', _fmt_billions(summary.get('next_forecast_value_billions')), f"Forecast year {_fmt_year(summary.get('forecast_start_year'))}")
+        _next_title = 'Ensemble — Next Quarter' if _is_quarterly else 'Ensemble — Next Year'
+        _next_meta = (f"Forecast {summary.get('forecast_start_label', '—')}" if _is_quarterly
+                      else f"Forecast year {_fmt_year(summary.get('forecast_start_year'))}")
+        _render_card(_next_title, _fmt_billions(summary.get('next_forecast_value_billions')), _next_meta)
     with metric_cols[2]:
         best_mape = summary.get('best_mape')
         best_method_raw = payload.get('best_method') or summary.get('best_method_display', '')
@@ -3438,9 +3370,13 @@ def main() -> None:
             # (Tab-jumping via DOM JS is brittle across Streamlit rerenders.)
             _model_popup(best_method_key, payload, training_df, actual_df, forecast_df, model_keys)
     with metric_cols[3]:
-        _render_card('Historical Years in Training', _fmt_int(summary.get('historical_rows')), f"Total rows loaded: {_fmt_int(summary.get('actual_rows'))}")
+        _render_card(f'Historical {"Quarters" if _is_quarterly else "Years"} in Training',
+                     _fmt_int(summary.get('historical_rows')), f"Total rows loaded: {_fmt_int(summary.get('actual_rows'))}")
     with metric_cols[4]:
-        _render_card('Forecast Horizon', f"{_fmt_int(summary.get('forecast_periods'))} years", f"Through {_fmt_year(summary.get('forecast_end_year'))}")
+        _through = (summary.get('forecast_end_label', '—') if _is_quarterly
+                    else f"{_fmt_year(summary.get('forecast_end_year'))}")
+        _render_card('Forecast Horizon', f"{_fmt_int(summary.get('forecast_periods'))} {_unit_plural}",
+                     f"Through {_through}")
 
     tabs = st.tabs(['Overview', 'Models', 'Test'])
 
@@ -3451,11 +3387,12 @@ def main() -> None:
             unsafe_allow_html=True,
         )
         st.plotly_chart(
-            _build_overview_chart(training_df, actual_df, forecast_df, model_keys, scenario_keys),
+            _build_overview_chart(training_df, actual_df, forecast_df, model_keys, scenario_keys,
+                                  period_labels=_period_labels, period_unit=_period_unit),
             use_container_width=True,
             config={'displayModeBar': False},
         )
-        forecast_table = _forecast_table(forecast_df, model_keys, scenario_keys)
+        forecast_table = _forecast_table(forecast_df, model_keys, scenario_keys, period_unit=_period_unit)
         if not forecast_table.empty:
             st.dataframe(forecast_table, use_container_width=True, hide_index=True)
         else:
@@ -3490,7 +3427,8 @@ def main() -> None:
             model_tabs = st.tabs(nested_labels)
             for idx, key in enumerate(model_keys):
                 with model_tabs[idx]:
-                    _render_model_panel(key, payload, training_df, actual_df, forecast_df, model_keys)
+                    _render_model_panel(key, payload, training_df, actual_df, forecast_df, model_keys,
+                                        period_labels=_period_labels, period_unit=_period_unit)
             if scenario_keys:
                 with model_tabs[-1]:
                     st.markdown('<h3 class="rev-section-title">Scenarios</h3>', unsafe_allow_html=True)
@@ -3501,7 +3439,7 @@ def main() -> None:
                         '</p>',
                         unsafe_allow_html=True,
                     )
-                    st.plotly_chart(_scenario_chart(forecast_df), use_container_width=True, config={'displayModeBar': False})
+                    st.plotly_chart(_scenario_chart(forecast_df, period_labels=_period_labels, period_unit=_period_unit), use_container_width=True, config={'displayModeBar': False})
 
     with tabs[2]:
         st.markdown('<h3 class="rev-section-title">Backtesting</h3>', unsafe_allow_html=True)
@@ -3531,7 +3469,7 @@ def main() -> None:
                 '<p class="rev-section-copy">Scenarios are derived from historical growth percentiles — not from model fitting. Pessimistic = 25th percentile growth; Baseline = 50th percentile (median); Optimistic = 75th percentile. The Ensemble line is overlaid for comparison.</p>',
                 unsafe_allow_html=True,
             )
-            st.plotly_chart(_scenario_chart(forecast_df, training_df, actual_df), use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(_scenario_chart(forecast_df, training_df, actual_df, period_labels=_period_labels, period_unit=_period_unit), use_container_width=True, config={'displayModeBar': False})
 
             # Exact-millions table: year | ensemble | pessimistic | baseline | optimistic
             _scen_cols = {'Year': forecast_df['year'].astype(int)}
@@ -3645,6 +3583,8 @@ RMSE = sqrt(mean((predicted − actual)²))
         f'ticker={selected_ticker} dashboard_ms={dashboard_elapsed:.2f} render_ms={render_elapsed:.2f}',
     )
     render_coresight_footer()
+    _tracker.finish()
+    log_render_complete("forecasting", perf_counter() - page_start)
 
 
 try:

@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from components.styles import COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS
-from utils.server_logger import log_structured_error
+from utils.server_logger import log_structured_error, timed_render
 
 
 def format_currency(value: float, decimals: int = 2) -> str:
@@ -194,7 +194,8 @@ def create_data_table(
         if on_select is not None:
             dataframe_kwargs["on_select"] = on_select
 
-        result = st.dataframe(**dataframe_kwargs)
+        with timed_render("TABLE_DATAFRAME"):
+            result = st.dataframe(**dataframe_kwargs)
 
         return result
     except Exception as e:

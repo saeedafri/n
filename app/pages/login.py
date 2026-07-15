@@ -26,14 +26,31 @@ load_dotenv()
 # ── Environment gate — must be read BEFORE any st.* call ──────────────────────
 from core.auth_environment import IS_OIDC_ENV, is_production_deploy
 
-# ── OIDC Config (only used when IS_OIDC_ENV=True) ─────────────────────────────
-IDP_BASE_URL        = "https://coresight.com"
+# ── OIDC Config — selected by ENVIRONMENT (env vars still override each value) ──
+# If APP_ENV / ENVIRONMENT / ENV is 'staging' (or 'stg')       → stage3 IdP + stg client/secret + marketdata-stg
+# If it is 'production' / 'prod' (or anything else = default)   → coresight.com + prod client/secret + marketdata
+# Any single value can still be overridden by its own env var (IDP_BASE_URL,
+# OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URI, IDP_AUTHORIZE/TOKEN/USERINFO_URL).
+_oidc_env_vals   = {os.getenv(_k, "").strip().lower() for _k in ("APP_ENV", "ENVIRONMENT", "ENV")}
+_OIDC_IS_PROD    = bool(_oidc_env_vals & {"production", "prod"})
+_OIDC_IS_STAGING = bool(_oidc_env_vals & {"staging", "stg"}) and not _OIDC_IS_PROD
+if _OIDC_IS_STAGING:
+    _DEF_IDP_BASE      = "https://stage3.coresight.com"
+    _DEF_CLIENT_ID     = "market-data"
+    _DEF_CLIENT_SECRET = "dsM(P4*q)Bw%#Y(*%S^y(DT(J*F#PvbBrrQwXX&RIr!!W406"
+    _DEF_REDIRECT      = "https://marketdata-stg.coresight.com"
+else:  # production (or default)
+    _DEF_IDP_BASE      = "https://coresight.com"
+    _DEF_CLIENT_ID     = "market-data"
+    _DEF_CLIENT_SECRET = "IwtYEUtc9nsi)j8g!LGliVsV!OkVn%dQuv0IZfu9hiy(ZOpr"
+    _DEF_REDIRECT      = "https://marketdata.coresight.com"
+IDP_BASE_URL        = (os.getenv("IDP_BASE_URL") or _DEF_IDP_BASE).rstrip("/")
 IDP_AUTHORIZE_URL   = os.getenv("IDP_AUTHORIZE_URL")   or f"{IDP_BASE_URL}/csr-idp/authorize"
 IDP_TOKEN_URL       = os.getenv("IDP_TOKEN_URL")       or f"{IDP_BASE_URL}/csr-idp/token"
 IDP_USERINFO_URL    = os.getenv("IDP_USERINFO_URL")    or f"{IDP_BASE_URL}/wp-json/csr-idp/v1/userinfo"
-OIDC_CLIENT_ID      = "market-data"
-OIDC_CLIENT_SECRET  = "IwtYEUtc9nsi)j8g!LGliVsV!OkVn%dQuv0IZfu9hiy(ZOpr"
-OIDC_REDIRECT_URI   = "https://marketdata.coresight.com" if is_production_deploy() else "https://marketdata-stg.coresight.com"
+OIDC_CLIENT_ID      = os.getenv("OIDC_CLIENT_ID")     or _DEF_CLIENT_ID
+OIDC_CLIENT_SECRET  = os.getenv("OIDC_CLIENT_SECRET") or _DEF_CLIENT_SECRET
+OIDC_REDIRECT_URI   = os.getenv("OIDC_REDIRECT_URI")  or _DEF_REDIRECT
 OIDC_SCOPE          = os.getenv("OIDC_SCOPE",          "openid profile email").strip()
 OIDC_STATE_MAX_AGE_SECONDS = int(os.getenv("OIDC_STATE_MAX_AGE_SECONDS", "900"))
 OIDC_RETURN_CONTEXT_MAX_AGE_SECONDS = int(
@@ -57,6 +74,12 @@ APP_DIR = Path(__file__).parent.parent
 if IS_OIDC_ENV:
     _oidc_exchange_lock: threading.Lock = threading.Lock()
     _oidc_exchange_cache: Dict[str, Dict[str, Any]] = {}
+    # Durable background-exchange registry: the single-use token POST runs in a
+    # daemon thread that OUTLIVES this UI run, so a rerun-storm / dropped WebSocket
+    # cannot strand the code. Result lands in the file+process cache above; any
+    # (reconnected) run polls it and completes. Exactly-once is enforced by an
+    # atomic file claim (see _try_claim_exchange). Terminal failures recorded here.
+    _oidc_bg_error: Dict[str, str] = {}
 
 import streamlit as st
 import streamlit.components.v1 as _st_components
@@ -68,6 +91,21 @@ except ImportError:
     def slog_warning(msg): pass
     def slog_error(msg): pass
     def log_timing(operation, elapsed_ms, details="", level="INFO"): pass
+
+# One-time (per process) visibility into which IdP/client this deployment is wired
+# to — invaluable for confirming STG→stage3 vs PROD→coresight.com. Never logs the
+# secret value; only whether it is SET. os.environ sentinel survives Streamlit reruns.
+if IS_OIDC_ENV and os.environ.get("_OIDC_CFG_LOGGED") != "1":
+    try:
+        slog_warning(
+            f"[OIDC] active config | env_mode={'staging' if _OIDC_IS_STAGING else 'production'} "
+            f"| idp_base={IDP_BASE_URL} | token_url={IDP_TOKEN_URL} "
+            f"| client_id={OIDC_CLIENT_ID} | redirect_uri={OIDC_REDIRECT_URI} "
+            f"| client_secret={'SET' if OIDC_CLIENT_SECRET else 'MISSING!!'}"
+        )
+        os.environ["_OIDC_CFG_LOGGED"] = "1"
+    except Exception:
+        pass
 
 from core.auth_manager import (
     login_user,
@@ -561,6 +599,151 @@ def _exchange_code_for_tokens(code: str, state_payload: Dict[str, Any]) -> Optio
             return None
     finally:
         _oidc_exchange_lock.release()
+
+
+# ── Durable exactly-once + background exchange ────────────────────────────────
+# The single-use token exchange runs in a daemon thread that OUTLIVES the UI run.
+# Exactly-once is enforced by an ATOMIC FILE CLAIM (O_CREAT|O_EXCL) keyed by the
+# code — process-safe, so a rerun-storm / reconnect / second worker can never
+# double-POST (which is what produced invalid_grant). The claimer POSTs once;
+# everyone else just polls the durable cache and completes.
+def _claim_path(code: str) -> str:
+    h = hashlib.sha256(code.encode()).hexdigest()[:16]
+    return os.path.join(tempfile.gettempdir(), f"_oidc_claim_{h}")
+
+
+def _try_claim_exchange(code: str) -> bool:
+    """Atomically claim the right to POST `code`. True → THIS caller runs the
+    exchange; False → someone already owns it (poll the cache instead). A stale
+    claim (>25s, the claimer died) is stolen so a broken attempt can still recover."""
+    path = _claim_path(code)
+    def _create() -> None:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, str(int(datetime.now(timezone.utc).timestamp())).encode())
+        finally:
+            os.close(fd)
+    try:
+        _create()
+        return True
+    except FileExistsError:
+        try:
+            if (datetime.now().timestamp() - os.path.getmtime(path)) > 25:
+                os.unlink(path)
+                _create()
+                slog_warning(f"[OIDC] stole stale exchange claim (prior attempt died) | code={code[:12]}")
+                return True
+        except Exception:
+            pass
+        return False
+    except Exception:
+        return False
+
+
+def _lookup_exchange_result(code: str) -> Optional[Dict[str, Any]]:
+    """Raw token payload for `code` from any durable cache (session→process→file),
+    or None. Cheap; polled on every callback rerun."""
+    try:
+        c = st.session_state.get("__oidc_exchange_result")
+        if isinstance(c, dict) and c.get("_for_code") == code:
+            return {k: v for k, v in c.items() if k != "_for_code"}
+    except Exception:
+        pass
+    p = _oidc_exchange_cache.get(code)
+    if isinstance(p, dict):
+        return {k: v for k, v in p.items() if k != "_for_code"}
+    f = _read_exchange_file_cache(code)
+    if isinstance(f, dict):
+        return f
+    return None
+
+
+def _background_exchange_worker(code: str, state_payload: Dict[str, Any]) -> None:
+    """Perform the OIDC token exchange in a detached daemon thread. MUST NOT touch
+    any Streamlit API (st.*) — it runs outside the ScriptRunner and must survive
+    the UI run being torn down by a rerun-storm / dropped WebSocket. Writes the
+    result to the durable file+process caches; records failures in _oidc_bg_error.
+    The single-use code is POSTed exactly once (never re-POSTed → no invalid_grant)."""
+    _w_start = perf_counter()
+    try:
+        cv = (state_payload or {}).get("cv")
+        redirect_uri = (state_payload or {}).get("ru") or OIDC_REDIRECT_URI
+        if not cv:
+            _oidc_bg_error[code] = "missing_verifier"
+            slog_error(f"[OIDC] bg exchange ABORT | code={code[:12]} | reason=missing_verifier")
+            return
+        form = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": OIDC_CLIENT_ID,
+            "code_verifier": cv,
+        }
+        if OIDC_CLIENT_SECRET:
+            form["client_secret"] = OIDC_CLIENT_SECRET
+        slog_warning(f"[OIDC] bg token exchange → {IDP_TOKEN_URL} | code={code[:12]}...")
+        http_start = perf_counter()
+        resp = requests.post(
+            IDP_TOKEN_URL,
+            headers={"Accept": "application/json",
+                     "Content-Type": "application/x-www-form-urlencoded"},
+            data=form, timeout=20, allow_redirects=False,
+        )
+        _http_ms = (perf_counter() - http_start) * 1000
+        log_timing("OIDC_TOKEN_HTTP", _http_ms, f"status={resp.status_code} bg=1")
+        slog_warning(f"[OIDC] bg token exchange status={resp.status_code} | code={code[:12]} | {_http_ms:.0f}ms")
+        if resp.status_code != 200:
+            try: _err_body = resp.json()
+            except Exception: _err_body = {"raw": (resp.text or "")[:300]}
+            _oidc_bg_error[code] = f"status_{resp.status_code}"
+            slog_error(f"[OIDC] bg token exchange FAILED | code={code[:12]} | status={resp.status_code} | body={_err_body}")
+            return
+        data = resp.json()
+        if not isinstance(data, dict):
+            _oidc_bg_error[code] = "bad_payload"
+            slog_error(f"[OIDC] bg token exchange bad_payload (non-dict) | code={code[:12]}")
+            return
+        _write_exchange_file_cache(code, data)          # durable — survives UI teardown
+        _oidc_exchange_cache[code] = {**data, "_for_code": code}
+        slog_warning(
+            f"[OIDC] bg token exchange SUCCESS | code={code[:12]} | keys={list(data.keys())} "
+            f"| total={(perf_counter() - _w_start) * 1000:.0f}ms"
+        )
+    except Exception as e:
+        _oidc_bg_error[code] = f"exc_{type(e).__name__}"
+        try:
+            log_structured_error(e, page="login", component="_background_exchange_worker",
+                                 operation="oidc_token_exchange", context=f"code={code[:12]}")
+        except Exception:
+            try: slog_error(f"[OIDC] bg token exchange EXCEPTION | code={code[:12]} | {type(e).__name__}: {e}")
+            except Exception: pass
+
+
+def _ensure_background_exchange(code: str, state_payload: Dict[str, Any]) -> str:
+    """Idempotently ensure the durable background exchange for `code` is running.
+    Returns 'done' (result cached), 'error' (terminal failure recorded), or
+    'inflight' (running / just started — poll+rerun). The atomic file claim
+    guarantees the single-use code is POSTed AT MOST ONCE across all
+    sessions/reruns/processes — a reconnect resumes, it never re-POSTs."""
+    # Bound the in-memory caches (the file cache, 300s TTL, is the durable store).
+    # Only ever evicts the OLDEST entries — never the code being processed now, which
+    # was just inserted — so an active login can never lose its result to eviction.
+    for _d in (_oidc_exchange_cache, _oidc_bg_error):
+        if len(_d) > 500:
+            for _k in list(_d.keys())[:len(_d) - 500]:
+                _d.pop(_k, None)
+    if _lookup_exchange_result(code) is not None:
+        return "done"
+    if code in _oidc_bg_error:
+        return "error"
+    cv = (state_payload or {}).get("cv")
+    if cv and _try_claim_exchange(code):
+        slog_warning(f"[OIDC] claimed exchange → spawning bg worker | code={code[:12]}")
+        threading.Thread(
+            target=_background_exchange_worker, args=(code, state_payload), daemon=True
+        ).start()
+    return "inflight"
+
 
 def _fetch_userinfo(access_token: str, id_token: str = "") -> Optional[Dict[str, Any]]:
     def _try(url, headers, label):
@@ -1134,8 +1317,16 @@ if IS_OIDC_ENV:
             st.stop()
 
         _completed = st.session_state.get("__completed_oidc_code")
-        _processing = st.session_state.get("__oidc_processing_code")
         _cached_state_payload = _decode_state_payload(_cb_state or "") if _cb_state else None
+
+        # ══════════════════════════════════════════════════════════════════════
+        # DURABLE, RECONNECT-SAFE CALLBACK (see _ensure_background_exchange).
+        # The single-use exchange runs in a daemon thread that OUTLIVES this UI run,
+        # so a rerun-storm / dropped WebSocket cannot strand the code. Every run —
+        # including a reconnected session — polls the cache and completes. The code
+        # is POSTed AT MOST ONCE and is NEVER re-POSTed, so the old "clearing and
+        # retrying" re-exchange (which produced invalid_grant) can no longer occur.
+        # ══════════════════════════════════════════════════════════════════════
         if _completed == _cb_code:
             slog_warning("[OIDC] duplicate callback — code already processed")
             _cached_td = st.session_state.get("__completed_oidc_token_data")
@@ -1143,80 +1334,70 @@ if IS_OIDC_ENV:
                 if _cached_state_payload:
                     _maybe_redirect_oidc_handoff(_cached_td, _cached_state_payload)
                 _complete_oidc_login(_cached_td)
-        elif _processing == _cb_code:
-            slog_warning("[OIDC] callback already in progress")
-            _cached_td = st.session_state.get("__completed_oidc_token_data")
-            if _cached_td:
-                if _cached_state_payload:
-                    _maybe_redirect_oidc_handoff(_cached_td, _cached_state_payload)
-                _complete_oidc_login(_cached_td)
-            _cached_payload = st.session_state.get("__oidc_exchange_result")
-            if not isinstance(_cached_payload, dict):
-                _cached_payload = _oidc_exchange_cache.get(_cb_code)
-            if not isinstance(_cached_payload, dict):
-                _cached_payload = _read_exchange_file_cache(_cb_code)
-            if isinstance(_cached_payload, dict):
-                _token_data = _build_token_data(_cached_payload)
-                if _token_data:
-                    st.session_state["__completed_oidc_code"] = _cb_code
-                    st.session_state["__completed_oidc_token_data"] = _token_data
-                    if _cached_state_payload:
-                        _maybe_redirect_oidc_handoff(_token_data, _cached_state_payload)
-                    _complete_oidc_login(_token_data)
-            _processing_started = float(st.session_state.get("__oidc_processing_started_at", 0) or 0)
-            _processing_age = datetime.now(timezone.utc).timestamp() - _processing_started
-            if _processing_started and _processing_age > 8:
-                slog_warning("[OIDC] processing marker stale — clearing and retrying")
-                st.session_state.pop("__oidc_processing_code", None)
-                st.session_state.pop("__oidc_processing_started_at", None)
-                st.rerun()
-            sleep(0.2)
-            st.rerun()
         else:
-            get_or_create_auth_flow_id()
-            slog_warning(
-                f"[OIDC] processing callback | auth_flow_id={get_auth_flow_id()} | "
-                f"code={_cb_code[:12]}..."
-            )
-            log_timing(
-                "AUTH_LOGIN_CALLBACK_PROCESSING",
-                0,
-                f"{_auth_request_meta()} code_prefix={_cb_code[:12]}",
-                level="WARNING",
-            )
-            st.session_state["__oidc_processing_code"] = _cb_code
-            st.session_state["__oidc_processing_started_at"] = datetime.now(timezone.utc).timestamp()
-            callback_start = perf_counter()
-            try:
-                _state_payload = _decode_state_payload(_cb_state or "")
-                if not _state_payload:
-                    slog_error("[OIDC] invalid/expired state")
-                    st.error("Invalid login state. Please try again.")
+            if st.session_state.get("__oidc_processing_code") != _cb_code:
+                st.session_state["__oidc_processing_code"] = _cb_code
+                st.session_state["__oidc_processing_started_at"] = datetime.now(timezone.utc).timestamp()
+                get_or_create_auth_flow_id()
+                slog_warning(
+                    f"[OIDC] processing callback | auth_flow_id={get_auth_flow_id()} | "
+                    f"code={_cb_code[:12]}..."
+                )
+                log_timing(
+                    "AUTH_LOGIN_CALLBACK_PROCESSING", 0,
+                    f"{_auth_request_meta()} code_prefix={_cb_code[:12]}", level="WARNING",
+                )
+
+            if not _cached_state_payload and _lookup_exchange_result(_cb_code) is None:
+                slog_error("[OIDC] invalid/expired state")
+                st.error("Invalid login state. Please try again.")
+            else:
+                _poll_n = int(st.session_state.get("__oidc_poll_n", 0))
+                _proc_started = float(st.session_state.get("__oidc_processing_started_at", 0) or 0)
+                _elapsed_ms = ((datetime.now(timezone.utc).timestamp() - _proc_started) * 1000) if _proc_started else 0.0
+                # Start/continue the durable background exchange (idempotent, POST-once).
+                _ensure_background_exchange(_cb_code, _cached_state_payload or {})
+                # Poll for the result (from this OR a reconnected run's thread).
+                _payload = _lookup_exchange_result(_cb_code)
+                if isinstance(_payload, dict):
+                    _token_data = _build_token_data(_payload)
+                    if _token_data:
+                        st.session_state["__completed_oidc_code"]       = _cb_code
+                        st.session_state["__completed_oidc_token_data"] = _token_data
+                        if _cached_state_payload:
+                            _maybe_redirect_oidc_handoff(_token_data, _cached_state_payload)
+                        slog_warning(
+                            f"[OIDC] callback resolved from durable cache | code={_cb_code[:12]} "
+                            f"| polls={_poll_n} | elapsed={_elapsed_ms:.0f}ms "
+                            f"| user={_token_data.get('user_email', '?')}"
+                        )
+                        log_timing("OIDC_CALLBACK_TOTAL", _elapsed_ms, f"result=success polls={_poll_n}")
+                        _complete_oidc_login(_token_data)
+                    else:
+                        slog_error(f"[OIDC] build_token_data failed | code={_cb_code[:12]} | polls={_poll_n}")
+                        st.error("Login could not be completed. Please sign in again.")
+                elif _cb_code in _oidc_bg_error:
+                    slog_error(
+                        f"[OIDC] token exchange failed — surfacing to user | code={_cb_code[:12]} "
+                        f"| reason={_oidc_bg_error.get(_cb_code, 'unknown')} | polls={_poll_n} "
+                        f"| elapsed={_elapsed_ms:.0f}ms"
+                    )
+                    st.error("Sign-in service is temporarily unavailable. Please try again.")
                 else:
-                    _t_exchange_start = perf_counter()
-                    _token_payload = _exchange_code_for_tokens(_cb_code, _state_payload)
-                    log_timing("CALLBACK_token_exchange", (perf_counter() - _t_exchange_start) * 1000,
-                               f"success={'YES' if _token_payload else 'NO'}", level="WARNING")
-                    if _token_payload:
-                        _t_build_start = perf_counter()
-                        _token_data = _build_token_data(_token_payload)
-                        log_timing("CALLBACK_build_token_data", (perf_counter() - _t_build_start) * 1000,
-                                   f"success={'YES' if _token_data else 'NO'}", level="WARNING")
-                        if _token_data:
-                            st.session_state["__completed_oidc_code"]       = _cb_code
-                            st.session_state["__completed_oidc_token_data"] = _token_data
-                            if _maybe_redirect_oidc_handoff(_token_data, _state_payload):
-                                log_timing(
-                                    "OIDC_CALLBACK_TOTAL",
-                                    (perf_counter() - callback_start) * 1000,
-                                    "result=handoff",
-                                )
-                            log_timing("OIDC_CALLBACK_TOTAL", (perf_counter() - callback_start) * 1000, "result=success")
-                            _complete_oidc_login(_token_data)
-            finally:
-                if st.session_state.get("__oidc_processing_code") == _cb_code and st.session_state.get("__completed_oidc_code") != _cb_code:
-                    st.session_state.pop("__oidc_processing_code", None)
-                    st.session_state.pop("__oidc_processing_started_at", None)
+                    # Exchange still running → keep the spinner, poll again. Bounded
+                    # so a genuinely dead exchange fails gracefully (never re-POSTs).
+                    if _proc_started and (datetime.now(timezone.utc).timestamp() - _proc_started) > 30:
+                        slog_error(f"[OIDC] exchange did not complete within 30s | code={_cb_code[:12]} | polls={_poll_n}")
+                        st.error("Sign-in is taking too long. Please try again.")
+                    else:
+                        st.session_state["__oidc_poll_n"] = _poll_n + 1
+                        if _poll_n and _poll_n % 15 == 0:   # ~every 4.5s: surface a slow login without per-poll spam
+                            slog_warning(
+                                f"[OIDC] awaiting exchange result | code={_cb_code[:12]} "
+                                f"| polls={_poll_n} | elapsed={_elapsed_ms / 1000:.1f}s"
+                            )
+                        sleep(0.3)
+                        st.rerun()
 
 
 # =============================================================================

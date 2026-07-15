@@ -527,6 +527,13 @@ class AuthManager:
             # Clear any previous logout invalidation
             st.session_state.pop("_auth_invalidated", None)
 
+            # Analytics: explicit login lifecycle event (best-effort).
+            try:
+                from utils.server_logger import track_login
+                track_login(user=user_email, method="oidc", success=True)
+            except Exception:
+                pass
+
             return AuthResult(
                 success=True,
                 session_id=session_id,
@@ -535,6 +542,11 @@ class AuthManager:
 
         except Exception as e:
             log_structured_error(e, page="auth_manager", component="login", operation="user_login", context=f"user={user_email}")
+            try:
+                from utils.server_logger import track_login
+                track_login(user=user_email, method="oidc", success=False, reason=type(e).__name__)
+            except Exception:
+                pass
             return AuthResult(
                 success=False,
                 error_message="Login failed. Please try again."
@@ -1197,6 +1209,16 @@ class AuthManager:
         start = time_module.perf_counter()
         route = "local"
         from core.auth_environment import is_oidc_enabled
+
+        # Analytics: explicit logout lifecycle event (best-effort). Emitted BEFORE the
+        # OIDC switch_page below halts this script run.
+        try:
+            from utils.server_logger import track_logout
+            _lo_user = (st.session_state.get("auth_data") or {}).get("user_email", "")
+            _lo_route = "logout_bridge" if is_oidc_enabled() else "local"
+            track_logout(user=_lo_user, route=_lo_route)
+        except Exception:
+            pass
 
         try:
             if is_oidc_enabled():

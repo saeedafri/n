@@ -4,16 +4,18 @@ Earnings Calendar Page - Coresight Research
 Calendar (Month grid) + Year view of earnings announcements with EPS beat/miss
 indicators and deep links to earnings call transcripts.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 import html
+import re
 
 import streamlit as st
 
 from components.styles import hide_sidebar, render_styles
 from components.navigation import render_header, render_coresight_footer
 from core.auth_manager import require_auth, get_current_user, _auth_request_meta, log_auth_cookie_server_presence
-from utils.server_logger import new_rerun_id, log_timing
+from utils.server_logger import new_rerun_id, log_timing, PageLoadTracker, log_render_complete
+import time as _time
 
 new_rerun_id("earnings_calendar")
 log_timing(
@@ -69,6 +71,85 @@ _COMPANY_COLORS = [
 ]
 
 
+def _month_view_date_range(anchor: date) -> Tuple[date, date]:
+    """42-day Sunday-aligned FullCalendar month grid (vis_start .. vis_end inclusive)."""
+    first_of_month = anchor.replace(day=1)
+    days_back = (first_of_month.weekday() + 1) % 7
+    vis_start = first_of_month - timedelta(days=days_back)
+    vis_end = vis_start + timedelta(days=41)
+    return vis_start, vis_end
+
+
+def _year_view_date_range(anchor: date) -> Tuple[date, date]:
+    """Jan 1 – Dec 31 for the anchor year."""
+    return date(anchor.year, 1, 1), date(anchor.year, 12, 31)
+
+
+def _parse_iso_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _resolve_visible_date_range() -> Tuple[date, date, str]:
+    """Return (vis_start, vis_end_inclusive, source_tag) for DB prefetch."""
+    anchor = _parse_iso_date(st.session_state.get("_ec_current_date")) or date.today()
+    vis_start_raw = st.session_state.get("ec_visible_start")
+    vis_end_excl_raw = st.session_state.get("ec_visible_end")
+
+    if vis_start_raw and vis_end_excl_raw:
+        vis_start = _parse_iso_date(vis_start_raw)
+        vis_end_excl = _parse_iso_date(vis_end_excl_raw)
+        if vis_start and vis_end_excl:
+            vis_end_inclusive = vis_end_excl - timedelta(days=1)
+            return vis_start, vis_end_inclusive, "session_datesSet"
+
+    if st.session_state.get("ec_view") == "year":
+        vis_start, vis_end = _year_view_date_range(anchor)
+        return vis_start, vis_end, "computed_year"
+
+    # Month + list views share the same visible window
+    vis_start, vis_end = _month_view_date_range(anchor)
+    return vis_start, vis_end, "computed_month"
+
+
+def _month_grid_weeks(anchor: date) -> int:
+    """Number of week-rows FullCalendar's dayGridMonth renders for `anchor`'s month
+    (firstDay=Monday, fixedWeekCount=False): the grid starts on the Monday on/before
+    the 1st and ends on the Sunday on/after the last day. Used to give the month view
+    a DETERMINISTIC height — one that depends only on the calendar structure, never on
+    how many events are shown — so an in-place company filter can't leave the
+    streamlit_calendar iframe at a stale (too-tall) height with a blank gap below."""
+    import calendar as _pycal
+    first = anchor.replace(day=1)
+    lead = first.weekday()  # Mon=0 … Sun=6 → cells before the 1st
+    days = _pycal.monthrange(anchor.year, anchor.month)[1]
+    return max(1, -(-(lead + days) // 7))  # ceil((lead + days) / 7)
+
+
+def _window_events(evs: List[Dict], vstart: date, vend: date) -> List[Dict]:
+    """Keep only events whose date falls in [vstart, vend] (inclusive).
+
+    The page fetches the FULL deduped set once (for the true badge count that
+    matches production) and windows it here in Python — ~ms — so the FullCalendar
+    render only ever receives the visible month/year, never all 16k events.
+    Earnings rows carry `earnings_date` as an ISO string; M&A rows carry a date
+    object — handle both."""
+    out: List[Dict] = []
+    for e in evs:
+        d = e.get("earnings_date")
+        if isinstance(d, str):
+            d = _parse_iso_date(d)
+        elif isinstance(d, datetime):
+            d = d.date()
+        if d is not None and vstart <= d <= vend:
+            out.append(e)
+    return out
+
+
 def _company_color(ticker: str) -> str:
     """Return a stable per-company color derived from the ticker string."""
     try:
@@ -81,33 +162,161 @@ def _company_color(ticker: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# EVENT-TYPE COLOR LEGEND  (Coresight brand palette — from the official
-# Color Palette & Style Guide). Earnings events are colored by fiscal quarter;
-# completed M&A events use the Coresight accent green. Each entry is
-# (background, text) chosen for readability of the small FullCalendar labels.
+# EVENT-TYPE STYLE TOKENS  (Figma Make — Refine calendar page design v17)
+# Light card fills, left accent bar, right-side quarter/type badge via CSS.
 # ─────────────────────────────────────────────────────────────────────────────
-_KIND_COLORS: Dict[str, Tuple[str, str]] = {
-    "Q1": ("#005F8F", "#FFFFFF"),   # Secondary Dark Blue
-    "Q2": ("#A3C0CE", "#2D2A29"),   # Secondary Light Blue (dark text for contrast)
-    "Q3": ("#7F7F7F", "#FFFFFF"),   # Secondary Grey
-    "Q4": ("#2D2A29", "#FFFFFF"),   # Primary Black
-    "ma": ("#61A575", "#16341F"),   # Accent Green — M&A Activities
+_CORESIGHT_RED = "#D62E2F"
+
+_TYPE_STYLE: Dict[str, Dict[str, str]] = {
+    "earnings": {
+        "card_bg": "rgba(240,249,255,0.5)",
+        "text": "#024A70",
+        "subtle": "#45556C",
+        "accent": "#0084D1",
+        "filter_bg": "#F0F9FF",
+        "filter_text": "#024A70",
+        "label": "Earnings",
+        "chip_bg": "#EFF6FF",
+        "chip_text": "#1D4ED8",
+    },
+    "ipo": {
+        "card_bg": "rgba(236,253,245,0.5)",
+        "text": "#004F3B",
+        "subtle": "#009966",
+        "accent": "#009966",
+        "filter_bg": "#ECFDF5",
+        "filter_text": "#004F3B",
+        "label": "IPO",
+        "chip_bg": "#ECFDF5",
+        "chip_text": "#047857",
+    },
+    "ma": {
+        "card_bg": "rgba(245,243,255,0.5)",
+        "text": "#4D179A",
+        "subtle": "#7F22FE",
+        "accent": "#7F22FE",
+        "filter_bg": "#F5F3FF",
+        "filter_text": "#4D179A",
+        "label": "M&A",
+        "chip_bg": "#F5F3FF",
+        "chip_text": "#6D28D9",
+    },
+    "delisted": {
+        "card_bg": "rgba(254,242,242,0.5)",
+        "text": "#82181A",
+        "subtle": "#D62E2F",
+        "accent": "#D62E2F",
+        "filter_bg": "#FEF2F2",
+        "filter_text": "#82181A",
+        "label": "Delisted",
+        "chip_bg": "#FEF2F2",
+        "chip_text": "#B91C1C",
+    },
 }
 
-# Order + labels for the clickable legend filter (NOT a dropdown).
-_LEGEND_ITEMS: List[Tuple[str, str]] = [
-    ("Q1", "Q1"),
-    ("Q2", "Q2"),
-    ("Q3", "Q3"),
-    ("Q4", "Q4"),
-    ("ma", "M&A Completion"),
+# Per-type chip CSS class suffix (Figma activePill colors)
+_TYPE_CHIP_CLASS: Dict[str, str] = {
+    "earnings": "ec-chip-earnings",
+    "ipo": "ec-chip-ipo",
+    "ma": "ec-chip-ma",
+    "delisted": "ec-chip-delisted",
+}
+
+_QUARTER_STYLE = {"bg": "#E2E8F0", "text": "#45556C"}
+
+_EVENT_TYPES: List[Tuple[str, str]] = [
+    ("earnings", "Earnings"),
+    ("ipo", "IPO"),
+    ("ma", "M&A"),
+    ("delisted", "Delisted"),
 ]
-_ALL_KINDS = tuple(k for k, _ in _LEGEND_ITEMS)
+_QUARTER_ITEMS: List[Tuple[str, str]] = [
+    ("Q1", "Q1"), ("Q2", "Q2"), ("Q3", "Q3"), ("Q4", "Q4"),
+]
+_ALL_TYPES = tuple(k for k, _ in _EVENT_TYPES)
+_ALL_QUARTERS = tuple(k for k, _ in _QUARTER_ITEMS)
+
+
+def _selected_set(key: str, all_values) -> set:
+    """Read a filter-selection list, distinguishing an explicit *empty* selection
+    (``[]`` — the user deselected every pill) from an *uninitialised* one
+    (``None`` — default to all). The old ``st.session_state.get(key) or list(all)``
+    idiom treated ``[]`` as falsy, so removing the last pill silently re-selected
+    everything. Selection state is always initialised to a list on page entry, so
+    ``None`` here means genuinely-unset, never "user cleared it"."""
+    stored = st.session_state.get(key)
+    return set(all_values) if stored is None else set(stored)
+
+_TYPE_HELP: Dict[str, str] = {
+    "earnings": "Earnings announcement dates",
+    "ipo": "IPO (first-listing) dates",
+    "ma": "M&A completion dates",
+    "delisted": "Delisted (went-private) dates",
+}
+_QUARTER_HELP: Dict[str, str] = {
+    "Q1": "Q1 earnings only", "Q2": "Q2 earnings only",
+    "Q3": "Q3 earnings only", "Q4": "Q4 earnings only",
+}
 
 
 def _kind_color(kind: str) -> Tuple[str, str]:
-    """(background, text) for an event kind; falls back to a neutral grey."""
-    return _KIND_COLORS.get(kind, ("#37474F", "#FFFFFF"))
+    """(accent, text) for detail-panel headers; maps legacy kind keys."""
+    _map = {
+        "Q1": "earnings", "Q2": "earnings", "Q3": "earnings", "Q4": "earnings",
+        "ma": "ma", "ipo": "ipo", "delisted": "delisted",
+    }
+    et = _map.get(kind, kind)
+    if et in _TYPE_STYLE:
+        s = _TYPE_STYLE[et]
+        return s["accent"], s["text"]
+    return "#37474F", "#FFFFFF"
+
+
+def _fc_class_names(event_type: str, quarter: Optional[str] = None) -> List[str]:
+    """FullCalendar classNames driving card CSS (badge via ::after)."""
+    classes = ["ec-card", f"ec-type-{event_type}"]
+    if event_type == "delisted":
+        classes.append("ec-no-badge")
+    elif event_type == "ipo":
+        classes.append("ec-badge-ipo")
+    elif event_type == "ma":
+        classes.append("ec-badge-ma")
+    elif quarter in _ALL_QUARTERS:
+        classes.append(f"ec-badge-{quarter}")
+    return classes
+
+
+def _fc_event_card(
+    *,
+    event_id: str,
+    start: str,
+    company_name: str,
+    ticker: str,
+    event_type: str,
+    quarter: Optional[str],
+    extended_props: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build a FullCalendar event dict with Figma card styling."""
+    style = _TYPE_STYLE.get(event_type, _TYPE_STYLE["earnings"])
+    kind = quarter if event_type == "earnings" and quarter else event_type
+    return {
+        "id": event_id,
+        "title": f"{company_name}\n{ticker or ''}".strip(),
+        "start": start,
+        "end": start,
+        "backgroundColor": style["card_bg"],
+        "borderColor": "transparent",
+        "textColor": style["text"],
+        "color": style["accent"],
+        "classNames": _fc_class_names(event_type, quarter),
+        "extendedProps": {
+            **extended_props,
+            "kind": kind,
+            "event_type": event_type,
+            "ticker": ticker,
+            "company_name": company_name,
+        },
+    }
 
 
 def _earnings_kind(fiscal_q: Optional[Any]) -> Optional[str]:
@@ -138,61 +347,552 @@ def _fmt_ma_value(val: Optional[Any]) -> str:
         return "—"
 
 
-def _toggle_event_kind(kind: str) -> None:
-    """Legend chip on_click — toggle a kind in the active set and remount calendar."""
+def _toggle_event_type(etype: str) -> None:
+    """Filter pill — toggle an event type and remount calendar."""
     try:
-        cur = set(st.session_state.get("ec_active_kinds") or list(_ALL_KINDS))
-        if kind in cur:
-            cur.discard(kind)
+        cur = _selected_set("ec_active_types", _ALL_TYPES)
+        if etype in cur:
+            cur.discard(etype)
         else:
-            cur.add(kind)
-        st.session_state.ec_active_kinds = [k for k in _ALL_KINDS if k in cur]
-        # Clear any open detail panel and force the calendar component to remount so
-        # it repaints with the filtered event set (cal key embeds ec_cal_version).
+            cur.add(etype)
+        st.session_state.ec_active_types = [k for k in _ALL_TYPES if k in cur]
+        # Quarters belong to Earnings (earnings HAS a quarter, not vice-versa).
+        # Toggling Earnings off clears all quarters; toggling it back on restores them.
+        if etype == "earnings":
+            st.session_state.ec_active_quarters = (
+                list(_ALL_QUARTERS) if "earnings" in cur else []
+            )
         st.session_state.ec_selected_event = None
         st.session_state.ec_cal_version = st.session_state.get("ec_cal_version", 0) + 1
     except Exception as exc:
-        log_structured_error(exc, page="earnings_calendar", component="_toggle_event_kind",
-                             operation="toggle_kind", context=f"kind={kind}")
+        log_structured_error(exc, page="earnings_calendar", component="_toggle_event_type",
+                             operation="toggle_type", context=f"type={etype}")
 
 
-def _render_event_type_legend() -> None:
-    """Clickable color legend that filters the calendar by event type.
-
-    Active chips are filled with the type's Coresight brand color; inactive chips
-    are outlined/dimmed. Clicking toggles that type — and combines (AND) with the
-    Company and Watchlist filters already applied to the event feeds.
-    """
+def _toggle_quarter(q: str) -> None:
+    """Filter pill — toggle a fiscal quarter (earnings only) and remount calendar."""
     try:
-        active = set(st.session_state.get("ec_active_kinds") or list(_ALL_KINDS))
-        cols = st.columns([1.05, 0.72, 0.72, 0.72, 0.72, 1.9, 3.45],
-                          gap="small", vertical_alignment="center")
-        with cols[0]:
-            st.markdown('<div class="ec-legend-label">Show types</div>', unsafe_allow_html=True)
-        for _i, (kind, label) in enumerate(_LEGEND_ITEMS):
-            with cols[_i + 1]:
-                st.button(
-                    label,
-                    key=f"ec_legend_{kind}",
-                    type="primary" if kind in active else "secondary",
-                    on_click=_toggle_event_kind,
-                    args=(kind,),
-                    width="stretch",
-                )
+        cur = _selected_set("ec_active_quarters", _ALL_QUARTERS)
+        if q in cur:
+            cur.discard(q)
+        else:
+            cur.add(q)
+        st.session_state.ec_active_quarters = [k for k in _ALL_QUARTERS if k in cur]
+        st.session_state.ec_selected_event = None
+        st.session_state.ec_cal_version = st.session_state.get("ec_cal_version", 0) + 1
     except Exception as exc:
-        log_structured_error(exc, page="earnings_calendar", component="_render_event_type_legend",
-                             operation="render_legend", context="legend render")
+        log_structured_error(exc, page="earnings_calendar", component="_toggle_quarter",
+                             operation="toggle_quarter", context=f"quarter={q}")
+
+
+def _toggle_filter_panel() -> None:
+    st.session_state.ec_filters_open = not st.session_state.get("ec_filters_open", False)
+
+
+def _toggle_section(name: str) -> None:
+    """Collapse/expand one filter section (Event Type / Fiscal Quarter / Company).
+    Pure UI — never remounts the calendar."""
+    st.session_state[f"ec_sec_{name}"] = not st.session_state.get(f"ec_sec_{name}", True)
+
+
+def _reset_filters() -> None:
+    st.session_state.ec_active_types = list(_ALL_TYPES)
+    st.session_state.ec_active_quarters = list(_ALL_QUARTERS)
+    st.session_state.ec_company_filter = "All Companies"
+    st.session_state.ec_selected_event = None
+    st.session_state.ec_cal_version = st.session_state.get("ec_cal_version", 0) + 1
+
+
+def _ec_shift_period(delta: int) -> None:
+    """Prev/next month (or year in yearly view) for the custom toolbar."""
+    try:
+        d = _parse_iso_date(st.session_state.get("_ec_current_date")) or date.today()
+        if st.session_state.get("ec_view") == "year":
+            new = date(d.year + delta, d.month, min(d.day, 28))
+        else:
+            m, y = d.month + delta, d.year
+            while m < 1:
+                m += 12
+                y -= 1
+            while m > 12:
+                m -= 12
+                y += 1
+            import calendar as _cal
+            last = _cal.monthrange(y, m)[1]
+            new = date(y, m, min(d.day, last))
+        st.session_state._ec_current_date = new.isoformat()
+        st.session_state.ec_visible_start = None
+        st.session_state.ec_visible_end = None
+        st.session_state.ec_selected_event = None
+        st.session_state.ec_cal_version = st.session_state.get("ec_cal_version", 0) + 1
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_ec_shift_period",
+                             operation="shift_period", context=f"delta={delta}")
+
+
+def _set_ec_view(view: str) -> None:
+    if st.session_state.get("ec_view") != view:
+        st.session_state.ec_visible_start = None
+        st.session_state.ec_visible_end = None
+    st.session_state.ec_view = view
+    st.session_state.ec_selected_event = None
+    st.session_state.ec_cal_version = st.session_state.get("ec_cal_version", 0) + 1
+
+
+def _render_filter_panel(
+    all_labels: List[str],
+    default_idx: int,
+    on_company_change,
+    wl_options: List[str],
+    wl_default_idx: int,
+    on_watchlist_change,
+    n_matching: int,
+) -> None:
+    """Figma filter card: Filters btn + removable chips + 3-column expanded panel."""
+    try:
+        active_types = _selected_set("ec_active_types", _ALL_TYPES)
+        active_q = _selected_set("ec_active_quarters", _ALL_QUARTERS)
+        filters_open = st.session_state.get("ec_filters_open", False)
+        _all_opt = all_labels[0] if all_labels else "All Companies"
+        _company_selected = (st.session_state.get("ec_company_filter") or "") not in ("", _all_opt)
+        # Filters button badge = number of filters currently SELECTED (active event
+        # types + active quarters) — always shown so the count is visible at a glance.
+        selected_count = len(active_types) + len(active_q)
+        # (kept for the "Reset all" visibility + chip logic below)
+        inactive = (
+            (len(_ALL_TYPES) - len(active_types))
+            + (len(_ALL_QUARTERS) - len(active_q))
+            + (1 if _company_selected else 0)
+        )
+
+        with st.container(border=True, key="ec_filter_card"):
+            # Single flex row (design: `flex items-center gap-3`) — chips are natural
+            # width and left-packed, never stretched. Reset all is pushed right (ml-auto).
+            with st.container(
+                horizontal=True, vertical_alignment="center", gap="small", key="ec_filter_row"
+            ):
+                # Count badge lives INSIDE the button (design) — baked into the label
+                # as a Streamlit badge, then restyled to a white circle via CSS.
+                # Always shown: the number of filters currently selected.
+                _flabel = f"Filters :gray-badge[{selected_count}]"
+                st.button(
+                    _flabel,
+                    key="ec_filters_toggle",
+                    type="primary" if filters_open else "secondary",
+                    on_click=_toggle_filter_panel,
+                )
+                st.html('<div class="ec-vdiv"></div>')
+                for etype, label in _EVENT_TYPES:
+                    if etype in active_types:
+                        st.button(
+                            f"{label} ×",
+                            key=f"ec_chip_type_{etype}",
+                            on_click=_toggle_event_type,
+                            args=(etype,),
+                        )
+                for q, ql in _QUARTER_ITEMS:
+                    if q in active_q:
+                        st.button(
+                            f"{ql} ×",
+                            key=f"ec_chip_q_{q}",
+                            on_click=_toggle_quarter,
+                            args=(q,),
+                        )
+                if inactive > 0:
+                    st.button("Reset all", key="ec_reset_filters", on_click=_reset_filters)
+
+            if filters_open:
+                with st.container(border=True, key="ec_filter_expand"):
+                    # Figma proportions: Event Type + Company wide, Fiscal Quarter narrow (~3:1:3)
+                    # Each section is a native st.expander (HTML <details>) so
+                    # collapse/expand is CLIENT-SIDE — instant, no page rerun.
+                    exp = st.columns([3, 1, 3], gap="small")
+                    with exp[0]:
+                        with st.expander("Event Type", expanded=True):
+                            for etype, label in _EVENT_TYPES:
+                                on = etype in active_types
+                                st.button(
+                                    label,
+                                    key=f"ec_exp_type_{etype}",
+                                    type="primary" if on else "secondary",
+                                    on_click=_toggle_event_type,
+                                    args=(etype,),
+                                    width="stretch",
+                                )
+                    with exp[1]:
+                        with st.expander("Fiscal Quarter", expanded=True):
+                            # 2×2 grid — buttons FILL the column (design node 24139:47638)
+                            qr1c1, qr1c2 = st.columns(2, gap="small")
+                            qr2c1, qr2c2 = st.columns(2, gap="small")
+                            _qslots = [(qr1c1, "Q1"), (qr1c2, "Q2"), (qr2c1, "Q3"), (qr2c2, "Q4")]
+                            for col, q in _qslots:
+                                with col:
+                                    st.button(
+                                        q,
+                                        key=f"ec_exp_q_{q}",
+                                        type="primary" if q in active_q else "secondary",
+                                        on_click=_toggle_quarter,
+                                        args=(q,),
+                                        width="stretch",
+                                    )
+                    with exp[2]:
+                        with st.expander("Company", expanded=True):
+                            # Native searchable dropdown: click to see EVERY company,
+                            # type to narrow (client-side). Restores the previous
+                            # calendar's company picker. All filtering stays in-memory.
+                            st.selectbox(
+                                "Company",
+                                options=all_labels,
+                                index=default_idx,
+                                key="ec_company_filter",
+                                on_change=on_company_change,
+                                placeholder="Company or ticker...",
+                                label_visibility="collapsed",
+                            )
+                            _sel = st.session_state.get("ec_company_filter") or ""
+                            hint = (
+                                f"{n_matching:,} matching events"
+                                if _sel and _sel != _all_opt
+                                else "All companies selected"
+                            )
+                            st.markdown(f'<div class="ec-filter-hint">{html.escape(hint)}</div>', unsafe_allow_html=True)
+                            if wl_options and len(wl_options) > 1:
+                                st.selectbox(
+                                    "Watchlist",
+                                    options=wl_options,
+                                    index=wl_default_idx,
+                                    key="ec_watchlist_filter",
+                                    on_change=on_watchlist_change,
+                                    label_visibility="collapsed",
+                                )
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_filter_panel",
+                             operation="render_filters", context="filter panel render")
+
+
+def _render_calendar_toolbar(
+    n_events: int,
+    n_companies: int,
+    n_ma: int,
+    alerts_on: bool,
+    open_email_dialog,
+) -> None:
+    """Figma calendar toolbar: month nav, stats, email alerts, legend, view switcher."""
+    try:
+        d = _parse_iso_date(st.session_state.get("_ec_current_date")) or date.today()
+        _months = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December",
+        ]
+        if st.session_state.get("ec_view") == "year":
+            title = str(d.year)
+        else:
+            title = f"{_months[d.month - 1]} {d.year}"
+
+        _view = st.session_state.get("ec_view", "calendar")
+        with st.container(
+            horizontal=True, vertical_alignment="center", gap="small", key="ec_toolbar_row"
+        ):
+            # Left: month nav (arrows flank the title)
+            st.button("‹", key="ec_cal_prev", on_click=_ec_shift_period, args=(-1,))
+            st.html(f'<div class="ec-cal-toolbar-title">{html.escape(title)}</div>')
+            st.button("›", key="ec_cal_next", on_click=_ec_shift_period, args=(1,))
+            # Right group (pushed to the far right via ml-auto)
+            with st.container(
+                horizontal=True, vertical_alignment="center", gap="medium", key="ec_toolbar_right"
+            ):
+                st.html(
+                    f'<div class="ec-cal-stats">'
+                    f'<span><b>{n_events:,}</b> <span class="ec-cal-stat-lbl">events</span></span>'
+                    f'<span><b>{n_companies}</b> <span class="ec-cal-stat-lbl">companies</span></span>'
+                    f'<span><b>{n_ma}</b> <span class="ec-cal-stat-lbl">M&amp;A</span></span>'
+                    f'</div>'
+                )
+                if st.button("Email Alerts", key="ec_open_email_alerts"):
+                    open_email_dialog()
+                st.html('<div class="ec-vdiv"></div>')
+                st.html(
+                    '<div class="ec-cal-legend">'
+                    '<span><i class="ec-dot ec-dot-earnings"></i>Earnings</span>'
+                    '<span><i class="ec-dot ec-dot-ipo"></i>IPO</span>'
+                    '<span><i class="ec-dot ec-dot-ma"></i>M&A</span>'
+                    '<span><i class="ec-dot ec-dot-delisted"></i>Delisted</span>'
+                    '</div>'
+                )
+                # Segmented view switcher (design: bg-slate-100 rounded-lg p-0.5)
+                with st.container(
+                    horizontal=True, vertical_alignment="center", gap="small", key="ec_view_switch"
+                ):
+                    for vid, vlabel in [("calendar", "Monthly"), ("year", "Yearly"), ("list", "List")]:
+                        st.button(
+                            vlabel,
+                            key=f"ec_view_{vid}",
+                            type="primary" if _view == vid else "secondary",
+                            on_click=_set_ec_view,
+                            args=(vid,),
+                        )
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_calendar_toolbar",
+                             operation="render_toolbar", context="calendar toolbar")
+
+
+# ── Yearly view (custom Figma month-card grid) ───────────────────────────────
+_YEAR_TYPE_COLOR = {"earnings": "#38BDF8", "ipo": "#6EE7B7", "ma": "#C4B5FD", "delisted": "#D62E2F"}
+_YEAR_TYPE_ORDER = ("earnings", "ipo", "ma", "delisted")
+_YEAR_MONTHS = ("January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December")
+_YEAR_DOW = ("M", "T", "W", "T", "F", "S", "S")
+
+
+def _days_in_month(y: int, m: int) -> int:
+    return (date(y + 1, 1, 1) - date(y, 12, 1)).days if m == 12 else (date(y, m + 1, 1) - date(y, m, 1)).days
+
+
+def _render_year_grid(events, ma_events, ipo_events, delisted_events,
+                      year: int, today: date, shown: int, total: int) -> str:
+    """Custom yearly view — 3×4 grid of mini-month cards matching the Figma design
+    (node 24139:48905): per-month type dots + count badge, per-day event tickers,
+    current-month red highlight. Rendered as one HTML block (no FullCalendar)."""
+    try:
+        from collections import defaultdict
+        by_day: Dict[Tuple[int, int], list] = defaultdict(list)
+        m_types: Dict[int, set] = defaultdict(set)
+        m_count: Dict[int, int] = defaultdict(int)
+        for lst, typ in ((events, "earnings"), (ipo_events, "ipo"),
+                         (ma_events, "ma"), (delisted_events, "delisted")):
+            for e in lst or []:
+                iso = _to_iso(e.get("earnings_date"))
+                if not iso:
+                    continue
+                try:
+                    dd = date.fromisoformat(str(iso)[:10])
+                except (ValueError, TypeError):
+                    continue
+                if dd.year != year:
+                    continue
+                by_day[(dd.month, dd.day)].append((str(e.get("ticker") or ""), typ))
+                m_types[dd.month].add(typ)
+                m_count[dd.month] += 1
+        prio = {t: i for i, t in enumerate(_YEAR_TYPE_ORDER)}
+        cards = []
+        for m in range(1, 13):
+            is_cur = (m == today.month and year == today.year)
+            dots = "".join(
+                f'<span class="ec-ym-dot" style="background:{_YEAR_TYPE_COLOR[t]}"></span>'
+                for t in _YEAR_TYPE_ORDER if t in m_types.get(m, ())
+            )
+            cnt = m_count.get(m, 0)
+            badge = f'<span class="ec-ym-badge">{cnt:,}</span>' if cnt else ""
+            head = (f'<div class="ec-ym-head"><span class="ec-ym-name">{_YEAR_MONTHS[m - 1]}</span>'
+                    f'<span class="ec-ym-hr"><span class="ec-ym-dots">{dots}</span>{badge}</span></div>')
+            wk = "".join(f"<span>{d}</span>" for d in _YEAR_DOW)
+            offset = date(year, m, 1).weekday()          # Monday = 0
+            ndays = _days_in_month(year, m)
+            cells = ['<div class="ec-ym-day ec-ym-empty"></div>' for _ in range(offset)]
+            for day in range(1, ndays + 1):
+                evs = sorted(by_day.get((m, day), ()), key=lambda x: (prio.get(x[1], 9), x[0]))
+                rows = ""
+                for tk, typ in evs[:2]:
+                    c = _YEAR_TYPE_COLOR[typ]
+                    rows += (f'<div class="ec-ym-ev"><span class="ec-ym-evdot" style="background:{c}"></span>'
+                             f'<span class="ec-ym-evtk" style="color:{c}">{html.escape(tk)}</span></div>')
+                if len(evs) > 2:
+                    rows += f'<div class="ec-ym-more">+{len(evs) - 2}</div>'
+                evhtml = f'<div class="ec-ym-evs">{rows}</div>' if rows else ""
+                is_today = is_cur and day == today.day
+                cls = "ec-ym-day today" if is_today else "ec-ym-day"
+                cells.append(f'<div class="{cls}"><span class="ec-ym-daynum">{day}</span>{evhtml}</div>')
+            body = (f'<div class="ec-ym-body"><div class="ec-ym-wk">{wk}</div>'
+                    f'<div class="ec-ym-days">{"".join(cells)}</div></div>')
+            cards.append(f'<div class="ec-ym-card{" cur" if is_cur else ""}">{head}{body}</div>')
+        del total  # denominator dropped — footer now shows the year-scoped count only
+        footer = (f'<div class="ec-year-foot"><span>Showing <b>{shown:,}</b> '
+                  f'events in {year}</span></div>')
+        return f'<div class="ec-year-wrap"><div class="ec-year-grid">{"".join(cards)}</div>{footer}</div>'
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_year_grid",
+                             operation="render_year", context=f"year={year}")
+        return '<div class="ec-no-data">Unable to render the yearly view.</div>'
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CSS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _get_calendar_css() -> str:
+    """FullCalendar iframe CSS — Figma card events, today indicator, list view."""
+    qbg, qtx = _QUARTER_STYLE["bg"], _QUARTER_STYLE["text"]
+    return f"""
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            .fc {{ font-family:'Inter',sans-serif !important; background:#FFFFFF !important; }}
+
+            /* Hide FullCalendar built-in toolbar — custom Figma toolbar above iframe */
+            .fc-header-toolbar {{ display:none !important; }}
+
+            /* Monday-first week */
+            .fc-col-header-cell-cushion {{
+                font-size:10px !important; font-weight:600 !important; color:#90A1B9 !important;
+                text-transform:uppercase; letter-spacing:1px; text-decoration:none !important;
+            }}
+            .fc-col-header-cell.fc-day-sat .fc-col-header-cell-cushion,
+            .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion {{ color:#CAD5E2 !important; }}
+            .fc-theme-standard .fc-col-header-cell {{
+                background:#F8FAFC !important; border-color:#E2E8F0 !important;
+            }}
+            .fc-col-header-cell .fc-scrollgrid-sync-inner {{ padding:3px 0 !important; }}
+
+            /* ── Today — Coresight red top accent (Figma) ── */
+            .fc-daygrid-day.fc-day-today {{
+                background:rgba(214,46,47,0.04) !important;
+                box-shadow:inset 0 2px 0 0 {_CORESIGHT_RED} !important;
+            }}
+            .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {{
+                color:{_CORESIGHT_RED} !important; font-weight:700 !important;
+            }}
+            .fc-multimonth .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {{
+                color:{_CORESIGHT_RED} !important; font-weight:700 !important;
+            }}
+
+            /* ── Day grid chrome ── */
+            .fc-daygrid-day-number {{
+                font-size:11px !important; font-weight:600 !important; color:#45556C !important;
+                text-decoration:none !important; padding:4px 6px !important; float:none !important;
+            }}
+            .fc-daygrid-day-top {{
+                justify-content:flex-start !important; flex-direction:row !important;
+            }}
+            .fc-day-other .fc-daygrid-day-frame {{
+                background:rgba(248,250,252,0.4) !important;
+            }}
+            .fc-day-other .fc-daygrid-day-number {{ color:#CAD5E2 !important; }}
+            /* Adjacent-month days show only the faded number — no events (design) */
+            .fc-day-other .fc-daygrid-day-events,
+            .fc-day-other .fc-daygrid-day-bottom {{ display:none !important; }}
+            /* Weekend cells — faint slate wash + muted day number (design) */
+            .fc-daygrid-day.fc-day-sat:not(.fc-day-other) .fc-daygrid-day-frame,
+            .fc-daygrid-day.fc-day-sun:not(.fc-day-other) .fc-daygrid-day-frame {{
+                background:rgba(248,250,252,0.6) !important;
+            }}
+            .fc-day-sat:not(.fc-day-other) .fc-daygrid-day-number,
+            .fc-day-sun:not(.fc-day-other) .fc-daygrid-day-number {{ color:#90A1B9 !important; }}
+            /* Outer grid border comes from the iframe (rounded card); drop the grid's
+               own outer border to avoid a double line, keep it clipped to the radius. */
+            .fc-scrollgrid {{ border:none !important; border-radius:16px !important; overflow:hidden !important; }}
+            .fc {{ border-radius:16px !important; overflow:hidden !important; }}
+            .fc-daygrid-day {{ border-color:#F1F5F9 !important; }}
+
+            /* ── Event cards (month + year) ── */
+            .fc-event.ec-card {{
+                cursor:pointer !important; border:none !important;
+                border-radius:8px !important; padding:0 !important;
+                margin-bottom:2px !important; overflow:hidden !important;
+                box-shadow:none !important; transition:filter .12s ease !important;
+            }}
+            /* Pastel background tint per type (design: fill {{type}}-50 @ 50%) */
+            .fc-event.ec-type-earnings {{ background:rgba(240,249,255,0.5) !important; }}
+            .fc-event.ec-type-ipo {{ background:rgba(236,253,245,0.5) !important; }}
+            .fc-event.ec-type-ma {{ background:rgba(245,243,255,0.5) !important; }}
+            .fc-event.ec-type-delisted {{ background:rgba(254,242,242,0.5) !important; }}
+            .fc-event.ec-card:hover {{ filter:brightness(0.97) !important; }}
+            .fc-event.ec-card .fc-event-main {{ padding:0 !important; }}
+            .fc-event.ec-card .fc-event-title-container {{ padding:0 !important; }}
+            .fc-event.ec-card .fc-event-title {{
+                white-space:pre-line !important; font-size:9px !important;
+                font-weight:400 !important; line-height:1.3 !important;
+                padding:3px 34px 3px 6px !important; position:relative !important;
+                min-height:28px !important;
+            }}
+            /* Wider badges (M&A / IPO) need extra right room so the company name never underlaps */
+            .fc-event.ec-badge-ma .fc-event-title,
+            .fc-event.ec-badge-ipo .fc-event-title {{ padding-right:46px !important; }}
+            .fc-event.ec-card .fc-event-title::first-line {{
+                font-weight:600 !important; font-size:10px !important;
+            }}
+            /* Ticker line = category-600, company (first line) = category-900 (Figma) */
+            .fc-event.ec-type-earnings .fc-event-title {{ color:#0084D1 !important; }}
+            .fc-event.ec-type-earnings .fc-event-title::first-line {{ color:#024A70 !important; }}
+            .fc-event.ec-type-ipo .fc-event-title {{ color:#009966 !important; }}
+            .fc-event.ec-type-ipo .fc-event-title::first-line {{ color:#004F3B !important; }}
+            .fc-event.ec-type-ma .fc-event-title {{ color:#7008E7 !important; }}
+            .fc-event.ec-type-ma .fc-event-title::first-line {{ color:#4D179A !important; }}
+            .fc-event.ec-type-delisted .fc-event-title {{ color:#E7000B !important; }}
+            .fc-event.ec-type-delisted .fc-event-title::first-line {{ color:#9F0712 !important; }}
+            .fc-event.ec-type-earnings {{ border-left:2px solid #38BDF8 !important; }}
+            .fc-event.ec-type-ipo {{ border-left:2px solid #6EE7B7 !important; }}
+            .fc-event.ec-type-ma {{ border-left:2px solid #C4B5FD !important; }}
+            .fc-event.ec-type-delisted {{ border-left:2px solid #D62E2F !important; }}
+            .fc-event.ec-card .fc-event-title::after {{
+                position:absolute; right:6px; top:50%; bottom:auto; transform:translateY(-50%);
+                font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px;
+                background:{qbg}; color:{qtx}; line-height:1.1;
+            }}
+            .fc-event.ec-badge-Q1 .fc-event-title::after {{ content:"Q1"; }}
+            .fc-event.ec-badge-Q2 .fc-event-title::after {{ content:"Q2"; }}
+            .fc-event.ec-badge-Q3 .fc-event-title::after {{ content:"Q3"; }}
+            .fc-event.ec-badge-Q4 .fc-event-title::after {{ content:"Q4"; }}
+            .fc-event.ec-badge-ipo .fc-event-title::after {{
+                content:"IPO"; background:#D0FAE5; color:#004F3B;
+            }}
+            .fc-event.ec-badge-ma .fc-event-title::after {{
+                content:"M&A"; background:#EDE9FE; color:#4D179A;
+            }}
+            .fc-event.ec-no-badge .fc-event-title::after {{ display:none !important; }}
+
+            /* ── List view rows ── */
+            .fc-list-event.ec-card {{
+                border-left:3px solid #0084D1 !important; margin-bottom:2px !important;
+                border-radius:0 6px 6px 0 !important;
+            }}
+            .fc-list-event.ec-type-earnings {{ border-left-color:#38BDF8 !important; }}
+            .fc-list-event.ec-type-ipo {{ border-left-color:#6EE7B7 !important; }}
+            .fc-list-event.ec-type-ma {{ border-left-color:#C4B5FD !important; }}
+            .fc-list-event.ec-type-delisted {{ border-left-color:#D62E2F !important; }}
+            .fc-list-event-time {{ display:none !important; }}
+            .fc-list-event-title {{
+                white-space:pre-line !important; font-size:13px !important;
+                font-weight:600 !important; position:relative !important;
+                padding-right:40px !important;
+            }}
+            .fc-list-event.ec-card .fc-list-event-title::after {{
+                position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;
+                background:{qbg}; color:{qtx};
+            }}
+            .fc-list-event.ec-badge-Q1 .fc-list-event-title::after {{ content:"Q1"; }}
+            .fc-list-event.ec-badge-Q2 .fc-list-event-title::after {{ content:"Q2"; }}
+            .fc-list-event.ec-badge-Q3 .fc-list-event-title::after {{ content:"Q3"; }}
+            .fc-list-event.ec-badge-Q4 .fc-list-event-title::after {{ content:"Q4"; }}
+            .fc-list-event.ec-badge-ipo .fc-list-event-title::after {{
+                content:"IPO"; background:#D1FAE5; color:#064E3B;
+            }}
+            .fc-list-event.ec-badge-ma .fc-list-event-title::after {{
+                content:"M&A"; background:#EDE9FE; color:#4C1D95;
+            }}
+            .fc-list-event.ec-no-badge .fc-list-event-title::after {{ display:none !important; }}
+            .fc-list-event-dot {{ width:0 !important; border-width:0 !important; }}
+            .fc-list-day-cushion {{
+                font-family:'Montserrat',sans-serif !important; font-weight:600 !important;
+                font-size:12px !important; color:#334155 !important;
+                background:#F8FAFC !important;
+            }}
+            .fc-list-table {{ border-color:#E2E8F0 !important; }}
+
+            /* ── multiMonthYear (year view) ── */
+            .fc-multimonth-title {{
+                font-family:'Montserrat',sans-serif !important; font-weight:700 !important;
+                font-size:13px !important; text-transform:uppercase; letter-spacing:0.5px;
+                color:#1E293B !important;
+            }}
+            .fc-multimonth-daygrid .fc-daygrid-day-number {{ font-size:11px !important; }}
+            .fc-multimonth {{ border-color:#E2E8F0 !important; border-radius:8px !important; }}
+        """
+
+
 def _get_css() -> str:
     try:
         return """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap');
 
 [data-testid="stHeaderActionElements"] { display:none !important; }
 header[data-testid="stHeader"] { display:none !important; height:0 !important; overflow:hidden !important; }
@@ -210,9 +910,13 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
 .ec-no-data { text-align:center; color:#6B6B6B; padding:48px 0; font-size:15px; }
 
 /* ── Calendar detail panel ── */
+/* Detail card lives in its OWN right-hand column beside the calendar (st.columns
+   [3,1]); it is never a floating overlay and never sits on top of the grid. */
+.st-key-ec_detail_col { padding-top:2px !important; }
+.st-key-ec_detail_col .stButton { margin-top:10px !important; }
 .ec-detail-card {
     background:#FFFFFF; border:1px solid #E5E5E5; border-radius:12px;
-    padding:20px; box-shadow:0 2px 12px rgba(0,0,0,0.07);
+    padding:20px; box-shadow:0 8px 24px rgba(0,0,0,0.12);
 }
 .ec-detail-title {
     font-family:'Montserrat',sans-serif; font-weight:700;
@@ -286,53 +990,62 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
 [data-testid="stDialogContent"] [data-testid="stCaption"] {
     color:#000000 !important;
 }
-/* Toolbar — Email Alerts (Coresight D6 primary; same family/sizing rhythm as Month/Year) */
-.st-key-ec_open_email_alerts button[kind="primary"],
-.st-key-ec_open_email_alerts button[data-testid="baseButton-primary"] {
-    font-family:'Montserrat',sans-serif !important;
-    font-weight:600 !important;
-    font-size:13px !important;
-    border-radius:8px !important;
-    background-color:#D62E2F !important;
-    border:2px solid #D62E2F !important;
-    color:#FFFFFF !important;
-    text-transform:capitalize !important;
-    white-space:nowrap !important;
+/* Toolbar — Email Alerts in dialog only (calendar toolbar uses white outline btn) */
+
+/* ── Figma: NO outer card around filter or calendar (design has none) ── */
+/* NOTE: st.container(border=True) draws the border directly on the .st-key-* block. */
+/* Calendar SECTION: no box. A FULL-WIDTH top line + a slight-grey band that bleeds
+   edge-to-edge behind the toolbar + grid (design). The grid (iframe) stays centered. */
+.st-key-ec_cal_card {
+    border:none !important; border-radius:0 !important; box-shadow:none !important;
+    background:transparent !important; padding:16px 0 24px 0 !important; position:relative !important;
 }
-.st-key-ec_open_email_alerts button[kind="primary"]:hover,
-.st-key-ec_open_email_alerts button[data-testid="baseButton-primary"]:hover {
-    background-color:#FFFFFF !important;
-    border:2px solid #D62E2F !important;
-    color:#D62E2F !important;
+.st-key-ec_cal_card::before {
+    content:'' !important; position:absolute !important; top:0 !important;
+    left:calc(-50vw + 50%) !important; width:100vw !important; height:100% !important;
+    background:#F8FAFC !important; border-top:1px solid #E2E8F0 !important;
+    z-index:0 !important; pointer-events:none !important;
 }
-/* Toolbar badge — top-aligned; small gap between Email Alerts and pill (avoid overlap) */
-[data-testid="stHorizontalBlock"]:has(.st-key-ec_open_email_alerts),
-[data-testid="stHorizontalBlock"]:has(.ec-toolbar-alerts-pill-host) {
-    align-items:flex-start !important;
+.st-key-ec_cal_card > div { position:relative !important; z-index:1 !important; }
+/* The month/list grid iframe = rounded bordered card with shadow (design grid r16). */
+.st-key-ec_cal_card iframe {
+    border:1px solid #E2E8F0 !important; border-radius:16px !important;
+    box-shadow:0 1px 2px -1px rgba(0,0,0,0.10), 0 1px 3px 0 rgba(0,0,0,0.10) !important;
+    background:#FFFFFF !important; overflow:hidden !important;
 }
-[data-testid="column"]:has(.ec-toolbar-alerts-pill-host) {
-    flex:0 0 auto !important;
-    width:auto !important;
-    min-width:unset !important;
-    padding-left:0 !important;
-    margin-left:0 !important;
+/* Filter area: flat, no bordered box — Filters button + chips sit on the page,
+   only the inner 3-section panel (ec_filter_expand) is a box. */
+.st-key-ec_filter_card {
+    border:none !important; border-radius:0 !important; box-shadow:none !important;
+    background:transparent !important; padding:0 !important; margin-bottom:14px !important;
 }
-.ec-toolbar-alerts-pill-host {
-    display:inline-flex;
-    align-items:center;
-    margin:0;
-    padding-top:1px;
+.st-key-ec_filter_expand {
+    border:1px solid #E2E8F0 !important; border-radius:14px !important;
+    margin-top:10px !important; padding:0 !important; overflow:hidden !important;
+    box-shadow:0 1px 2px -1px rgba(0,0,0,0.10), 0 1px 3px 0 rgba(0,0,0,0.10) !important;
+    background:#FFFFFF !important;
 }
-.ec-alerts-status-pill.ec-alerts-status-pill--toolbar {
-    font-family:'Roboto',sans-serif !important;
-    min-width:unset !important;
-    min-height:unset !important;
-    padding:3px 9px !important;
-    font-size:10px !important;
-    font-weight:700 !important;
-    border-radius:8px !important;
-    line-height:1.2 !important;
-    letter-spacing:0.01em !important;
+/* Zero the inter-column gap so the section dividers sit flush (design: divide-x) */
+.st-key-ec_filter_expand [data-testid="stHorizontalBlock"] { gap:0 !important; }
+.st-key-ec_filter_expand [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    border-right:1px solid #F1F5F9 !important; padding:12px 14px 14px !important;
+}
+.st-key-ec_filter_expand [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+    border-right:none !important;
+}
+/* Nested columns inside a section expander (Fiscal Quarter Q1–Q4 grid) must NOT
+   inherit the panel-column divider/padding — that was crushing the Q buttons. */
+.st-key-ec_filter_expand [data-testid="stExpanderDetails"] [data-testid="stColumn"] {
+    border-right:none !important; padding:0 !important;
+}
+.st-key-ec_filter_expand [data-testid="stExpanderDetails"] [data-testid="stHorizontalBlock"] {
+    gap:8px !important; width:100% !important;
+}
+/* Make the Q grid fill the Fiscal Quarter column (no dead space on the right) */
+.st-key-ec_filter_expand [data-testid="stExpanderDetails"],
+.st-key-ec_filter_expand [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"],
+.st-key-ec_filter_expand [data-testid="stExpanderDetails"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {
+    width:100% !important;
 }
 /* Email alert saved-state display */
 .ec-alerts-status-wrap {
@@ -351,7 +1064,7 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
     min-height:32px;
     padding:6px 14px;
     border-radius:8px;
-    font-family:'Roboto',sans-serif;
+    font-family:'Inter',sans-serif;
     font-size:12px;
     font-weight:700;
     line-height:1.2;
@@ -368,15 +1081,15 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
 }
 .ec-alerts-lede {
     font-size:13px; color:#000000; margin:0 0 2px 0; line-height:1.35;
-    font-family:'Roboto',sans-serif;
+    font-family:'Inter',sans-serif;
 }
 .ec-alerts-foot {
     font-size:11px; color:#000000; line-height:1.35; margin:4px 0 0 0;
-    font-family:'Roboto',sans-serif;
+    font-family:'Inter',sans-serif;
 }
 .ec-alerts-hint {
     font-size:12px; color:#000000; line-height:1.35; margin:0;
-    font-family:'Roboto',sans-serif;
+    font-family:'Inter',sans-serif;
 }
 .ec-alerts-section {
     font-family:'Montserrat',sans-serif;
@@ -388,7 +1101,7 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
     font-size:12px; color:#000000; line-height:1.45;
     background:#F4F5F7; border-radius:8px; padding:9px 12px; margin:6px 0 10px 0;
     border-left:4px solid #9E9E9E;
-    font-family:'Roboto',sans-serif;
+    font-family:'Inter',sans-serif;
 }
 .ec-alerts-callout--on {
     background:#E8F5E9; border-left-color:#2E7D32; color:#000000;
@@ -403,38 +1116,338 @@ div[data-testid="stSelectbox"] label { font-size:11px !important; font-weight:50
     color:#000000 !important;
 }
 
-/* ── Clickable color legend (event-type filter) ── */
-.ec-legend-label {
-    font-size:11px; font-weight:600; color:#6B6B6B;
-    text-transform:uppercase; letter-spacing:0.5px; margin:2px 0 0 0;
-    font-family:'Montserrat',sans-serif; white-space:nowrap;
+/* ── Figma filter controls ── */
+.ec-filter-section-label {
+    font-family:'Inter',sans-serif; font-size:10px; font-weight:600;
+    color:#64748B; text-transform:uppercase; letter-spacing:0.08em;
+    margin-bottom:10px;
 }
-/* Legend chips: compact, pill-shaped, branded per event kind */
-div[class*="st-key-ec_legend_"] button {
-    font-family:'Roboto',sans-serif !important;
-    font-weight:700 !important; font-size:12px !important;
-    border-radius:14px !important; padding:3px 12px !important;
-    min-height:30px !important; width:100% !important;
-    white-space:nowrap !important; box-shadow:none !important;
-    transition:opacity .12s ease, filter .12s ease !important;
+.ec-filter-hint {
+    font-family:'Inter',sans-serif; font-size:10px; color:#90A1B9;
+    line-height:1.5; margin-top:8px;
 }
-/* Inactive (secondary) chips: outlined + dimmed so "off" reads clearly */
-div[class*="st-key-ec_legend_"] button[kind="secondary"] {
-    background:#FFFFFF !important; opacity:0.5 !important;
-    filter:grayscale(35%) !important; font-weight:600 !important;
-}
-div[class*="st-key-ec_legend_"] button[kind="secondary"]:hover { opacity:0.8 !important; }
 
-.st-key-ec_legend_Q1 button[kind="primary"]{ background:#005F8F !important; border-color:#005F8F !important; color:#FFFFFF !important; }
-.st-key-ec_legend_Q1 button[kind="secondary"]{ border:2px solid #005F8F !important; color:#005F8F !important; }
-.st-key-ec_legend_Q2 button[kind="primary"]{ background:#A3C0CE !important; border-color:#A3C0CE !important; color:#2D2A29 !important; }
-.st-key-ec_legend_Q2 button[kind="secondary"]{ border:2px solid #A3C0CE !important; color:#5B7C8D !important; }
-.st-key-ec_legend_Q3 button[kind="primary"]{ background:#7F7F7F !important; border-color:#7F7F7F !important; color:#FFFFFF !important; }
-.st-key-ec_legend_Q3 button[kind="secondary"]{ border:2px solid #7F7F7F !important; color:#7F7F7F !important; }
-.st-key-ec_legend_Q4 button[kind="primary"]{ background:#2D2A29 !important; border-color:#2D2A29 !important; color:#FFFFFF !important; }
-.st-key-ec_legend_Q4 button[kind="secondary"]{ border:2px solid #2D2A29 !important; color:#2D2A29 !important; }
-.st-key-ec_legend_ma button[kind="primary"]{ background:#61A575 !important; border-color:#61A575 !important; color:#16341F !important; }
-.st-key-ec_legend_ma button[kind="secondary"]{ border:2px solid #61A575 !important; color:#3E7350 !important; }
+/* Filters toggle button */
+.st-key-ec_filters_toggle button[kind="primary"] {
+    background:#2D2A29 !important; border:1px solid #2D2A29 !important; color:#FFFFFF !important;
+    font-family:'Inter',sans-serif !important; font-weight:500 !important; font-size:12px !important;
+    border-radius:10px !important; min-height:30px !important;
+}
+.st-key-ec_filters_toggle button[kind="secondary"] {
+    background:#FFFFFF !important; border:1px solid #E2E8F0 !important; color:#62748E !important;
+    font-family:'Inter',sans-serif !important; font-weight:500 !important; font-size:12px !important;
+    border-radius:10px !important; min-height:30px !important;
+}
+
+/* Removable chips (active filters row) — Figma: pastel dot + label + × */
+/* Natural (content) width, left-packed — never stretch as filters are removed. */
+div[class*="st-key-ec_chip_type_"],
+div[class*="st-key-ec_chip_q_"] { width:auto !important; flex:0 0 auto !important; }
+div[class*="st-key-ec_chip_type_"] button,
+div[class*="st-key-ec_chip_q_"] button {
+    font-family:'Inter',sans-serif !important; font-weight:500 !important; font-size:11px !important;
+    line-height:16.5px !important;
+    border-radius:999px !important; min-height:21px !important; padding:2px 6px 2px 8px !important;
+    width:auto !important; min-width:0 !important; white-space:nowrap !important;
+    border:1px solid transparent !important; box-shadow:none !important;
+    display:inline-flex !important; align-items:center !important; justify-content:center !important; gap:4px !important;
+}
+div[class*="st-key-ec_chip_type_"] button::before {
+    content:''; width:6px; height:6px; border-radius:50%; flex:0 0 auto;
+}
+.st-key-ec_chip_type_earnings button { background:#F0F9FF !important; color:#0069A8 !important; }
+.st-key-ec_chip_type_earnings button::before { background:#38BDF8 !important; }
+.st-key-ec_chip_type_ipo button { background:#ECFDF5 !important; color:#007A55 !important; }
+.st-key-ec_chip_type_ipo button::before { background:#6EE7B7 !important; }
+.st-key-ec_chip_type_ma button { background:#F5F3FF !important; color:#7008E7 !important; }
+.st-key-ec_chip_type_ma button::before { background:#C4B5FD !important; }
+.st-key-ec_chip_type_delisted button { background:#FEF2F2 !important; color:#C10007 !important; }
+.st-key-ec_chip_type_delisted button::before { background:#D62E2F !important; }
+div[class*="st-key-ec_chip_q_"] button {
+    background:#E2E8F0 !important; color:#45556C !important; font-weight:600 !important;
+}
+.st-key-ec_reset_filters button {
+    font-size:11px !important; color:#90A1B9 !important; background:transparent !important;
+    border:none !important; box-shadow:none !important; font-weight:500 !important;
+}
+
+/* Expanded event-type rows (Figma: pastel dot + label, left-aligned) */
+div[class*="st-key-ec_exp_type_"] button {
+    justify-content:flex-start !important; text-align:left !important; border:none !important;
+    border-radius:10px !important; display:flex !important; align-items:center !important; gap:10px !important;
+    padding:8px 12px !important; min-height:32px !important;
+    font-family:'Inter',sans-serif !important; font-size:12px !important; font-weight:500 !important;
+}
+div[class*="st-key-ec_exp_type_"] button::before {
+    content:''; width:8px; height:8px; border-radius:50%; flex:0 0 auto;
+}
+.st-key-ec_exp_type_earnings button[kind="primary"] { background:rgba(240,249,255,0.5) !important; color:#024A70 !important; }
+.st-key-ec_exp_type_earnings button[kind="primary"]::before { background:#38BDF8 !important; }
+.st-key-ec_exp_type_ipo button[kind="primary"] { background:rgba(236,253,245,0.5) !important; color:#004F3B !important; }
+.st-key-ec_exp_type_ipo button[kind="primary"]::before { background:#6EE7B7 !important; }
+.st-key-ec_exp_type_ma button[kind="primary"] { background:rgba(245,243,255,0.5) !important; color:#4D179A !important; }
+.st-key-ec_exp_type_ma button[kind="primary"]::before { background:#C4B5FD !important; }
+.st-key-ec_exp_type_delisted button[kind="primary"] { background:rgba(254,242,242,0.5) !important; color:#9F0712 !important; }
+.st-key-ec_exp_type_delisted button[kind="primary"]::before { background:#D62E2F !important; }
+div[class*="st-key-ec_exp_type_"] button[kind="secondary"] {
+    background:#F8FAFC !important; color:#90A1B9 !important;
+}
+div[class*="st-key-ec_exp_type_"] button[kind="secondary"]::before { background:#CBD5E1 !important; }
+/* Inactive event-type rows show a right-aligned "hidden" hint (design) */
+div[class*="st-key-ec_exp_type_"] button[kind="secondary"]::after {
+    content:'hidden'; margin-left:auto !important; font-size:10px !important;
+    font-weight:500 !important; color:#CAD5E2 !important; letter-spacing:0 !important;
+}
+/* Keep the label hugging the dot — Streamlit centers the label via nested flex wrappers */
+div[class*="st-key-ec_exp_type_"] button > div { justify-content:flex-start !important; width:100% !important; }
+div[class*="st-key-ec_exp_type_"] button > div > span { justify-content:flex-start !important; margin:0 !important; }
+div[class*="st-key-ec_exp_type_"] button [data-testid="stMarkdownContainer"] { text-align:left !important; margin:0 !important; }
+div[class*="st-key-ec_exp_type_"] button [data-testid="stMarkdownContainer"] p { text-align:left !important; }
+/* Fiscal Quarter: 2×2 grid, buttons fill the column (design node 24139:47638) */
+div[class*="st-key-ec_exp_q_"] button { width:100% !important; padding:0 !important; }
+div[class*="st-key-ec_exp_q_"] button[kind="primary"] {
+    background:#F1F5F9 !important; box-shadow:inset 0 0 0 1px #CAD5E2 !important; border:none !important;
+    color:#4C4E56 !important; border-radius:10px !important; font-weight:700 !important;
+    font-size:12px !important; min-height:36px !important;
+}
+div[class*="st-key-ec_exp_q_"] button[kind="secondary"] {
+    background:#F8FAFC !important; box-shadow:none !important; border:none !important;
+    color:#CAD5E2 !important; border-radius:10px !important; font-weight:700 !important;
+    font-size:12px !important; min-height:36px !important;
+}
+/* Collapsible filter sections = native st.expander (<details>) — client-side, no rerun.
+   Restyle the header to the Figma section header: flat, uppercase label + chevron right. */
+.st-key-ec_filter_expand [data-testid="stExpander"] { border:none !important; box-shadow:none !important; }
+.st-key-ec_filter_expand [data-testid="stExpander"] details {
+    border:none !important; background:transparent !important; box-shadow:none !important;
+}
+.st-key-ec_filter_expand [data-testid="stExpander"] summary {
+    padding:2px 2px !important; min-height:0 !important; list-style:none !important;
+    position:relative !important; cursor:pointer !important;
+    display:flex !important; align-items:center !important;
+    background:transparent !important; border:none !important;   /* no grey box, no underline (design) */
+}
+.st-key-ec_filter_expand [data-testid="stExpander"] summary:hover { background:transparent !important; }
+/* Remove Streamlit's separator line under the expander header */
+.st-key-ec_filter_expand [data-testid="stExpander"] [data-testid="stExpanderDetails"] { border:none !important; }
+.st-key-ec_filter_expand [data-testid="stExpander"] summary::-webkit-details-marker { display:none !important; }
+/* Hide Streamlit's default (Material-font) chevron — swap for an inline SVG so the
+   STG proxy stripping the icon font can never garble it. */
+.st-key-ec_filter_expand [data-testid="stExpander"] summary svg,
+.st-key-ec_filter_expand [data-testid="stExpander"] summary [data-testid="stIconMaterial"],
+.st-key-ec_filter_expand [data-testid="stExpander"] summary [data-testid="stExpanderToggleIcon"] {
+    display:none !important;
+}
+.st-key-ec_filter_expand [data-testid="stExpander"] summary p,
+.st-key-ec_filter_expand [data-testid="stExpander"] summary span {
+    font-family:'Inter',sans-serif !important; font-size:11px !important; font-weight:600 !important;
+    color:#62748E !important; text-transform:uppercase !important; letter-spacing:0.55px !important;
+    text-align:left !important; margin:0 !important;
+}
+.st-key-ec_filter_expand [data-testid="stExpander"] summary::after {
+    content:''; position:absolute; right:2px; top:50%; transform:translateY(-50%);
+    width:13px; height:13px;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2390A1B9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center;
+    background-size:13px 13px; transition:transform .15s ease;
+}
+.st-key-ec_filter_expand [data-testid="stExpander"] details[open] summary::after { transform:translateY(-50%) rotate(180deg); }
+.st-key-ec_filter_expand [data-testid="stExpander"] [data-testid="stExpanderDetails"] { padding-top:8px !important; }
+
+/* Filters toggle — sliders icon (Figma) instead of a hamburger char */
+.st-key-ec_filters_toggle button { display:flex !important; align-items:center !important; justify-content:center !important; gap:7px !important; }
+.st-key-ec_filters_toggle button::before {
+    content:''; width:13px; height:13px; flex:0 0 auto; background-repeat:no-repeat; background-position:center; background-size:13px 13px;
+}
+.st-key-ec_filters_toggle button[kind="primary"]::before {
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='21' x2='14' y1='4' y2='4'/%3E%3Cline x1='10' x2='3' y1='4' y2='4'/%3E%3Cline x1='21' x2='12' y1='12' y2='12'/%3E%3Cline x1='8' x2='3' y1='12' y2='12'/%3E%3Cline x1='21' x2='16' y1='20' y2='20'/%3E%3Cline x1='12' x2='3' y1='20' y2='20'/%3E%3Cline x1='14' x2='14' y1='2' y2='6'/%3E%3Cline x1='8' x2='8' y1='10' y2='14'/%3E%3Cline x1='16' x2='16' y1='18' y2='22'/%3E%3C/svg%3E");
+}
+.st-key-ec_filters_toggle button[kind="secondary"]::before {
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='21' x2='14' y1='4' y2='4'/%3E%3Cline x1='10' x2='3' y1='4' y2='4'/%3E%3Cline x1='21' x2='12' y1='12' y2='12'/%3E%3Cline x1='8' x2='3' y1='12' y2='12'/%3E%3Cline x1='21' x2='16' y1='20' y2='20'/%3E%3Cline x1='12' x2='3' y1='20' y2='20'/%3E%3Cline x1='14' x2='14' y1='2' y2='6'/%3E%3Cline x1='8' x2='8' y1='10' y2='14'/%3E%3Cline x1='16' x2='16' y1='18' y2='22'/%3E%3C/svg%3E");
+}
+/* Chevron on the Filters button (rotates up when the panel is open) */
+.st-key-ec_filters_toggle button::after {
+    content:''; width:12px; height:12px; flex:0 0 auto; margin-left:1px;
+    background-repeat:no-repeat; background-position:center; background-size:12px 12px;
+    transition:transform .2s ease;
+}
+.st-key-ec_filters_toggle button[kind="primary"]::after {
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    transform:rotate(180deg);
+}
+.st-key-ec_filters_toggle button[kind="secondary"]::after {
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+/* Count badge INSIDE the Filters button — white circle (design). The label carries a
+   Streamlit badge (:gray-badge[N]) which we restyle to a circle. */
+.st-key-ec_filters_toggle button .stMarkdownBadge {
+    width:16px !important; min-width:16px !important; height:16px !important; padding:0 !important;
+    border-radius:999px !important; display:inline-flex !important; align-items:center !important;
+    justify-content:center !important; font-family:'Inter',sans-serif !important;
+    font-size:9px !important; font-weight:700 !important; line-height:1 !important; margin:0 1px !important;
+    vertical-align:middle !important;
+}
+.st-key-ec_filters_toggle button[kind="primary"] .stMarkdownBadge {
+    background:#FFFFFF !important; color:#2D2A29 !important;
+}
+.st-key-ec_filters_toggle button[kind="secondary"] .stMarkdownBadge {
+    background:#2D2A29 !important; color:#FFFFFF !important;
+}
+
+/* Top filter row: single left-packed flex line (design: flex items-center gap-3) */
+.st-key-ec_filter_row { flex-wrap:wrap !important; row-gap:8px !important; }
+/* Every item is content-width and left-packed — nothing grows to create gaps. */
+.st-key-ec_filter_row > [data-testid="stElementContainer"] {
+    width:auto !important; flex:0 0 auto !important;
+}
+/* Count badge — dark circle (design's inactiveCount) */
+.ec-fbadge {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:16px; height:16px; border-radius:999px;
+    background:#2D2A29; color:#FFFFFF; font-family:'Inter',sans-serif;
+    font-size:9px; font-weight:700; line-height:1;
+}
+/* Vertical divider between Filters button and the chips */
+.ec-vdiv { width:1px; height:16px; background:#E2E8F0; }
+.st-key-ec_filter_row [data-testid="stElementContainer"]:has(.ec-vdiv),
+.st-key-ec_filter_row [data-testid="stElementContainer"]:has(.ec-fbadge) {
+    display:flex !important; align-items:center !important;
+}
+/* Reset all pushed to the far right (design: ml-auto) */
+.st-key-ec_reset_filters { margin-left:auto !important; }
+
+/* ── Calendar toolbar (Figma: flex justify-between, nav left / rest right) ── */
+.st-key-ec_toolbar_row { margin:0 0 14px !important; flex-wrap:nowrap !important; }
+.st-key-ec_toolbar_row > [data-testid="stElementContainer"] { width:auto !important; flex:0 0 auto !important; }
+/* Right cluster pushed to the far right (design: the left group + ml-auto on the rest) */
+.st-key-ec_toolbar_right { margin-left:auto !important; width:auto !important; flex:0 0 auto !important; }
+.st-key-ec_toolbar_right > [data-testid="stElementContainer"] { width:auto !important; flex:0 0 auto !important; }
+.ec-cal-toolbar-title {
+    font-family:'Inter',sans-serif; font-size:16px; font-weight:600; color:#2D2A29;
+    text-align:center; line-height:24px; min-width:140px; white-space:nowrap;
+}
+.ec-cal-stats {
+    font-family:'Inter',sans-serif; font-size:12px; color:#90A1B9;
+    display:flex; align-items:baseline; gap:16px; flex-wrap:nowrap; white-space:nowrap;
+}
+.ec-cal-stats b { color:#4C4E56; font-weight:700; font-size:12px; }
+.ec-cal-stat-lbl { color:#90A1B9; font-size:11px; font-weight:400; }
+.ec-cal-legend {
+    font-family:'Inter',sans-serif; font-size:11px; color:#62748E;
+    display:flex; flex-wrap:nowrap; gap:12px; align-items:center; line-height:1.5;
+}
+.ec-cal-legend span { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.ec-dot { display:inline-block; width:8px; height:8px; border-radius:6px; }
+.ec-dot-earnings { background:#38BDF8; }
+.ec-dot-ipo { background:#6EE7B7; }
+.ec-dot-ma { background:#C4B5FD; }
+.ec-dot-delisted { background:#D62E2F; }
+
+.st-key-ec_cal_prev button, .st-key-ec_cal_next button {
+    min-height:28px !important; width:28px !important; height:28px !important; padding:0 !important;
+    border:1px solid #E2E8F0 !important; border-radius:10px !important;
+    background:#FFFFFF !important; color:#62748E !important; font-size:15px !important;
+    font-weight:400 !important;
+}
+/* Email Alerts — white pill with a lucide bell icon (design) */
+.st-key-ec_open_email_alerts button {
+    background:#FFFFFF !important; border:1px solid #E2E8F0 !important; color:#45556C !important;
+    font-family:'Inter',sans-serif !important; font-size:11px !important; font-weight:500 !important;
+    border-radius:10px !important; min-height:31px !important; padding:6px 10px !important;
+    display:inline-flex !important; align-items:center !important; gap:6px !important;
+}
+.st-key-ec_open_email_alerts button:hover { border-color:#CBD5E1 !important; background:#F8FAFC !important; }
+.st-key-ec_open_email_alerts button::before {
+    content:''; width:11px; height:11px; flex:0 0 auto; background-repeat:no-repeat;
+    background-position:center; background-size:11px 11px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2345556C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.268 21a2 2 0 0 0 3.464 0'/%3E%3Cpath d='M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'/%3E%3C/svg%3E");
+}
+/* Segmented view switcher — pill group (design: bg-slate-100 rounded-lg p-0.5) */
+.st-key-ec_view_switch {
+    background:#F1F5F9 !important; border-radius:10px !important;
+    padding:2px !important; gap:2px !important; flex:0 0 auto !important; width:auto !important;
+}
+.st-key-ec_view_switch > [data-testid="stElementContainer"] { width:auto !important; flex:0 0 auto !important; }
+div[class*="st-key-ec_view_"] button {
+    font-family:'Inter',sans-serif !important; font-size:12px !important; font-weight:500 !important;
+    border-radius:8px !important; min-height:24px !important; border:none !important;
+    box-shadow:none !important; white-space:nowrap !important; padding:4px 12px !important; width:auto !important;
+}
+div[class*="st-key-ec_view_"] button[kind="primary"] {
+    background:#FFFFFF !important; color:#2D2A29 !important; font-weight:500 !important;
+    box-shadow:0 1px 2px -1px rgba(0,0,0,0.10), 0 1px 3px 0 rgba(0,0,0,0.10) !important;
+}
+div[class*="st-key-ec_view_"] button[kind="secondary"] {
+    background:transparent !important; color:#62748E !important;
+}
+
+.ec-no-data {
+    text-align:center; color:#64748B; padding:48px 0; font-size:15px;
+    font-family:'Inter',sans-serif;
+}
+
+/* ── Yearly view — custom month-card grid (Figma node 24139:48905) ── */
+.ec-year-wrap { margin-top:4px; }
+.ec-year-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px 19px; }
+.ec-ym-card { border:1px solid #E2E8F0; border-radius:14px; background:#FFFFFF; overflow:hidden; }
+.ec-ym-card.cur {
+    border-color:#D62E2F;
+    box-shadow:0 1px 2px -1px rgba(0,0,0,0.10), 0 1px 3px 0 rgba(0,0,0,0.10);
+}
+.ec-ym-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; background:#F8FAFC; border-bottom:1px solid #F1F5F9;
+}
+.ec-ym-card.cur .ec-ym-head { background:#D62E2F; border-bottom-color:#D62E2F; }
+.ec-ym-name {
+    font-family:'Inter',sans-serif; font-weight:700; font-size:12px; line-height:16px;
+    letter-spacing:0.3px; color:#333333;
+}
+.ec-ym-card.cur .ec-ym-name { color:#FFFFFF; }
+.ec-ym-hr { display:flex; align-items:center; gap:8px; }
+.ec-ym-dots { display:flex; align-items:center; gap:4px; }
+.ec-ym-dot { width:6px; height:6px; border-radius:50%; flex:0 0 auto; }
+.ec-ym-card.cur .ec-ym-dot { background:rgba(255,255,255,0.70) !important; }
+.ec-ym-badge {
+    font-family:'Inter',sans-serif; font-weight:600; font-size:9px; line-height:13.5px;
+    color:#62748E; background:#E2E8F0; border-radius:999px; padding:2px 6px; white-space:nowrap;
+}
+.ec-ym-card.cur .ec-ym-badge { background:rgba(255,255,255,0.20); color:#FFFFFF; }
+.ec-ym-body { padding:12px; }
+.ec-ym-wk { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+.ec-ym-wk span {
+    font-family:'Inter',sans-serif; font-weight:600; font-size:8px; line-height:12px;
+    color:#90A1B9; padding-left:2px;
+}
+.ec-ym-wk span:nth-child(6), .ec-ym-wk span:nth-child(7) { color:#CAD5E2; }
+.ec-ym-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); margin-top:4px; }
+.ec-ym-day { min-height:36px; border:1px solid #F8FAFC; padding:2px 1px; box-sizing:border-box; }
+.ec-ym-day.today { border-color:#D62E2F; }
+.ec-ym-daynum {
+    display:block; font-family:'Inter',sans-serif; font-weight:600; font-size:9px;
+    line-height:11.25px; color:#62748E; padding-left:2px;
+}
+.ec-ym-day.today .ec-ym-daynum { color:#D62E2F; }
+.ec-ym-evs { margin-top:2px; display:flex; flex-direction:column; gap:1px; }
+.ec-ym-ev { display:flex; align-items:center; gap:2px; padding-left:1px; }
+.ec-ym-evdot { width:4px; height:4px; border-radius:50%; flex:0 0 auto; }
+.ec-ym-evtk {
+    font-family:'Inter',sans-serif; font-weight:500; font-size:8px; line-height:9px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.ec-ym-more {
+    font-family:'Inter',sans-serif; font-weight:400; font-size:7px; line-height:9px;
+    color:#90A1B9; padding-left:2px; margin-top:1px;
+}
+.ec-year-foot {
+    display:flex; align-items:center; justify-content:space-between; margin-top:14px;
+    font-family:'Inter',sans-serif; font-size:11px; color:#90A1B9;
+}
+.ec-year-foot b { color:#62748E; font-weight:600; }
+.ec-yf-qs { display:flex; gap:6px; }
+.ec-yf-q {
+    font-family:'Inter',sans-serif; font-weight:700; font-size:10px; color:#45556C;
+    background:#E2E8F0; border-radius:4px; padding:2px 8px;
+}
 </style>
 """
     except Exception as exc:
@@ -679,9 +1692,16 @@ def _normalize_alert_selection_mode(saved: Dict[str, Any]) -> str:
     return "companies"
 
 
-def _load_existing_alert_preferences(user_email: str) -> Dict[str, Any]:
+_EC_PREFS_UNSET = object()  # sentinel: "no prefetched row supplied"
+
+
+def _load_existing_alert_preferences(user_email: str, saved_row: Any = _EC_PREFS_UNSET) -> Dict[str, Any]:
     """
     Load saved preferences from the DB via EarningsCalendarRepository.
+
+    `saved_row` — optional prefetched raw row (from the page's parallel fetch
+    phase). Pass the row (or None for "no saved prefs") to skip the repository
+    lookup; omit it entirely to fetch from the repository as before.
 
     Expected repository method:
         get_earnings_alert_preferences(user_email: str) -> dict | None
@@ -704,10 +1724,15 @@ def _load_existing_alert_preferences(user_email: str) -> Dict[str, Any]:
         "watchlist_id": None,
     }
     try:
-        getter = getattr(EarningsCalendarRepository, "get_earnings_alert_preferences", None)
-        if not callable(getter) or not user_email:
+        if not user_email:
             return default_prefs
-        saved = getter(user_email) or {}
+        if saved_row is not _EC_PREFS_UNSET:
+            saved = dict(saved_row) if isinstance(saved_row, dict) else {}
+        else:
+            getter = getattr(EarningsCalendarRepository, "get_earnings_alert_preferences", None)
+            if not callable(getter):
+                return default_prefs
+            saved = getter(user_email) or {}
         mode = _normalize_alert_selection_mode(saved)
         raw_tickers = list(saved.get("tickers") or [])
         watchlist_id: Optional[int] = None
@@ -1182,6 +2207,18 @@ def _render_email_alert_preferences_inner(all_tickers_meta: List[Dict[str, Any]]
                             body_lines=confirm_lines,
                         )
                         prefs["enabled"] = bool(want_reminders)
+                        # Analytics: earnings-alert preferences saved (discrete click).
+                        try:
+                            from utils.server_logger import track_action
+                            track_action("alert_prefs_save", page="earnings_calendar",
+                                         enabled=bool(want_reminders),
+                                         days_before=int(days_before),
+                                         mode=selection_mode,
+                                         tickers=len(selected_tickers or []),
+                                         sectors=len(selected_sectors or []),
+                                         mailed=bool(mailed))
+                        except Exception:
+                            pass
                         st.session_state["ec_alert_save_success"] = True
                         st.session_state["ec_alert_save_mailed"] = bool(mailed)
                         st.session_state["ec_alert_save_in_progress"] = False
@@ -1258,36 +2295,31 @@ def _to_fullcalendar(events: List[Dict]) -> List[Dict]:
             fq = e["fiscal_q"]
             fy = e["report_fiscal_year"]
             company_name = e.get("company_name") or e["ticker"]
-            label = f"{company_name} Q{fq}" if fq and fy else company_name
-            # Color by fiscal quarter (Q1-Q4) so the clickable legend can filter
-            # by type. Falls back to a neutral grey for out-of-range quarters.
             kind = _earnings_kind(fq)
-            bg, txt = _kind_color(kind) if kind else ("#37474F", "#FFFFFF")
+            if not kind:
+                continue
             start_str = _to_iso(e["earnings_date"])
-            fc.append({
-                "id":        str(e["id"]) if e.get("id") is not None else "",
-                "title":     label,
-                "start":     start_str,
-                "end":       start_str,
-                "color":     bg,
-                "textColor": txt,
-                "extendedProps": {
-                    "kind":          kind or "earnings",
-                    "ticker":        e["ticker"],
-                    "company_name":  e["company_name"],
-                    "fiscal_q":      fq,
-                    "fiscal_year":   fy,
-                    "fiscal_qe":     e.get("fiscal_quarter_ending", ""),
-                    "eps_actual":    e.get("eps_actual"),
-                    "eps_forecast":  e.get("eps_forecast"),
-                    "surprise_pct":  e.get("surprise_pct"),
-                    "market_cap":    e.get("market_cap"),
+            fc.append(_fc_event_card(
+                event_id=str(e["id"]) if e.get("id") is not None else "",
+                start=start_str,
+                company_name=company_name,
+                ticker=e["ticker"],
+                event_type="earnings",
+                quarter=kind,
+                extended_props={
+                    "fiscal_q": fq,
+                    "fiscal_year": fy,
+                    "fiscal_qe": e.get("fiscal_quarter_ending", ""),
+                    "eps_actual": e.get("eps_actual"),
+                    "eps_forecast": e.get("eps_forecast"),
+                    "surprise_pct": e.get("surprise_pct"),
+                    "market_cap": e.get("market_cap"),
                     "num_estimates": e.get("num_estimates"),
-                    "report_time":   e.get("report_time", "time-not-supplied"),
-                    "beat_miss":     e.get("beat_miss", "no_data"),
+                    "report_time": e.get("report_time", "time-not-supplied"),
+                    "beat_miss": e.get("beat_miss", "no_data"),
                     "ir_website_url": e.get("ir_website_url"),
                 },
-            })
+            ))
         return fc
     except Exception as exc:
         log_structured_error(exc, page="earnings_calendar", component="_to_fullcalendar",
@@ -1296,52 +2328,133 @@ def _to_fullcalendar(events: List[Dict]) -> List[Dict]:
         return []
 
 
-def _ma_to_fullcalendar(ma_events: List[Dict]) -> List[Dict]:
-    """Convert completed-M&A events into FullCalendar events (Coresight red).
+# upstream ETL produced sentence fragments / 8-K boilerplate in
+# ma_acquirer/ma_target ('reference', 'completed its previously'); names that
+# fail validation render as '—' rather than misinforming
+from utils.ma_8k_extract import sanitize_ma_name as _sanitize_ma_name
 
-    Ids are prefixed 'ma_' so they never collide with earnings event ids in the
-    click handler. The earnings feed is untouched — this only ADDS events.
-    """
+
+def _ma_to_fullcalendar(ma_events: List[Dict]) -> List[Dict]:
+    """Convert completed-M&A events into FullCalendar card events."""
     try:
-        bg, txt = _kind_color("ma")
         fc = []
         for e in ma_events:
+          try:
             start_str = _to_iso(e.get("earnings_date"))
             if not start_str:
                 continue
             company_name = e.get("company_name") or e.get("ticker") or ""
-            deal = (e.get("ma_deal_type") or "M&A").title()
-            label = f"{company_name} · {deal}"
-            # DB numerics arrive as Decimal — cast so streamlit_calendar can JSON it.
+            _dt = e.get("ma_deal_type")
+            deal = (_dt if isinstance(_dt, str) and _dt else "M&A").title()
             _raw_val = e.get("ma_value_usd_m")
-            _val = float(_raw_val) if _raw_val is not None else None
-            fc.append({
-                "id":        f"ma_{e['id']}" if e.get("id") is not None else f"ma_{start_str}_{e.get('ticker','')}",
-                "title":     label,
-                "start":     start_str,
-                "end":       start_str,
-                "color":     bg,
-                "textColor": txt,
-                "extendedProps": {
-                    "kind":             "ma",
-                    "ticker":           e.get("ticker", ""),
-                    "company_name":     company_name,
-                    "ma_acquirer":      e.get("ma_acquirer"),
-                    "ma_target":        e.get("ma_target"),
-                    "ma_deal_type":     e.get("ma_deal_type"),
-                    "ma_value_usd_m":   _val,
-                    "ma_close_date":    _to_iso(e.get("ma_close_date")) if e.get("ma_close_date") else "",
+            try:
+                _val = float(_raw_val) if _raw_val is not None else None
+                if _val != _val:
+                    _val = None
+            except (TypeError, ValueError):
+                _val = None
+            fc.append(_fc_event_card(
+                event_id=f"ma_{e['id']}" if e.get("id") is not None else f"ma_{start_str}_{e.get('ticker','')}",
+                start=start_str,
+                company_name=company_name,
+                ticker=e.get("ticker", ""),
+                event_type="ma",
+                quarter=None,
+                extended_props={
+                    "ma_acquirer": _sanitize_ma_name(e.get("ma_acquirer")),
+                    "ma_target": _sanitize_ma_name(e.get("ma_target")),
+                    "ma_deal_type": e.get("ma_deal_type") or deal,
+                    "ma_value_usd_m": _val,
+                    "ma_close_date": _to_iso(e.get("ma_close_date")) if e.get("ma_close_date") else "",
                     "ma_announce_date": _to_iso(e.get("ma_announce_date")) if e.get("ma_announce_date") else "",
-                    "source":           e.get("source"),
-                    "source_ref":       e.get("source_ref"),
-                    "headline":         e.get("headline"),
+                    "source": e.get("source"),
+                    "source_ref": e.get("source_ref"),
+                    "headline": e.get("headline"),
                 },
-            })
+            ))
+          except Exception as _ev_exc:
+            log_structured_error(_ev_exc, page="earnings_calendar", component="_ma_to_fullcalendar",
+                                 operation="convert_ma_event_row",
+                                 context=f"ticker={e.get('ticker') if isinstance(e, dict) else '?'}")
+            continue
         return fc
     except Exception as exc:
         log_structured_error(exc, page="earnings_calendar", component="_ma_to_fullcalendar",
                              operation="convert_ma_events",
                              context=f"events_count={len(ma_events) if ma_events else 0}")
+        return []
+
+
+def _ipo_to_fullcalendar(ipo_events: List[Dict]) -> List[Dict]:
+    """Convert IPO (first-listing) events into FullCalendar card events."""
+    try:
+        fc = []
+        for e in ipo_events:
+          try:
+            start_str = _to_iso(e.get("earnings_date"))
+            if not start_str:
+                continue
+            company_name = e.get("company_name") or e.get("ticker") or ""
+            fc.append(_fc_event_card(
+                event_id=f"ipo_{e['id']}" if e.get("id") is not None else f"ipo_{start_str}_{e.get('ticker','')}",
+                start=start_str,
+                company_name=company_name,
+                ticker=e.get("ticker", ""),
+                event_type="ipo",
+                quarter=None,
+                extended_props={
+                    "ipo_date": _to_iso(e.get("ipo_date")) if e.get("ipo_date") else start_str,
+                    "exchange": e.get("exchange"),
+                    "listing_status": e.get("listing_status"),
+                    "ipo_source": e.get("ipo_source", "av"),
+                },
+            ))
+          except Exception as _ev_exc:
+            log_structured_error(_ev_exc, page="earnings_calendar", component="_ipo_to_fullcalendar",
+                                 operation="convert_ipo_event_row",
+                                 context=f"ticker={e.get('ticker') if isinstance(e, dict) else '?'}")
+            continue
+        return fc
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_ipo_to_fullcalendar",
+                             operation="convert_ipo_events",
+                             context=f"events_count={len(ipo_events) if ipo_events else 0}")
+        return []
+
+
+def _delisted_to_fullcalendar(delisted_events: List[Dict]) -> List[Dict]:
+    """Convert delisted events into FullCalendar card events."""
+    try:
+        fc = []
+        for e in delisted_events:
+          try:
+            start_str = _to_iso(e.get("earnings_date"))
+            if not start_str:
+                continue
+            company_name = e.get("company_name") or e.get("ticker") or ""
+            fc.append(_fc_event_card(
+                event_id=f"del_{e['id']}" if e.get("id") is not None else f"del_{start_str}_{e.get('ticker','')}",
+                start=start_str,
+                company_name=company_name,
+                ticker=e.get("ticker", ""),
+                event_type="delisted",
+                quarter=None,
+                extended_props={
+                    "delisting_date": _to_iso(e.get("delisting_date")) if e.get("delisting_date") else start_str,
+                    "industry": e.get("industry"),
+                    "exchange": e.get("exchange"),
+                },
+            ))
+          except Exception as _ev_exc:
+            log_structured_error(_ev_exc, page="earnings_calendar", component="_delisted_to_fullcalendar",
+                                 operation="convert_delisted_event_row",
+                                 context=f"ticker={e.get('ticker') if isinstance(e, dict) else '?'}")
+            continue
+        return fc
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_delisted_to_fullcalendar",
+                             operation="convert_delisted_events",
+                             context=f"events_count={len(delisted_events) if delisted_events else 0}")
         return []
 
 
@@ -1355,8 +2468,8 @@ def _render_ma_detail_panel(event_data: Dict) -> None:
         ep       = event_data.get("extendedProps", {})
         ticker   = ep.get("ticker", "")
         company  = ep.get("company_name", ticker)
-        acquirer = ep.get("ma_acquirer") or "—"
-        target   = ep.get("ma_target") or "—"
+        acquirer = _sanitize_ma_name(ep.get("ma_acquirer")) or "—"
+        target   = _sanitize_ma_name(ep.get("ma_target")) or "—"
         deal     = (ep.get("ma_deal_type") or "M&A").title()
         value    = _fmt_ma_value(ep.get("ma_value_usd_m"))
         close_d  = _fmt_date(ep.get("ma_close_date") or event_data.get("start", ""))
@@ -1418,6 +2531,101 @@ def _render_ma_detail_panel(event_data: Dict) -> None:
         return None
 
 
+def _render_ipo_detail_panel(event_data: Dict) -> None:
+    """Detail card for an IPO (first-listing) event."""
+    try:
+        ep       = event_data.get("extendedProps", {})
+        ticker   = ep.get("ticker", "")
+        company  = ep.get("company_name", ticker)
+        ipo_date = _fmt_date(ep.get("ipo_date") or event_data.get("start", ""))
+        exchange = ep.get("exchange") or "—"
+        status   = ep.get("listing_status") or "—"
+        bg, _txt = _kind_color("ipo")
+        # Source label reflects the feed: exact AV listing date vs Yahoo first-trade
+        # (the fallback for foreign names AV omits — approximate for very old listings).
+        _src = ep.get("ipo_source", "av")
+        src_label = "Yahoo Finance (first-trade date)" if _src == "yf" else "Alpha Vantage Listing"
+        date_label = "First Trade Date" if _src == "yf" else "IPO Date"
+
+        st.html(f"""
+        <div class="ec-detail-card">
+            <div class="ec-detail-title">{html.escape(str(company))}</div>
+            <div class="ec-detail-sub">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                             background:{bg};margin-right:6px;vertical-align:middle;"></span>
+                {html.escape(str(ticker))} &nbsp;·&nbsp; IPO
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">{date_label}</span>
+                <span class="ec-detail-val">{ipo_date}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Exchange</span>
+                <span class="ec-detail-val">{html.escape(str(exchange))}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Listing Status</span>
+                <span class="ec-detail-val">{html.escape(str(status))}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Source</span>
+                <span class="ec-detail-val">{html.escape(src_label)}</span>
+            </div>
+        </div>
+        """)
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_ipo_detail_panel",
+                             operation="render_ipo_detail", context="IPO detail panel render")
+        return None
+
+
+def _render_delisted_detail_panel(event_data: Dict) -> None:
+    """Detail card for a delisted (went private) event."""
+    try:
+        ep        = event_data.get("extendedProps", {})
+        ticker    = ep.get("ticker", "")
+        company   = ep.get("company_name", ticker)
+        del_date  = _fmt_date(ep.get("delisting_date") or event_data.get("start", ""))
+        industry  = ep.get("industry") or "—"
+        exchange  = ep.get("exchange") or "—"
+        bg, _txt  = _kind_color("delisted")
+
+        st.html(f"""
+        <div class="ec-detail-card">
+            <div class="ec-detail-title">{html.escape(str(company))}</div>
+            <div class="ec-detail-sub">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                             background:{bg};margin-right:6px;vertical-align:middle;"></span>
+                {html.escape(str(ticker))} &nbsp;·&nbsp; Delisted (Went Private)
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Delisting Date</span>
+                <span class="ec-detail-val">{del_date}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Status</span>
+                <span class="ec-detail-val">Public → Private</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Industry</span>
+                <span class="ec-detail-val">{html.escape(str(industry))}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Last Exchange</span>
+                <span class="ec-detail-val">{html.escape(str(exchange))}</span>
+            </div>
+            <div class="ec-detail-row">
+                <span class="ec-detail-key">Source</span>
+                <span class="ec-detail-val">Alpha Vantage Listing</span>
+            </div>
+        </div>
+        """)
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar", component="_render_delisted_detail_panel",
+                             operation="render_delisted_detail", context="Delisted detail panel render")
+        return None
+
+
 def _render_detail_panel(event_data: Dict) -> None:
     try:
         import time as _t
@@ -1426,6 +2634,12 @@ def _render_detail_panel(event_data: Dict) -> None:
         ep          = event_data.get("extendedProps", {})
         if ep.get("kind") == "ma":
             _render_ma_detail_panel(event_data)
+            return
+        if ep.get("kind") == "ipo":
+            _render_ipo_detail_panel(event_data)
+            return
+        if ep.get("kind") == "delisted":
+            _render_delisted_detail_panel(event_data)
             return
         ticker      = ep.get("ticker", "")
         company     = ep.get("company_name", ticker)
@@ -1515,6 +2729,14 @@ def _render_detail_panel(event_data: Dict) -> None:
         """)
 
         _panel_ms = (_t.perf_counter() - _t0) * 1000
+        # Track detail-panel render time (this is where the transcript lookup runs —
+        # the batched get_transcript_for_calendar_event keeps it fast; previously the
+        # per-row N+1 made this 22-49s for big companies).
+        try:
+            log_timing("EC_DETAIL_PANEL_RENDER", _panel_ms,
+                       details=f"ticker={ticker} q={fiscal_q}", level="WARNING")
+        except Exception:
+            pass
     except Exception as exc:
         log_structured_error(exc, page="earnings_calendar", component="_render_detail_panel",
                              operation="render_detail", context="detail panel render")
@@ -1603,14 +2825,16 @@ def _filter_events_by_watchlist(events: List[Dict], watchlist_rows: List[Dict]) 
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_page() -> None:
+    import time as _time
+    _page_start = _time.perf_counter()
+    _tracker = PageLoadTracker("earnings_calendar")
     try:
-        import time as _time
         _t0_page = _time.perf_counter()
 
         # Render styles FIRST - before anything else to prevent layout flash
         render_styles()
-        st.set_page_config(page_title="Earnings Calendar", layout="wide")
-        st.html(_get_css())
+        st.set_page_config(page_title="Calendar", layout="wide")
+        st.markdown(_get_css(), unsafe_allow_html=True)
 
         # Reset company dropdown and watchlist filter on fresh navigation to this page
         if st.session_state.get("_active_page") != "earnings_calendar":
@@ -1618,27 +2842,25 @@ def render_page() -> None:
             st.session_state.pop("ec_watchlist_filter", None)
             st.session_state["ec_active_watchlist_id"] = None
             st.session_state["ec_active_watchlist_name"] = ""
-            # Reset the event-type legend filter so all kinds show on fresh entry
-            st.session_state["ec_active_kinds"] = list(_ALL_KINDS)
+            # Reset filters on fresh page entry — panel starts COLLAPSED (business ask).
+            st.session_state["ec_active_types"] = list(_ALL_TYPES)
+            st.session_state["ec_active_quarters"] = list(_ALL_QUARTERS)
+            st.session_state["ec_filters_open"] = False
+            st.session_state.pop("ec_active_kinds", None)
 
         render_header(current_page="earnings_calendar")
 
-        # Show loading placeholder immediately before any blocking DB calls
-        _ecal_loading_hint = st.empty()
-        _ecal_loading_hint.markdown(
-            '<div style="display:flex;align-items:center;gap:12px;padding:32px 0 16px 0;">'
-            '<div style="width:28px;height:28px;border:3px solid #eee;border-top:3px solid #d62e2f;'
-            'border-radius:50%;animation:ecal-spin 0.8s linear infinite;"></div>'
-            '<span style="font-family:Montserrat,sans-serif;font-size:15px;color:#888;">'
-            'Loading earnings calendar&hellip;</span></div>'
-            '<style>@keyframes ecal-spin{to{transform:rotate(360deg)}}</style>',
-            unsafe_allow_html=True,
-        )
+        # STICKY branded loader — stays up until the streamlit_calendar iframe actually
+        # paints (it renders client-side well after Python returns), so the user never
+        # sees the filter bar over an empty calendar area. JS self-removes; the legacy
+        # `.empty()` calls below are safe no-ops.
+        from components.loading import render_sticky_loader
+        _ecal_loading_hint = render_sticky_loader("Loading Calendar")
 
         # ── session state defaults ────────────────────────────────────────────────
         _t_session = _time.perf_counter()
         if "ec_view" not in st.session_state:
-            st.session_state.ec_view = "calendar"   # "calendar" | "year"
+            st.session_state.ec_view = "calendar"   # "calendar" | "year" | "list"
         if "ec_selected_event" not in st.session_state:
             st.session_state.ec_selected_event = None
         # ec_cal_version is incremented on Close so the calendar component
@@ -1654,12 +2876,97 @@ def render_page() -> None:
             st.session_state.ec_active_watchlist_id = None
         if "ec_active_watchlist_name" not in st.session_state:
             st.session_state.ec_active_watchlist_name = ""
-        # Event-type legend filter — set of active kinds ("Q1".."Q4","ma")
-        if "ec_active_kinds" not in st.session_state:
-            st.session_state.ec_active_kinds = list(_ALL_KINDS)
+        if "ec_active_types" not in st.session_state:
+            # Migrate legacy combined kind filter if present
+            _legacy = st.session_state.get("ec_active_kinds")
+            if _legacy:
+                st.session_state.ec_active_types = [
+                    t for t in _ALL_TYPES
+                    if t in _legacy or (t == "earnings" and any(q in _legacy for q in _ALL_QUARTERS))
+                ] or list(_ALL_TYPES)
+            else:
+                st.session_state.ec_active_types = list(_ALL_TYPES)
+        if "ec_active_quarters" not in st.session_state:
+            _legacy = st.session_state.get("ec_active_kinds")
+            if _legacy:
+                st.session_state.ec_active_quarters = [q for q in _ALL_QUARTERS if q in _legacy] or list(_ALL_QUARTERS)
+            else:
+                st.session_state.ec_active_quarters = list(_ALL_QUARTERS)
+        if "ec_filters_open" not in st.session_state:
+            st.session_state.ec_filters_open = False
+        if "ec_visible_start" not in st.session_state:
+            st.session_state.ec_visible_start = None
+        if "ec_visible_end" not in st.session_state:
+            st.session_state.ec_visible_end = None
+
+        # Analytics: calendar filters (company / watchlist / active event-type legend
+        # kinds) are session-state, not URL — capture them for the analytics feed.
+        try:
+            from utils.server_logger import log_filters_if_changed
+            log_filters_if_changed(
+                "earnings_calendar",
+                company=st.session_state.get("ec_company_filter") or None,
+                watchlist=st.session_state.get("ec_active_watchlist_name") or None,
+                active_types=list(st.session_state.get("ec_active_types") or []),
+                active_quarters=list(st.session_state.get("ec_active_quarters") or []),
+            )
+        except Exception:
+            pass
+
+        _vis_start, _vis_end_inclusive, _vis_source = _resolve_visible_date_range()
+        log_timing(
+            "EC_OPT_VISIBLE_RANGE",
+            0,
+            f"source={_vis_source} start={_vis_start} end={_vis_end_inclusive}",
+            level="WARNING",
+        )
 
         # ── load available tickers + date range + all events (parallel — all independent) ─
         from concurrent.futures import ThreadPoolExecutor
+
+        # Toolbar inputs (main-thread session reads) needed by the extra
+        # parallel prefetches below. On STG (03-Jul) the toolbar's sequential
+        # alert-prefs + watchlists + ticker-validation DB calls measured
+        # 4.3-4.7s per render (EC_PAGE_TOOLBAR_AND_FILTER); prefetching them
+        # here overlaps them with the events fetch.
+        _toolbar_user_email = _get_signed_in_user_email()
+        _tb_cand_ticker = (
+            st.query_params.get("ticker", "")
+            or st.session_state.get("active_ticker", "")
+            or ""
+        ).strip()
+
+        def _fetch_alert_prefs_raw():
+            # Pure-DB path (no st.session_state — worker thread has no ctx).
+            try:
+                if not _toolbar_user_email:
+                    return None
+                from data.earnings_alert_store import load_preference
+                return load_preference(str(_toolbar_user_email).strip().lower())
+            except Exception as exc:
+                log_structured_error(exc, page="earnings_calendar", component="_fetch_alert_prefs_raw",
+                                     operation="prefetch_alert_prefs", context=f"user={_toolbar_user_email}")
+                return None
+
+        def _fetch_toolbar_watchlists():
+            # get_user_watchlists wraps all session_state access in try/except —
+            # safe from a worker thread (cache skipped, DB result returned).
+            try:
+                return get_user_watchlists(_toolbar_user_email) if _toolbar_user_email else []
+            except Exception as exc:
+                log_structured_error(exc, page="earnings_calendar", component="_fetch_toolbar_watchlists",
+                                     operation="prefetch_watchlists", context=f"user={_toolbar_user_email}")
+                return []
+
+        def _warm_candidate_company():
+            # Warms CompanyRepository.get_company_by_ticker's st.cache_data so the
+            # later validate_and_get_ticker() call is a cache hit (~0ms).
+            try:
+                if _tb_cand_ticker:
+                    from data.repository import CompanyRepository
+                    CompanyRepository.get_company_by_ticker(_tb_cand_ticker)
+            except Exception:
+                pass
 
         def _fetch_tickers():
             try:
@@ -1684,8 +2991,11 @@ def render_page() -> None:
         def _fetch_all_events():
             try:
                 t = _time.perf_counter()
-                # Pre-fetch ALL events (no ticker filter) — used when user has "All Companies" selected
-                result = EarningsCalendarRepository.get_calendar_events(tickers=None)
+                # FULL deduped set (ALL companies, ALL dates) — disk-materialized,
+                # so this is a fast cache read, not the ~3.6s dedup SQL. The page
+                # counts this for the true badge (matches prod 16,052/330) and
+                # windows it in Python for the FullCalendar render.
+                result = EarningsCalendarRepository.get_calendar_events_full()
                 return result
             except Exception as exc:
                 log_structured_error(exc, page="earnings_calendar", component="_fetch_all_events",
@@ -1702,13 +3012,38 @@ def render_page() -> None:
                                      operation="fetch_all_ma", context="parallel fetch")
                 return []
 
+        def _fetch_all_ipo():
+            try:
+                # IPO (first-listing) dates for calendar companies (separate feed;
+                # ~311 rows, one per company; earnings logic untouched).
+                return EarningsCalendarRepository.get_ipo_events()
+            except Exception as exc:
+                log_structured_error(exc, page="earnings_calendar", component="_fetch_all_ipo",
+                                     operation="fetch_all_ipo", context="parallel fetch")
+                return []
+
+        def _fetch_all_delisted():
+            try:
+                # Delisted (went private) dates for firm-tracked companies (separate
+                # feed; ~6 rows; earnings logic untouched).
+                return EarningsCalendarRepository.get_delisted_events()
+            except Exception as exc:
+                log_structured_error(exc, page="earnings_calendar", component="_fetch_all_delisted",
+                                     operation="fetch_all_delisted", context="parallel fetch")
+                return []
+
         _t_parallel = _time.perf_counter()
         # Single loading UX: custom `_ecal_loading_hint` above (don't stack `st.spinner` with same message).
-        with ThreadPoolExecutor(max_workers=4) as _ec_exec:
+        with ThreadPoolExecutor(max_workers=9) as _ec_exec:
             _ticker_future = _ec_exec.submit(_fetch_tickers)
             _dr_future = _ec_exec.submit(_fetch_date_range)
             _events_future = _ec_exec.submit(_fetch_all_events)
             _ma_future = _ec_exec.submit(_fetch_all_ma)
+            _ipo_future = _ec_exec.submit(_fetch_all_ipo)
+            _delisted_future = _ec_exec.submit(_fetch_all_delisted)
+            _prefs_future = _ec_exec.submit(_fetch_alert_prefs_raw)
+            _wl_future = _ec_exec.submit(_fetch_toolbar_watchlists)
+            _ec_exec.submit(_warm_candidate_company)
             _te = _time.perf_counter(); all_tickers_meta = _ticker_future.result()
             log_timing("EC_PAGE_FETCH_TICKERS", (_time.perf_counter() - _te) * 1000, level="WARNING")
             _te = _time.perf_counter(); (min_date, max_date) = _dr_future.result()
@@ -1719,6 +3054,17 @@ def render_page() -> None:
             _te = _time.perf_counter(); _prefetched_ma_events = _ma_future.result()
             log_timing("EC_PAGE_FETCH_ALL_MA", (_time.perf_counter() - _te) * 1000,
                        details=f"ma_events={len(_prefetched_ma_events) if _prefetched_ma_events else 0}", level="WARNING")
+            _te = _time.perf_counter(); _prefetched_ipo_events = _ipo_future.result()
+            log_timing("EC_PAGE_FETCH_ALL_IPO", (_time.perf_counter() - _te) * 1000,
+                       details=f"ipo_events={len(_prefetched_ipo_events) if _prefetched_ipo_events else 0}", level="WARNING")
+            _te = _time.perf_counter(); _prefetched_delisted_events = _delisted_future.result()
+            log_timing("EC_PAGE_FETCH_ALL_DELISTED", (_time.perf_counter() - _te) * 1000,
+                       details=f"delisted_events={len(_prefetched_delisted_events) if _prefetched_delisted_events else 0}", level="WARNING")
+            _te = _time.perf_counter(); _prefetched_alert_prefs = _prefs_future.result()
+            log_timing("EC_PAGE_FETCH_ALERT_PREFS", (_time.perf_counter() - _te) * 1000, level="WARNING")
+            _te = _time.perf_counter(); _prefetched_watchlists = _wl_future.result()
+            log_timing("EC_PAGE_FETCH_WATCHLISTS", (_time.perf_counter() - _te) * 1000,
+                       details=f"n={len(_prefetched_watchlists or [])}", level="WARNING")
         log_timing("EC_PAGE_PARALLEL_TOTAL", (_time.perf_counter() - _t_parallel) * 1000, level="WARNING")
 
         if not all_tickers_meta or not max_date:
@@ -1769,26 +3115,35 @@ def render_page() -> None:
                         st.session_state.active_ticker         = _t
                         st.session_state._ec_cal_synced_ticker = _t
                 # "All Companies" → carry forward existing ?ticker= URL param (don't clear it)
+                st.session_state.ec_selected_event = None
+                # Height handling by view:
+                #  • Month view has a DETERMINISTIC height (weeks × row) that is
+                #    independent of the event count, so the filtered set can swap IN
+                #    PLACE (stable key → no iframe remount, no loader flash) and the
+                #    grid still exactly fills the iframe — fast AND no blank gap.
+                #  • List view height is intrinsically event-count-driven (a listMonth
+                #    is as tall as its rows). streamlit_calendar does NOT shrink the
+                #    iframe on an in-place event change, so a stable key would leave the
+                #    tall "all companies" height with a big blank gap under a filtered
+                #    (short) list. Bump the version there so the list REMOUNTS at the
+                #    correct height. Only ~1 filtered company's rows render, so the
+                #    remount is cheap.
+                if st.session_state.get("ec_view") == "list":
+                    st.session_state.ec_cal_version += 1
             except Exception as exc:
                 log_structured_error(exc, page="earnings_calendar", component="_on_company_change",
                                      operation="company_change_callback",
                                      context=f"label={st.session_state.get('ec_company_filter', '')}")
                 return
 
-        # ── toolbar setup: email badge + watchlist list (one email lookup shared by both) ────
-        _toolbar_user_email = _get_signed_in_user_email()
+        # ── toolbar setup: email badge + watchlist list — both prefetched in the
+        # parallel phase above (was 2 sequential DB round-trips per render) ────
         _ec_tb_alerts_on = bool(
-            _load_existing_alert_preferences(_toolbar_user_email).get("enabled", False)
+            _load_existing_alert_preferences(
+                _toolbar_user_email, saved_row=_prefetched_alert_prefs,
+            ).get("enabled", False)
         )
-
-        try:
-            _toolbar_watchlists = get_user_watchlists(_toolbar_user_email) if _toolbar_user_email else []
-        except Exception as _wl_toolbar_exc:
-            log_structured_error(
-                _wl_toolbar_exc, page="earnings_calendar", component="render_page",
-                operation="load_toolbar_watchlists", context=f"user={_toolbar_user_email}",
-            )
-            _toolbar_watchlists = []
+        _toolbar_watchlists = _prefetched_watchlists or []
 
         _no_wl_label = "— No watchlist —"
         _wl_options = [_no_wl_label] + [
@@ -1827,86 +3182,10 @@ def render_page() -> None:
                     context=f"label={st.session_state.get('ec_watchlist_filter', '')}",
                 )
 
-        # ── filter bar ─────────────────────────────────────────────────────────────
-        col_alerts, f1, f2_wl, f_toggle = st.columns([3, 3, 3, 2], gap="small", vertical_alignment="bottom")
-        with col_alerts:
-            # Compact button left; remainder of first column keeps spacing before Company (matches old empty column)
-            _ec_btn_col, _ec_alerts_pad = st.columns([2, 2.65], gap="small")
-            with _ec_btn_col:
-                _ec_mail_btn_c, _ec_mail_badge_c = st.columns(
-                    [2.72, 0.62], gap="small", vertical_alignment="top"
-                )
-                with _ec_mail_btn_c:
-                    if st.button(
-                        "Email Alerts",
-                        key="ec_open_email_alerts",
-                        type="primary",
-                        width="stretch",
-                    ):
-                        _email_alerts_dialog(all_tickers_meta)
-                with _ec_mail_badge_c:
-                    st.html(_ec_toolbar_alert_status_html(_ec_tb_alerts_on))
-
-        with f1:
-            selected_label = st.selectbox(
-                "Company",
-                options=all_labels,
-                index=_default_idx,
-                key="ec_company_filter",
-                on_change=_on_company_change,
-            )
-            if selected_label == _all_opt:
-                selected_tickers = tuple(m["ticker"] for m in all_tickers_meta)
-            else:
-                selected_tickers = (
-                    (ticker_map[selected_label],)
-                    if selected_label in ticker_map
-                    else tuple(m["ticker"] for m in all_tickers_meta)
-                )
-
-        with f2_wl:
-            if _toolbar_watchlists:
-                st.selectbox(
-                    "Watchlist",
-                    options=_wl_options,
-                    index=_wl_default_idx,
-                    key="ec_watchlist_filter",
-                    on_change=_on_watchlist_change,
-                )
-            else:
-                st.selectbox(
-                    "Watchlist",
-                    options=[_no_wl_label],
-                    index=0,
-                    key="ec_watchlist_filter",
-                    disabled=True,
-                    help="No watchlists found. Create one on the Screening page.",
-                )
-
-        with f_toggle:
-            c1, c2 = st.columns(2, gap="small")
-            with c1:
-                if st.button(
-                    "Month Wise",
-                    width="stretch",
-                    type="primary" if st.session_state.ec_view == "calendar" else "secondary",
-                ):
-                    st.session_state.ec_view = "calendar"
-                    st.session_state.ec_selected_event = None
-            with c2:
-                if st.button(
-                    "Year Wise",
-                    width="stretch",
-                    type="primary" if st.session_state.ec_view == "year" else "secondary",
-                ):
-                    st.session_state.ec_view = "year"
-                    st.session_state.ec_selected_event = None
-
-        # ── load events (all dates; FullCalendar arrows handle navigation) ────────
+        # ── load & filter events (company/watchlist from filter panel) ────────────
         _t_events = _time.perf_counter()
         _active_wl_id = st.session_state.ec_active_watchlist_id
         if _active_wl_id is not None:
-            # Watchlist mode: fetch member rows then filter prefetched feeds in memory
             try:
                 _wl_company_rows = get_watchlist_companies(_active_wl_id)
             except Exception as _wl_filter_exc:
@@ -1917,52 +3196,113 @@ def render_page() -> None:
                 _wl_company_rows = []
             events = _filter_events_by_watchlist(_prefetched_events, _wl_company_rows)
             ma_events = _filter_events_by_watchlist(_prefetched_ma_events, _wl_company_rows)
+            ipo_events = _filter_events_by_watchlist(_prefetched_ipo_events, _wl_company_rows)
+            delisted_events = _filter_events_by_watchlist(_prefetched_delisted_events, _wl_company_rows)
             _wl_active_name = st.session_state.ec_active_watchlist_name
-            _wl_cal_count = len({e["ticker"] for e in events} | {e["ticker"] for e in ma_events})
+            _wl_cal_count = len({e["ticker"] for e in events} | {e["ticker"] for e in ma_events}
+                                | {e["ticker"] for e in ipo_events} | {e["ticker"] for e in delisted_events})
             st.caption(
                 f"Filtering by watchlist: **{_wl_active_name}** — "
                 f"{len(_wl_company_rows)} {'company' if len(_wl_company_rows) == 1 else 'companies'}, "
                 f"{_wl_cal_count} {'company' if _wl_cal_count == 1 else 'companies'} "
                 f"found on this calendar."
             )
-        elif selected_label == _all_opt:
-            # "All Companies" selected — use the pre-fetched results (0ms — already in cache)
+        else:
             events = _prefetched_events
             ma_events = _prefetched_ma_events
+            ipo_events = _prefetched_ipo_events
+            delisted_events = _prefetched_delisted_events
+
+        # Company dropdown → filter events to the selected ticker (in-memory, 0 DB
+        # round-trips). "All Companies" (or unset) leaves the full set untouched.
+        _company_label = st.session_state.get("ec_company_filter") or ""
+        _company_ticker = (
+            ticker_map.get(_company_label, "")
+            if _company_label and _company_label != _all_opt
+            else ""
+        )
+        if _company_ticker:
+            _ct = _company_ticker.lower()
+            def _company_match(e: Dict) -> bool:
+                return str(e.get("ticker") or "").lower() == _ct
+            events = [e for e in events if _company_match(e)]
+            ma_events = [e for e in ma_events if _company_match(e)]
+            ipo_events = [e for e in ipo_events if _company_match(e)]
+            delisted_events = [e for e in delisted_events if _company_match(e)]
+
+        _n_pre_filter = len(events) + len(ma_events) + len(ipo_events) + len(delisted_events)
+        _render_filter_panel(
+            all_labels=all_labels,
+            default_idx=_default_idx,
+            on_company_change=_on_company_change,
+            wl_options=_wl_options,
+            wl_default_idx=_wl_default_idx,
+            on_watchlist_change=_on_watchlist_change,
+            n_matching=_n_pre_filter,
+        )
+        _active_types = _selected_set("ec_active_types", _ALL_TYPES)
+        _active_quarters = _selected_set("ec_active_quarters", _ALL_QUARTERS)
+
+        if "earnings" not in _active_types:
+            events = []
         else:
-            # Specific company selected — fetch filtered earnings subset (hits Streamlit
-            # cache); M&A is a small in-memory feed, filter it by the same tickers.
-            with st.spinner(""):
-                events = EarningsCalendarRepository.get_calendar_events(tickers=selected_tickers)
-            _sel_set = set(selected_tickers)
-            ma_events = [e for e in _prefetched_ma_events if e.get("ticker") in _sel_set]
+            events = [e for e in events if _earnings_kind(e.get("fiscal_q")) in _active_quarters]
+        ma_events = ma_events if "ma" in _active_types else []
+        ipo_events = ipo_events if "ipo" in _active_types else []
+        delisted_events = delisted_events if "delisted" in _active_types else []
 
-        # ── event-type color legend (clickable filter; combines AND with Company /
-        #     Watchlist above). Rendered before the no-data guard so the user can
-        #     always re-enable a hidden type. ──────────────────────────────────────
-        _render_event_type_legend()
-        _active_kinds = set(st.session_state.get("ec_active_kinds") or _ALL_KINDS)
-
-        # Apply the legend filter to each feed (earnings → by quarter; M&A → "ma")
-        events = [e for e in events if _earnings_kind(e.get("fiscal_q")) in _active_kinds]
-        ma_events = ma_events if "ma" in _active_kinds else []
-
-        if not events and not ma_events:
+        if not events and not ma_events and not ipo_events and not delisted_events:
             _ecal_loading_hint.empty()
             st.html('<div class="ec-no-data">No events match the selected filters. '
-                    'Click a color in the legend above to show more.</div>')
+                    'Use the filter pills above to show more event types or quarters.</div>')
             render_coresight_footer()
             return
 
-        # ── event count ───────────────────────────────────────────────────────────
-        _n_total = len(events) + len(ma_events)
-        _n_companies = len({e['ticker'] for e in events} | {e['ticker'] for e in ma_events})
-        _ma_suffix = f" &nbsp;·&nbsp; {len(ma_events):,} M&amp;A completion{'' if len(ma_events) == 1 else 's'}" if ma_events else ""
-        st.html(f"""
-        <div class="ec-event-count">
-            {_n_total:,} events &nbsp;·&nbsp; {_n_companies} companies{_ma_suffix}
-        </div>
-        """)
+        # ── stats for Figma toolbar (scoped to the DISPLAYED period) ────────────
+        # Business requirement: the toolbar/footer counts must reflect ONLY the
+        # period on screen — the month for Monthly/List, the year for Yearly — NOT
+        # the full all-time deduped set. We scope the already type/company/watchlist-
+        # filtered feeds to that period here (strict calendar month, not the 42-day
+        # grid) before the render window narrows them to the FullCalendar view.
+        # Count ALL active event types (earnings + IPO + M&A + delisted), not just
+        # earnings — otherwise "N events" reads 0 when only Delisted/IPO/M&A are on.
+        import calendar as _cal_period
+        _view_now = st.session_state.get("ec_view", "calendar")
+        _cnt_anchor = _parse_iso_date(st.session_state.get("_ec_current_date")) or date.today()
+        if _view_now == "year":
+            _cnt_start, _cnt_end = _year_view_date_range(_cnt_anchor)
+        else:
+            _cnt_start = _cnt_anchor.replace(day=1)
+            _cnt_end = _cnt_anchor.replace(
+                day=_cal_period.monthrange(_cnt_anchor.year, _cnt_anchor.month)[1]
+            )
+        _events_scoped   = _window_events(events, _cnt_start, _cnt_end)
+        _ma_scoped       = _window_events(ma_events, _cnt_start, _cnt_end)
+        _ipo_scoped      = _window_events(ipo_events, _cnt_start, _cnt_end)
+        _delisted_scoped = _window_events(delisted_events, _cnt_start, _cnt_end)
+        _all_shown = _events_scoped + _ma_scoped + _ipo_scoped + _delisted_scoped
+        _n_total = len(_all_shown)
+        _n_companies = len({e["ticker"] for e in _all_shown if e.get("ticker")})
+        _n_ma = len(_ma_scoped)
+        # Human-readable label for the footer ("July 2026" / "2026").
+        _period_months = ["January", "February", "March", "April", "May", "June",
+                          "July", "August", "September", "October", "November", "December"]
+        _period_label = (str(_cnt_anchor.year) if _view_now == "year"
+                         else f"{_period_months[_cnt_anchor.month - 1]} {_cnt_anchor.year}")
+
+        # Window ALL feeds down to the visible month/year for rendering. Navigation
+        # is 100% server-side here: the custom ‹ › toolbar buttons and the
+        # Month/Year/List toggles each trigger a Streamlit rerun that re-resolves the
+        # visible window and re-windows every feed (headerToolbar is False — there are
+        # no client-only FullCalendar arrows that could bypass the server). So the
+        # iframe never needs off-window markers. Windowing the overlays too (they were
+        # previously sent in full) cuts the events shipped to FullCalendar from ~1,400
+        # to a few hundred per view — the dominant client-side render cost. The badge
+        # counts above are computed PRE-window, so they still reflect the full set.
+        events          = _window_events(events, _vis_start, _vis_end_inclusive)
+        ma_events       = _window_events(ma_events, _vis_start, _vis_end_inclusive)
+        ipo_events      = _window_events(ipo_events, _vis_start, _vis_end_inclusive)
+        delisted_events = _window_events(delisted_events, _vis_start, _vis_end_inclusive)
 
         # ─────────────────────────────────────────────────────────────────────────
         # FULLCALENDAR — Month (dayGridMonth) or Year (multiMonthYear) view
@@ -1974,53 +3314,93 @@ def render_page() -> None:
         log_timing("EC_PAGE_TOOLBAR_AND_FILTER", (_time.perf_counter() - _t_dropdown) * 1000,
                    details=f"events_in_view={len(events)}", level="WARNING")
         _t_fc_prep = _time.perf_counter()
-        fc_events    = _to_fullcalendar(events) + _ma_to_fullcalendar(ma_events)
+        fc_events    = (_to_fullcalendar(events)
+                        + _ma_to_fullcalendar(ma_events)
+                        + _ipo_to_fullcalendar(ipo_events)
+                        + _delisted_to_fullcalendar(delisted_events))
         log_timing("EC_PAGE_TO_FULLCALENDAR", (_time.perf_counter() - _t_fc_prep) * 1000,
                    details=f"events={len(fc_events)}", level="WARNING")
-        # Normalize to ISO date strings (earnings feed yields str dates, the M&A
-        # feed yields date objects) so max() never compares mixed types.
+        # Normalize to ISO date strings (earnings feed yields str dates, the overlay
+        # feeds yield date objects) so max() never compares mixed types.
         _dated       = [d[:10] for d in (
             [_to_iso(e["earnings_date"]) for e in events if e.get("earnings_date")] +
-            [_to_iso(e["earnings_date"]) for e in ma_events if e.get("earnings_date")]
+            [_to_iso(e["earnings_date"]) for e in ma_events if e.get("earnings_date")] +
+            [_to_iso(e["earnings_date"]) for e in ipo_events if e.get("earnings_date")] +
+            [_to_iso(e["earnings_date"]) for e in delisted_events if e.get("earnings_date")]
         ) if d]
         initial_date = max(_dated) if _dated else date.today().isoformat()
-        is_year_view = st.session_state.ec_view == "year"
+        _view = st.session_state.ec_view
 
-        if is_year_view:
+        # ── Yearly view: custom Figma month-card grid (no FullCalendar) ──
+        if _view == "year":
+            _yr = (_parse_iso_date(st.session_state.get("_ec_current_date")) or date.today()).year
+            _yr_shown = len(events) + len(ma_events) + len(ipo_events) + len(delisted_events)
+            with st.container(border=True, key="ec_cal_card"):
+                _render_calendar_toolbar(
+                    n_events=_n_total, n_companies=_n_companies, n_ma=_n_ma,
+                    alerts_on=_ec_tb_alerts_on,
+                    open_email_dialog=lambda: _email_alerts_dialog(all_tickers_meta),
+                )
+                _ecal_loading_hint.empty()   # no iframe paints in the year view — clear the sticky loader
+                st.html(_render_year_grid(events, ma_events, ipo_events, delisted_events,
+                                          _yr, date.today(), _yr_shown, _n_pre_filter))
+            log_timing("EC_PAGE_RENDER_TOTAL", (_time.perf_counter() - _t0_page) * 1000,
+                       details=f"year_view events={_yr_shown}", level="WARNING")
+            render_coresight_footer()
+            return
+
+        if _view == "year":
             cal_key = f"earnings_cal_year_{st.session_state.ec_cal_version}"
             cal_options = {
                 "initialView":       "multiMonthYear",
                 "editable":          False,
                 "selectable":        False,
-                "headerToolbar": {
-                    "left":   "prev,next today",
-                    "center": "title",
-                    "right":  "",
-                },
-                "buttonText":        {"today": "Today"},
+                "headerToolbar":     False,
+                "firstDay":          1,
                 "multiMonthMaxColumns": 3,
                 "dayMaxEvents":      3,
                 "moreLinkClick":     "popover",
                 "eventDisplay":      "block",
                 "height":            "auto",
             }
+        elif _view == "list":
+            cal_key = f"earnings_cal_list_{st.session_state.ec_cal_version}"
+            cal_options = {
+                "initialView":   "listMonth",
+                "editable":      False,
+                "selectable":    False,
+                "headerToolbar": False,
+                "firstDay":      1,
+                "eventDisplay":  "block",
+                "height":        "auto",
+                "contentHeight": 680,
+            }
         else:
             cal_key = f"earnings_cal_month_{st.session_state.ec_cal_version}"
+            _anchor = _parse_iso_date(st.session_state.get("_ec_current_date")) or date.today()
+            # DETERMINISTIC height = weekday-header + N week-rows × per-row budget,
+            # independent of the event count. `height:"auto"` sized the grid to the
+            # tallest rendered row, so a dense "All Companies" month produced a tall
+            # iframe; filtering to one company (in place, no remount) shrank the grid
+            # but the streamlit_calendar iframe kept the tall height → a large blank
+            # gap under the calendar. A fixed per-month height keeps every render the
+            # same height (rows stretch to fill), so no stale height, no gap — and no
+            # remount, so it stays fast. 150px/row matches the previous dense auto
+            # height (5-week July ≈ 783px) and comfortably fits dayMaxEvents=3.
+            _month_h = 33 + _month_grid_weeks(_anchor) * 150
             cal_options = {
                 "initialView":   "dayGridMonth",
                 "editable":      False,
                 "selectable":    False,
-                "headerToolbar": {
-                    "left":   "prev,next today",
-                    "center": "title",
-                    "right":  "dayGridMonth,listMonth",
-                },
-                "buttonText":    {"today": "Today", "month": "Month", "listMonth": "List"},
-                "dayMaxEvents":  4,
+                "headerToolbar": False,
+                "firstDay":      1,
+                "dayMaxEvents":  3,
                 "moreLinkClick": "popover",
                 "eventDisplay":  "block",
-                "height":        680,
-                "contentHeight": 660,
+                # Show ONLY the weeks this month spans (no padded 6th week / next month).
+                "fixedWeekCount": False,
+                "showNonCurrentDates": True,
+                "height":        _month_h,
             }
 
         # Always pass the tracked current date so FullCalendar re-initialises on
@@ -2028,54 +3408,91 @@ def render_page() -> None:
         # Streamlit rerenders, the calendar opens back on the event's month.
         cal_options["initialDate"] = st.session_state._ec_current_date
 
-        calendar_css = """
-            .fc { font-family:'Roboto',sans-serif !important; background:#FFFFFF !important; }
+        calendar_css = _get_calendar_css()
 
-            /* ── Toolbar ── */
-            .fc-toolbar-title { font-family:'Montserrat',sans-serif !important; font-weight:700 !important; font-size:18px !important; }
-            .fc-button-primary { background:#D62E2F !important; border-color:#D62E2F !important; text-transform:capitalize !important; font-size:13px !important; }
-            .fc-button-primary:not(:disabled):active,
-            .fc-button-primary:not(:disabled).fc-button-active { background:#A82020 !important; border-color:#A82020 !important; }
-            .fc-today-button { background:#6C757D !important; border-color:#6C757D !important; }
-
-            /* ── Day grid ── */
-            .fc-day-today { background:rgba(214,46,47,0.06) !important; }
-            .fc-event { cursor:pointer !important; font-size:11px !important; font-weight:500 !important; border:none !important; padding:1px 5px !important; border-radius:3px !important; }
-            .fc-daygrid-day-number { font-size:12px !important; color:#2D2A29 !important; text-decoration:none !important; }
-            .fc-col-header-cell-cushion { font-size:12px !important; font-weight:600 !important; color:#4F4F4F !important; text-transform:uppercase; letter-spacing:0.4px; text-decoration:none !important; }
-
-            /* ── List view ── */
-            .fc-list-event-title { font-size:13px !important; }
-            .fc-list-event-time { display:none !important; }
-
-            /* ── multiMonthYear ── */
-            .fc-multimonth-title { font-family:'Montserrat',sans-serif !important; font-weight:700 !important; font-size:13px !important; text-transform:uppercase; letter-spacing:0.5px; color:#2D2A29 !important; }
-            .fc-multimonth-daygrid .fc-daygrid-day-number { font-size:11px !important; }
-        """
-
-        # Keep the column COUNT constant (2 columns always) so React never remounts
-        # FullCalendar.  When no event is selected the detail column is collapsed to
-        # a negligible width so the calendar fills the full row.
+        # Layout — the toolbar spans the FULL width above the grid, so it is always a
+        # single row: the month nav, stats, legend and Monthly/Yearly/List switcher
+        # never wrap onto a second line and are never covered. When a detail card is
+        # open, only the BODY below the toolbar splits 3:1 — the calendar shrinks to
+        # 3/4 and the detail card takes a dedicated 1/4 column ON THE RIGHT, beside the
+        # grid, NEVER overlapping it (matches the reference design). Closed → the
+        # calendar is full width. (A prior position:fixed overlay floated the card on
+        # TOP of the grid, covering the middle days and the view switcher — fixed here.)
         _has_panel = bool(st.session_state.ec_selected_event)
-        cal_col, detail_col = st.columns([3, 1] if _has_panel else [1, 0.001], gap="medium")
 
-        with cal_col:
-            _t_fc_render = _time.perf_counter()
-            # Default streamlit-calendar callbacks include `eventsSet`, which FullCalendar
-            # fires whenever events are painted (initial load, month nav, etc.). Each call
-            # posts to Streamlit and retriggers a full script rerun — feels like constant
-            # reloads. We only need clicks for the detail panel.
-            cal_result = st_calendar(
-                events=fc_events,
-                options=cal_options,
-                custom_css=calendar_css,
-                key=cal_key,
-                callbacks=["eventClick"],
+        with st.container(border=True, key="ec_cal_card"):
+            _render_calendar_toolbar(
+                n_events=_n_total,
+                n_companies=_n_companies,
+                n_ma=_n_ma,
+                alerts_on=_ec_tb_alerts_on,
+                open_email_dialog=lambda: _email_alerts_dialog(all_tickers_meta),
             )
-            log_timing("EC_PAGE_STCALENDAR_RENDER", (_time.perf_counter() - _t_fc_render) * 1000,
-                       details=f"events={len(fc_events)} view={st.session_state.ec_view}", level="WARNING")
+            if _has_panel:
+                _cal_body, _detail_body = st.columns([3, 1], gap="medium")
+            else:
+                _cal_body, _detail_body = st.container(), None
+
+            with _cal_body:
+                _t_fc_render = _time.perf_counter()
+                cal_result = st_calendar(
+                    events=fc_events,
+                    options=cal_options,
+                    custom_css=calendar_css,
+                    key=cal_key,
+                    callbacks=["eventClick", "datesSet"],
+                )
+                log_timing("EC_PAGE_STCALENDAR_RENDER", (_time.perf_counter() - _t_fc_render) * 1000,
+                           details=f"events={len(fc_events)} view={st.session_state.ec_view}", level="WARNING")
+                # Footer: count scoped to the displayed period only (no all-time
+                # total, no decorative Q1–Q4 badges — they were non-interactive).
+                st.html(
+                    f'<div class="ec-year-foot"><span>Showing <b>{_n_total:,}</b> '
+                    f'events in {html.escape(_period_label)}</span></div>'
+                )
+
+            if _has_panel and _detail_body is not None:
+                with _detail_body:
+                    # Detail card in its own right-hand column — beside the calendar,
+                    # never on top of it. CLOSE bumps ec_cal_version to remount the
+                    # calendar: st_calendar keeps its last eventClick across a plain
+                    # rerun, so once ec_selected_event is cleared the stale click would
+                    # re-fire and instantly re-open the panel — remounting flushes it.
+                    with st.container(key="ec_detail_col"):
+                        _render_detail_panel(st.session_state.ec_selected_event)
+                        if st.button("✕ Close", key="ec_close_detail"):
+                            st.session_state.ec_selected_event = None
+                            st.session_state.ec_cal_version += 1
+                            st.rerun()
         log_timing("EC_PAGE_RENDER_TOTAL", (_time.perf_counter() - _t0_page) * 1000,
                    details=f"events={len(fc_events)}", level="WARNING")
+
+        if cal_result and cal_result.get("datesSet"):
+            _ds = cal_result["datesSet"]
+            _new_start = str(_ds.get("startStr", ""))[:10]
+            _new_end_excl = str(_ds.get("endStr", ""))[:10]
+            _old_start = st.session_state.get("ec_visible_start")
+            _old_end = st.session_state.get("ec_visible_end")
+            if _new_start and _new_end_excl and (
+                _new_start != _old_start or _new_end_excl != _old_end
+            ):
+                st.session_state.ec_visible_start = _new_start
+                st.session_state.ec_visible_end = _new_end_excl
+                log_timing(
+                    "EC_OPT_DATES_SET_UPDATED",
+                    0,
+                    f"old_start={_old_start} old_end={_old_end} "
+                    f"new_start={_new_start} new_end={_new_end_excl}",
+                    level="WARNING",
+                )
+                st.rerun()
+            else:
+                log_timing(
+                    "EC_OPT_DATES_SET_NO_RERUN",
+                    0,
+                    "reason=range_unchanged",
+                    level="WARNING",
+                )
 
         if cal_result and cal_result.get("eventClick"):
             clicked_event = cal_result["eventClick"]["event"]
@@ -2091,21 +3508,14 @@ def render_page() -> None:
                 st.rerun()
             # else: same event already selected — skip to prevent infinite rerun loop
 
-        with detail_col:
-            if st.session_state.ec_selected_event:
-                st.html('<div style="height:60px;"></div>')
-                _render_detail_panel(st.session_state.ec_selected_event)
-                if st.button("✕ Close", key="ec_close_detail"):
-                    st.session_state.ec_selected_event = None
-                    st.session_state.ec_cal_version   += 1
-                    st.rerun()
-
         st.html('<div style="height:32px;"></div>')
 
         # Clear the early loading placeholder now that content is rendered
         _ecal_loading_hint.empty()
 
         render_coresight_footer()
+        _tracker.finish()
+        log_render_complete("earnings_calendar", _time.perf_counter() - _page_start)
 
     except Exception as exc:
         try:
@@ -2123,4 +3533,4 @@ try:
 except Exception as exc:
     log_structured_error(exc, page="earnings_calendar", component="top_level",
                          operation="run_render_page", context="top-level invocation")
-    st.error("Something went wrong loading the Earnings Calendar.")
+    st.error("Something went wrong loading the Calendar.")

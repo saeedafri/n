@@ -39,7 +39,7 @@ class LocalStorageManager:
             if LocalStorage is None:
                 self.local_storage = None
                 self.page_name = page_name
-                logger.warning("streamlit-local-storage not installed; browser persistence disabled")
+                log_error("streamlit-local-storage not installed; browser persistence disabled")
                 return
             # Initialize with a unique key to avoid conflicts
             self.local_storage = LocalStorage(key=f"sip_local_storage_{page_name or 'default'}")
@@ -250,9 +250,15 @@ class LocalStorageManager:
 
                 if self.local_storage is not None:
                     self.local_storage.setItem(self.STORAGE_KEY, json_data)
-
-                # Also save using JavaScript as fallback
-                save_to_local_storage_js(self.STORAGE_KEY, all_pages_state)
+                else:
+                    # JS fallback ONLY when the component is unavailable. When the
+                    # component IS present, setItem already persisted the same data, so
+                    # this second components.html iframe is pure redundancy — and
+                    # Streamlit inserts it at DOM position [0], BEFORE the sticky header,
+                    # opening a ~16-58px blank strip above the header on every save (the
+                    # bug earnings_calls works around by saving at end-of-render). Gating
+                    # it here fixes that at the root for every page.
+                    save_to_local_storage_js(self.STORAGE_KEY, all_pages_state)
                 return True
 
         except Exception as e:
@@ -513,7 +519,10 @@ def save_earnings_calls_state():
             json_data = json.dumps(all_pages)
             manager.local_storage.setItem(manager.STORAGE_KEY, json_data)
             st.session_state[LocalStorageManager._SS_CACHE_KEY] = all_pages
-            save_to_local_storage_js(manager.STORAGE_KEY, all_pages)
+            # No JS fallback here — the component (guaranteed present; the function
+            # early-returns above when it is None) already persisted via setItem. A
+            # second components.html iframe would insert at DOM position [0] and push the
+            # sticky header down.
             return True
     except Exception:
         pass

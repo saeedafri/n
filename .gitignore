@@ -729,3 +729,6 @@ docs/technical-documentation/_validation-v2/screening-p4.png
 docs/technical-documentation/_validation-v2/screening-p8.png
 docs/technical-documentation/_validation-v2/screening-p15.png
 docs/technical-documentation/_validation-v2/screening-p20.png
+
+# EDGAR store-totals disk cache (rebuilt on demand, 24h TTL)
+data/edgar_cache/

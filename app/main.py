@@ -6,6 +6,10 @@ Uses ONLY server_logger - no standard library logging
 
 import sys
 import os
+
+# glibc malloc arenas — must be set before first heap allocation
+os.environ.setdefault("MALLOC_ARENA_MAX", "2")
+
 from pathlib import Path
 
 # =============================================================================
@@ -180,7 +184,7 @@ _PAGES_CONFIG = [
     ("pages/newsroom.py", "Newsroom", "newsroom", False),
     ("pages/earnings_calls.py", "Earnings Calls", "earnings_calls", False),
     ("pages/live_earnings_transcript.py", "Live Transcript", "live_earnings_transcript", False),
-    ("pages/earnings_calendar.py", "Earnings Calendar", "earnings_calendar", False),
+    ("pages/earnings_calendar.py", "Calendar", "earnings_calendar", False),
     ("pages/screening.py", "Screening", "screening", False),
     ("pages/company_filings.py", "Company Filings", "company_filings", False),
     ("pages/company_filings_add_files.py", "Add Files", "company_filings_add_files", False),
@@ -235,6 +239,8 @@ except Exception as e:
 # =============================================================================
 try:
     new_rerun_id("main")
+    from components.base_page import _patch_st_rerun_once
+    _patch_st_rerun_once()
 except Exception:
     pass
 
@@ -309,10 +315,22 @@ try:
                 f"{_auth_request_meta()} browser_cookie_ok={_browser_ok_param or '1'}",
                 level="WARNING",
             )
+            # Clean the handoff params from the URL CLIENT-SIDE (history.replaceState)
+            # instead of mutating st.query_params. Mutating st.query_params schedules
+            # a full app RERUN, which re-rendered the landing page a second time during
+            # sign-in ("Loading Home" twice). replaceState strips the params with no
+            # rerun; the next natural rerun reads the already-clean URL, so the handoff
+            # is not re-processed. Same end state, one fewer home render.
             try:
-                for _hk in ("login_handoff", "auth_flow_id", "browser_cookie_ok"):
-                    if _hk in st.query_params:
-                        del st.query_params[_hk]
+                import streamlit.components.v1 as _handoff_comp
+                _handoff_comp.html(
+                    "<script>try{var w=window.parent,u=new URL(w.location.href);"
+                    "['login_handoff','auth_flow_id','browser_cookie_ok']"
+                    ".forEach(function(k){u.searchParams.delete(k);});"
+                    "w.history.replaceState({},'',u.pathname+(u.search||'')+(u.hash||''));"
+                    "}catch(e){}</script>",
+                    height=0,
+                )
             except Exception:
                 pass
         else:
@@ -436,7 +454,7 @@ if _auth_ready_for_bg:
                 _pu_ensure()
                 _ea_ensure()
             except Exception:
-                pass
+                log_exception("ERROR in background screening-tables prewarm")
 
         os.environ["APP_SCREENING_PREWARM_STARTED"] = "1"
         _prewarm_start = perf_counter()
@@ -468,6 +486,60 @@ if _auth_ready_for_bg:
             warmup_ec_caches()
             os.environ["APP_EC_WARMED"] = "1"
             log_timing("MAIN_EC_WARMUP", (perf_counter() - _ec_warm_start) * 1000)
+        except Exception:
+            pass
+
+    # =========================================================================
+    # COMPANY-FILINGS PREFETCH WARMUP (authenticated-only, BACKGROUND)
+    # The /company_filings filter prefetch runs a DISTINCT+filesort over every
+    # metric row of a ticker on coreiq_filing_metrics_v5 (~75k rows for a big
+    # filer like AMZN). On a COLD buffer pool (right after a process restart)
+    # that first query is ~11s → a 12s "CRITICAL" page load; once the pages are
+    # in MySQL's buffer pool it drops to ~0.5s. Warm the shared ticker index +
+    # the common heavy filers' pages in the BACKGROUND (never blocks the first
+    # render — unlike the FT/EC warmups above) so the first real filings load is
+    # already warm. Same query as company_filings._prefetch_ticker_filter_data.
+    # =========================================================================
+    if (os.getenv("ENABLE_FILINGS_WARMUP", "1").strip() != "0"
+            and os.environ.get("APP_FILINGS_PREFETCH_WARMED") != "1"):
+        try:
+            import threading as _fm_threading
+
+            def _warm_filings_prefetch():
+                _w_start = perf_counter()
+                _ok = 0
+                try:
+                    from core.database import db_manager as _fm_db
+                    _tickers = [t.strip().upper() for t in os.getenv(
+                        "FILINGS_WARMUP_TICKERS",
+                        "AMZN,AAPL,WMT,TGT,COST,HD,NKE,M",
+                    ).split(",") if t.strip()]
+                    _q = (
+                        "SELECT DISTINCT doc_type, "
+                        "COALESCE(storage_year, report_fiscal_year, fiscal_year) AS bucket_year, "
+                        "COALESCE(fiscal_year, storage_year, report_fiscal_year) AS display_year "
+                        "FROM coreiq_filing_metrics_v5 WHERE ticker = :ticker "
+                        "ORDER BY doc_type, bucket_year DESC"
+                    )
+                    for _tk in _tickers:
+                        try:
+                            _fm_db.execute_query_readonly(_q, {"ticker": _tk})
+                            _ok += 1
+                        except Exception:
+                            pass
+                    log_timing(
+                        "MAIN_FILINGS_PREFETCH_WARMUP",
+                        (perf_counter() - _w_start) * 1000,
+                        f"warmed={_ok}/{len(_tickers)}",
+                    )
+                except Exception:
+                    pass
+
+            os.environ["APP_FILINGS_PREFETCH_WARMED"] = "1"
+            _fm_thr_start = perf_counter()
+            _fm_threading.Thread(target=_warm_filings_prefetch, daemon=True).start()
+            log_timing("MAIN_FILINGS_PREFETCH_WARMUP_THREAD", (perf_counter() - _fm_thr_start) * 1000)
+            del _fm_threading
         except Exception:
             pass
 
@@ -518,7 +590,7 @@ if _auth_ready_for_bg and os.environ.get("APP_NON_SEC_WARMUP_STARTED") != "1":
                     tickers = [t for t, _ in tickers_with_names]
                     warm_non_sec_cache_at_startup(tickers, max_workers=32)
             except Exception:
-                pass
+                log_exception("ERROR in background non-SEC cache warmup")
 
         _nonsec_start = perf_counter()
         os.environ["APP_NON_SEC_WARMUP_STARTED"] = "1"
@@ -553,10 +625,63 @@ if _auth_ready_for_bg and os.getenv("EARNINGS_ALERT_DISPATCH", "1").strip() != "
                 pass
 
 # =============================================================================
+# FORECAST AUTO-REFRESH (twice-daily, reporting-date driven; ON by default).
+# One daemon thread; never blocks page render. Exactly-once across instances via
+# an atomic DB claim. Disable with ENABLE_FORECAST_AUTO_REFRESH=0.
+# Spec: docs/superpowers/specs/2026-07-07-forecast-auto-refresh-design.md
+# =============================================================================
+if (_auth_ready_for_bg
+        and os.getenv("ENABLE_FORECAST_AUTO_REFRESH", "1").strip() not in ("0", "", "false", "False")
+        and os.environ.get("APP_FORECAST_AUTO_REFRESH_STARTED") != "1"):
+    try:
+        from utils.forecast_auto_refresh import start_forecast_auto_refresh
+
+        os.environ["APP_FORECAST_AUTO_REFRESH_STARTED"] = "1"
+        start_forecast_auto_refresh()
+    except Exception:
+        pass
+
+# =============================================================================
+# M&A OVERLAY AUTO-ENRICH (6-hourly; ON by default). Fixes acquirer/target for
+# M&A rows the nightly ETL inserts with regex garbage, via edgartools in a
+# daemon thread — no DB writes, never blocks page render. Disable with
+# ENABLE_MA_OVERRIDES_AUTO=0.
+# Spec: docs/superpowers/specs/2026-07-15-calendar-ma-acquirer-target-repair-design.md
+# =============================================================================
+if (_auth_ready_for_bg
+        and os.getenv("ENABLE_MA_OVERRIDES_AUTO", "1").strip() not in ("0", "", "false", "False")
+        and os.environ.get("APP_MA_OVERRIDES_AUTO_STARTED") != "1"):
+    try:
+        from utils.ma_overrides_auto import start_ma_overrides_auto
+
+        os.environ["APP_MA_OVERRIDES_AUTO_STARTED"] = "1"
+        start_ma_overrides_auto()
+    except Exception:
+        pass
+
+# =============================================================================
 # STARTUP COMPLETE - RUN APP
 # =============================================================================
+_page_obs_start = None
+_page_obs_key = ""
+try:
+    from components.base_page import bootstrap_page_observability, finish_page_observability
+    try:
+        _page_obs_key = getattr(pg, "url_path", "") or "main"
+    except Exception:
+        _page_obs_key = "main"
+    _page_obs_start = bootstrap_page_observability(_page_obs_key)
+except Exception:
+    pass
+
 try:
     pg.run()
 except Exception as e:
     log_exception("FATAL: Error running page")
     raise
+finally:
+    try:
+        if _page_obs_start is not None and _page_obs_key:
+            finish_page_observability(_page_obs_key, _page_obs_start)
+    except Exception:
+        pass

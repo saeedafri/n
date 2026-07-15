@@ -13,7 +13,9 @@ from time import perf_counter
 
 from core.auth_manager import get_current_user, require_auth
 from core.access_control import AccessControlManager, UserRolesManager
-from utils.server_logger import log_timing
+from utils.server_logger import log_timing, log_structured_error, new_rerun_id
+
+new_rerun_id("access_management")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -680,8 +682,12 @@ def main():
         from core.database import DatabaseManager
         _db = DatabaseManager()
         _db.execute_query_readonly("SELECT 1", {})
-    except Exception:
+    except Exception as _db_exc:
         db_ok = False
+        # This failure drives an access-control fallback (below) — it MUST be traced.
+        log_structured_error(_db_exc, page="access_management",
+                             component="db_health_check", operation="SELECT_1",
+                             context=f"user={user_email} — falling back to hardcoded admin list")
     log_timing("ACCESS_MGMT_db_health", (perf_counter() - _db_t) * 1000,
                f"db_ok={db_ok}", level="INFO")
 
@@ -757,4 +763,11 @@ def main():
     render_coresight_footer(full_width=True, stick_to_bottom=True)
 
 
-main()
+# Top-level safety net: never leave an admin on a raw traceback / blank screen with
+# no trace — every other page has this guard; access_management was the exception.
+try:
+    main()
+except Exception as _page_exc:
+    log_structured_error(_page_exc, page="access_management", component="main",
+                         operation="PAGE_RENDER")
+    st.error("Access Management is temporarily unavailable. Please refresh the page.")

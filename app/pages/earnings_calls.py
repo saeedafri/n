@@ -23,16 +23,18 @@ from core.database import init_database
 from utils.local_storage_manager import load_earnings_calls_state, save_earnings_calls_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
 try:
-    from utils.server_logger import log_error, log_info, PageLoadTracker, log_db_timing, log_timing, new_rerun_id, set_page_context, log_structured_error, error_boundary
+    from utils.server_logger import log_error, log_info, log_warning, PageLoadTracker, log_db_timing, log_timing, new_rerun_id, set_page_context, log_structured_error, error_boundary, log_render_complete
 except ImportError:
     def log_error(*a, **kw): pass  # type: ignore
     def log_info(*a, **kw): pass  # type: ignore
+    def log_warning(*a, **kw): pass  # type: ignore
     def log_db_timing(*a, **kw): pass  # type: ignore
     def log_timing(*a, **kw): pass  # type: ignore
     def new_rerun_id(*a, **kw): return ''  # type: ignore
     def set_page_context(*a, **kw): pass  # type: ignore
     def log_structured_error(*a, **kw): return ''  # type: ignore
     def error_boundary(*a, **kw): pass  # type: ignore
+    def log_render_complete(*a, **kw): pass  # type: ignore
     PageLoadTracker = None  # type: ignore
 
 # =============================================================================
@@ -900,6 +902,11 @@ def _render_js_download_button(pdf_bytes: bytes, filename: str) -> None:
     deployments when Nginx doesn't forward that path).
     """
     try:
+        from utils.server_logger import track_download
+        track_download("transcript_pdf", name=filename, page="earnings_calls")
+    except Exception:
+        pass
+    try:
         import base64
         from streamlit.components.v1 import html as _sthtml
 
@@ -960,6 +967,11 @@ function dl(){{
 
 def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "Excel", auto_click: bool = False) -> None:
     """Client-side Excel download button via JS Blob API; matches market_data.py."""
+    try:
+        from utils.server_logger import track_download
+        track_download("earnings_excel", name=filename, page="earnings_calls")
+    except Exception:
+        pass
     try:
         import base64
         from streamlit.components.v1 import html as _sthtml
@@ -1137,6 +1149,41 @@ def _build_keyword_results_excel(results: List[Dict], ticker_display: Dict[str, 
         return buf.getvalue()
     except Exception as e:
         log_structured_error(e, page="earnings_calls", component="_build_keyword_results_excel", operation="build_excel")
+        return b""
+
+
+def _build_keyword_results_csv(results: List[Dict], ticker_display: Dict[str, str]) -> bytes:
+    """Build a CSV of keyword search results — SIP-style export.
+
+    Same rows and columns as the old Excel body (Company, Ticker, Year, Quarter,
+    Reporter Name, Whole Paragraph). CSV builds in milliseconds where the styled
+    openpyxl workbook took minutes on 10k rows, and opens directly in Excel.
+    UTF-8 BOM so Excel renders non-ASCII correctly.
+    """
+    try:
+        import csv
+        from io import StringIO
+
+        def _company_from_ticker(ticker: str) -> str:
+            label = ticker_display.get(ticker, ticker) or ticker
+            return label.split("(")[0].strip() if "(" in label else label
+
+        buf = StringIO()
+        writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(["Company", "Ticker", "Year", "Quarter", "Reporter Name", "Whole Paragraph"])
+        for result in results:
+            ticker = str(result.get("ticker") or "").strip()
+            writer.writerow([
+                _company_from_ticker(ticker),
+                ticker,
+                str(result.get("year") or ""),
+                str(result.get("quarter") or ""),
+                str(result.get("speaker") or ""),
+                re.sub(r"\s+", " ", str(result.get("paragraph") or result.get("snippet") or "")).strip(),
+            ])
+        return buf.getvalue().encode("utf-8-sig")
+    except Exception as e:
+        log_structured_error(e, page="earnings_calls", component="_build_keyword_results_csv", operation="build_csv")
         return b""
 
 
@@ -1511,15 +1558,24 @@ def _get_ec_excel_executor() -> ThreadPoolExecutor:
     return ThreadPoolExecutor(max_workers=2)
 
 
-# ── Cross-transcript Excel job registry ──────────────────────────────────────
-# MODULE-LEVEL (not st.session_state) so an in-flight build SURVIVES filter
-# changes, reruns, and page navigation — it keeps running and its result is held
-# here until the user is back on a page that can fire the download. Keyed by the
-# export signature. A run_every fragment polls this and auto-downloads when ready.
+# ── Cross-transcript export job registry ─────────────────────────────────────
+# PROCESS-LEVEL via st.cache_resource so an in-flight build SURVIVES filter
+# changes, reruns, and page navigation. It must NOT be a plain module global:
+# st.Page re-executes this file in a fresh module namespace on every script
+# run, so a module-level dict is wiped each rerun — the ready bytes were lost
+# before any run could deliver them (the "export never completes" bug seen on
+# STG 03-Jul). Keyed by the export signature; a run_every fragment polls this.
 import threading as _ec_threading
 
-_EC_EXCEL_JOBS: Dict[str, dict] = {}   # sig_key -> {future, bytes, downloaded, filename, error}
-_EC_EXCEL_JOBS_LOCK = _ec_threading.Lock()
+
+@st.cache_resource(show_spinner=False)
+def _ec_excel_job_registry() -> dict:
+    return {"jobs": {}, "lock": _ec_threading.Lock()}
+
+
+_EC_EXCEL_REG = _ec_excel_job_registry()
+_EC_EXCEL_JOBS: Dict[str, dict] = _EC_EXCEL_REG["jobs"]   # sig_key -> {future, bytes, downloaded, filename, error}
+_EC_EXCEL_JOBS_LOCK = _EC_EXCEL_REG["lock"]
 _EC_EXCEL_JOBS_MAX = 12
 
 
@@ -1582,18 +1638,32 @@ def _build_cross_excel_job(
     allowed_tickers: Optional[Tuple[str, ...]],
     ticker_display: Dict[str, str],
 ) -> bytes:
-    """Heavy Excel build run OFF the script thread — never touches st.session_state.
+    """Heavy export build run OFF the script thread — never touches st.session_state.
 
-    Fetches all matching keyword windows and renders the workbook. Runs inside the
-    background executor so the Streamlit session stays interactive while it works.
+    Fetches all matching keyword windows and renders a CSV (SIP-style — the old
+    styled openpyxl workbook took minutes for 10k rows; CSV builds in ms with the
+    exact same rows/columns). Runs inside the background executor so the
+    Streamlit session stays interactive while it works.
     """
     try:
+        _t0 = _time.perf_counter()
         results = _compute_all_cross_search_results_for_excel(
             keyword, company, year, quarter, watchlist_id, allowed_tickers,
         )
-        return _build_keyword_results_excel(results, ticker_display)
+        _t1 = _time.perf_counter()
+        data = _build_keyword_results_csv(results, ticker_display)
+        log_timing(
+            "EC_EXPORT_JOB_TOTAL",
+            (_time.perf_counter() - _t0) * 1000,
+            details=(
+                f"rows={len(results)} fetch_ms={(_t1 - _t0) * 1000:.0f} "
+                f"csv_ms={(_time.perf_counter() - _t1) * 1000:.0f} bytes={len(data)}"
+            ),
+            level="WARNING",
+        )
+        return data
     except Exception as e:
-        log_structured_error(e, page="earnings_calls", component="_build_cross_excel_job", operation="background_excel")
+        log_structured_error(e, page="earnings_calls", component="_build_cross_excel_job", operation="background_export")
         return b""
 
 
@@ -1717,16 +1787,8 @@ def render_earnings_calls(active_ticker: str = None):
 
     # Show loading placeholder immediately so the user sees feedback
     # before any blocking DB calls (companies, years, transcript fetch).
-    _ec_loading_hint = st.empty()
-    _ec_loading_hint.markdown(
-        '<div style="display:flex;align-items:center;gap:12px;padding:32px 0 16px 0;">'
-        '<div style="width:28px;height:28px;border:3px solid #eee;border-top:3px solid #d62e2f;'
-        'border-radius:50%;animation:ec-spin 0.8s linear infinite;"></div>'
-        '<span style="font-family:Montserrat,sans-serif;font-size:15px;color:#888;">'
-        'Loading earnings call data&hellip;</span></div>'
-        '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
-        unsafe_allow_html=True,
-    )
+    from components.loading import render_page_loader
+    _ec_loading_hint = render_page_loader("Loading Earnings Calls")
 
     # Inject custom CSS
     st.markdown(get_earnings_css(), unsafe_allow_html=True)
@@ -1746,12 +1808,27 @@ def render_earnings_calls(active_ticker: str = None):
             log_structured_error(_exc, page="earnings_calls", component="fetch_sec_companies", operation="THREAD_RESULT")
             companies = []
         try:
-            non_sec_transcript_companies = _non_sec_future.result(timeout=30)
+            # non-SEC transcript companies are SUPPLEMENTARY (materialized, warm≈0ms,
+            # cold≈6.4s). Bound the wait at 15s so a cold startup-race can't block the
+            # whole page for 30s; on the rare miss we degrade to [] and it fills from the
+            # warm cache on the next load. This is EXPECTED cold behaviour, not an error —
+            # log it as a WARNING so it never pollutes the ERROR stream.
+            non_sec_transcript_companies = _non_sec_future.result(timeout=15)
         except Exception as _exc:
-            log_structured_error(_exc, page="earnings_calls", component="fetch_non_sec_companies", operation="THREAD_RESULT")
+            log_warning(
+                f"[EC_NONSEC] non-SEC transcript companies unavailable this load "
+                f"(cold materialize race, degrading to empty; warms next load): "
+                f"{type(_exc).__name__}"
+            )
             non_sec_transcript_companies = []
     _t1_companies = _time.perf_counter()
     _companies_time = (_t1_companies - _t0_companies) * 1000
+    _companies_warm = _companies_time < 1000
+    log_timing(
+        "EC_FETCH_COMPANIES",
+        _companies_time,
+        f"sec={len(companies)} non_sec={len(non_sec_transcript_companies)} warm={_companies_warm}",
+    )
     if _tracker: _tracker.step_end("FETCH_COMPANIES", f"sec={len(companies)} non_sec={len(non_sec_transcript_companies)} parallel_ms={_companies_time:.0f}")
     if _tracker: _tracker.step_start("MERGE_COMPANIES")
     _sec_tickers = {c['ticker'] for c in companies}
@@ -1926,8 +2003,11 @@ def render_earnings_calls(active_ticker: str = None):
     _fresh_ticker = (st.query_params.get("ticker") and st.query_params.get("ticker") != st.session_state.get("_ec_last_url_ticker"))
 
     if "ec_year" not in st.session_state or st.session_state.ec_year not in year_options or _fresh_ticker:
-        # Default to LATEST real year (last item, since available_years is sorted reverse)
-        st.session_state.ec_year = year_options[-1] if year_options[-1] != 'ALL' else (year_options[1] if len(year_options) > 1 else year_options[0])
+        # Default to LATEST real year. available_years is sorted reverse=True
+        # (newest first), so year_options = ['ALL', <newest>, ..., <oldest>] and
+        # the newest real year is index 1 — NOT [-1], which is the OLDEST and
+        # made Macy's (M) land on 2007 instead of 2026 on fresh load (STG 03-Jul).
+        st.session_state.ec_year = year_options[1] if len(year_options) > 1 else year_options[0]
         if _fresh_ticker:
             st.session_state._ec_last_url_ticker = st.query_params.get("ticker")
 
@@ -1981,6 +2061,20 @@ def render_earnings_calls(active_ticker: str = None):
     _pf_quarter = st.session_state.ec_quarter
     _pf_is_cross = (_pf_company == 'ALL' or str(_pf_year) == 'ALL' or _pf_quarter == 'ALL')
     _pf_is_non_sec = (_pf_company in _non_sec_only_tickers)
+
+    # Analytics: company/year/quarter/keyword are session-state (not URL), so the auto
+    # page_view misses them. Capture the full earnings-calls filter state.
+    try:
+        from utils.server_logger import log_filters_if_changed
+        log_filters_if_changed(
+            "earnings_calls",
+            company=_pf_company,
+            year=str(_pf_year),
+            quarter=str(_pf_quarter),
+            keyword=st.session_state.get('ec_search') or None,
+        )
+    except Exception:
+        pass
     _transcript_future = None
     _edate_future = None
     if not _pf_is_cross and not _pf_is_non_sec:
@@ -2552,30 +2646,42 @@ def render_earnings_calls(active_ticker: str = None):
                 st.markdown('<div class="transcript-search-placeholder">Type a keyword above to search within the transcript</div>', unsafe_allow_html=True)
 
         # ===================================================================
-        # EXCEL EXPORT — rendered BELOW the results box (not inside it).
-        # Cross-transcript export is heavy, so it runs in a BACKGROUND thread:
-        # clicking "Excel" submits the build to the pool and the page stays
-        # interactive; once ready the download fires automatically.
+        # CSV EXPORT — rendered BELOW the results box (not inside it).
+        # Cross-transcript export is heavy (DB windows for every match), so it
+        # runs in a BACKGROUND thread: clicking "CSV" submits the build to the
+        # pool and the page stays interactive; when it finishes, a Download
+        # button appears here. (SIP-style CSV replaced the styled Excel build,
+        # which took minutes for 10k rows and whose auto-download iframe was
+        # wiped by the 1.2s poller before it could fire — the "never
+        # completes" bug seen on STG 03-Jul.)
         # ===================================================================
         if is_cross_search and active_keyword and cross_results:
             _xl_sig_key = repr((active_keyword, company, str(year), quarter, _applied_watchlist_id))
             _xl_filename = (
                 f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}"
-                "_Keyword_Results.xlsx"
+                "_Keyword_Results.csv"
             )
 
             _dl_l, _dl_r = st.columns([1, 1])
             with _dl_r:
                 _job = _ec_excel_job_get(_xl_sig_key)
+                log_timing(
+                    "EC_EXPORT_STATE", 0,
+                    f"sig={_xl_sig_key} job=" + (
+                        "none" if _job is None else
+                        ("ready" if _job.get("bytes") else ("error" if _job.get("error") else "building"))
+                    ),
+                    level="WARNING",
+                )
                 if _job is None:
                     # ONE click → start the background build + toast. No full-page
                     # rerun loop: the poller fragment below does isolated polling,
                     # so the rest of the page stays fully interactive.
                     if st.button(
-                        "▦  Excel",
+                        "▦  CSV",
                         key=f"ec_cross_excel_{hash(_xl_sig_key)}",
                         width="stretch",
-                        help="Build an Excel of ALL matching results — runs in the background; download starts automatically.",
+                        help="Build a CSV of ALL matching results — runs in the background; a download button appears when it's ready.",
                     ):
                         _kw, _co, _yr, _qt = active_keyword, company, str(year), quarter
                         _wl, _wt, _td = _applied_watchlist_id, _active_watchlist_tickers, dict(ticker_display)
@@ -2585,25 +2691,35 @@ def render_earnings_calls(active_ticker: str = None):
                                 _build_cross_excel_job, _kw, _co, _yr, _qt, _wl, _wt, _td,
                             ),
                         )
-                        st.toast("Preparing Excel in the background — download starts automatically.", icon="⏳")
+                        st.toast("Preparing CSV in the background — a download button appears when it's ready.", icon="⏳")
                         # No st.rerun(): the button click already triggers one rerun,
                         # and the poller fragment below picks up the new job. Calling
                         # st.rerun() here would cancel the toast before it shows.
                 elif _job.get("bytes"):
-                    # Ready (e.g. revisited after auto-download) — static re-download.
-                    _render_excel_js_download(_job["bytes"], _job.get("filename") or _xl_filename, "Excel")
+                    # Ready — served by Streamlit's media manager over plain HTTP
+                    # (no giant base64 iframe, no fonts.googleapis dependency).
+                    st.download_button(
+                        "⬇  Download CSV",
+                        data=_job["bytes"],
+                        file_name=_job.get("filename") or _xl_filename,
+                        mime="text/csv",
+                        key=f"ec_cross_csv_dl_{hash(_xl_sig_key)}",
+                        width="stretch",
+                        type="primary",
+                    )
                 elif _job.get("error"):
                     st.markdown(
                         '<div class="transcript-search-count" style="color:#D62E2F;">'
-                        'Could not build the Excel file — please try again.</div>',
+                        'Could not build the CSV file — please try again.</div>',
                         unsafe_allow_html=True,
                     )
 
             # Poller fragment: reruns ONLY itself every ~1.2s (page stays
-            # responsive — no full-page rerun). It collects finished builds and
-            # fires the auto-download exactly once per job, for ANY job whose
-            # build has finished — so the download still happens even if you
-            # changed the keyword/filters while it was building.
+            # responsive — no full-page rerun while building). When a build
+            # finishes it marks the job done and triggers ONE full rerun so the
+            # static "Download CSV" button above replaces the spinner. No JS
+            # auto-click: the old iframe was destroyed by the next fragment
+            # rerun before its load event fired, losing the download.
             if any(not j.get("downloaded") for _, j in _ec_excel_jobs_snapshot()):
                 @st.fragment(run_every="1.2s")
                 def _ec_excel_poller():
@@ -2617,19 +2733,22 @@ def render_earnings_calls(active_ticker: str = None):
                             '<span style="width:14px;height:14px;border:2px solid #eee;'
                             'border-top:2px solid #d62e2f;border-radius:50%;'
                             'display:inline-block;animation:ec-spin 0.8s linear infinite;"></span>'
-                            'Preparing Excel in the background — keep working; your '
-                            'download starts automatically when it\'s ready.</span></div>'
+                            'Preparing CSV in the background — keep working; a '
+                            'download button appears here when it\'s ready.</span></div>'
                             '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
                             unsafe_allow_html=True,
                         )
-                    # auto-download ANY ready-but-not-downloaded job, exactly once
+                    # mark ANY finished job delivered, then one full rerun to
+                    # swap the spinner for the persistent download button
+                    _any_ready = False
                     for k, j in _ec_excel_jobs_snapshot():
-                        if j.get("bytes") and not j.get("downloaded"):
-                            _render_excel_js_download(j["bytes"], j.get("filename") or "Earnings_Calls.xlsx",
-                                                      "Excel", auto_click=True)
+                        if (j.get("bytes") or j.get("error")) and not j.get("downloaded"):
+                            _any_ready = True
                             with _EC_EXCEL_JOBS_LOCK:
                                 if k in _EC_EXCEL_JOBS:
                                     _EC_EXCEL_JOBS[k]["downloaded"] = True
+                    if _any_ready:
+                        st.rerun(scope="app")
                 _ec_excel_poller()
 
         elif (not is_cross_search) and active_keyword and _single_matches:
@@ -2637,17 +2756,20 @@ def render_earnings_calls(active_ticker: str = None):
             _xl_sig = (active_keyword, company, str(year), quarter, len(_single_matches))
             if st.session_state.get("ec_single_excel_sig") != _xl_sig:
                 st.session_state.ec_single_excel_sig = _xl_sig
-                st.session_state.ec_single_excel_bytes = _build_keyword_results_excel(
+                st.session_state.ec_single_excel_bytes = _build_keyword_results_csv(
                     _single_matches, ticker_display,
                 )
             _xl_bytes = st.session_state.get("ec_single_excel_bytes")
             if _xl_bytes:
                 _dl_l, _dl_r = st.columns([1, 1])
                 with _dl_r:
-                    _render_excel_js_download(
-                        _xl_bytes,
-                        f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.xlsx",
-                        "Excel",
+                    st.download_button(
+                        "▦  CSV",
+                        data=_xl_bytes,
+                        file_name=f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.csv",
+                        mime="text/csv",
+                        key=f"ec_single_csv_dl_{hash(_xl_sig)}",
+                        width="stretch",
                     )
 
 
@@ -2765,6 +2887,7 @@ def render_earnings_calls(active_ticker: str = None):
     _total_page_time = (_t1_page_end - _t0_page_start) * 1000
     if _tracker: _tracker.finish()
     log_info(f"[TIMING] EC_PAGE_TOTAL | {_total_page_time:.1f}ms | company={company} year={year} quarter={quarter}")
+    log_render_complete("earnings_calls", _t1_page_end - _t0_page_start)
 
 
 def main():

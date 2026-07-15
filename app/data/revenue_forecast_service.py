@@ -25,6 +25,9 @@ from utils.server_logger import log_structured_error, log_timing
 # Quarterly forecast frame columns that are not persisted as model rows
 # (mirrors the annual store, which keeps only models + ensemble + scenarios).
 _QUARTERLY_NON_MODEL_COLS = ("fiscal_year", "fiscal_quarter", "label", "ci_lower", "ci_upper")
+# The forecasting models (excludes scenarios) — used to shape the page-facing frame.
+_QUARTERLY_MODEL_KEYS = ("linear", "cagr", "exp_smoothing", "holt",
+                         "ma_trend", "weighted_avg", "seasonal_naive", "ensemble")
 
 
 SEC_SOURCE_TABLE = "coreiq_av_financials_income_statement"
@@ -877,30 +880,109 @@ class RevenueForecastService:
             backtest_df = engine.backtest(holdout_quarters=4)
             forecast_df = engine.forecast(periods=periods)
 
-        backtest_rows = backtest_df.to_dict("records") if not backtest_df.empty else []
+        # ── Normalize the forecast frame to the Annual dashboard shape ───────
+        # x-axis key 'year' = qidx (fiscal_year*4 + fiscal_quarter); 'period_label'
+        # = 'Q# YYYY'. Only model + scenario columns remain besides those two, so the
+        # page's Overview/Models/Test helpers see exactly the same structure as Annual.
+        def _lst(v):
+            if v is None:
+                return []
+            if hasattr(v, "tolist"):
+                out = v.tolist()
+                return out if isinstance(out, list) else [out]
+            return v if isinstance(v, list) else [v]
+
+        raw_forecasts: Dict[str, Any] = {}
+        if not forecast_df.empty:
+            fdf = forecast_df.copy()
+            fdf["year"] = fdf["fiscal_year"].astype(int) * 4 + fdf["fiscal_quarter"].astype(int)
+            fdf["period_label"] = [f"Q{int(q)} {int(y)}"
+                                   for y, q in zip(fdf["fiscal_year"], fdf["fiscal_quarter"])]
+            if not _store_hit and getattr(engine, "forecasts", None):
+                for mkey, mp in engine.forecasts.items():
+                    raw_forecasts[mkey] = {
+                        "method": mkey,
+                        "years": _lst(mp.get("qidx")),
+                        "forecast": _lst(mp.get("forecast")),
+                        "ci_lower": _lst(mp.get("ci_lower")),
+                        "ci_upper": _lst(mp.get("ci_upper")),
+                        "r_squared": mp.get("r_squared"),
+                        "cagr": mp.get("qoq_growth"),
+                    }
+            _keep = ["year", "period_label"] + [c for c in fdf.columns
+                     if c in _QUARTERLY_MODEL_KEYS or c.startswith("scenario_")]
+            forecast_df = fdf[_keep].sort_values("year").reset_index(drop=True)
+
+        # Historical rows keyed to qidx for the shared frame helpers
+        historical_rows: List[Dict[str, Any]] = []
+        for _, r in historical.iterrows():
+            historical_rows.append({
+                "year": int(r["qidx"]),
+                "sales": float(r["sales"]) if pd.notna(r["sales"]) else None,
+                "growth_pct": float(r["growth_pct"]) if pd.notna(r["growth_pct"]) else None,
+                "is_outlier": bool(r["is_outlier"]),
+                "period_label": r["label"],
+                "cal_year": int(r["year"]),
+            })
+
+        # Actual rows carry qidx + quarter label so the overview/company frame align
+        for r in actual_rows:
+            r["year"] = int(r["fiscal_year"]) * 4 + int(r["fiscal_quarter"])
+            r["qidx"] = r["year"]
+            r["period_label"] = r["label"]
+
+        # Enrich backtest rows with method_key + display (matches the Annual contract)
+        backtest_rows: List[Dict[str, Any]] = []
+        if not backtest_df.empty:
+            _has_bias = "bias" in backtest_df.columns
+            _has_rmse = "rmse" in backtest_df.columns
+            for _, r in backtest_df.iterrows():
+                mk = r.get("method")
+                backtest_rows.append({
+                    "method": mk,
+                    "method_key": r.get("method_key", mk),
+                    "display": _MODEL_FULL_LABELS.get(mk, str(mk).replace("_", " ").title()),
+                    "mape": float(r["mape"]) if pd.notna(r.get("mape")) else None,
+                    "bias": (float(r["bias"]) if _has_bias and pd.notna(r.get("bias")) else None),
+                    "rmse": (float(r["rmse"]) if _has_rmse and pd.notna(r.get("rmse")) else None),
+                })
+
         forecast_rows = forecast_df.to_dict("records") if not forecast_df.empty else []
-        historical_rows = historical.to_dict("records") if not historical.empty else []
+        outlier_qidx = [int(x) for x in engine.outliers]
 
         best_method_key: Optional[str] = engine.best_method
-        if best_method_key is None and backtest_rows:
+        best_method_display = None
+        best_mape = None
+        if backtest_rows:
             _valid = [r for r in backtest_rows if r.get("mape") is not None]
             if _valid:
-                best_method_key = min(_valid, key=lambda r: r["mape"]).get("method_key") \
-                    or min(_valid, key=lambda r: r["mape"]).get("method")
+                _best_row = min(_valid, key=lambda r: r["mape"])
+                best_method_display = _best_row.get("display")
+                best_mape = _best_row.get("mape")
+                if best_method_key is None:
+                    best_method_key = _best_row.get("method_key") or _best_row.get("method")
 
-        available_models = [c for c in forecast_df.columns if c not in _QUARTERLY_NON_MODEL_COLS]
+        # Page uses only the models (no scenarios) for the Model tabs; the store
+        # persists both models and scenarios.
+        available_models = [c for c in forecast_df.columns
+                            if c not in ("year", "period_label") and not c.startswith("scenario_")]
+        store_model_keys = [c for c in forecast_df.columns if c not in ("year", "period_label")]
 
-        # Fire-and-forget upsert only on a full engine run (mirrors annual path)
+        # Fire-and-forget upsert only on a full engine run (mirrors annual path).
+        # The store needs fiscal_year/fiscal_quarter — reconstruct them from qidx.
         if not _store_hit and forecast_rows:
             _df_copy = forecast_df.copy()
-            _bt_copy = [{"method_key": r.get("method"), "mape": r.get("mape")} for r in backtest_rows]
-            _models = list(available_models)
+            _df_copy["fiscal_quarter"] = ((_df_copy["year"] - 1) % 4 + 1).astype(int)
+            _df_copy["fiscal_year"] = ((_df_copy["year"] - _df_copy["fiscal_quarter"]) // 4).astype(int)
+            _bt_copy = [{"method_key": r.get("method_key"), "mape": r.get("mape")} for r in backtest_rows]
+            _models = list(store_model_keys)
             _best = best_method_key or ""
 
             def _smart_upsert():
                 try:
                     from data.quarterly_forecast_store import (
                         ensure_quarterly_forecast_table, upsert_forecasts as _do_upsert,
+                        prune_stale_quarters as _prune,
                     )
                     ensure_quarterly_forecast_table()
                     _do_upsert(
@@ -909,6 +991,7 @@ class RevenueForecastService:
                         last_actual_date=_last_actual_date,
                         company_name=company_name or None,
                     )
+                    _prune(_forecast_ticker, _last_actual_date)
                 except Exception:
                     pass
 
@@ -918,8 +1001,17 @@ class RevenueForecastService:
             except Exception:
                 pass
 
+        # qidx → 'Q# YYYY' map for the chart x-axis (history + forecast)
+        period_labels: Dict[int, str] = {}
+        for _hr in historical_rows:
+            period_labels[int(_hr["year"])] = _hr["period_label"]
+        for _fr in forecast_rows:
+            period_labels[int(_fr["year"])] = _fr["period_label"]
+
         next_q = forecast_rows[0] if forecast_rows else {}
         latest_actual = actual_rows[-1] if actual_rows else {}
+        forecast_min = forecast_rows[0]["year"] if forecast_rows else None
+        forecast_max = forecast_rows[-1]["year"] if forecast_rows else None
         log_timing("FORECAST_QUARTERLY_TOTAL", (perf_counter() - start) * 1000,
                    f"ticker={ticker} source={resolved_source} store_hit={_store_hit} "
                    f"quarters={len(forecast_rows)}")
@@ -932,30 +1024,46 @@ class RevenueForecastService:
             "reported_currency": reported_currency,
             "display_currency": reported_currency,
             "period_type": "quarterly",
+            "period_labels": period_labels,
             "actual_rows": actual_rows,
             "historical_rows": historical_rows,
             "backtest_rows": backtest_rows,
             "forecast_rows": forecast_rows,
+            "raw_forecasts": raw_forecasts,
             "best_method": best_method_key,
+            "best_method_display": best_method_display,
+            "best_mape": best_mape,
             "available_models": available_models,
-            "outlier_quarters": list(engine.outliers),
+            "outlier_years": outlier_qidx,
             "summary": {
                 "latest_actual_date": latest_actual.get("period_date"),
-                "latest_actual_label": latest_actual.get("label"),
+                "latest_actual_label": latest_actual.get("period_label"),
                 "latest_actual_revenue_billions": latest_actual.get("total_revenue_billions"),
+                "display_currency": reported_currency,
                 "reported_currency": reported_currency,
-                "next_forecast_label": next_q.get("label"),
+                "forecast_start_year": forecast_min,
+                "forecast_end_year": forecast_max,
+                "forecast_start_label": next_q.get("period_label"),
+                "forecast_end_label": forecast_rows[-1].get("period_label") if forecast_rows else None,
+                "next_forecast_value": next_q.get("ensemble"),
                 "next_forecast_value_billions": next_q.get("ensemble"),
-                "forecast_start_label": forecast_rows[0].get("label") if forecast_rows else None,
-                "forecast_end_label": forecast_rows[-1].get("label") if forecast_rows else None,
                 "forecast_periods": len(forecast_rows),
                 "historical_rows": len(historical_rows),
                 "actual_rows": len(actual_rows),
-                "outliers_excluded": len(engine.outliers),
-                "annual_cagr_pct": summary_stats.get("annual_cagr_pct"),
-                "avg_qoq_growth_pct": summary_stats.get("avg_qoq_growth_pct"),
+                "outliers_excluded": len(outlier_qidx),
+                "best_mape": best_mape,
+                "best_method_display": best_method_display,
+                "cagr_pct": summary_stats.get("annual_cagr_pct"),
+                "avg_annual_growth_pct": summary_stats.get("avg_qoq_growth_pct"),
+                "median_annual_growth_pct": summary_stats.get("median_qoq_growth_pct"),
                 "growth_volatility_pct": summary_stats.get("growth_volatility_pct"),
+                "min_growth_pct": summary_stats.get("min_qoq_growth_pct"),
+                "max_growth_pct": summary_stats.get("max_qoq_growth_pct"),
+                "total_growth_pct": summary_stats.get("total_growth_pct"),
                 "seasonal_indices": summary_stats.get("seasonal_indices"),
+                "source_note": ("SEC quarterly actuals from coreiq_av_financials_income_statement"
+                                if resolved_source == "SEC"
+                                else "YFinance quarterly revenue pivoted from coreiq_yf_financials_income_statement"),
             },
         }
 

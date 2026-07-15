@@ -216,8 +216,10 @@ def _log_query_time(func):
 
             # Use server_logger for consistent timing format
             try:
-                from utils.server_logger import log_db_timing
+                from utils.server_logger import log_db_timing, log_data_volume
                 log_db_timing(func_name, "repository", elapsed_ms, rows=result_size, ticker=str(ticker))
+                if result_size >= 1000:
+                    log_data_volume("repository", result_size, operation=func_name)
             except Exception:
                 pass  # Never fail a query because of logging
 
@@ -312,6 +314,15 @@ class CompanyRepository:
             companies.append({'ticker': ticker, 'name': display_name})
 
         companies.sort(key=lambda x: x['name'].lower())
+        try:
+            from utils.server_logger import log_timing
+            log_timing(
+                "DB_get_companies",
+                0.0,
+                f"table=coreiq_companies rows={len(companies)} source=get_companies_map",
+            )
+        except Exception:
+            pass
         return companies
 
     # ========================================================================
@@ -391,7 +402,20 @@ class CompanyRepository:
                    country_of_incorporation
             FROM coreiq_companies;
         """
+        _t0 = time.perf_counter()
         results = db_manager.execute_query_readonly(query)
+        _elapsed_ms = (time.perf_counter() - _t0) * 1000
+        try:
+            from utils.server_logger import log_db_timing, log_data_volume
+            log_db_timing("get_companies_rows", "coreiq_companies", _elapsed_ms, rows=len(results))
+            log_data_volume(
+                "coreiq_companies",
+                len(results),
+                cols=8,
+                operation="get_companies_rows",
+            )
+        except Exception:
+            pass
         rows: List[Dict[str, Any]] = []
         for row in results:
             ticker = row['ticker']
@@ -596,7 +620,7 @@ class IncomeStatementRepository:
                     # Support both nested {"info": {...}} and flat {"currency": ...} structures
                     info = payload.get('info', payload)
                     yf_currency = info.get('financialCurrency') or info.get('currency') or 'USD'
-                except:
+                except Exception:
                     yf_currency = 'USD'
 
             _yf_col = "yf_symbol" if _yf_is_composite else "ticker"
@@ -1013,10 +1037,11 @@ class NewsRepository:
             words = [w for w in clean_keyword.split() if w]
 
             if _use_av_ft:
-                # FULLTEXT path (Experiment): MATCH AGAINST in BOOLEAN MODE.
-                # Requires ft_av_title FULLTEXT index on title column.
-                # Each word prefixed with '+' for AND semantics.
-                ft_expr = ' '.join(f'+{w}' for w in words)
+                # FULLTEXT path: MATCH AGAINST in BOOLEAN MODE via ft_av_title.
+                # '+word*' = AND semantics with prefix match, so "revenue" also
+                # matches "revenues" — closest FT equivalent of the old
+                # client-side substring filter (newsroom full-range search).
+                ft_expr = ' '.join(f'+{w}*' for w in words)
                 inner_where += " AND MATCH(n.title) AGAINST(:av_ft_kw IN BOOLEAN MODE)"
                 params['av_ft_kw'] = ft_expr
             else:
@@ -1027,7 +1052,13 @@ class NewsRepository:
                     inner_where += f" AND n.title LIKE :{key}"
                     params[key] = f'%{word}%'
 
-            _hint = "" if _use_av_ft else "/*+ MAX_EXECUTION_TIME(60000) */ "
+            # Both paths get an execution cap: FULLTEXT for a token that's
+            # common across the range (rare, only if the newsroom density probe
+            # misroutes) materializes a huge doc list and can run ~140s over a
+            # wide range — the cap aborts that one slice at 15s so the parallel
+            # wave's other slices still return, instead of hanging the page.
+            _hint = ("/*+ MAX_EXECUTION_TIME(15000) */ " if _use_av_ft
+                     else "/*+ MAX_EXECUTION_TIME(60000) */ ")
             query = f"""
                 SELECT {_hint}n.id, n.title, n.summary, n.url,
                        n.source_name AS source, n.source_domain,
@@ -1637,6 +1668,227 @@ class NewsRepository:
             return []
 
     @staticmethod
+    @st.cache_data(ttl=1800, show_spinner=False)
+    def search_av_articles_by_title(
+        keyword: str,
+        date_from: date,
+        date_to: date,
+        limit: int = 1000,
+        sort_ascending: bool = False,
+    ) -> List[NewsArticle]:
+        """Newsroom keyword search — substring title match, newest-first
+        (oldest-first for ascending).
+
+        DEFERRED JOIN (two-step). STG 03-Jul EXPLAIN proof: the ORDER BY…LIMIT scan
+        uses the time index correctly (`type=range`), but selecting the big
+        `summary` + `ticker_sentiment_json` + `topics_json` columns for every row it
+        touches blew past the 6s cap → **0 rows for a common term** ('revenue' wide →
+        av=0). `SELECT id` for the same window returns 1000 in **528ms**. So step 1
+        fetches only the ids (fast over any range), step 2 hydrates just those ≤lim
+        rows by primary key. Identical rows, ~10× faster. No `USE INDEX` hint — that
+        hint (not the deferred join) caused the earlier backward-scan timeout.
+        """
+        import time as _t
+        from utils.server_logger import log_db_timing
+        words = [w for w in (keyword or "").strip().split() if w]
+        if not words or not date_from or not date_to:
+            return []
+        date_sort = "ASC" if sort_ascending else "DESC"
+        like_where = " AND ".join(f"title LIKE :w{i}" for i in range(len(words)))
+        params: dict = {f"w{i}": f"%{w}%" for i, w in enumerate(words)}
+        params.update({
+            "d1": date_from,
+            "d2": date_to + timedelta(days=1),
+            # overflow fetch — same 2x dedupe strategy as get_articles
+            "lim": limit * 2,
+        })
+        # Step 1: ids only — covered by the time index, ~0.9s warm over 14 years.
+        # Cap 10s (not 6s) so a COLD first-query id-scan still completes instead of
+        # returning empty (the 6s cap is exactly what produced 'revenue' → av=0).
+        id_sql = f"""
+            SELECT /*+ MAX_EXECUTION_TIME(10000) */ id
+            FROM coreiq_av_market_news_sentiment
+            WHERE time_published_utc >= :d1 AND time_published_utc < :d2
+              AND {like_where}
+            ORDER BY time_published_utc {date_sort}
+            LIMIT :lim
+        """
+        _t0 = _t.perf_counter()
+        _id_rows = db_manager.execute_query_readonly(id_sql, params)
+        _ids = [r["id"] for r in _id_rows]
+        if not _ids:
+            log_db_timing("SELECT_AV_TITLE_LIKE", "coreiq_av_market_news_sentiment",
+                          (_t.perf_counter() - _t0) * 1000, 0)
+            return []
+        # Step 2: hydrate the ≤lim matched ids by PK, then restore time order (IN(...)
+        # does not preserve order). Generous cap — the payload (large *_json columns
+        # for ~2k rows) is the real cost floor (~7s); a cap here must let it COMPLETE,
+        # never truncate to empty. The loading spinner covers the wait.
+        _in = ", ".join(f":i{k}" for k in range(len(_ids)))
+        _hyd_params = {f"i{k}": _v for k, _v in enumerate(_ids)}
+        hyd_sql = f"""
+            SELECT /*+ MAX_EXECUTION_TIME(20000) */
+                   id, title, summary, url,
+                   source_name AS source, source_domain,
+                   time_published_utc AS time_published,
+                   ticker_sentiment_json, topics_json
+            FROM coreiq_av_market_news_sentiment
+            WHERE id IN ({_in})
+        """
+        rows = db_manager.execute_query_readonly(hyd_sql, _hyd_params)
+        rows.sort(key=lambda r: (r["time_published"] or datetime.min),
+                  reverse=(date_sort == "DESC"))
+        log_db_timing(
+            "SELECT_AV_TITLE_LIKE", "coreiq_av_market_news_sentiment",
+            (_t.perf_counter() - _t0) * 1000, len(rows),
+        )
+        articles = [
+            NewsArticle(
+                id=row['id'],
+                title=row['title'] or '',
+                summary=row['summary'] or '',
+                url=row['url'] or '',
+                source=row['source'] or '',
+                source_domain=row['source_domain'] or '',
+                time_published=row['time_published'],
+                time_published_raw='',
+                overall_sentiment_score=0.0,
+                overall_sentiment_label='Neutral',
+                banner_image=None,
+                ticker_sentiment=NewsRepository._parse_ticker_sentiment(
+                    row['ticker_sentiment_json'] or '[]'
+                ),
+                topics=NewsRepository._parse_topics(row.get('topics_json') or ''),
+                category_within_source='',
+            )
+            for row in rows
+        ]
+        articles, _raw, _dupes, _merged = NewsRepository._dedupe_and_merge_articles(articles, limit)
+        return articles
+
+    @staticmethod
+    @st.cache_data(ttl=1800, show_spinner=False)
+    def search_yf_articles_by_title(
+        keyword: str,
+        date_from: date,
+        date_to: date,
+        limit: int = 2000,
+        sort_ascending: bool = False,
+    ) -> List[NewsArticle]:
+        """Newsroom full-range keyword search on YF — substring title match via
+        idx_yf_time_title_icp, deduped by news_id with tickers merged.
+
+        All rows of one news_id share a title, so any title match returns every
+        row of that story — Python groups them (first-seen order preserves the
+        date sort) and merges DISTINCT tickers, mirroring get_yf_articles'
+        GROUP_CONCAT dedup. Overflow ×4 covers per-ticker row duplication.
+        """
+        import time as _t
+        from utils.server_logger import log_db_timing
+        words = [w for w in (keyword or "").strip().split() if w]
+        if not words or not date_from or not date_to:
+            return []
+        date_sort = "ASC" if sort_ascending else "DESC"
+        like_where = " AND ".join(f"title LIKE :w{i}" for i in range(len(words)))
+        params: dict = {f"w{i}": f"%{w}%" for i, w in enumerate(words)}
+        params.update({
+            "d1": date_from,
+            "d2": date_to + timedelta(days=1),
+            # No ×4 overflow. STG proof: 'revenue' is SPARSE in YF over a wide range —
+            # the id-scan at LIMIT 8000 (×4) times out (>18s → 0 rows), and even a
+            # GROUP BY news_id at 2000 times out. LIMIT 2000 raw rows completes in
+            # ~7.7s; the news_id grouping happens in Python below. Fewer distinct
+            # stories than ×4, but a populated feed instead of an empty one (AV is the
+            # primary source anyway).
+            "lim": limit,
+        })
+        # Deferred join (two-step), same rationale as the AV method: selecting the
+        # payload columns for every row the ORDER BY…LIMIT scan touches blew past the
+        # 6s cap → 0 rows for common terms over wide ranges (STG: yf=0 for 'revenue').
+        # Step 1 fetches only ids (fast), step 2 hydrates them by PK. No index hint.
+        id_sql = f"""
+            SELECT /*+ MAX_EXECUTION_TIME(10000) */ id
+            FROM coreiq_yf_market_news_sentiment
+            WHERE published_at >= :d1 AND published_at < :d2
+              AND {like_where}
+            ORDER BY published_at {date_sort}
+            LIMIT :lim
+        """
+        _t0 = _t.perf_counter()
+        _id_rows = db_manager.execute_query_readonly(id_sql, params)
+        _ids = [r["id"] for r in _id_rows]
+        if not _ids:
+            log_db_timing("SELECT_YF_TITLE_LIKE", "coreiq_yf_market_news_sentiment",
+                          (_t.perf_counter() - _t0) * 1000, 0)
+            return []
+        _in = ", ".join(f":i{k}" for k in range(len(_ids)))
+        _hyd_params = {f"i{k}": _v for k, _v in enumerate(_ids)}
+        hyd_sql = f"""
+            SELECT /*+ MAX_EXECUTION_TIME(20000) */
+                   id, news_id, published_at, title, publisher, link,
+                   primary_topic_v1, primary_topic_v2, ticker
+            FROM coreiq_yf_market_news_sentiment
+            WHERE id IN ({_in})
+        """
+        rows = db_manager.execute_query_readonly(hyd_sql, _hyd_params)
+        rows.sort(key=lambda r: (r["published_at"] or datetime.min),
+                  reverse=(date_sort == "DESC"))
+        log_db_timing(
+            "SELECT_YF_TITLE_LIKE", "coreiq_yf_market_news_sentiment",
+            (_t.perf_counter() - _t0) * 1000, len(rows),
+        )
+        grouped: Dict[Any, dict] = {}
+        order: List[Any] = []
+        for row in rows:
+            nid = row.get('news_id') or row['id']
+            g = grouped.get(nid)
+            if g is None:
+                grouped[nid] = {"row": row, "tickers": []}
+                order.append(nid)
+                g = grouped[nid]
+            _tk = (row.get('ticker') or '').strip()
+            if _tk and _tk not in g["tickers"]:
+                g["tickers"].append(_tk)
+        articles: List[NewsArticle] = []
+        for nid in order[:limit]:
+            g = grouped[nid]
+            row = g["row"]
+            title_val = row.get('title') or ''
+            if not title_val:
+                continue
+            ts_list = [
+                TickerSentiment(
+                    ticker=_tk, relevance_score='1.0', ticker_sentiment_label='',
+                    ticker_sentiment_score='0.0', display_name='',
+                )
+                for _tk in g["tickers"]
+            ]
+            _yf_topics = []
+            _t1v = row.get('primary_topic_v1') or ''
+            _t2v = row.get('primary_topic_v2') or ''
+            if _t1v:
+                _yf_topics.append({'topic': _t1v})
+            if _t2v and _t2v != _t1v:
+                _yf_topics.append({'topic': _t2v})
+            articles.append(NewsArticle(
+                id=row['id'],
+                title=title_val,
+                summary=title_val,
+                url=row.get('link') or '',
+                source=row.get('publisher') or '',
+                source_domain='',
+                time_published=row.get('published_at'),
+                time_published_raw='',
+                overall_sentiment_score=0.0,
+                overall_sentiment_label='Neutral',
+                banner_image=None,
+                ticker_sentiment=ts_list,
+                topics=_yf_topics,
+                category_within_source='',
+            ))
+        return articles
+
+    @staticmethod
     @st.cache_data(ttl=43200, show_spinner=False)
     @_log_query_time
     def get_yf_articles(
@@ -1660,7 +1912,10 @@ class NewsRepository:
         fetches detail columns via 2K PK lookups. No Python dedup needed.
 
         - Sector filtering: handled by caller using cached companies_map
-        - Keyword filtering: handled by caller on cached articles
+        - Keyword: when provided (>=3 chars), server-side FULLTEXT title search
+          via ft_yf_title (BOOLEAN MODE, '+word*' prefix terms) — used by the
+          newsroom full-date-range search. Shorter keywords return [] (below
+          innodb_ft_min_token_size).
         - Company ticker filtering: removed (company dropdown disabled)
         """
         from utils.server_logger import log_timing, log_db_timing, log_info, log_warning
@@ -1735,10 +1990,45 @@ class NewsRepository:
             """
             return db_manager.execute_query_readonly(_hq, _hp)
 
+        _clean_yf_kw = (keyword or "").strip()
+        if _clean_yf_kw and len(_clean_yf_kw) < 3:
+            return []
+
         try:
             _t_q = time.perf_counter()
 
-            if _can_yf_parallel:
+            if _clean_yf_kw:
+                # ── KEYWORD PATH: FULLTEXT title search over the date range ──
+                # Same grouped news_id dedup as below, filtered by ft_yf_title.
+                _yf_ft = ' '.join(f'+{w}*' for w in _clean_yf_kw.split() if w)
+                # MAX_EXECUTION_TIME cap: bound a misrouted common-token slice
+                # (see the AV get_articles FT path for the rationale).
+                kw_query = f"""
+                    SELECT /*+ MAX_EXECUTION_TIME(15000) */
+                           y.id, d.news_id, d.published_at, d.tickers,
+                           y.title, y.publisher, y.link,
+                           y.primary_topic_v1, y.primary_topic_v2
+                    FROM coreiq_yf_market_news_sentiment y
+                    INNER JOIN (
+                        SELECT news_id,
+                               MAX(published_at) AS published_at,
+                               MIN(id) AS min_id,
+                               GROUP_CONCAT(DISTINCT ticker SEPARATOR ';;') AS tickers
+                        FROM coreiq_yf_market_news_sentiment
+                        WHERE MATCH(title) AGAINST(:yf_ft_kw IN BOOLEAN MODE)
+                          AND {yf_where}
+                        GROUP BY news_id
+                        ORDER BY MAX(published_at) {date_sort}
+                        LIMIT :limit OFFSET :offset
+                    ) d ON y.id = d.min_id
+                    ORDER BY d.published_at {date_sort}
+                """
+                results = db_manager.execute_query_readonly(
+                    kw_query, {**params, 'yf_ft_kw': _yf_ft},
+                )
+                _q_ms = (time.perf_counter() - _t_q) * 1000
+                log_db_timing("SELECT_YF_KEYWORD", "coreiq_yf_market_news_sentiment", _q_ms, len(results))
+            elif _can_yf_parallel:
                 from concurrent.futures import ThreadPoolExecutor as _YFPool
                 _mid = date_from + (date_to - date_from) / 2
                 _mid_excl = _mid + timedelta(days=1)
@@ -1773,8 +2063,9 @@ class NewsRepository:
                 """
                 results = db_manager.execute_query_readonly(query, params)
 
-            _q_ms = (time.perf_counter() - _t_q) * 1000
-            log_db_timing("SELECT_YF_COMBINED", "coreiq_yf_market_news_sentiment", _q_ms, len(results))
+            if not _clean_yf_kw:
+                _q_ms = (time.perf_counter() - _t_q) * 1000
+                log_db_timing("SELECT_YF_COMBINED", "coreiq_yf_market_news_sentiment", _q_ms, len(results))
 
         except Exception as exc:
             _db_ms = (time.perf_counter() - _t_db) * 1000
@@ -2060,28 +2351,49 @@ class EarningsCallRepository:
         """Get only companies that have earnings call transcripts (cached 10 min).
 
         PERFORMANCE OPTIMIZATION:
-        1. Get distinct tickers from transcripts table (fast, no JOIN)
+        1. Distinct tickers via disk materialization (avoids ~23s cold DISTINCT on restart)
         2. Use CACHED companies map for name lookup (no DB query!)
 
         Returns:
             List of dicts with 'ticker' and 'name' keys.
         """
+        import pandas as pd
+        from utils.materialize import materialized_or_build
         from utils.server_logger import log_db_timing
-        import time
         total_start = time.perf_counter()
 
-        # Step 1: Get tickers from transcripts table (fast, indexed)
+        def _build_earnings_tickers_df() -> pd.DataFrame:
+            query = """
+                SELECT DISTINCT ticker
+                FROM coreiq_av_earnings_call_transcripts
+                WHERE has_transcript = 1
+                ORDER BY ticker
+            """
+            _t0 = time.perf_counter()
+            results = db_manager.execute_query_readonly(query)
+            tickers = [row['ticker'] for row in results if row['ticker']]
+            log_db_timing(
+                "get_companies_with_earnings.distinct_tickers",
+                "coreiq_av_earnings_call_transcripts",
+                (time.perf_counter() - _t0) * 1000,
+                rows=len(tickers),
+            )
+            return pd.DataFrame({'ticker': tickers})
+
+        # Step 1: tickers from disk materialization or live DISTINCT
         step_start = time.perf_counter()
-        query = """
-            SELECT DISTINCT ticker
-            FROM coreiq_av_earnings_call_transcripts
-            WHERE has_transcript = 1
-            ORDER BY ticker
-        """
-        results = db_manager.execute_query_readonly(query)
-        tickers = [row['ticker'] for row in results if row['ticker']]
+        _sources = [{"table": "coreiq_av_earnings_call_transcripts", "signal": None}]
+        tickers_df = materialized_or_build(
+            "earnings_transcript_tickers", _build_earnings_tickers_df, _sources
+        )
+        tickers = tickers_df['ticker'].tolist()
         step1_ms = (time.perf_counter() - step_start) * 1000
-        log_db_timing("get_companies_with_earnings.distinct_tickers", "coreiq_av_earnings_call_transcripts", step1_ms, rows=len(tickers))
+        log_db_timing(
+            "get_companies_with_earnings.tickers_resolved",
+            "coreiq_av_earnings_call_transcripts",
+            step1_ms,
+            rows=len(tickers),
+        )
 
         # Step 2: Use CACHED companies map for name lookup (FAST!)
         step_start = time.perf_counter()
@@ -2090,9 +2402,7 @@ class EarningsCallRepository:
         log_db_timing("get_companies_with_earnings.companies_map", "coreiq_companies", step2_ms, rows=len(companies_map))
 
         # Step 3: Build company list
-        step_start = time.perf_counter()
         companies = []
-
         for ticker in tickers:
             company = companies_map.get(ticker)
             if company:
@@ -2102,12 +2412,9 @@ class EarningsCallRepository:
                     'name': _format_company_name(display_name)
                 })
             else:
-                # Fallback: ticker not in companies table
                 companies.append({'ticker': ticker, 'name': ticker})
 
-        # Sort by name
         companies.sort(key=lambda x: x['name'].lower())
-        step3_ms = (time.perf_counter() - step_start) * 1000
 
         total_ms = (time.perf_counter() - total_start) * 1000
         log_db_timing("get_companies_with_earnings.TOTAL", "coreiq_av_earnings_call_transcripts", total_ms, rows=len(companies))
@@ -2692,10 +2999,14 @@ class EarningsCallRepository:
         ordered_ids = [int(r["id"]) for r in metadata_rows]
 
         # PASS 2 — parallel: fetch the keyword window per id BY PRIMARY KEY.
-        # PK batches parallelise across pooled connections (~26s for ~8.5k rows),
-        # far faster than reading the LONGTEXT inside the FULLTEXT scan (~190s).
-        # LOCATE has no LOWER() (column collation is *_ci). Window kept tight
-        # (before/window) to bound transfer, which dominates per-row cost.
+        # PK batches parallelise across pooled connections, far faster than
+        # reading the LONGTEXT inside the FULLTEXT scan. STG 03-Jul: this pass is
+        # both latency- AND transfer-bound (cold off-page LONGTEXT reads). The
+        # window is kept at 8000 to GUARANTEE no paragraph truncation (a 6000
+        # window trimmed ~some >5900-char speaker turns → data loss); the safe
+        # speedup here is raising parallelism (10→14, pool is 15). A smaller
+        # window would cut ~40% more but risks truncating long paragraphs.
+        # LOCATE has no LOWER() (column collation is *_ci).
         _BEFORE, _WINDOW = 3000, 8000
 
         def _fetch_window_batch(batch_ids: List[int]) -> List[Dict]:
@@ -2725,7 +3036,7 @@ class EarningsCallRepository:
                 window_rows.extend(_fetch_window_batch(b))
         else:
             from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=min(10, len(batches))) as _pool:
+            with ThreadPoolExecutor(max_workers=min(14, len(batches))) as _pool:
                 for out in _pool.map(_fetch_window_batch, batches):
                     window_rows.extend(out)
 
@@ -2761,19 +3072,47 @@ class EarningsCallRepository:
         Uses company_name directly from coreiq_filing_metrics_v5 (ticker+company_name is
         the unique composite — ticker alone is NOT unique across sources).
         """
-        from utils.server_logger import log_db_timing
+        import pandas as pd
         import time as _t
+        from utils.materialize import materialized_or_build
+        from utils.server_logger import log_db_timing
         _start = _t.perf_counter()
 
-        query = """
-            SELECT DISTINCT ticker, company_name FROM coreiq_filing_metrics_v5
-            WHERE doc_type IN ('transcript-Q1','transcript-Q2','transcript-Q3','transcript-Q4')
-            ORDER BY company_name
-        """
-        results = db_manager.execute_query_readonly(query)
+        def _build_non_sec_df() -> pd.DataFrame:
+            query = """
+                SELECT DISTINCT ticker, company_name FROM coreiq_filing_metrics_v5
+                WHERE doc_type IN ('transcript-Q1','transcript-Q2','transcript-Q3','transcript-Q4')
+                ORDER BY company_name
+            """
+            _t0 = _t.perf_counter()
+            results = db_manager.execute_query_readonly(query)
+            log_db_timing(
+                "get_non_sec_transcript_companies.query",
+                "coreiq_filing_metrics_v5",
+                (_t.perf_counter() - _t0) * 1000,
+                rows=len(results),
+            )
+            rows = [
+                {'ticker': r.get('ticker'), 'company_name': r.get('company_name') or r.get('ticker')}
+                for r in results if r.get('ticker')
+            ]
+            return pd.DataFrame(rows)
+
+        # Scope the freshness check to the transcript subset (106 rows, ~0.3s)
+        # instead of COUNT(*) over the whole 12.5M-row table (65s cold on STG,
+        # and it changed every ingest so the disk cache never hit → the 63s
+        # blocker on earnings_calls/home/logs landing).
+        _sources = [{
+            "table": "coreiq_filing_metrics_v5",
+            "where": ("doc_type IN ('transcript-Q1','transcript-Q2',"
+                      "'transcript-Q3','transcript-Q4')"),
+            "signal": None,
+        }]
+        df = materialized_or_build("non_sec_transcript_companies", _build_non_sec_df, _sources)
+
         companies = []
         _seen_tickers = set()
-        for row in results:
+        for _, row in df.iterrows():
             ticker = row.get('ticker')
             cname = row.get('company_name') or ticker
             if ticker and ticker not in _seen_tickers:
@@ -2917,7 +3256,7 @@ class BalanceSheetRepository:
                     # Support both nested {"info": {...}} and flat {"currency": ...} structures
                     info = payload.get('info', payload)
                     yf_currency = info.get('financialCurrency') or info.get('currency') or 'USD'
-                except:
+                except Exception:
                     yf_currency = 'USD'
 
             _yf_col = "yf_symbol" if _yf_is_composite else "ticker"
@@ -3058,7 +3397,7 @@ class BalanceSheetRepository:
                 if row.get('raw_json'):
                     try:
                         raw_json_data = json.loads(row['raw_json'])
-                    except:
+                    except Exception:
                         pass
 
                 # Build raw_json dict from columns (camelCase keys for consistency)
@@ -3341,7 +3680,7 @@ class CashFlowRepository:
                     # Support both nested {"info": {...}} and flat {"currency": ...} structures
                     info = payload.get('info', payload)
                     yf_currency = info.get('financialCurrency') or info.get('currency') or 'USD'
-                except:
+                except Exception:
                     yf_currency = 'USD'
 
             _yf_col = "yf_symbol" if _yf_is_composite else "ticker"
@@ -3727,7 +4066,7 @@ class KeyStatsRepository:
                     # Support both nested {"info": {...}} and flat {"currency": ...} structures
                     info = payload.get('info', payload)
                     yf_currency = info.get('financialCurrency') or info.get('currency') or 'USD'
-                except:
+                except Exception:
                     yf_currency = 'USD'
 
             query = f"""
@@ -4866,7 +5205,7 @@ class ModelForecastsRepository:
             params["end_fy"] = end_year
 
         rows = db_manager.execute_query_readonly(f"""
-            SELECT fiscal_year, model_key, value_millions, is_best_model, is_ensemble, mape, last_actual_date
+            SELECT fiscal_year, forecast_date, model_key, value_millions, is_best_model, is_ensemble, mape, last_actual_date
             FROM coreiq_model_forecasts
             WHERE ticker = :ticker AND metric = 'total_revenue' {fy_filter}
             ORDER BY fiscal_year ASC, model_key ASC
@@ -4875,18 +5214,35 @@ class ModelForecastsRepository:
         if not rows:
             return {"periods": [], "sections": [], "reported_currency": "USD", "last_actual_date": None, "historical_rows": []}
 
-        fiscal_years = sorted({int(r["fiscal_year"]) for r in rows})
         by_fy: Dict[int, Dict[str, Any]] = {}
+        fdate_by_fy: Dict[int, Any] = {}
         last_actual_date = None
         for r in rows:
             fy = int(r["fiscal_year"])
-            mk = r["model_key"]
-            by_fy.setdefault(fy, {})[mk] = r
-            if r.get("last_actual_date") and last_actual_date is None:
-                last_actual_date = r["last_actual_date"]
-                if hasattr(last_actual_date, "date"): last_actual_date = last_actual_date.date()
+            by_fy.setdefault(fy, {})[r["model_key"]] = r
+            if fy not in fdate_by_fy and r.get("forecast_date"):
+                _fd = r["forecast_date"]
+                fdate_by_fy[fy] = _fd.date() if hasattr(_fd, "date") else _fd
+            _lad = r.get("last_actual_date")
+            if _lad:
+                _lad = _lad.date() if hasattr(_lad, "date") else _lad
+                # MAX, never the first row's — a lingering stale row carries an
+                # OLDER last_actual_date and would wrongly caption "Last actual".
+                if last_actual_date is None or _lad > last_actual_date:
+                    last_actual_date = _lad
 
-        periods = [{"date": date(fy, 1, 1), "label": str(fy), "fiscal_year": fy} for fy in fiscal_years]
+        def _fy_date(fy):
+            return fdate_by_fy.get(fy) or date(fy, 12, 31)
+
+        # Keep only fiscal years whose real forecast_date is AFTER the last actual
+        # (drops phantom / aged rows). Label each column by the forecast_date's YEAR —
+        # the authoritative period year — so a fiscal_year mislabel in storage (some
+        # companies store it off by one) never surfaces a wrong year in the UI.
+        fiscal_years = [fy for fy in sorted(by_fy)
+                        if last_actual_date is None or _fy_date(fy) > last_actual_date]
+
+        periods = [{"date": _fy_date(fy), "label": str(_fy_date(fy).year), "fiscal_year": fy}
+                   for fy in fiscal_years]
 
         available_models = [mk for mk in ModelForecastsRepository._MODEL_ORDER
                             if any(by_fy.get(fy, {}).get(mk) for fy in fiscal_years)]
@@ -5004,7 +5360,7 @@ class ModelForecastsRepository:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
             """
-            SELECT fiscal_year, fiscal_quarter, model_key, value_millions,
+            SELECT fiscal_year, fiscal_quarter, forecast_date, model_key, value_millions,
                    is_best_model, is_ensemble, mape, last_actual_date
             FROM coreiq_model_forecasts_quarterly
             WHERE ticker = :ticker AND metric = 'total_revenue'
@@ -5015,21 +5371,39 @@ class ModelForecastsRepository:
             return {"periods": [], "sections": [], "reported_currency": "USD",
                     "last_actual_date": None, "historical_rows": []}
 
-        all_periods = sorted({(int(r["fiscal_year"]), int(r["fiscal_quarter"])) for r in rows})[:max_quarters]
-        period_set = set(all_periods)
-        by_period: Dict[tuple, Dict[str, Any]] = {}
+        # First pass over ALL rows: real stored quarter-end date per period, and the
+        # MAX last_actual (never the first row's — a lingering stale row carries an
+        # OLDER last_actual and would mis-anchor the window / caption).
+        fdate_by_period: Dict[tuple, Any] = {}
         last_actual_date = None
         for r in rows:
             key = (int(r["fiscal_year"]), int(r["fiscal_quarter"]))
-            if key not in period_set:
-                continue
-            by_period.setdefault(key, {})[r["model_key"]] = r
-            if r.get("last_actual_date") and last_actual_date is None:
-                last_actual_date = r["last_actual_date"]
-                if hasattr(last_actual_date, "date"):
-                    last_actual_date = last_actual_date.date()
+            if key not in fdate_by_period and r.get("forecast_date"):
+                _fd = r["forecast_date"]
+                fdate_by_period[key] = _fd.date() if hasattr(_fd, "date") else _fd
+            _lad = r.get("last_actual_date")
+            if _lad:
+                _lad = _lad.date() if hasattr(_lad, "date") else _lad
+                if last_actual_date is None or _lad > last_actual_date:
+                    last_actual_date = _lad
 
-        periods = [{"date": date(y, *ModelForecastsRepository._QUARTER_END.get(q, (12, 31))),
+        def _period_date(y, q):
+            fd = fdate_by_period.get((y, q))
+            return fd if fd is not None else date(y, *ModelForecastsRepository._QUARTER_END.get(q, (12, 31)))
+
+        # Candidate periods = only those strictly AFTER the last actual (drop aged /
+        # lingering rows), ordered by real quarter-end date, then the nearest N.
+        _cands = {(int(r["fiscal_year"]), int(r["fiscal_quarter"])) for r in rows}
+        _cands = [k for k in _cands if last_actual_date is None or _period_date(*k) > last_actual_date]
+        all_periods = sorted(_cands, key=lambda k: _period_date(*k))[:max_quarters]
+        period_set = set(all_periods)
+        by_period: Dict[tuple, Dict[str, Any]] = {}
+        for r in rows:
+            key = (int(r["fiscal_year"]), int(r["fiscal_quarter"]))
+            if key in period_set:
+                by_period.setdefault(key, {})[r["model_key"]] = r
+
+        periods = [{"date": _period_date(y, q),
                     "label": f"Q{q} {y}", "fiscal_year": y, "fiscal_quarter": q}
                    for (y, q) in all_periods]
 
@@ -5810,36 +6184,32 @@ class StockQuoteRepository:
                     except (ValueError, TypeError, json.JSONDecodeError):
                         pass
         else:
-            # SEC: Use coreiq_av_time_series_daily
+            # SEC: Use coreiq_av_time_series_daily.
+            # Read the dedicated close/volume COLUMNS instead of the raw_json blob:
+            # (ticker, day_date, close, volume) is a covering index, so this is a
+            # pure index scan — no table/blob access, no ~1.2k json.loads per chart.
+            # Verified on STG: close/volume columns equal the raw_json values exactly
+            # (0 drift) and no in-range row has a NULL close, so nothing is dropped.
             table = "coreiq_av_time_series_daily"
-            columns = "day_date, close, raw_json"
+            columns = "day_date, close, volume"
             query = """
-                SELECT day_date, close, raw_json
+                SELECT day_date, close, volume
                 FROM coreiq_av_time_series_daily
                 WHERE ticker = :ticker
                   AND day_date >= DATE_SUB(CURDATE(), INTERVAL :days DAY)
-                  AND raw_json IS NOT NULL
+                  AND close IS NOT NULL
                 ORDER BY day_date ASC
             """
             results = db_manager.execute_query_readonly(query, {"ticker": ticker, "days": days})
             for row in results:
-                close_val = None
-                volume_val = None
-                # Prefer the dedicated column for close; fall back to raw_json
-                if row.get("close") is not None:
-                    try:
-                        close_val = float(row["close"])
-                    except (ValueError, TypeError):
-                        pass
-                # Always parse raw_json for volume (dedicated volume column may not exist)
-                if row.get("raw_json"):
-                    try:
-                        bar = json.loads(row["raw_json"]).get("bar", {})
-                        if close_val is None:
-                            close_val = float(bar.get("4. close", 0)) or None
-                        volume_val = int(float(bar.get("5. volume", 0))) or None
-                    except (ValueError, TypeError, json.JSONDecodeError):
-                        pass
+                try:
+                    close_val = float(row["close"]) if row.get("close") is not None else None
+                except (ValueError, TypeError):
+                    close_val = None
+                try:
+                    volume_val = int(row["volume"]) if row.get("volume") is not None else None
+                except (ValueError, TypeError):
+                    volume_val = None
                 if close_val is not None:
                     day = row["day_date"]
                     history.append({
@@ -7226,8 +7596,8 @@ class FilingMetricRepository:
                 )
             return llm_results, True
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"[LLM fallback] error: {e}")
+            log_structured_error(e, page="repository", component="get_filing_metrics_llm",
+                                 operation="LLM_FALLBACK")
             return [], False
 
 # ---------------------------------------------------------------------------
@@ -7299,7 +7669,7 @@ class AVFinancialsEarningsRepository:
                     LOWER(COALESCE(report_type, '')) IN ('quarterly', 'q')
                     OR COALESCE(report_type, '') = ''
                   )
-            ORDER BY ingested_at DESC
+            ORDER BY fetched_at_utc DESC
             LIMIT 1
             """,
             params,
@@ -7317,19 +7687,19 @@ class AVFinancialsEarningsRepository:
 
         blob_rows = db_manager.execute_query_readonly(
             """
-            SELECT payload_json
+            SELECT raw_json
             FROM coreiq_av_financials_earnings
             WHERE ticker = :ticker
-              AND payload_json IS NOT NULL
-              AND payload_json != ''
-            ORDER BY ingested_at DESC
+              AND raw_json IS NOT NULL
+              AND raw_json != ''
+            ORDER BY fetched_at_utc DESC
             LIMIT 1
             """,
             {"ticker": ticker},
         )
         if not blob_rows:
             return None
-        raw = blob_rows[0].get("payload_json")
+        raw = blob_rows[0].get("raw_json")
         if not raw:
             return None
         try:
@@ -7439,7 +7809,9 @@ class EarningsCalendarRepository:
         """
         rows: List[Dict[str, Any]] = []
         ir_table_errors: List[Tuple[str, Exception]] = []
-        for table_name in ("coreiq_ir_websites", "company_ir_websites"):
+        # Only coreiq_ir_websites exists (verified on STG 03-Jul); the old
+        # company_ir_websites fallback threw error 1146 on every lookup.
+        for table_name in ("coreiq_ir_websites",):
             try:
                 table_rows = db_manager.execute_query_readonly(
                     f"""
@@ -7910,6 +8282,47 @@ class EarningsCalendarRepository:
         return _final
 
     @staticmethod
+    @st.cache_data(ttl=300, show_spinner=False)
+    def get_calendar_events_full() -> List[Dict[str, Any]]:
+        """Full deduped calendar set — ALL companies, ALL dates — disk-materialized.
+
+        WHY: the dedup UNION with ROW_NUMBER() OVER(...) costs ~3.6s cold on STG
+        regardless of a date window (a 1-month window is still ~0.7s because the
+        window function must rank the whole partition set before the date filter
+        narrows). Running it on every page load AND every month/year navigation is
+        the calendar's dominant latency.
+
+        FIX: materialize the full result to disk (same pattern as
+        get_ma_completion_events). The freshness signature is just the row counts
+        of the two source calendar tables — both small and indexed, so the check
+        is instant and only moves when new earnings rows are ingested. The page
+        counts THIS full set for the "N events · M companies" badge (so it matches
+        production exactly — 16,052 / 330) and windows it in Python (~ms) for the
+        FullCalendar render, so we never ship 16k events to the browser DOM.
+        """
+        import pandas as _pd
+        from utils.materialize import materialized_or_build
+
+        # Materialize a DataFrame (compact fingerprint: rows/cols/hash) rather than
+        # the raw list (whose fingerprint recurses into all ~16k items → bloated
+        # meta). dtype=object is DELIBERATE: it preserves the exact Python values
+        # get_calendar_events produced — None stays None (no NaN), ints stay ints
+        # (no int→float coercion) — so `to_dict` below cannot re-introduce the
+        # NaN/float trap that once crashed the M&A overlay. Zero number/type drift.
+        def _build() -> "_pd.DataFrame":
+            _rows = EarningsCalendarRepository.get_calendar_events(tickers=None)
+            return _pd.DataFrame(_rows, dtype=object) if _rows else _pd.DataFrame()
+
+        _sources = [
+            {"table": "coreiq_nasdaq_earnings_calendar", "signal": None},
+            {"table": "coreiq_yf_earnings_calendar", "signal": None},
+        ]
+        _df = materialized_or_build("calendar_events_full", _build, _sources)
+        if _df is None or _df.empty:
+            return []
+        return _df.to_dict("records")
+
+    @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     def _get_fiscal_year_end_map() -> Dict[str, str]:
         """
@@ -7973,6 +8386,70 @@ class EarningsCalendarRepository:
                                  context="fiscal year end map fetch failed — falling back to calendar quarters")
             return {}
 
+    _MA_OVERRIDES_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
+    _MA_RUNTIME_CACHE: Tuple[float, Dict[str, Dict[str, Any]]] = (-1.0, {})
+
+    @staticmethod
+    def _load_ma_overrides() -> Dict[str, Dict[str, Any]]:
+        """Curated M&A field corrections, keyed by event_id (as str).
+
+        The upstream nightly ETL populated ma_acquirer/ma_target with regex
+        captures of 8-K boilerplate ('reference', sentence fragments). DB
+        repair is the data team's job — until they apply it, two read-only
+        overlays correct what the calendar shows:
+
+          1. repo overlay app/data/ma_event_overrides.json — LLM-verified
+             re-extraction of the 262 rows known at build time (see
+             scripts/enrich_ma_events_v2.py); loaded once per process;
+          2. runtime overlay (MDP cache dir) — written by the background
+             auto-enricher (utils/ma_overrides_auto.py) for rows the nightly
+             ETL inserts later; reloaded on mtime change.
+
+        Repo entries win over runtime entries. A JSON field explicitly set to
+        null means "verified unknown — clear the DB garbage"; an absent
+        event_id means "keep the DB value".
+        """
+        cls = EarningsCalendarRepository
+        if cls._MA_OVERRIDES_CACHE is None:
+            try:
+                import json as _json
+                _path = os.path.join(os.path.dirname(__file__), "ma_event_overrides.json")
+                with open(_path, "r", encoding="utf-8") as _f:
+                    _raw = _json.load(_f)
+                cls._MA_OVERRIDES_CACHE = {str(k): v for k, v in _raw.get("events", {}).items()}
+            except FileNotFoundError:
+                cls._MA_OVERRIDES_CACHE = {}
+            except Exception as exc:
+                log_structured_error(
+                    exc, page="repository", component="EarningsCalendarRepository",
+                    operation="_load_ma_overrides", context="ma_event_overrides.json load failed",
+                )
+                cls._MA_OVERRIDES_CACHE = {}
+
+        try:
+            import json as _json
+            from utils.ma_overrides_auto import runtime_overlay_path
+            _rt_path = runtime_overlay_path()
+            if _rt_path and os.path.exists(_rt_path):
+                _mtime = os.path.getmtime(_rt_path)
+                if _mtime != cls._MA_RUNTIME_CACHE[0]:
+                    with open(_rt_path, "r", encoding="utf-8") as _f:
+                        _rt_raw = _json.load(_f)
+                    cls._MA_RUNTIME_CACHE = (
+                        _mtime,
+                        {str(k): v for k, v in _rt_raw.get("events", {}).items()},
+                    )
+        except Exception as exc:
+            log_structured_error(
+                exc, page="repository", component="EarningsCalendarRepository",
+                operation="_load_ma_overrides", context="runtime overlay load failed",
+            )
+
+        _runtime = cls._MA_RUNTIME_CACHE[1]
+        if not _runtime:
+            return cls._MA_OVERRIDES_CACHE
+        return {**_runtime, **cls._MA_OVERRIDES_CACHE}
+
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     @_log_query_time
@@ -8024,8 +8501,42 @@ class EarningsCalendarRepository:
               AND e.event_date IS NOT NULL
             ORDER BY e.event_date DESC, e.event_id DESC
         """
+        # Disk-materialize: the M&A query scans ~18.7k 'M&A Activity' rows +
+        # filesort + join = ~12.5s cold on STG (03-Jul), and the 263-row result
+        # is historical (changes only when a new completion is ingested). The
+        # scoped freshness check (COUNT of 'M&A Closing' rows) is instant and
+        # only moves when a completion is added → disk cache actually hits.
         try:
-            rows = db_manager.execute_query_readonly_raising(query, {})
+            import pandas as _pd
+            from utils.materialize import materialized_or_build
+
+            def _build_ma_df() -> "_pd.DataFrame":
+                _rows = db_manager.execute_query_readonly_raising(query, {})
+                return _pd.DataFrame(_rows) if _rows else _pd.DataFrame()
+
+            _ma_sources = [{
+                "table": "coreiq_company_events",
+                "where": ("event_category = 'M&A Activity' "
+                          "AND event_subtype = 'M&A Closing' AND ma_is_closed = 1"),
+                # MAX(updated_at) in the signature: the M&A enrichment repairs
+                # acquirer/target IN PLACE (row count unchanged), so a
+                # count-only signature would serve stale garbage forever.
+                "signal": "MAX(updated_at)",
+            }]
+            _df = materialized_or_build("ma_completion_events", _build_ma_df, _ma_sources)
+            rows = _df.to_dict("records") if _df is not None and not _df.empty else []
+            # to_dict("records") turns NULL / NaT DB cells into float('nan'). Downstream
+            # (_ma_to_fullcalendar `.title()`, streamlit_calendar JSON) expects None or a
+            # string, so a NaN float crashed the M&A overlay (AttributeError: 'float' has
+            # no attribute 'title') → all 263 events dropped. Normalise NaN/NaT → None here
+            # (root) so every consumer is safe.
+            for _row in rows:
+                for _k, _v in list(_row.items()):
+                    try:
+                        if _v is not None and _pd.isna(_v):
+                            _row[_k] = None
+                    except (TypeError, ValueError):
+                        pass
         except Exception as exc:
             log_structured_error(
                 exc, page="repository", component="EarningsCalendarRepository",
@@ -8034,27 +8545,266 @@ class EarningsCalendarRepository:
             )
             return []
 
+        overrides = EarningsCalendarRepository._load_ma_overrides()
         events: List[Dict[str, Any]] = []
         for r in rows:
             t = r.get("ticker")
             if not t:
                 continue
+            ov = overrides.get(str(r.get("id")), {})
             events.append({
                 "id":            r.get("id"),
                 "ticker":        t,
                 "company_name":  r.get("company_name") or t,
                 "earnings_date": r.get("event_date"),   # reuse key so shared filters work
-                "ma_acquirer":   r.get("ma_acquirer"),
-                "ma_target":     r.get("ma_target"),
-                "ma_deal_type":  r.get("ma_deal_type"),
-                "ma_value_usd_m": r.get("ma_transaction_value_usd_m"),
-                "ma_close_date": r.get("ma_close_date"),
-                "ma_announce_date": r.get("ma_announce_date"),
+                # acquirer/target: an override key present (even null) REPLACES the
+                # DB value — null means "verified unknown", clearing ETL garbage.
+                "ma_acquirer":   ov["acquirer"] if "acquirer" in ov else r.get("ma_acquirer"),
+                "ma_target":     ov["target"] if "target" in ov else r.get("ma_target"),
+                "ma_deal_type":  ov.get("deal_type") or r.get("ma_deal_type"),
+                "ma_value_usd_m": ov.get("transaction_value_usd_m")
+                                  if ov.get("transaction_value_usd_m") is not None
+                                  else r.get("ma_transaction_value_usd_m"),
+                "ma_close_date": ov.get("close_date") or r.get("ma_close_date"),
+                "ma_announce_date": ov.get("announce_date") or r.get("ma_announce_date"),
                 "source":        r.get("source"),
                 "source_ref":    r.get("source_ref"),
                 "headline":      r.get("headline"),
             })
         return events
+
+    @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
+    @_log_query_time
+    def get_ipo_events() -> List[Dict[str, Any]]:
+        """Return IPO (first-listing) dates for companies on the calendar (additive).
+
+        Source: coreiq_av_companies_all.ipo_date (Alpha Vantage LISTING_STATUS) —
+        100% populated, already used elsewhere for the sector master list. We JOIN
+        to the calendar's ticker universe (NASDAQ + YF earnings tables) so we only
+        emit one IPO marker per company that actually appears on the calendar
+        (~303 of 330; the ~27 gaps are foreign/ADR names AV's US feed omits).
+
+        Earnings date-derivation logic is untouched — this is a separate feed
+        merged in at render time, exactly like the M&A feed.
+
+        Returns list of dicts with keys:
+            id, ticker, company_name, earnings_date (the IPO date),
+            ipo_date, exchange, listing_status
+        """
+        # PRIMARY source — Alpha Vantage LISTING_STATUS (exact IPO dates, US feed).
+        av_query = """
+            SELECT
+                a.symbol                                   AS ticker,
+                COALESCE(c.name_coresight, a.company_name, a.symbol) AS company_name,
+                a.ipo_date                                 AS ipo_date,
+                a.exchange                                 AS exchange,
+                a.listing_status                           AS listing_status
+            FROM coreiq_av_companies_all a
+            JOIN (
+                SELECT DISTINCT ticker FROM coreiq_nasdaq_earnings_calendar
+                    WHERE ticker IS NOT NULL AND fiscal_quarter_ending IS NOT NULL
+                UNION
+                SELECT DISTINCT ticker FROM coreiq_yf_earnings_calendar
+                    WHERE ticker IS NOT NULL
+            ) cal ON cal.ticker = a.symbol
+            LEFT JOIN coreiq_companies c ON c.ticker = a.symbol
+            WHERE a.ipo_date IS NOT NULL
+        """
+
+        # Disk-materialize (same pattern as get_ma_completion_events): the JOIN of
+        # coreiq_av_companies_all (~22k) against the calendar ticker universe costs
+        # several seconds cold, and the ~311-row result is essentially static
+        # (a company IPOs once). Freshness = the calendar tables' scoped counts, so
+        # the cache only rebuilds when the calendar company set changes; dtype=object
+        # preserves date objects exactly (no NaN/float drift for the windower).
+        try:
+            import pandas as _pd
+            import json as _json
+            from datetime import datetime as _dt, timezone as _tz
+            from utils.materialize import materialized_or_build
+
+            def _build_ipo_df() -> "_pd.DataFrame":
+                _rows = db_manager.execute_query_readonly_raising(av_query, {})
+                _events = [
+                    {
+                        "id":             f"{r['ticker']}_{r.get('ipo_date')}",
+                        "ticker":         r["ticker"],
+                        "company_name":   r.get("company_name") or r["ticker"],
+                        "earnings_date":  r.get("ipo_date"),   # reuse key for shared filters
+                        "ipo_date":       r.get("ipo_date"),
+                        "exchange":       r.get("exchange"),
+                        "listing_status": r.get("listing_status"),
+                        "ipo_source":     "av",   # Alpha Vantage listing (exact)
+                    }
+                    for r in _rows if r.get("ticker")
+                ]
+                _av_tickers = {e["ticker"] for e in _events}
+
+                # FALLBACK — for calendar names AV's US feed omits (foreign/ADR, ~27),
+                # use Yahoo Finance's first-trade date stored in the YF overview
+                # payload (info.firstTradeDateMilliseconds). Accurate for recent
+                # listings; for very old names it is Yahoo's earliest-data date, so
+                # it is flagged ipo_source='yf' and the detail panel labels it as a
+                # first-trade (Yahoo) date rather than an exact IPO date.
+                try:
+                    _cal = db_manager.execute_query_readonly(
+                        """
+                        SELECT DISTINCT ticker FROM coreiq_nasdaq_earnings_calendar
+                            WHERE ticker IS NOT NULL AND fiscal_quarter_ending IS NOT NULL
+                        UNION
+                        SELECT DISTINCT ticker FROM coreiq_yf_earnings_calendar
+                            WHERE ticker IS NOT NULL
+                        """, {})
+                    _cal_tickers = {r["ticker"] for r in _cal if r.get("ticker")}
+                    _foreign = sorted(t for t in (_cal_tickers - _av_tickers)
+                                      if t and all(ch.isalnum() or ch in ".-" for ch in t))
+                    if _foreign:
+                        _cmap = CompanyRepository.get_companies_map()
+                        _in = ", ".join(f"'{t}'" for t in _foreign)
+                        _yf_q = f"""
+                            SELECT ticker, yf_symbol,
+                                JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.info.firstTradeDateMilliseconds')) AS ftd_ms,
+                                JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.info.firstTradeDateEpochUtc'))      AS ftd_sec,
+                                JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.info.shortName'))                   AS yf_name
+                            FROM (
+                                SELECT ticker, yf_symbol, payload_json,
+                                       ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY ingested_at DESC) AS rn
+                                FROM coreiq_yf_company_overview
+                                WHERE ticker IN ({_in}) AND payload_json IS NOT NULL AND payload_json <> ''
+                            ) x WHERE rn = 1
+                        """
+                        for r in db_manager.execute_query_readonly(_yf_q):
+                            _ms = r.get("ftd_ms")
+                            if not _ms and r.get("ftd_sec"):
+                                try:
+                                    _ms = int(float(r["ftd_sec"])) * 1000
+                                except (TypeError, ValueError):
+                                    _ms = None
+                            if not _ms:
+                                continue
+                            try:
+                                _d = _dt.fromtimestamp(int(float(_ms)) / 1000, tz=_tz.utc).date()
+                            except (TypeError, ValueError, OSError):
+                                continue
+                            _tk = r["ticker"]
+                            _nm = (_cmap.get(_tk, {}) or {}).get("name_coresight") or r.get("yf_name") or _tk
+                            _events.append({
+                                "id":             f"{_tk}_{_d}",
+                                "ticker":         _tk,
+                                "company_name":   _nm,
+                                "earnings_date":  _d,
+                                "ipo_date":       _d,
+                                "exchange":       r.get("yf_symbol"),
+                                "listing_status": "Active",
+                                "ipo_source":     "yf",   # Yahoo first-trade (approximate for old names)
+                            })
+                except Exception as _yf_exc:
+                    log_structured_error(
+                        _yf_exc, page="repository", component="EarningsCalendarRepository",
+                        operation="get_ipo_events_yf_fallback", context="YF first-trade fallback failed",
+                    )
+
+                return _pd.DataFrame(_events, dtype=object) if _events else _pd.DataFrame()
+
+            _ipo_sources = [
+                {"table": "coreiq_nasdaq_earnings_calendar",
+                 "where": "ticker IS NOT NULL AND fiscal_quarter_ending IS NOT NULL",
+                 "signal": None},
+                {"table": "coreiq_yf_earnings_calendar",
+                 "where": "ticker IS NOT NULL", "signal": None},
+            ]
+            _df = materialized_or_build("ipo_events", _build_ipo_df, _ipo_sources)
+            if _df is None or _df.empty:
+                return []
+            return _df.to_dict("records")
+        except Exception as exc:
+            log_structured_error(
+                exc, page="repository", component="EarningsCalendarRepository",
+                operation="get_ipo_events", context="IPO events fetch failed",
+            )
+            return []
+
+    @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
+    @_log_query_time
+    def get_delisted_events() -> List[Dict[str, Any]]:
+        """Return DELISTED (went public → private) dates as a calendar overlay.
+
+        Business ask: mark when a covered company left the public markets (e.g.
+        Nordstrom, Skechers, Walgreens, Foot Locker — all taken private in 2025-26).
+
+        Scope: the firm's own tracked universe drives it — `coreiq_companies` rows
+        the analysts have flagged `listing_status='Private'` (curated, so it is the
+        RIGHT set and dodges Alpha Vantage ticker-reuse collisions, e.g. RockTenn's
+        old 'RKT' now belongs to Rocket Companies). The delisting DATE comes from
+        `coreiq_av_companies_all.delisting_date`, joined by ticker AND a name guard
+        so a reused ticker can never attach the wrong date.
+
+        Returns list of dicts with keys:
+            id, ticker, company_name, earnings_date (the delisting date),
+            delisting_date, industry, exchange
+        """
+        query = """
+            SELECT
+                c.ticker                                   AS ticker,
+                c.name_coresight                           AS company_name,
+                a.delisting_date                           AS delisting_date,
+                c.primary_industry_coresight               AS industry,
+                a.exchange                                 AS exchange
+            FROM coreiq_companies c
+            JOIN coreiq_av_companies_all a
+              ON a.symbol = c.ticker
+             AND a.listing_status = 'Delisted'
+             AND a.delisting_date IS NOT NULL
+             AND (
+                    LOWER(TRIM(a.company_name)) = LOWER(TRIM(c.name_coresight))
+                 OR LOWER(a.company_name) LIKE CONCAT(
+                        LEFT(LOWER(REPLACE(REPLACE(c.name_coresight,'?',''),',','')), 5), '%')
+                 )
+            WHERE c.listing_status IN ('Private', 'Delisted')
+            ORDER BY a.delisting_date DESC
+        """
+
+        # Disk-materialize: tiny (~6 rows) and near-static, but this keeps cold loads
+        # instant. Freshness = the COUNT of firm-flagged Private/Delisted companies,
+        # which only moves when analysts mark a new company private — exactly the
+        # event we render — so the cache rebuilds precisely when it should.
+        try:
+            import pandas as _pd
+            from utils.materialize import materialized_or_build
+
+            def _build_delisted_df() -> "_pd.DataFrame":
+                _rows = db_manager.execute_query_readonly_raising(query, {})
+                _events = [
+                    {
+                        "id":             f"{r['ticker']}_{r.get('delisting_date')}",
+                        "ticker":         r["ticker"],
+                        "company_name":   r.get("company_name") or r["ticker"],
+                        "earnings_date":  r.get("delisting_date"),   # reuse key for shared filters
+                        "delisting_date": r.get("delisting_date"),
+                        "industry":       r.get("industry"),
+                        "exchange":       r.get("exchange"),
+                    }
+                    for r in _rows if r.get("ticker") and r.get("delisting_date")
+                ]
+                return _pd.DataFrame(_events, dtype=object) if _events else _pd.DataFrame()
+
+            _sources = [{
+                "table": "coreiq_companies",
+                "where": "listing_status IN ('Private','Delisted')",
+                "signal": None,
+            }]
+            _df = materialized_or_build("delisted_events", _build_delisted_df, _sources)
+            if _df is None or _df.empty:
+                return []
+            return _df.to_dict("records")
+        except Exception as exc:
+            log_structured_error(
+                exc, page="repository", component="EarningsCalendarRepository",
+                operation="get_delisted_events", context="Delisted events fetch failed",
+            )
+            return []
 
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
@@ -8809,7 +9559,70 @@ class EarningsCalendarRepository:
             """,
             {"ticker": ticker},
         )
+        if not rows:
+            return None
 
+        # ── FAST PATH — resolve (year,q) → report-date WITHOUT an N+1 ─────────────
+        # The old loop called get_earnings_date() PER transcript row — up to 80
+        # separate Azure round-trips (measured 20-49s for big companies), which is
+        # exactly what made a calendar cell click "load very very late". Instead,
+        # pull the ticker's whole NASDAQ fiscal_quarter_ending → report_date map in
+        # ONE query and match transcript rows in memory. The FQE label is a pure
+        # in-memory computation, and the FYE map + numbering convention are already
+        # @st.cache_data-cached — so this is 1 query instead of 80 (same result).
+        _MONTH_NAME_TO_NUM = {
+            "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+            "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+        }
+        try:
+            fye_map = EarningsCalendarRepository._get_fiscal_year_end_map()
+            fye_month = _MONTH_NAME_TO_NUM.get((fye_map.get(ticker) or "December").lower(), 12)
+            convention = EarningsCalendarRepository._fiscal_numbering_convention(ticker, fye_month)
+        except Exception:
+            convention = None
+
+        if convention:
+            cal_rows = db_manager.execute_query_readonly(
+                """
+                SELECT fiscal_quarter_ending AS fqe, MAX(earnings_date) AS d
+                FROM coreiq_nasdaq_earnings_calendar
+                WHERE ticker = :ticker
+                  AND earnings_date IS NOT NULL
+                  AND fiscal_quarter_ending IS NOT NULL
+                GROUP BY fiscal_quarter_ending
+                """,
+                {"ticker": ticker},
+            )
+            fqe_to_date: Dict[str, str] = {}
+            for r in cal_rows:
+                d = r.get("d")
+                if d is None:
+                    continue
+                fqe_to_date[r.get("fqe")] = (
+                    d.date().isoformat() if isinstance(d, datetime) else str(d)[:10]
+                )
+            for row in rows:
+                year = row.get("year")
+                q = row.get("q")
+                if not year or not q:
+                    continue
+                try:
+                    fqe = EarningsCalendarRepository._fqe_string_for_transcript(
+                        int(year), int(q), fye_month, convention
+                    )
+                except Exception:
+                    continue
+                if fqe_to_date.get(fqe) == target_date:
+                    return {
+                        "ticker": ticker,
+                        "year": int(year),
+                        "q": int(q),
+                        "quarter": row.get("quarter") or f"Q{int(q)}",
+                    }
+            # Convention-based resolution is authoritative — no transcript maps here.
+            return None
+
+        # ── FALLBACK (rare) — numbering convention unavailable for this ticker ────
         for row in rows:
             year = row.get("year")
             q = row.get("q")
@@ -9202,18 +10015,70 @@ class SegmentDataRepository:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def _fetch_all_db_rows(ticker: str) -> List[Dict[str, Any]]:
-        """Fetch ALL dimensioned rows for a ticker (years in parallel)."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        """Fetch ALL dimensioned + consolidated rows for a ticker.
+
+        One dim query + one ndim query covering every fiscal year (was 2
+        queries × N years through a 6-worker pool — 5.2s inside TAB_Segments
+        on STG 03-Jul; now 3 round-trips total). The deterministic sort below
+        is unchanged, so downstream classification sees identical input.
+        """
+        from utils.constants import SEGMENT_ALL_AXES
+        from utils.server_logger import log_db_timing
+        import time as _t
+        _t0 = _t.perf_counter()
         years = SegmentDataRepository._fetch_db_years(ticker)
         if not years:
             return []
-        all_rows: List[Dict[str, Any]] = []
-        with ThreadPoolExecutor(max_workers=min(len(years), 6)) as pool:
-            futs = {pool.submit(SegmentDataRepository._fetch_db_year_rows, ticker, yr): yr for yr in years}
-            for fut in as_completed(futs):
-                rows = fut.result()
-                if rows:
-                    all_rows.extend(rows)
+        year_keys = {f"y{i}": y for i, y in enumerate(years)}
+        year_ph = ", ".join(f":{k}" for k in year_keys)
+        clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
+        dim_sql = f"""
+            SELECT original_label, numeric_value, unit_ref, report_fiscal_year,
+                   dimension_label, dimension_member_label, concept,
+                   period_type, period_start, period_end, period_instant,
+                   dimension, full_dimension_label, filing_date
+            FROM coreiq_filing_metrics_v5
+            WHERE ticker = :ticker
+              AND is_dimensioned = 1
+              AND numeric_value IS NOT NULL
+              AND doc_type = '10-K'
+              AND report_fiscal_year IN ({year_ph})
+              AND ({clause})
+            ORDER BY report_fiscal_year ASC, full_dimension_label ASC, original_label ASC
+        """
+        all_rows: List[Dict[str, Any]] = [
+            dict(r) for r in db_manager.execute_query_readonly(
+                dim_sql, {"ticker": ticker, **year_keys, **params},
+            ) or []
+        ]
+        ndim_sql = f"""
+            SELECT original_label, numeric_value, unit_ref, report_fiscal_year,
+                   NULL AS dimension_label, NULL AS dimension_member_label, NULL AS concept,
+                   period_type, period_start, period_end, period_instant,
+                   NULL AS dimension, NULL AS full_dimension_label, filing_date
+            FROM coreiq_filing_metrics_v5
+            WHERE ticker = :ticker
+              AND is_dimensioned = 0
+              AND numeric_value IS NOT NULL
+              AND doc_type = '10-K'
+              AND report_fiscal_year IN ({year_ph})
+            ORDER BY report_fiscal_year ASC, original_label ASC
+        """
+        ndim_rows = [
+            dict(r) for r in db_manager.execute_query_readonly(
+                ndim_sql, {"ticker": ticker, **year_keys},
+            ) or []
+        ]
+        for r in ndim_rows:
+            r['_is_ndim'] = True
+        all_rows.extend(ndim_rows)
+        log_db_timing(
+            "SegmentDataRepository._fetch_all_db_rows",
+            "coreiq_filing_metrics_v5",
+            (_t.perf_counter() - _t0) * 1000,
+            rows=len(all_rows),
+            ticker=ticker,
+        )
         def _fd_neg(r) -> int:
             """Return negative integer of filing_date YYYYMMDD for descending sort."""
             fd = r.get('filing_date')
@@ -10254,6 +11119,38 @@ def preload_edgartools_ratings(ticker: str) -> None:
             _edgar_ratings_futures[ticker] = future
 
 
+_store_totals_preloading: set = set()
+
+
+def preload_store_totals(ticker: str) -> None:
+    """Fire-and-forget background warm-up of the XBRL store totals.
+
+    The worker populates the on-disk cache (data/edgar_cache/store_totals/), so
+    by the time the user clicks the Additional Data tab the fetch is a
+    millisecond disk read regardless of Streamlit cache context. No-op when a
+    fresh disk cache already exists or a preload is in-flight.
+    """
+    tkr = (ticker or "").upper()
+    if not tkr:
+        return
+    with _edgar_ratings_lock:
+        if tkr in _store_totals_preloading:
+            return
+        _store_totals_preloading.add(tkr)
+
+    def _worker():
+        try:
+            RatingsDataRepository._edgartools_store_totals(tkr)
+            RatingsDataRepository._edgartools_stores_by_country(tkr)
+        except Exception:
+            pass
+        finally:
+            with _edgar_ratings_lock:
+                _store_totals_preloading.discard(tkr)
+
+    _get_edgar_executor().submit(_worker)
+
+
 # =============================================================================
 # RATINGS & STORE COUNT REPOSITORY — credit ratings + store counts
 # =============================================================================
@@ -10277,6 +11174,23 @@ class RatingsDataRepository:
         "Caa1": "CCC+", "Caa2": "CCC", "Caa3": "CCC-",
         "Ca": "CC", "C": "C",
     }
+
+    _SP_NOTCHES = {
+        "AAA": 1, "AA+": 2, "AA": 3, "AA-": 4, "A+": 5, "A": 6, "A-": 7,
+        "BBB+": 8, "BBB": 9, "BBB-": 10, "BB+": 11, "BB": 12, "BB-": 13,
+        "B+": 14, "B": 15, "B-": 16, "CCC+": 17, "CCC": 18, "CCC-": 19,
+        "CC": 20, "C": 21, "D": 22,
+    }
+
+    @staticmethod
+    def _rating_notch(rating: Any) -> Optional[int]:
+        """Map an S&P/Fitch or Moody's rating to a comparable notch number
+        (AAA=1 … D=22). Returns None for unrecognized strings."""
+        if not rating:
+            return None
+        r = str(rating).strip()
+        r = RatingsDataRepository._MOODYS_TO_SP.get(r, r)
+        return RatingsDataRepository._SP_NOTCHES.get(r)
 
     _YEAR_QUERY = """
         SELECT DISTINCT report_fiscal_year
@@ -10358,8 +11272,24 @@ class RatingsDataRepository:
         MY = RatingsDataRepository._MOODYS_RE
         OL = RatingsDataRepository._OUTLOOK_RE
         # Require 2+ chars or word boundary for short S&P tokens to avoid "a", "c", "d" false positives
-        SP_SAFE = r'(?:AAA|AA[\+\-]?|A[\+\-]|BBB[\+\-]?|BB[\+\-]?|B[\+\-]|CCC[\+\-]?|CC|D)'  # excludes bare "A", "B", "C"
+        # Also excludes bare "D": no portal company is in default — every observed "D"
+        # was a false positive (MCD showed S&P "D" from boilerplate text).
+        SP_SAFE = r'(?:AAA|AA[\+\-]?|A[\+\-]|BBB[\+\-]?|BB[\+\-]?|B[\+\-]|CCC[\+\-]?|CC)'  # excludes bare "A", "B", "C", "D"
         SP_WORDBOUNDED = rf'\b({SP})\b'  # full set but with word boundaries
+
+        # Covenant/threshold language: "if our rating falls below BBB-", "must
+        # maintain at least BBB" — these state a trigger level, not the rating.
+        _COVENANT = _re.compile(
+            r'(?:below|beneath|under|at\s+least|falls?|fell|maintain|reduced?\s+to|'
+            r'lower\s+than|less\s+than|minimum|downgrade[sd]?\s+(?:to|below)|from)\s*$',
+            _re.IGNORECASE)
+
+        # Distress-grade floor: the regex path never emits CCC/CC/C/D (S&P) or
+        # Caa/Ca/C (Moody's). Genuinely distressed issuers come from curated DB
+        # rows; at this quality of extraction a missing rating beats mislabeling
+        # a healthy company as near-default.
+        _DISTRESS = {'CCC+', 'CCC', 'CCC-', 'CC', 'C', 'D',
+                     'Caa1', 'Caa2', 'Caa3', 'Ca'}
 
         candidates: List[Dict[str, Any]] = []
         seen: set = set()
@@ -10370,8 +11300,15 @@ class RatingsDataRepository:
             # Validate rating is actually a proper rating (case-sensitive check)
             if not _re.match(rf'^{SP}$', rating) and not _re.match(rf'^{MY}$', rating):
                 return
-            # Reject single-letter lowercase matches (false positives)
-            if len(rating) == 1 and rating.islower():
+            # Reject bare B/C/D and distress-grade tokens (observed false
+            # positives: MCD "D", COST/COKE "C", KBH "B"). Bare "A" stays —
+            # it is a real, common rating (e.g. Target's Fitch rating is A)
+            # and the primary patterns anchor it to rating-verb context.
+            if rating in {'B', 'C', 'D'} or rating in _DISTRESS:
+                return
+            # Reject covenant-threshold phrasing just before the rating token
+            _pre = text[max(0, match_obj.start(1) - 60):match_obj.start(1)]
+            if _COVENANT.search(_pre):
                 return
             seen.add(agency)
             # Find outlook near the match
@@ -10480,7 +11417,10 @@ class RatingsDataRepository:
                 fy = filing.filing_date.year if filing.filing_date else None
                 if not fy:
                     return None
-                for item_key in ["Item 7", "Item 1A", "Item 1", "Item 8"]:
+                # NOTE: Item 1A (risk factors) deliberately excluded — it is
+                # covenant/threshold language ("if our rating falls below BBB-")
+                # and was a systematic source of false extractions.
+                for item_key in ["Item 7", "Item 1", "Item 8"]:
                     try:
                         section = tenk[item_key]
                         section_text = str(section) if section else ""
@@ -10496,6 +11436,27 @@ class RatingsDataRepository:
                 return None
 
         try:
+            import json as _json
+            import time as _time_mod
+            from datetime import date as _dt
+
+            # ── Tier 0: disk cache (24h) — ratings change ~annually; a restart
+            # must not cost another 30-60s section-text fetch per ticker.
+            _cache_file = (Path(__file__).resolve().parent.parent.parent
+                           / "data" / "edgar_cache" / "credit_ratings" / f"{ticker.upper()}.json")
+            try:
+                if _cache_file.exists():
+                    _c = _json.loads(_cache_file.read_text())
+                    if _time_mod.time() - _c.get("cached_at", 0) < 86_400:
+                        _res = {int(fy): v for fy, v in _c.get("results", {}).items()}
+                        if _res:
+                            _res["_filing_dates"] = {  # type: ignore[assignment]
+                                int(fy): _dt.fromisoformat(d)
+                                for fy, d in _c.get("filing_dates", {}).items()}
+                        return _res
+            except Exception:
+                pass
+
             if 'edgar' not in _sys.modules:
                 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "edgartools"))
             from edgar import Company as EdgarCompany
@@ -10516,6 +11477,17 @@ class RatingsDataRepository:
                         fy, extracted, fd = result
                         results[fy] = extracted
                         filing_dates[fy] = fd
+
+            try:
+                _cache_file.parent.mkdir(parents=True, exist_ok=True)
+                _cache_file.write_text(_json.dumps({
+                    "cached_at": _time_mod.time(),
+                    "results": {str(fy): v for fy, v in results.items()},
+                    "filing_dates": {str(fy): fd.isoformat() for fy, fd in filing_dates.items()
+                                     if hasattr(fd, 'isoformat')},
+                }))
+            except Exception:
+                pass
 
             if results:
                 results["_filing_dates"] = filing_dates  # type: ignore[assignment]
@@ -10584,18 +11556,59 @@ class RatingsDataRepository:
             'us-gaap:numberofoperatinglocations',
         }
 
+        # ISO-3166 alpha-2 → display name. Labels straight from filings are
+        # inconsistent ("Canadian Operations", "KOREA") — the member qname
+        # (country:CA) is the reliable identity.
+        _ISO_COUNTRY = {
+            "US": "United States", "CA": "Canada", "MX": "Mexico", "JP": "Japan",
+            "GB": "United Kingdom", "KR": "South Korea", "AU": "Australia",
+            "TW": "Taiwan", "CN": "China", "ES": "Spain", "FR": "France",
+            "IS": "Iceland", "SE": "Sweden", "NZ": "New Zealand", "IE": "Ireland",
+            "DE": "Germany", "IT": "Italy", "NL": "Netherlands", "BE": "Belgium",
+            "AT": "Austria", "CH": "Switzerland", "PL": "Poland", "PT": "Portugal",
+            "IN": "India", "BR": "Brazil", "CL": "Chile", "TH": "Thailand",
+            "SG": "Singapore", "MY": "Malaysia", "PH": "Philippines",
+            "VN": "Vietnam", "ID": "Indonesia", "HK": "Hong Kong",
+            "AE": "United Arab Emirates", "SA": "Saudi Arabia",
+            "ZA": "South Africa", "PR": "Puerto Rico", "NO": "Norway",
+            "DK": "Denmark", "FI": "Finland",
+        }
+
         try:
+            import json as _json
+            import time as _time_mod
+            from datetime import date as _dt, datetime as _dtt
+            from pathlib import Path as _Path
             from edgar import Company
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+            from concurrent.futures import ThreadPoolExecutor
+
+            # ── Tier 0: disk cache ────────────────────────────────────────────
+            _cache_file = (_Path(__file__).resolve().parent.parent.parent
+                           / "data" / "edgar_cache" / "stores_by_country" / f"{ticker.upper()}.json")
+            try:
+                if _cache_file.exists():
+                    _c = _json.loads(_cache_file.read_text())
+                    if _time_mod.time() - _c.get("cached_at", 0) < 86_400:
+                        _cc = {cn: {int(y): int(v) for y, v in yv.items()}
+                               for cn, yv in (_c.get("countries") or {}).items()}
+                        if not _cc:
+                            return {}
+                        return {
+                            "years": sorted(set(y for yv in _cc.values() for y in yv)),
+                            "countries": _cc,
+                            "period_dates": {int(y): _dt.fromisoformat(d)
+                                             for y, d in _c.get("period_dates", {}).items()},
+                        }
+            except Exception:
+                pass
 
             company = Company(ticker)
             filings = company.get_filings(form='10-K')
-            if not filings:
+            if not filings or len(filings) == 0:
                 return {}
-
-            filing_list = list(filings[:6])
-            countries: Dict[str, Dict[int, int]] = {}
-            period_dates: Dict[int, 'date'] = {}
+            # NOTE: list(filings)[:6], not list(filings[:6]) — EntityFilings does not
+            # support slice indexing on edgartools ≥5.x (pyarrow ChunkedArray error).
+            filing_list = list(filings)[:6]
 
             def _process(filing_obj):
                 local: list = []
@@ -10603,62 +11616,417 @@ class RatingsDataRepository:
                     xbrl = filing_obj.xbrl()
                     if not xbrl:
                         return local
-                    # Use by_dimension() to fetch only geo-dimensioned facts — much faster
-                    # than fetching all facts and filtering in Python.
                     facts = xbrl.query().by_dimension("StatementGeographicalAxis").with_dimensions().execute()
                     for f in (facts or []):
                         concept = (f.get('concept') or '').lower()
                         if concept not in _STORE_CONCEPTS:
                             continue
-                        country_label = f.get('dimension_member_label') or f.get('label') or ''
-                        country_label = country_label.title()
-                        if not country_label:
+                        dims = {k: str(v) for k, v in f.items()
+                                if k.startswith('dim_') and v is not None}
+                        _geo = next((v for k, v in dims.items()
+                                     if 'StatementGeographicalAxis' in k), '')
+                        # Countries ONLY: member qname must be country:XX.
+                        # State (stpr:) and custom members are not countries.
+                        if not _geo.startswith('country:'):
                             continue
-                        # Normalize US variants to a single canonical label
-                        _cl_lower = country_label.lower()
-                        if _cl_lower.startswith('united states') or _cl_lower in (
-                            'u.s.', 'us', 'u.s. operations', 'us operations', 'domestic',
-                            'united states of america'
-                        ):
-                            country_label = 'United States'
-                        fy = f.get('fiscal_year')
+                        _code = _geo.split(':', 1)[1].upper()
+                        country_label = _ISO_COUNTRY.get(
+                            _code, (f.get('dimension_member_label') or _code).title())
                         val = f.get('numeric_value')
-                        if fy and val is not None:
-                            pe = f.get('period_instant') or f.get('period_end')
-                            local.append((country_label, int(fy), int(val), pe))
+                        if val is None:
+                            continue
+                        val = int(val)
+                        if val <= 0 or val > 100_000:
+                            continue
+                        # Key by the fact's own as-of date (same convention as
+                        # the worldwide totals; edgartools fiscal_year metadata
+                        # mislabels comparatives).
+                        pe = f.get('period_instant') or f.get('period_end')
+                        if not pe:
+                            continue
+                        try:
+                            if isinstance(pe, str):
+                                pe = _dt.fromisoformat(pe[:10])
+                            elif isinstance(pe, _dtt):
+                                pe = pe.date()
+                        except Exception:
+                            continue
+                        if not hasattr(pe, 'year'):
+                            continue
+                        local.append({"country": country_label, "code": _code,
+                                      "val": val, "instant": pe,
+                                      "n_dims": len(dims)})
                 except Exception:
                     pass
                 return local
 
             with ThreadPoolExecutor(max_workers=3) as pool:
-                futs = [pool.submit(_process, f) for f in filing_list]
-                for fut in as_completed(futs):
-                    for country_label, fy, val, pe in (fut.result() or []):
-                        if country_label not in countries:
-                            countries[country_label] = {}
-                        # Keep the first (most recent filing's) value per year
-                        if fy not in countries[country_label]:
-                            countries[country_label][fy] = val
-                        if pe and fy not in period_dates:
-                            try:
-                                from datetime import date as _dt
-                                if isinstance(pe, str):
-                                    pe = _dt.fromisoformat(pe)
-                                period_dates[fy] = pe
-                            except Exception:
-                                pass
+                per_filing = list(pool.map(_process, filing_list))
+
+            # Per (country, as-of date): prefer the fact with the FEWEST extra
+            # dimensions (pure geo = the country total; geo+sub-axis = a slice).
+            # Per (country, calendar year): the latest as-of date wins.
+            _best_at: Dict[tuple, dict] = {}
+            for facts in per_filing:  # newest filing first
+                for f in facts:
+                    _k = (f["code"], f["instant"])
+                    if _k not in _best_at or f["n_dims"] < _best_at[_k]["n_dims"]:
+                        _best_at[_k] = f
+            countries: Dict[str, Dict[int, int]] = {}
+            period_dates: Dict[int, Any] = {}
+            _chosen: Dict[tuple, Any] = {}   # (code, year) -> instant
+            for (_code, _instant), f in sorted(_best_at.items(),
+                                               key=lambda kv: str(kv[0][1])):
+                _y = _instant.year
+                if (_code, _y) in _chosen and _instant <= _chosen[(_code, _y)]:
+                    continue
+                _chosen[(_code, _y)] = _instant
+                countries.setdefault(f["country"], {})[_y] = f["val"]
+                if _y not in period_dates or _instant > period_dates[_y]:
+                    period_dates[_y] = _instant
+
+            try:
+                _cache_file.parent.mkdir(parents=True, exist_ok=True)
+                _cache_file.write_text(_json.dumps({
+                    "cached_at": _time_mod.time(),
+                    "countries": {cn: {str(y): v for y, v in yv.items()}
+                                  for cn, yv in countries.items()},
+                    "period_dates": {str(y): d.isoformat() for y, d in period_dates.items()},
+                }))
+            except Exception:
+                pass
 
             if not countries:
                 return {}
-
-            all_years = sorted(set(y for vals in countries.values() for y in vals))
             return {
-                "years": all_years,
-                "period_dates": period_dates,
+                "years": sorted(set(y for yv in countries.values() for y in yv)),
                 "countries": countries,
+                "period_dates": period_dates,
             }
         except Exception:
             return {}
+
+    @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
+    def _edgartools_store_totals(ticker: str) -> Dict[str, Any]:
+        """Fetch WORLDWIDE store-count totals per fiscal year from XBRL (SEC EDGAR).
+
+        Companies that tag us-gaap:NumberOfStores (and related concepts) publish the
+        exact figure — far more reliable than the regex+LLM text pipeline that feeds
+        source='store_count' rows. Preference order per fiscal year within a filing:
+          1. undimensioned fact (the consolidated total itself)
+          2. srt:ConsolidatedEntitiesAxis = ParentCompany fact (e.g. TSCO 2,602)
+          3. sum of StatementGeographicalAxis members — countries are disjoint
+             (COST 914 ✓, ULTA 1,505+84+2=1,591 ✓); state (stpr:) members are
+             ignored whenever a country:US member coexists (avoids double count)
+          4. sum of members of a single other axis (banner/segment splits,
+             e.g. ROST 1,904+363=2,267 ✓); acquisition-disclosure axes excluded —
+             they describe deals, not the fleet. Multiple axes → largest sum wins
+             (each axis independently totals the company; partial tagging under-sums).
+
+        Newest filing wins per fiscal year; older filings only fill missing years.
+        Returns {"years": [...], "totals": {fy: int}, "period_dates": {fy: date}} or {}.
+        """
+        _CONCEPTS = ("NumberOfStores", "NumberOfRestaurants",
+                     "NumberOfUnitsOperated", "NumberOfOperatingLocations")
+        _CONCEPTS_LOWER = {f"us-gaap:{c.lower()}" for c in _CONCEPTS}
+        _ACQ_AXES = ("BusinessAcquisitionAxis", "AssetAcquisitionAxis",
+                     "BusinessCombinationAxis")
+
+        def _facts_from_filing(filing_obj) -> list:
+            out = []
+            try:
+                xbrl = filing_obj.xbrl()
+                if not xbrl:
+                    return out
+                for concept in _CONCEPTS:
+                    try:
+                        res = xbrl.query().by_concept(concept).execute()
+                    except Exception:
+                        res = []
+                    for f in (res or []):
+                        c = (f.get('concept') or '').lower()
+                        if c not in _CONCEPTS_LOWER:
+                            continue
+                        val = f.get('numeric_value')
+                        if val is None:
+                            continue
+                        val = int(val)
+                        if val <= 0 or val > 100_000:
+                            continue
+                        # Key by the fact's own as-of date, NOT edgartools fiscal_year
+                        # metadata — comparative facts in older filings carry wrong
+                        # fiscal_year labels (LULU series was shifted one year), while
+                        # instant.year matches the v5 report_fiscal_year convention
+                        # (ULTA 2026-01-31→2026, COST 2025-08-31→2025, ACI 2026-02-28→2026).
+                        pe = f.get('period_instant') or f.get('period_end')
+                        if not pe:
+                            continue
+                        try:
+                            from datetime import date as _dt
+                            if isinstance(pe, str):
+                                pe = _dt.fromisoformat(pe[:10])
+                        except Exception:
+                            continue
+                        if not hasattr(pe, 'year'):
+                            continue
+                        dims = {k: str(v) for k, v in f.items()
+                                if k.startswith('dim_') and v is not None}
+                        out.append({
+                            "concept": c, "fy": int(pe.year), "val": val, "dims": dims,
+                            "instant": pe,
+                        })
+            except Exception:
+                pass
+            return out
+
+        def _total_for_year(facts: list):
+            """Apply the preference rules to one fiscal year's facts from one filing."""
+            # Dedupe identical facts (same concept+dims+value appear twice in some filings)
+            seen, uniq = set(), []
+            for f in facts:
+                k = (f["concept"], f["val"], tuple(sorted(f["dims"].items())))
+                if k in seen:
+                    continue
+                seen.add(k)
+                uniq.append(f)
+
+            undim = [f for f in uniq if not f["dims"]]
+            if undim:
+                return max(f["val"] for f in undim)
+
+            parent = [f for f in uniq
+                      if any('ConsolidatedEntitiesAxis' in a and 'ParentCompany' in m
+                             for a, m in f["dims"].items())]
+            if parent:
+                return max(f["val"] for f in parent)
+
+            geo = [f for f in uniq
+                   if any('StatementGeographicalAxis' in a for a in f["dims"])]
+            if geo:
+                def _geo_member(f):
+                    return next(m for a, m in f["dims"].items()
+                                if 'StatementGeographicalAxis' in a)
+                has_country_us = any(_geo_member(f) == 'country:US' for f in geo)
+                vals = [f["val"] for f in geo
+                        if not (has_country_us and _geo_member(f).startswith('stpr:'))]
+                if vals:
+                    return sum(vals)
+
+            by_axis: Dict[str, list] = {}
+            for f in uniq:
+                if len(f["dims"]) != 1:
+                    continue  # multi-axis facts are member subsets, not fleet splits
+                axis = next(iter(f["dims"]))
+                if any(a in axis for a in _ACQ_AXES):
+                    continue
+                by_axis.setdefault(axis, []).append(f["val"])
+            if by_axis:
+                return max(sum(v) for v in by_axis.values())
+            return None
+
+        try:
+            import json as _json
+            import time as _time_mod
+            from datetime import date as _dt, datetime as _dtt
+            from pathlib import Path as _Path
+            from edgar import Company
+            from concurrent.futures import ThreadPoolExecutor
+
+            def _series_clean(_t: Dict[int, int]) -> Dict[int, int]:
+                """Sanitize an XBRL totals series.
+
+                1. Drop years >3x away from the series median — a stray footnote
+                   value inside a real series (LOW tags 442 in one year amid
+                   ~1,850; LZB's 2012-14 are 2/3/9 amid ~200).
+                2. Then require no >3x jump between neighboring remaining years —
+                   an incoherent remainder is a footnote/brand subset, not a
+                   fleet ({} = unusable). 3x, not lower: DLTR's Family Dollar
+                   acquisition year is a legitimate 2.62x.
+                """
+                if not _t:
+                    return {}
+                _vals = sorted(_t.values())
+                _med = _vals[len(_vals) // 2]
+                if _med > 0:
+                    _t = {y: v for y, v in _t.items()
+                          if v <= _med * 3.0 and v >= _med / 3.0}
+                _ys = sorted(_t)
+                for _a, _b in zip(_ys, _ys[1:]):
+                    _lo, _hi = sorted((_t[_a], _t[_b]))
+                    if _lo > 0 and _hi / _lo > 3.0:
+                        return {}
+                return _t
+
+            # Issuers whose XBRL store tagging is a brand/deal subset that no
+            # structural check can catch (series is internally smooth):
+            #   DRI — tags only Ruth's Chris counts (~154); real fleet ~2,100.
+            if ticker.upper() in {"DRI"}:
+                return {}
+
+            # ── Tier 0: disk cache (survives restarts; 10-Ks change ~annually) ──
+            _cache_dir = _Path(__file__).resolve().parent.parent.parent / "data" / "edgar_cache" / "store_totals"
+            _cache_file = _cache_dir / f"{ticker.upper()}.json"
+            try:
+                if _cache_file.exists():
+                    _c = _json.loads(_cache_file.read_text())
+                    if _time_mod.time() - _c.get("cached_at", 0) < 86_400:  # 24h TTL
+                        _ct = _series_clean({int(y): int(v) for y, v in (_c.get("totals") or {}).items()})
+                        if not _ct:
+                            return {}
+                        return {
+                            "years": sorted(_ct),
+                            "totals": _ct,
+                            "period_dates": {int(y): _dt.fromisoformat(d)
+                                             for y, d in _c.get("period_dates", {}).items()
+                                             if int(y) in _ct},
+                        }
+            except Exception:
+                pass
+
+            company = Company(ticker)
+            totals: Dict[int, int] = {}
+            period_dates: Dict[int, Any] = {}
+            _chosen_instant: Dict[int, Any] = {}
+
+            # ── Tier 1: SEC companyfacts API — ONE ~1s HTTP call, all years ──────
+            # Undimensioned facts only; fiscal_period='FY' keeps 10-K (FYE) values
+            # and drops 10-Q interim counts (ULTA tags 1,608 at Q1 vs 1,591 at FYE).
+            try:
+                _df = company.get_facts().to_dataframe()
+                _cmask = _df['concept'].astype(str).str.lower().str.replace('us-gaap:', '', regex=False).isin(
+                    {c.lower() for c in _CONCEPTS})
+                _fy_mask = _df.get('fiscal_period').astype(str).eq('FY') if 'fiscal_period' in _df.columns else True
+                for _, _r in _df[_cmask & _fy_mask].iterrows():
+                    _v = _r.get('numeric_value')
+                    _pe = _r.get('period_end')
+                    if _v is None or _pe is None:
+                        continue
+                    _v = int(_v)
+                    if _v <= 0 or _v > 100_000:
+                        continue
+                    if isinstance(_pe, str):
+                        _pe = _dt.fromisoformat(_pe[:10])
+                    elif isinstance(_pe, _dtt):
+                        _pe = _pe.date()
+                    elif not hasattr(_pe, 'year'):
+                        continue
+                    if hasattr(_pe, 'date') and not isinstance(_pe, _dt):
+                        _pe = _pe.date()
+                    _fy = _pe.year
+                    if _fy in _chosen_instant and _pe <= _chosen_instant[_fy]:
+                        continue
+                    _chosen_instant[_fy] = _pe
+                    totals[_fy] = _v
+                    period_dates[_fy] = _pe
+            except Exception:
+                pass
+
+            # ── Tier 2: parse only filings for years companyfacts didn't cover ──
+            # (issuers that tag stores only with dimensions: ROST segments,
+            #  TSCO ParentCompany, COST/ULTA geo splits in some years)
+            _this_year = _dt.today().year
+            _missing = [y for y in range(_this_year - 6, _this_year + 1) if y not in totals]
+            # Only hunt through individual filings when the company has EVER tagged
+            # a store count (tier 1 non-empty). Companies that never tag one
+            # (software, CPG, ~100 of the portal's tickers) would otherwise cost
+            # six XBRL parses to find nothing, on every cache expiry.
+            if _missing and totals:
+                filings = company.get_filings(form='10-K')
+                # NOTE: list(filings)[:6], not filings[:6] — EntityFilings does not
+                # support slice indexing on edgartools ≥5.x.
+                filing_list = list(filings)[:6] if filings and len(filings) > 0 else []
+                # A 10-K filed in year Y carries as-of dates in Y or Y-1
+                relevant = [f for f in filing_list
+                            if f.filing_date and (f.filing_date.year in _missing
+                                                  or f.filing_date.year - 1 in _missing)]
+                if relevant:
+                    with ThreadPoolExecutor(max_workers=3) as pool:
+                        per_filing = list(pool.map(_facts_from_filing, relevant))
+                    # One total per exact as-of date; latest as-of date wins per
+                    # calendar year (52/53-week years can put two instants in one
+                    # year, e.g. AAP Jan-1-2022 and Dec-31-2022).
+                    for facts in per_filing:  # newest filing first
+                        by_instant: Dict[Any, list] = {}
+                        for f in facts:
+                            by_instant.setdefault(f["instant"], []).append(f)
+                        for instant, i_facts in by_instant.items():
+                            fy = instant.year
+                            if fy in _chosen_instant and instant <= _chosen_instant[fy]:
+                                continue
+                            total = _total_for_year(i_facts)
+                            if total is None:
+                                continue
+                            _chosen_instant[fy] = instant
+                            totals[fy] = total
+                            period_dates[fy] = instant
+
+            # ── Persist to disk cache (also caches the "no data" outcome) ────────
+            try:
+                _cache_dir.mkdir(parents=True, exist_ok=True)
+                _cache_file.write_text(_json.dumps({
+                    "cached_at": _time_mod.time(),
+                    "totals": {str(y): v for y, v in totals.items()},
+                    "period_dates": {str(y): d.isoformat() for y, d in period_dates.items()},
+                }))
+            except Exception:
+                pass
+
+            totals = _series_clean(totals)
+            if not totals:
+                return {}
+            return {
+                "years": sorted(totals),
+                "totals": totals,
+                "period_dates": {y: d for y, d in period_dates.items() if y in totals},
+            }
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _store_row_passes_source_check(row: Dict[str, Any]) -> bool:
+        """Hide store_count rows whose value cannot be reproduced from their own
+        source sentence.
+
+        The stored value must literally appear among the sentence's numbers, or
+        equal the sum of some subset of them (legitimate segment sums like
+        KSS 1,159+12=1,171 or BBY 991+168=1,159). Rows that fail are LLM
+        transcription/fabrication errors — observed: DKS FY2026=42 (no number in
+        sentence), URBN=9 ("53 years of experience"), TJX FY2022=3,680 (table says
+        3,380), AAP FY2019=4,872 (sentence says 4,877). Accuracy-first: a "-" is
+        better than a wrong number.
+        """
+        try:
+            import json as _json
+            import re as _re
+            val = row.get('numeric_value')
+            if val is None:
+                return False
+            val = int(val)
+            lq = row.get('llm_query')
+            d = _json.loads(lq) if isinstance(lq, str) else (lq or {})
+            sent = d.get('source_sentence') or ''
+            if not sent:
+                return False
+            nums = [int(x.replace(',', '')) for x in _re.findall(r'\d[\d,]*', sent)]
+            # Spelled-out counts too: "five retail stores", "318 stores and five
+            # in Canada" (WRBY 318+5=323, FIGS "five"=5, BRLT "42 and one"=43)
+            _words = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+                      'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+                      'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14,
+                      'fifteen': 15, 'sixteen': 16, 'seventeen': 17, 'eighteen': 18,
+                      'nineteen': 19, 'twenty': 20}
+            nums += [_words[w] for w in _re.findall(r'[a-zA-Z]+', sent.lower()) if w in _words]
+            nums = [n for n in nums if 0 < n <= 100_000]
+            if val in nums:
+                return True
+            # Subset-sum over the first 14 numbers, bounded by val
+            sums = {0}
+            for n in nums[:14]:
+                sums |= {s + n for s in sums if s + n <= val}
+            return val in sums
+        except Exception:
+            return False
 
     # ─────────────────────────────────────────────────────────────────────
     #  Square Footage — DB-first + edgartools fallback
@@ -10910,16 +12278,35 @@ class RatingsDataRepository:
     @staticmethod
     def get_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
         rows = RatingsDataRepository._fetch_all_rows(ticker)
-        if not rows:
-            edgar_data = RatingsDataRepository._edgartools_credit_ratings(ticker)
-            edgar_years = [k for k in edgar_data if isinstance(k, int)]
-            if edgar_years:
-                return date(min(edgar_years), 1, 31), date(max(edgar_years), 12, 31)
-            return None, None
         years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
-        if not years:
-            return None, None
-        return date(years[0], 1, 31), date(years[-1], 12, 31)
+        if years:
+            return date(years[0], 1, 31), date(years[-1], 12, 31)
+
+        # No DB rows: 225 of 341 companies land here (CASY, BKE, MCD, ...).
+        # Check XBRL store totals FIRST (disk-cached → ms) and BOUND every call —
+        # the credit-ratings wrapper can block up to 120s on an in-flight preload,
+        # which used to stall PAGE_date_range_fetch and blank the whole tab.
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        _pool = _TPE(max_workers=2)
+        try:
+            _f_tot = _pool.submit(RatingsDataRepository._edgartools_store_totals, ticker)
+            try:
+                _tot = (_f_tot.result(timeout=3) or {}).get("totals", {})
+                if _tot:
+                    return date(min(_tot), 1, 31), date(max(_tot), 12, 31)
+            except Exception:
+                pass
+            _f_cr = _pool.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
+            try:
+                edgar_data = _f_cr.result(timeout=3) or {}
+                edgar_years = [k for k in edgar_data if isinstance(k, int)]
+                if edgar_years:
+                    return date(min(edgar_years), 1, 31), date(max(edgar_years), 12, 31)
+            except Exception:
+                pass
+        finally:
+            _pool.shutdown(wait=False)
+        return None, None
 
     @staticmethod
     def get_available_dates(ticker: str) -> List[date]:
@@ -10935,7 +12322,9 @@ class RatingsDataRepository:
 
         Returns dict with:
             - years: list of fiscal years in range
-            - period_dates: {year: filing_date}
+            - period_dates: {year: filing_date} (internal; NOT for display)
+            - period_display_dates: {year: fiscal-year-end date} for column headers,
+              matching Income Statement / Key Stats / Segments
             - credit_ratings: list of dicts with per-year rating values
             - store_counts: list of dicts with per-year count values
             - has_credit_ratings: bool
@@ -10944,20 +12333,30 @@ class RatingsDataRepository:
         start_year = start_date.year
         end_year = end_date.year
 
-        # ── Phase 1: DB + credit ratings in parallel (both lightweight/cached) ─
+        # ── Phase 1: DB + credit ratings in parallel ──────────────────────────
+        # The edgartools path is a LIVE SEC EDGAR fetch — fast once cached, but ~50s
+        # COLD for a ticker missing from the DB (STG 03-Jul: CRMT ratings_render=53.6s,
+        # an unbounded wait). BOUND the UI wait: if edgartools hasn't returned in time,
+        # render DB-only NOW and do not block — the background thread keeps running and
+        # @st.cache_data has it warm for the next render. shutdown(wait=False) so we
+        # never join the slow thread (a plain `with` would wait for it on exit = 50s).
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=2) as _pool1:
-            _f_db = _pool1.submit(RatingsDataRepository._fetch_all_rows, ticker)
-            _f_cr = _pool1.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
-            try:
-                all_rows = _f_db.result()
-            except Exception:
-                all_rows = []
-            _edgar_data_raw: Dict[str, Any] = {}
-            try:
-                _edgar_data_raw = _f_cr.result() or {}
-            except Exception:
-                pass
+        _pool1 = ThreadPoolExecutor(max_workers=2)
+        _f_db = _pool1.submit(RatingsDataRepository._fetch_all_rows, ticker)
+        _f_cr = _pool1.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
+        try:
+            all_rows = _f_db.result(timeout=20)
+        except Exception:
+            all_rows = []
+        _edgar_data_raw: Dict[str, Any] = {}
+        try:
+            # 2s: warm hits are disk-cache milliseconds; a cold section-text fetch
+            # takes 30-60s so waiting longer only delays the render. The fetch
+            # keeps running in the background and fills on the next rerun.
+            _edgar_data_raw = _f_cr.result(timeout=2) or {}
+        except Exception:
+            pass  # edgartools slow/cold → DB-only this render; warms for the next one
+        _pool1.shutdown(wait=False)
 
         filtered = [r for r in all_rows if r.get('report_fiscal_year') and start_year <= r['report_fiscal_year'] <= end_year]
 
@@ -10979,6 +12378,12 @@ class RatingsDataRepository:
                     edgar_period_dates[fy] = fd
                 for r in ratings_list:
                     agency = r.get("agency", "Unknown")
+                    # Sanity filter at the single choke point (covers both fresh
+                    # extractions and older disk-cached results): recognizable
+                    # rating, never distress-grade from the regex path.
+                    _notch = RatingsDataRepository._rating_notch(r.get("rating"))
+                    if _notch is None or _notch >= 17:  # CCC+ and below
+                        continue
                     if agency not in edgar_cr_map:
                         edgar_cr_map[agency] = {
                             "agency": agency,
@@ -10996,10 +12401,10 @@ class RatingsDataRepository:
         db_years = sorted(set(r['report_fiscal_year'] for r in filtered if r.get('report_fiscal_year')))
         all_years = sorted(set(db_years) | edgar_years)
 
-        if not all_years:
-            return {"years": [], "period_dates": {}, "credit_ratings": [], "store_counts": [],
-                    "has_credit_ratings": False, "has_store_counts": False}
-
+        # Do NOT early-return when the DB has nothing: 225 of 341 portal companies
+        # have no store_count/credit_rating rows at all (DG, MCD, SBUX, LOW, KMX,
+        # CASY, ...) yet many tag NumberOfStores in XBRL — phase 2 below must still
+        # run for them. The all-empty payload is returned at the end instead.
         years = all_years
 
         # Build period_dates from DB filing_date or period_instant
@@ -11018,31 +12423,165 @@ class RatingsDataRepository:
         # Separate credit ratings and store counts from DB
         cr_rows = [r for r in filtered if r.get('source') == 'credit_rating']
         sc_rows = [r for r in filtered if r.get('source') == 'store_count']
+        # Accuracy gate: drop rows whose value can't be reproduced from their own
+        # source sentence (LLM transcription/fabrication errors).
+        sc_rows = [r for r in sc_rows if RatingsDataRepository._store_row_passes_source_check(r)]
 
-        # Credit ratings: group by agency (dimension) — DB rows
-        cr_map: Dict[str, Dict[str, Any]] = {}  # key = agency
+        # Store Count means RETAIL UNITS — infrastructure counts are different
+        # things and never display here (15-Jul, per business):
+        #  * count types that are never stores (D.R. Horton's "homes" are homes
+        #    CLOSED; Realty Income's "properties" are REIT assets; PAG's
+        #    "franchises" are agreements, not sites),
+        #  * non-retail companies whose "locations" are offices/plants/DCs
+        #    (ADT sales offices, DXC/Zebra offices, Tyson plants, TopBuild
+        #    branches, Coke Consolidated + PFG + UNFI distribution centers,
+        #    homebuilders, SPG malls, Solo Brands wholesale doors, ...).
+        # FND's "warehouses" stay — warehouse-format stores ARE its retail
+        # format (like Costco's warehouses, which come from XBRL anyway).
+        _SC_TYPE_EXCLUDE = {'distribution centers', 'manufacturing facilities',
+                            'properties', 'homes', 'franchises'}
+        _SC_NON_RETAIL = {
+            "ADT", "APH", "ARW", "AVY", "BLD", "CHSCP", "COKE", "DAR", "DHI",
+            "DXC", "INGR", "KVUE", "MTH", "O", "PFGC", "PHM", "SPG", "TSN",
+            "UFI", "WHR", "ZBRA", "UNFI", "QRTEA", "QVCA.Q", "QVCPQ", "SGI",
+            "FLWS", "PRMB", "CHWY", "FNKO",
+        }
+        if ticker.upper() in _SC_NON_RETAIL:
+            sc_rows = []
+        else:
+            sc_rows = [r for r in sc_rows
+                       if (r.get('dimension') or '').strip().lower() not in _SC_TYPE_EXCLUDE]
+
+        # Credit ratings: group by agency (dimension) — DB rows.
+        # Duplicate (ticker, fy, agency) rows exist with CONFLICTING values
+        # (AAP FY2023: Baa3 vs Baa2; KBH FY2024: BB vs B vs BB+; KHC: BBB vs
+        # BBB-), and some rows are regex noise (COKE/COST/FND rated "C").
+        # Resolution per cell:
+        #   1. drop values >2 notches from the duplicate set's median,
+        #   2. if the remaining spread ≤1 notch → pick the most complete row
+        #      (has outlook, has short-term rating), then latest filing_date,
+        #   3. still conflicting → show "-" rather than guess.
+        # Afterwards, a series-level pass drops any value ≥4 notches from every
+        # other value the ticker has (kills isolated "C"s amid investment grade).
+        # Manually verified WRONG in the DB (15-Jul-2026) — LLM fabricated these
+        # wholesale; real ratings differ by 3-12 notches:
+        #   COST shows Baa2, real Aa3/A+ · TGT shows Baa2/BBB, real A2/A/A ·
+        #   M shows Baa2/BBB, real Ba1/BB+/BBB- · XRX shows BBB (2025), real
+        #   Caa2/CCC+ after the 2025 downgrades. Excluded until re-ingest.
+        _CR_DB_UNRELIABLE = {"COST", "TGT", "M", "XRX"}
+        if cr_rows and str(cr_rows[0].get('ticker', '')).upper() in _CR_DB_UNRELIABLE:
+            cr_rows = []
+
+        _cr_cells: Dict[tuple, list] = {}
         for row in cr_rows:
             agency = row.get('dimension') or 'Unknown'
-            if agency not in cr_map:
-                cr_map[agency] = {
-                    "agency": agency,
-                    "label": f"Credit Rating ({agency})",
+            yr = row['report_fiscal_year']
+            _val = row.get('value')
+            if not _val or str(_val).lower() == 'none':
+                continue
+            # CC/C/D never displays from this path: no portal company is at or
+            # near default; every observed instance was extraction noise
+            # (WMT Moody's "C" ×7 years, PRMB "C", COST "C", KSS Fitch "C").
+            _n0 = RatingsDataRepository._rating_notch(_val)
+            if _n0 is None or _n0 >= 20:
+                continue
+            _cr_cells.setdefault((agency, yr), []).append(row)
+
+        _resolved_cells: Dict[tuple, Dict[str, Any]] = {}
+        for (_ag, _yr), _rows in _cr_cells.items():
+            _scored = [(RatingsDataRepository._rating_notch(r['value']), r) for r in _rows]
+            _scored = [(n, r) for n, r in _scored if n is not None]
+            if not _scored:
+                continue
+            _notches = sorted(n for n, _ in _scored)
+            _med = _notches[(len(_notches) - 1) // 2]  # lower middle — bias to the better rating
+            _kept = [(n, r) for n, r in _scored if abs(n - _med) <= 2]
+            if not _kept:
+                continue
+            _spread = max(n for n, _ in _kept) - min(n for n, _ in _kept)
+            if _spread > 1:
+                continue  # irreconcilable extraction conflict → "-"
+            def _row_quality(nr):
+                _n, _r = nr
+                return (
+                    1 if (_r.get('member') and str(_r.get('member')).lower() != 'none') else 0,
+                    1 if _r.get('llm_query') else 0,
+                    str(_r.get('filing_date') or ''),
+                )
+            _best = max(_kept, key=_row_quality)[1]
+            _resolved_cells[(_ag, _yr)] = _best
+
+        # Series-level outlier drop: a cell whose rating sits ≥4 notches from
+        # EVERY other resolved cell of this ticker is extraction noise (an
+        # isolated "C" amid investment grade). Compare against other CELLS —
+        # identical values in other cells are legitimate neighbors.
+        if len(_resolved_cells) > 1:
+            _cell_notches = {k: RatingsDataRepository._rating_notch(r['value'])
+                             for k, r in _resolved_cells.items()}
+            _dropped_keys = []
+            for _key, _n in _cell_notches.items():
+                if _n is None:
+                    continue
+                _others = [m for k2, m in _cell_notches.items() if k2 != _key and m is not None]
+                if _others and min(abs(_n - m) for m in _others) >= 4:
+                    _dropped_keys.append(_key)
+            for _key in _dropped_keys:
+                _resolved_cells.pop(_key, None)
+
+        # Fabricated-provenance guard: some pipeline rows carry a templated
+        # "has assigned a long-term rating ..." sentence instead of a filing
+        # quote, and several are hallucinations (BBY FY2026 claims a Moody's
+        # downgrade to Baa2 while Moody's affirmed A3 in Jan 2025). A templated
+        # cell stepping ≥2 notches from the nearest non-templated year of the
+        # same agency is dropped; 1-notch steps stay (DKS's real Baa3→Baa2
+        # upgrade arrived via the same template).
+        def _cr_templated(_r) -> bool:
+            _lq = str(_r.get('llm_query') or '')
+            return 'long-term rating' in _lq or 'has assigned a' in _lq
+        _by_agency: Dict[str, dict] = {}
+        for (_ag, _yr), _r in _resolved_cells.items():
+            _by_agency.setdefault(_ag, {})[_yr] = _r
+        _dropped_tmpl = []
+        for _ag, _yrmap in _by_agency.items():
+            for _yr, _r in _yrmap.items():
+                if not _cr_templated(_r):
+                    continue
+                _n = RatingsDataRepository._rating_notch(_r['value'])
+                # Compare against the CLOSEST non-templated year only — BBY's
+                # fake FY2026 Baa2 must be judged against FY2025's A3 (2 notches),
+                # not rescued by the distant FY2020 Baa1 (1 notch).
+                _neigh_years = sorted(
+                    (_y2 for _y2, _v in _yrmap.items()
+                     if _y2 != _yr and not _cr_templated(_v)
+                     and RatingsDataRepository._rating_notch(_v['value']) is not None),
+                    key=lambda _y2: abs(_y2 - _yr))
+                if _n is not None and _neigh_years:
+                    _nearest = RatingsDataRepository._rating_notch(
+                        _yrmap[_neigh_years[0]]['value'])
+                    if abs(_n - _nearest) >= 2:
+                        _dropped_tmpl.append((_ag, _yr))
+        for _key in _dropped_tmpl:
+            _resolved_cells.pop(_key, None)
+
+        cr_map: Dict[str, Dict[str, Any]] = {}  # key = agency
+        for (_ag, _yr), row in _resolved_cells.items():
+            if _ag not in cr_map:
+                cr_map[_ag] = {
+                    "agency": _ag,
+                    "label": f"Credit Rating ({_ag})",
                     "values": {y: None for y in years},
                     "outlooks": {y: None for y in years},
                     "details": {y: None for y in years},
                 }
-            yr = row['report_fiscal_year']
-            if yr in cr_map[agency]["values"]:
-                _val = row.get('value')
+            if _yr in cr_map[_ag]["values"]:
                 _member = row.get('member')
-                cr_map[agency]["values"][yr] = _val if _val and str(_val).lower() != 'none' else None
-                cr_map[agency]["outlooks"][yr] = _member if _member and str(_member).lower() != 'none' else None
-                # Parse llm_query JSON for extra detail
+                cr_map[_ag]["values"][_yr] = row.get('value')
+                cr_map[_ag]["outlooks"][_yr] = _member if _member and str(_member).lower() != 'none' else None
                 lq = row.get('llm_query')
                 if lq:
                     try:
                         import json
-                        cr_map[agency]["details"][yr] = json.loads(lq) if isinstance(lq, str) else lq
+                        cr_map[_ag]["details"][_yr] = json.loads(lq) if isinstance(lq, str) else lq
                     except Exception:
                         pass
 
@@ -11066,7 +12605,13 @@ class RatingsDataRepository:
                             cr_map[agency]["outlooks"][yr] = edgar_entry["outlooks"][yr]
 
         # Store counts: group by dimension (store type)
+        # Some (ticker, year, store_type) combos have duplicate rows with different
+        # values (e.g. AAP FY2022: 4,706 vs 5,086 — one from each adjacent 10-K).
+        # Row order from the DB has no tiebreak, so a plain overwrite is
+        # nondeterministic. Keep the observation with the latest as-of date
+        # (member, ISO string), then latest filing_date.
         sc_map: Dict[str, Dict[str, Any]] = {}  # key = store_type
+        _sc_pick: Dict[tuple, tuple] = {}       # (store_type, yr) -> chosen row's sort key
         for row in sc_rows:
             store_type = row.get('dimension') or 'Total'
             if store_type not in sc_map:
@@ -11077,54 +12622,189 @@ class RatingsDataRepository:
                 }
             yr = row['report_fiscal_year']
             if yr in sc_map[store_type]["values"]:
+                _row_key = (str(row.get('member') or ''), str(row.get('filing_date') or ''))
+                _pick_key = (store_type, yr)
+                if _pick_key in _sc_pick and _row_key <= _sc_pick[_pick_key]:
+                    continue
+                _sc_pick[_pick_key] = _row_key
                 sc_map[store_type]["values"][yr] = row.get('numeric_value')
 
         # Sort agencies and store types alphabetically
         credit_ratings = sorted(cr_map.values(), key=lambda x: x["agency"])
         store_counts = sorted(sc_map.values(), key=lambda x: x["store_type"])
 
-        # ── Phase 2: stores-by-country + square footage in parallel ──────────
-        _stores_by_country_raw: Dict[str, Any] = {}
+        # ── Phase 2: XBRL store totals + square footage in parallel ──────────
+        # Worldwide-only direction (15-Jul-2026): the per-country breakdown is
+        # retired from the UI; instead XBRL us-gaap:NumberOfStores totals become
+        # the preferred store-count source when robust (issuer-tagged, exact).
+        # Bounded wait like phase 1 — a cold EDGAR fetch keeps running in the
+        # background and is served warm from cache on the next render.
+        _xbrl_totals_raw: Dict[str, Any] = {}
+        _sbc_raw: Dict[str, Any] = {}
         _sqft_raw: Dict[str, Any] = {"years": [], "metrics": [], "has_data": False, "_source": "none"}
-        with ThreadPoolExecutor(max_workers=2) as _pool2:
-            _f_sbc  = _pool2.submit(RatingsDataRepository._edgartools_stores_by_country, ticker)
-            _f_sqft = _pool2.submit(RatingsDataRepository.get_square_footage_data, ticker, 2000, end_year)
-            try:
-                _stores_by_country_raw = _f_sbc.result() or {}
-            except Exception:
-                pass
-            try:
-                _sqft_raw = _f_sqft.result() or _sqft_raw
-            except Exception:
-                pass
+        _pool2 = ThreadPoolExecutor(max_workers=3)
+        _f_tot  = _pool2.submit(RatingsDataRepository._edgartools_store_totals, ticker)
+        _f_sbc  = _pool2.submit(RatingsDataRepository._edgartools_stores_by_country, ticker)
+        _f_sqft = _pool2.submit(RatingsDataRepository.get_square_footage_data, ticker, 2000, end_year)
+        # Short SHARED deadline — NO LAG on ticker switch. Warm tickers resolve
+        # from the 24h disk caches in milliseconds; a cold ticker renders what it
+        # has within ~4s total (not 3+3+6 sequential) while the fetches keep
+        # running in the background. Never make the user wait for EDGAR.
+        import time as _t_mod
+        _deadline = _t_mod.monotonic() + 4.0
+        def _left() -> float:
+            return max(0.1, _deadline - _t_mod.monotonic())
+        try:
+            _xbrl_totals_raw = _f_tot.result(timeout=_left()) or {}
+        except Exception:
+            pass
+        try:
+            _sbc_raw = _f_sbc.result(timeout=_left()) or {}
+        except Exception:
+            pass
+        try:
+            _sqft_raw = _f_sqft.result(timeout=_left()) or _sqft_raw
+        except Exception:
+            pass
+        _pool2.shutdown(wait=False)
 
-        stores_by_country_data: Dict[str, Any] = _stores_by_country_raw
+        # ── Store-count source resolution ─────────────────────────────────────
+        # XBRL totals replace the DB (LLM text pipeline) rows only when:
+        #   * ≥3 fiscal years tagged — 1-2 year tags are usually a different
+        #     quantity entirely (BBY tagged 800 once; TJX tags a 300 that is not
+        #     its store fleet), AND
+        #   * some overlapping year agrees with a validated DB row within 1%
+        #     (proves both sources describe the same quantity — LULU FY2020
+        #     491=491), OR the DB has no valid rows at all (URBN, where every DB
+        #     row failed the source-sentence check).
+        # Otherwise the validated DB rows stand (DKS: XBRL tags only the flagship
+        # banner, 728 vs the true ~855 fleet — DB wins there).
+        _all_totals: Dict[int, int] = _xbrl_totals_raw.get("totals", {}) or {}
+        # Usable = ≥3 years AND current: issuers that stopped tagging (BBY last
+        # tagged undimensioned store counts in 2021, domestic-only) must not
+        # replace a live DB series with a stale one.
+        _xbrl_usable = (len(_all_totals) >= 3
+                        and max(_all_totals) >= date.today().year - 2)
+        _db_has_values = any(v is not None for sc in store_counts for v in sc["values"].values())
+        # Agreement must be tested across ALL fiscal years, not just the selected
+        # date range — LULU's agreeing year (FY2020: 491=491) sits outside the
+        # default UI window, and agreement is a property of the sources, not of
+        # the view.
+        _xbrl_agrees_db = False
+        if _xbrl_usable:
+            for _r in all_rows:
+                if _r.get('source') != 'store_count':
+                    continue
+                _y = _r.get('report_fiscal_year')
+                _v = _r.get('numeric_value')
+                _t = _all_totals.get(_y)
+                if not (_y and _v and _t):
+                    continue
+                if abs(_t - int(_v)) / max(int(_v), 1) <= 0.01 and \
+                        RatingsDataRepository._store_row_passes_source_check(_r):
+                    _xbrl_agrees_db = True
+                    break
+        # Scope guard: agreement in one year does not guarantee equal scope in all
+        # years. If the DB has a VALIDATED value for the same-or-newer year that is
+        # >1% LARGER than XBRL's latest, the DB row is the fuller worldwide count
+        # and XBRL is a subset — BBW tags corporate+partner (553) while its 10-K
+        # total including franchises is 662. Subsets are always smaller, so
+        # preferring the larger validated figure is safe (fabrications are gated).
+        if _xbrl_usable and _all_totals:
+            _x_latest_y = max(_all_totals)
+            _db_newer_larger = any(
+                sc["values"].get(_y) is not None and _y >= _x_latest_y
+                and int(sc["values"][_y]) > _all_totals[_x_latest_y] * 1.01
+                for sc in store_counts for _y in sc["values"]
+            )
+            if _db_newer_larger:
+                _xbrl_usable = False
 
-        sbc_years_all = stores_by_country_data.get("years", [])
-        sbc_years = [y for y in sbc_years_all if start_year <= y <= end_year]
-        sbc_countries = stores_by_country_data.get("countries", {})
-        sbc_period_dates = stores_by_country_data.get("period_dates", {})
+        _sc_source = "db"
+        if _xbrl_usable and (_xbrl_agrees_db or not _db_has_values):
+            _tot_in_range = {y: v for y, v in _all_totals.items() if start_year <= y <= end_year}
+            if _tot_in_range:
+                years = sorted(set(years) | set(_tot_in_range))
+                store_counts = [{
+                    "store_type": "Total",
+                    "label": "Store Count (Total)",
+                    "values": {y: _tot_in_range.get(y) for y in years},
+                }]
+                _sc_source = "xbrl"
+                for _fy, _fd in (_xbrl_totals_raw.get("period_dates") or {}).items():
+                    if _fy in _tot_in_range and _fy not in period_dates and _fd:
+                        period_dates[_fy] = _fd
 
-        for _fy, _fd in sbc_period_dates.items():
-            if _fy not in period_dates and _fd:
-                period_dates[_fy] = _fd
+        # Drop store-type rows that ended up with no values (all rows gated out)
+        store_counts = [sc for sc in store_counts
+                        if any(v is not None for v in sc["values"].values())]
+
+        # ── Stores by Country + worldwide Total row ───────────────────────────
+        # Reliability gate: a year's country breakdown displays ONLY when the
+        # countries sum to the verified worldwide total for that year within 2%
+        # (COST and ULTA reconcile exactly). Un-reconcilable years are hidden.
+        _verified_totals: Dict[int, int] = {}
+        for sc in store_counts:
+            for _y, _v in sc["values"].items():
+                if _v is not None:
+                    _verified_totals[_y] = max(int(_v), _verified_totals.get(_y, 0))
+
+        sbc_years: list = []
+        sbc_countries: Dict[str, Any] = {}
+        sbc_total_row: Dict[int, int] = {}
+        _sbc_countries_raw = _sbc_raw.get("countries", {}) or {}
+        if _sbc_countries_raw:
+            for _y in sorted(set(y for yv in _sbc_countries_raw.values() for y in yv)):
+                if not (start_year <= _y <= end_year):
+                    continue
+                _sum = sum(yv[_y] for yv in _sbc_countries_raw.values() if _y in yv)
+                _tot = _verified_totals.get(_y)
+                if _tot and abs(_sum - _tot) / _tot <= 0.02:
+                    sbc_years.append(_y)
+                    sbc_total_row[_y] = _tot
+            for _cn, _yv in _sbc_countries_raw.items():
+                _vals = {y: v for y, v in _yv.items() if y in sbc_years}
+                if _vals:
+                    sbc_countries[_cn] = _vals
+            for _fy, _fd in (_sbc_raw.get("period_dates") or {}).items():
+                if _fy in sbc_total_row and _fy not in period_dates and _fd:
+                    period_dates[_fy] = _fd
+            years = sorted(set(years) | set(sbc_years))
 
         sqft_data: Dict[str, Any] = _sqft_raw
 
         _source = "db" if db_has_cr else ("edgartools" if edgar_cr_map else "none")
 
+        # Display-only header dates: fiscal-year-end (last day of the FYE month),
+        # so the Additional Data columns match Income Statement / Key Stats /
+        # Segments (e.g. ANF shows Jan-31-2021, not the 10-K filing date
+        # Mar-29-2021). Safe to key by year: report_fiscal_year == calendar year
+        # of the fiscal period end for both Jan-FYE (ANF FY2021 → Jan-2021) and
+        # Dec-FYE (CRI FY2023 → Dec-2023) companies. `period_dates` (real filing
+        # dates) is left untouched for internal logic; when the FYE month is
+        # unknown the UI falls back to it.
+        period_display_dates: Dict[int, date] = {}
+        _fye_m = SegmentDataRepository._fye_month(ticker)
+        if _fye_m:
+            period_display_dates = {
+                y: SegmentDataRepository._fye_display_date(y, _fye_m) for y in years
+            }
+
         return {
             "years": years,
             "period_dates": period_dates,
+            "period_display_dates": period_display_dates,
             "credit_ratings": credit_ratings,
             "store_counts": store_counts,
-            "stores_by_country": {"years": sbc_years, "countries": sbc_countries},
+            "stores_by_country": {"years": sbc_years, "countries": sbc_countries,
+                                  "total_row": sbc_total_row},
             "square_footage": sqft_data,
             "has_credit_ratings": len(credit_ratings) > 0,
             "has_store_counts": len(store_counts) > 0,
             "has_stores_by_country": bool(sbc_years and sbc_countries),
             "has_square_footage": sqft_data.get("has_data", False),
             "_source": _source,
+            "_sc_source": _sc_source,
         }
 
 

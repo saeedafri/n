@@ -34,10 +34,11 @@ import glob
 
 # Import server logger
 try:
-    from utils.server_logger import log_error, log_exception, log_structured_error
+    from utils.server_logger import log_error, log_info, log_exception, log_structured_error
 except ImportError:
     import logging
     log_error = logging.error
+    log_info = logging.info
     log_exception = logging.exception
     def log_structured_error(exc, page="", component="", operation=""):
         logging.error(f"[{component}] {operation}: {exc}")
@@ -494,7 +495,7 @@ def _audit_file_cache() -> Dict[str, Any]:
 
         audit_duration = time.time() - audit_start
 
-        log_error(
+        log_info(
             f"[BG_SCAN][AUDIT] file_count={file_count} recent_files={recent_files} "
             f"previous_watermark={previous_watermark} current_watermark={current_watermark} "
             f"has_new_blob_activity={has_new_blob_activity} "
@@ -678,7 +679,7 @@ class BackgroundFilingsScanner:
                         # Cache is healthy, skip scan
                         self._stats['scan_skipped'] = True
                         self._stats['skip_reason'] = audit['reason']
-                        log_error(f"[BG_SCAN][SKIP] Scan skipped — {audit['reason']}")
+                        log_info(f"[BG_SCAN][SKIP] Scan skipped — {audit['reason']}")
                         return True
 
                 self._stop_event.clear()
@@ -1277,10 +1278,10 @@ def init_background_scanner(auto_start: bool = True, force_scan: bool = False) -
     """
     global _initialized
 
-    log_error(f"[BG_SCAN][INIT] called — _initialized={_initialized} auto_start={auto_start} force_scan={force_scan}")
+    log_info(f"[BG_SCAN][INIT] called — _initialized={_initialized} auto_start={auto_start} force_scan={force_scan}")
 
     if _initialized and not force_scan:
-        log_error("[BG_SCAN][INIT] already initialized — returning early")
+        log_info("[BG_SCAN][INIT] already initialized — returning early")
         return True
 
     try:
@@ -1294,7 +1295,7 @@ def init_background_scanner(auto_start: bool = True, force_scan: bool = False) -
             scanner.start(force_scan=force_scan)
 
         _initialized = True
-        log_error("[BG_SCAN][INIT] initialization complete")
+        log_info("[BG_SCAN][INIT] initialization complete")
         return True
 
     except Exception as e:

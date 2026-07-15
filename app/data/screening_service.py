@@ -234,30 +234,30 @@ def get_all_countries() -> List[str]:
 # =============================================================================
 
 def get_base_company_universe() -> pd.DataFrame:
-    """Return DataFrame of ALL companies as the base screening universe.
+    """Return DataFrame of ALL companies as the base screening universe."""
 
-    Uses get_companies_rows() (1-hour cached) instead of get_companies_map() so
-    that companies sharing the same ticker on different exchanges (e.g. JD Sports
-    on LSE and JD.com on NASDAQ both use ticker 'JD') are each included as a
-    separate row.  The unique identity is ticker + name_coresight.
+    def _build_universe() -> pd.DataFrame:
+        company_rows = CompanyRepository.get_companies_rows()
+        rows = []
+        for c in company_rows:
+            raw_name = c.get("name_coresight") or ""
+            rows.append({
+                "ticker":       c["ticker"],
+                "company_name": _format_company_name(raw_name),
+                "sector":       c.get("primary_industry_coresight") or "",
+                "exchange":     c.get("exchange") or "",
+                "country":      c.get("country_of_incorporation") or "",
+            })
+        df = pd.DataFrame(rows, columns=["ticker", "company_name", "sector", "exchange", "country"])
+        from utils.mem_opt import optimize_frame_memory, audit_frame_numbers, release_memory
+        df = optimize_frame_memory(df, name="screening_universe")
+        audit_frame_numbers("screening_universe", df)
+        release_memory()
+        return df
 
-    Returns:
-        DataFrame with columns: ticker, company_name, sector, exchange
-    """
-    company_rows = CompanyRepository.get_companies_rows()
-
-    rows = []
-    for c in company_rows:
-        raw_name = c.get("name_coresight") or ""
-        rows.append({
-            "ticker":       c["ticker"],
-            "company_name": _format_company_name(raw_name),
-            "sector":       c.get("primary_industry_coresight") or "",
-            "exchange":     c.get("exchange") or "",
-            "country":      c.get("country_of_incorporation") or "",
-        })
-    df = pd.DataFrame(rows, columns=["ticker", "company_name", "sector", "exchange", "country"])
-    return df
+    from utils.materialize import materialized_or_build
+    _sources = [{"table": "coreiq_companies", "signal": None}]
+    return materialized_or_build("screening_universe", _build_universe, _sources)
 
 
 # =============================================================================
@@ -1705,14 +1705,9 @@ def _segment_cache_universe() -> List[str]:
     """Tickers to (re)build the segment cache for.
 
     Sourced from the small ``coreiq_companies`` master — a fast indexed read.
-    The previous approach did `SELECT DISTINCT ticker FROM coreiq_filing_metrics_v5`
-    with a leading-wildcard `dimension LIKE` over ~7.7M rows: an unindexable full
-    scan that is unreliable on Azure (minutes-to-timeout under IO throttling) and
-    repeatedly stalled the rebuild. Companies without dimensioned 10-K segment
-    facts simply yield zero entries in the per-ticker pass that follows, so using
-    the (slightly larger) company master here is harmless and far more robust.
-    Falls back to the filing-metrics scan only if the company master is empty/unavailable.
-    """
+    Companies without dimensioned 10-K segment facts yield zero entries in the
+    per-ticker pass that follows. No fallback to filing_metrics_v5 (7.75M-row scan).
+  """
     try:
         rows = db_manager.execute_query_readonly(
             "SELECT ticker FROM coreiq_companies "
@@ -1724,18 +1719,7 @@ def _segment_cache_universe() -> List[str]:
     except Exception as exc:
         log_error(f"[SCREENING] _segment_cache_universe: company-master lookup failed: {exc}")
 
-    # Fallback: derive from filing metrics (slow full scan; last resort only).
-    from utils.constants import SEGMENT_ALL_AXES
-
-    clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
-    sql = f"""
-        SELECT DISTINCT ticker
-        FROM coreiq_filing_metrics_v5
-        WHERE is_dimensioned = 1 AND doc_type = '10-K'
-          AND numeric_value IS NOT NULL AND ({clause})
-    """
-    rows = db_manager.execute_query_readonly(sql, params) or []
-    return sorted(r["ticker"] for r in rows if r.get("ticker"))
+    raise RuntimeError(SEGMENT_CACHE_UNAVAILABLE_MESSAGE)
 
 
 def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict[str, int]:
@@ -2837,16 +2821,7 @@ def apply_segment_statement_criterion(
             selected_segments=query_segments,
         )
     else:
-        # NON-FILTERING GRACEFUL DEGRADE — the values cache cannot answer this
-        # scope (fresh deployment with an empty cache, or a metric/year the cache
-        # doesn't cover). NEVER crash the results page: return every company with
-        # no segment value so it renders as N/A and the full universe is
-        # preserved, exactly like every other criterion. If the cache is
-        # completely empty (fresh deploy), kick off a one-time background build so
-        # subsequent screens get real values automatically; a populated-but-scope-
-        # missing cache means the data simply isn't in v4 — degrade silently.
-        data_source = "cache_unavailable"
-        rows = []
+        # Fail fast — no v5 live-SQL fallback and no silent N/A degrade.
         try:
             overall = get_segment_values_cache_status()
             if int(overall.get("total_rows", 0) or 0) == 0:
@@ -2854,11 +2829,11 @@ def apply_segment_statement_criterion(
         except Exception as _bx:
             log_error(f"[SCREENING] auto segment cache rebuild check failed: {_bx}")
         log_timing(
-            "SCREENING_SEGMENT_CACHE_UNAVAILABLE_DEGRADE",
+            "SCREENING_SEGMENT_CACHE_UNAVAILABLE",
             (time.perf_counter() - t_db) * 1000,
-            f"stmt={stmt} metric={metric_key} type={segment_type} "
-            f"tickers={len(tickers)} -> N/A for all (universe preserved)",
+            f"stmt={stmt} metric={metric_key} type={segment_type} tickers={len(tickers)}",
         )
+        raise RuntimeError(SEGMENT_CACHE_UNAVAILABLE_MESSAGE)
     ms_db = (time.perf_counter() - t_db) * 1000
     log_timing(
         "SEGMENT_SQL_TOTAL",
@@ -3498,7 +3473,6 @@ def apply_keydevs_criterion(
     rows_in = len(working_df)
 
     categories = criterion.get("categories", [])    # list of exact DB event_category values
-    show_headline = criterion.get("show_headline", False)
 
     # Simple exact match - categories are already exact DB values from KEYDEV_CATEGORIES_5MAIN
     query_cats = categories
@@ -3523,13 +3497,21 @@ def apply_keydevs_criterion(
     # Step 1+2 merged: single ROW_NUMBER() query replaces filter + headline queries
     _MAX_EVENTS_PER_COMPANY = 10
 
-    if show_headline:
-        # Single ROW_NUMBER() query replaces 2 separate queries
-        # Benchmark: 419ms vs 4,404ms combined on Azure
-        combined_query = f"""
-            SELECT ticker, event_date, event_subtype, event_category, headline
+    # Key-dev screening ALWAYS returns the event DETAILS (date · type · headline,
+    # ≤10 per company) for the results column — never a bare "matched" marker; the
+    # detail column IS the whole point of the criterion.
+    # Late row lookup: window over NARROW columns only (event_id/event_date —
+    # served index-only from idx_ticker_cat), then join back by PK for the fat
+    # headline TEXT of just the surviving ~10 rows/ticker. Carrying headline
+    # through the ROW_NUMBER() temp table spilled to disk and took 37-48s on
+    # STG (measured 03-Jul); this shape returns byte-identical rows in ~2.7s
+    # worst-case (5 largest categories × 349 tickers, no date filter).
+    combined_query = f"""
+        SELECT e.ticker, e.event_date, e.event_subtype, e.event_category, e.headline
+        FROM (
+            SELECT event_id, event_date
             FROM (
-                SELECT ticker, event_date, event_subtype, event_category, headline,
+                SELECT event_id, event_date,
                        ROW_NUMBER() OVER (
                            PARTITION BY ticker
                            ORDER BY event_date DESC, event_id DESC
@@ -3540,15 +3522,10 @@ def apply_keydevs_criterion(
                   {date_clause}
             ) ranked
             WHERE rn <= {_MAX_EVENTS_PER_COMPANY}
-        """
-    else:
-        combined_query = f"""
-            SELECT DISTINCT ticker
-            FROM coreiq_company_events
-            WHERE ticker IN ({ticker_sql})
-              AND event_category IN ({cat_sql})
-              {date_clause}
-        """
+        ) ids
+        JOIN coreiq_company_events e
+          ON e.event_id = ids.event_id AND e.event_date = ids.event_date
+    """
 
     try:
         combined_rows = db_manager.execute_query_readonly(combined_query)
@@ -3560,7 +3537,7 @@ def apply_keydevs_criterion(
     matched_tickers = {r["ticker"] for r in combined_rows}
     event_map: Dict[str, str] = {}
 
-    if show_headline and combined_rows:
+    if combined_rows:
         from collections import defaultdict
         ticker_events: Dict[str, list] = defaultdict(list)
         for r in combined_rows:
@@ -3586,11 +3563,13 @@ def apply_keydevs_criterion(
     # Step 3: filter working_df
     filtered = working_df[working_df["ticker"].isin(matched_tickers)].copy()
 
-    if show_headline:
-        display_col = criterion.get("display_col", "Key Developments")
-        filtered[display_col] = filtered["ticker"].map(
-            lambda t: event_map.get(t, "")
-        )
+    # Always populate the results column with the actual event DETAILS (date ·
+    # type · headline). Matched companies carry their latest events; everyone else
+    # stays N/A via the non-filtering left-merge upstream. Never a bare "✓ Matched"
+    # marker — the user asked for the developments, not a match flag.
+    display_col = criterion.get("display_col")
+    if display_col:
+        filtered[display_col] = filtered["ticker"].map(lambda t: event_map.get(t, ""))
 
     rows_out = len(filtered)
 
@@ -3945,8 +3924,12 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
                     seen.add(tk)
             return result
         else:
+            # MAX, not SUM: duplicate rows / overlapping store types at the latest
+            # year would double a SUM (AAP FY2023 showed 5,086+5,107=10,193 while
+            # that was its newest year). Every ticker currently has one row at its
+            # latest year, so MAX == the row value.
             rows = db_manager.execute_query_readonly(f"""
-                SELECT fmv.ticker, SUM(fmv.numeric_value) AS store_total
+                SELECT fmv.ticker, MAX(fmv.numeric_value) AS store_total
                 FROM coreiq_filing_metrics_v5 fmv
                 INNER JOIN (
                     SELECT ticker, MAX(report_fiscal_year) AS yr

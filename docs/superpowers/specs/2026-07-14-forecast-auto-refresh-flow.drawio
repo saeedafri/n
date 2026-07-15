@@ -1,0 +1,125 @@
+<mxfile host="app.diagrams.net" version="24.7.17">
+  <diagram name="Forecast Auto-Refresh Flow" id="fc-auto-refresh">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="2000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== TITLE ===================== -->
+        <mxCell id="title" value="Forecast Auto-Refresh — End-to-End Flow (Annual; Quarterly paused)" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;fontColor=#B22222;" vertex="1" parent="1">
+          <mxGeometry x="360" y="20" width="820" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== MAIN FLOW ===================== -->
+        <mxCell id="n1" value="App process starts&#10;Azure App Service — Always On = ON" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="80" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="First authenticated page-load&#10;→ start_forecast_auto_refresh() (once per process)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="175" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" value="Daemon thread loop — wake every 5 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="490" y="270" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n4" value="A run window (06:00 / 18:00 IST)&#10;past-due today AND not yet done?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="450" y="355" width="340" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="n5" value="INSERT IGNORE run_key into&#10;coreiq_forecast_refresh_runs —&#10;did THIS instance win the claim?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="450" y="515" width="340" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="skip" value="Skip — another instance&#10;already owns this window" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="540" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n6" value="Run cycle (force = False)&#10;Quarterly PAUSED → Annual only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="690" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n7" value="get_companies() — every coreiq_companies row&#10;(SEC / YFinance) with ≥ 3 annual years" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="785" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n8" value="For each company in the universe" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="885" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n9" value="needs_update()?&#10;income_statement.fiscal_date_ending&#10;&gt;  coreiq_model_forecasts.last_actual_date ?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="440" y="965" width="360" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="upd" value="up_to_date — skip,&#10;NO DB write (cheap 1-query check)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="1005" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n10" value="Run engine — 6 models + ensemble + scenarios&#10;backtest 2 yrs · forecast 5 yrs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1150" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n11" value="Upsert → coreiq_model_forecasts&#10;prune years that have aged into the past" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1255" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n12" value="Clear caches → Forecasting page &amp; Market Data&#10;immediately show the new numbers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1390" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n13" value="Send summary email (human heartbeat)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1485" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n14" value="Finalize audit row — status + counts + finished_at" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1570" width="300" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n15" value="Cycle done" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="520" y="1655" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== DATA STORES (left) ===================== -->
+        <mxCell id="ds1" value="Source financial tables (ACTUALS)&#10;fed by SEC · YFinance · Alpha Vantage ingestion" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="985" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="db1" value="coreiq_model_forecasts&#10;(annual forecasts — the output)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1255" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="rd1" value="Forecasting page · Market Data&#10;Estimates tab (read forecasts)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="70" y="1400" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== NOTES (right) ===================== -->
+        <mxCell id="note1" value="ROLE OF REPORTING DATE&#10;&#10;The scheduler triggers off REAL reported actuals — last_actual_date advances the moment a company files. The CALENDAR reporting date (earnings calendar + fiscal-year-end) is used ONLY for: UI display, the manual &quot;Refresh All&quot; hold-back, and the email summary. It does NOT gate the scheduler → zero-miss." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="880" y="355" width="360" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" value="EXACTLY-ONCE&#10;&#10;run_key = 'YYYY-MM-DD:HHMM' is the PRIMARY KEY. INSERT IGNORE = the atomic lock. With multiple Azure instances only ONE runs each window. Catch-up: a window missed while the app was down runs on the next wake-up (same local day)." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="880" y="585" width="360" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="note3" value="SCENARIOS&#10;&#10;• New annual actuals → needs_update = TRUE → re-forecast&#10;• No new data (typical) → all up_to_date, 0 writes, email still sent&#10;• New company (≥3 yrs) → no stored row → built from scratch&#10;• New company &lt; 3 usable yrs (e.g. CRWV) → correctly skipped until enough history&#10;• App down at a window → caught up on next wake-up&#10;• Multiple instances → only one wins the claim&#10;• One ticker errors → logged, loop continues, run still finalizes" style="shape=note;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="880" y="765" width="360" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="note4" value="INTERVAL&#10;06:00 &amp; 18:00 IST, twice daily.&#10;Daemon polls every 5 min; runs the window when it is due." style="shape=note;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="880" y="175" width="360" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EDGES ===================== -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n3" target="n4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="No — keep sleeping" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#999999;fontColor=#666666;" edge="1" parent="1" source="n4" target="n3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontStyle=1;" edge="1" parent="1" source="n4" target="n5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#999999;fontColor=#666666;" edge="1" parent="1" source="n5" target="skip"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontStyle=1;" edge="1" parent="1" source="n5" target="n6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n6" target="n7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="per company" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n8" target="n9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#999999;fontColor=#666666;" edge="1" parent="1" source="n9" target="upd"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="next" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;exitX=0.5;exitY=0;entryX=0;entryY=0.5;strokeColor=#999999;fontColor=#666666;" edge="1" parent="1" source="upd" target="n8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="Yes — new data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontStyle=1;" edge="1" parent="1" source="n9" target="n10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n10" target="n11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" value="next company (loop)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;exitX=0;exitY=0.5;entryX=0;entryY=1;strokeColor=#9673a6;fontColor=#9673a6;dashed=1;" edge="1" parent="1" source="n11" target="n8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" value="after all companies" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;exitX=1;exitY=0.5;entryX=1;entryY=0;fontStyle=1;" edge="1" parent="1" source="n8" target="n12"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n12" target="n13"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n13" target="n14"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="n14" target="n15"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- data-flow edges (dashed) -->
+        <mxCell id="e20" value="reads newest actual date" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="ds1" target="n9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" value="upsert" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;strokeColor=#82b366;fontColor=#5a8a3a;exitX=0;exitY=0.5;entryX=1;entryY=0.2;" edge="1" parent="1" source="n11" target="db1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" value="read" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;strokeColor=#d6b656;fontColor=#a58a2a;" edge="1" parent="1" source="db1" target="rd1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===================== LIVE EXAMPLE ===================== -->
+        <mxCell id="ex1" value="THE ANNUAL TRIGGER — pinpointed (this is step 6 / needs_update)&#10;&#10;Two real dates are compared for each company:&#10;&#10;NEWEST ACTUAL WE HOLD&#10;  SEC → coreiq_av_financials_income_statement.fiscal_date_ending&#10;  YF  → coreiq_yf_financials_income_statement.period_end&#10;  (report_type/frequency = 'annual', revenue present)&#10;  which source? coreiq_companies.source&#10;&#10;WHAT THE FORECAST REMEMBERS&#10;  coreiq_model_forecasts.last_actual_date&#10;  (NOT computed_at — that is just WHEN it last ran)&#10;&#10;RULE: newest fiscal_date_ending  &gt;  stored last_actual_date  → REBUILD.  Equal → skip (no write).&#10;&#10;Real rows today (all caught up → skip):&#10;  AAP  newest 2025-12-31 = stored 2025-12-31&#10;  GIS  newest 2026-05-31 = stored 2026-05-31&#10;When GIS files FY2027 → newest 2027-05-31 &gt; 2026-05-31 → auto-rebuild.&#10;&#10;Proof engine works: AAP annual force-rebuilt 2026-07-12 09:12 (50 rows). Heartbeat: annual runs 06:00/18:00 IST daily, annual_updated=0 = no new filings yet (correct)." style="shape=note;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=8;spacingTop=6;fontColor=#1b4d2b;" vertex="1" parent="1">
+          <mxGeometry x="810" y="1080" width="440" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="exedge" value="the check in step 6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;strokeColor=#82b366;fontColor=#5a8a3a;exitX=1;exitY=0.5;entryX=0;entryY=0.1;" edge="1" parent="1" source="n9" target="ex1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

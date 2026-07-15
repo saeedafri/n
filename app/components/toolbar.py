@@ -126,16 +126,21 @@ from .styles import render_styles
 from utils.local_storage import set_marketdata_tab
 
 try:
-    from utils.server_logger import log_structured_error
+    from utils.server_logger import log_structured_error, timed_render
 except ImportError:
     def log_structured_error(exc, **kw): pass  # type: ignore
 
 def render_tabs(selected_tab: str) -> str:
+    with timed_render("TOOLBAR_TABS"):
+        return _render_tabs_inner(selected_tab)
+
+
+def _render_tabs_inner(selected_tab: str) -> str:
     try:
         tabs = ["company_profile", "key_stats", "income_statement", "balance_sheet", "cash_flow", "ratios", "estimates", "forecasting", "segment_data", "ratings"]
         tab_labels = ["Company Profile", "Key Stats", "Income Statement", "Balance Sheet", "Cash Flow", "Ratios", "Estimates", "Forecasting", "Segment", "Additional Data"]
         # Tabs that show a "Testing in Progress" label above
-        _dev_in_progress_tabs = {"segment_data", "ratings", "forecasting"}
+        _dev_in_progress_tabs = {"forecasting"}
 
         _col_widths = [1.2, 0.8, 1.2,1, 0.8, 1, 1, 1, 1, 1]
 

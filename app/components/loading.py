@@ -397,6 +397,175 @@ def show_red_spinner(text: str = "Loading..."):
         return st.spinner(text)
 
 
+# Coresight logo — same asset as the boot splash (core/boot_overlay.py), proven to
+# load behind the STG proxy. onerror hides it so the card still shows spinner+label.
+_CS_LOGO_URL = ("https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net"
+                "/wp-content/uploads/2023/12/coresight-logo-1.png")
+
+_BRANDED_LOADER_CSS = """
+<style>
+/* ── CENTERING ROOT-CAUSE FIX ─────────────────────────────────────────────────
+   styles.py puts `will-change: opacity, transform` + a translateY entry animation
+   on every element-container/stMarkdownContainer. Per CSS spec, will-change:transform
+   (or any live transform) turns that ancestor into the CONTAINING BLOCK for
+   position:fixed descendants — so this overlay was positioned against a 0-height
+   box at the top of the content (STG bug: card at top, not centered; measured
+   cardCenter y=146 vs viewport y=450). Neutralise those properties on any wrapper
+   that contains the overlay so position:fixed means the VIEWPORT again. */
+[data-testid="stMarkdownContainer"]:has(.cs-al-ov),
+[data-testid="element-container"]:has(.cs-al-ov),
+[data-testid="stElementContainer"]:has(.cs-al-ov),
+[data-testid="stVerticalBlock"] > div:has(.cs-al-ov),
+[data-testid="stHorizontalBlock"] > div:has(.cs-al-ov){
+  animation:none!important;will-change:auto!important;
+  transform:none!important;filter:none!important;}
+
+/* ── ONE SPINNER ONLY: while the branded overlay is up, hide EVERY other
+   loading indicator — the boot splash card, st.spinner, and inline page/article
+   spinners — so the user never sees two spinners at once. The boot overlay and
+   this in-app overlay are pixel-identical, so hiding boot the instant this one
+   mounts makes the boot→in-app handoff read as ONE continuous spinner. Rules
+   deactivate the moment the overlay leaves the DOM. */
+body:has(.cs-al-ov) #cs-boot-overlay,
+body:has(.cs-al-ov) #cs-ov{display:none!important;}
+body:has(.cs-al-ov) [data-testid="stSpinner"],
+body:has(.cs-al-ov) .cs-inline-loading,
+body:has(.cs-al-ov) .cs-page-subspinner{display:none!important;}
+
+/* Overlay: full viewport, translucent (the page stays visible + keeps loading
+   behind it), CLICK-THROUGH (pointer-events:none) so the header nav and tabs
+   remain usable while loading. Pure-CSS failsafe still removes it at 22s even
+   if the JS remover never loads — it can never trap the user. */
+.cs-al-ov{position:fixed!important;inset:0!important;z-index:2147483000;
+  background:rgba(244,244,244,.62);
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:none!important;
+  animation:cs-al-in .18s ease both, cs-al-failsafe .4s ease 22s forwards;}
+@keyframes cs-al-in{from{opacity:0}to{opacity:1}}
+@keyframes cs-al-failsafe{to{opacity:0;visibility:hidden;pointer-events:none;}}
+/* Card: IDENTICAL to the boot-splash card (logo + ring + label + shimmer) so a
+   boot→in-app handoff reads as ONE spinner whose text changes. */
+.cs-al-card{display:flex;flex-direction:column;align-items:center;gap:16px;
+  padding:30px 44px;background:#fff;border-radius:14px;
+  box-shadow:0 6px 40px rgba(0,0,0,.12);pointer-events:none;}
+.cs-al-card img{width:132px;height:auto;display:block;}
+.cs-al-ring{width:32px;height:32px;border-radius:50%;
+  border:3px solid rgba(214,46,47,.14);border-top-color:#d62e2f;animation:cs-al-spin .7s linear infinite;}
+@keyframes cs-al-spin{to{transform:rotate(360deg)}}
+.cs-al-txt{font-family:Montserrat,'Source Sans Pro',system-ui,sans-serif;font-size:14px;
+  font-weight:600;color:#555;letter-spacing:.01em;text-align:center;}
+.cs-al-sh{width:108px;height:2px;border-radius:1px;
+  background:linear-gradient(90deg,#ebebeb 25%,#d62e2f 50%,#ebebeb 75%);
+  background-size:200% 100%;animation:cs-al-shm 1.6s ease infinite;}
+@keyframes cs-al-shm{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+"""
+
+
+def _branded_overlay_html(label: str, oid: str = "cs-app-loader") -> str:
+    """The branded Coresight loader card (logo + red spinner + dynamic label)."""
+    return (
+        _BRANDED_LOADER_CSS
+        + f'<div id="{oid}" class="cs-al-ov"><div class="cs-al-card">'
+        + f'<img src="{_CS_LOGO_URL}" alt="Coresight" referrerpolicy="no-referrer" '
+        + 'onerror="this.style.display=\'none\'">'
+        + '<div class="cs-al-ring"></div>'
+        + f'<div class="cs-al-txt">{label}</div>'
+        + '<div class="cs-al-sh"></div></div></div>'
+    )
+
+
+def render_page_loader(label: str = "Loading", overlay: bool = True, placeholder=None):
+    """Branded Coresight loader — a centered white card with the Coresight logo, a red
+    spinner and a DYNAMIC {label} (e.g. "Loading Income Statement"). Shown via st.empty()
+    so it is visible DURING the server compute and cleared when the Python render
+    finishes — correct for pages whose content is server-rendered HTML/tables
+    (market_data, earnings_calls).
+
+    For pages whose heavy content paints CLIENT-SIDE in an iframe AFTER Python returns
+    (AgGrid results grid, streamlit_calendar) use render_sticky_loader() instead, so the
+    overlay stays up until the grid actually appears (never vanishes onto a blank area).
+
+    `overlay` is kept for backwards-compat (the card is always a centered overlay now).
+    Returns the st.empty() placeholder; call .empty() on it when done.
+    """
+    try:
+        holder = placeholder if placeholder is not None else st.empty()
+        holder.markdown(_branded_overlay_html(label), unsafe_allow_html=True)
+        return holder
+    except Exception as e:
+        log_structured_error(e, page="loading", component="render_page_loader", operation="render page loader")
+        return placeholder
+
+
+_STICKY_REMOVER_JS = """
+<script>
+(function(){
+  try{
+    var doc = window.parent.document;
+    var ov = doc.getElementById('cs-sticky-loader');
+    if(!ov) return;
+    var main = doc.querySelector('[data-testid="stMain"]') || doc.body;
+    // Hide ONLY once the heavy content has actually PAINTED — never on a "DOM settled"
+    // heuristic, because during the server-compute wait the DOM is idle (looks settled)
+    // while the grid/calendar has not rendered yet. "Painted" = the AgGrid / calendar
+    // iframe has real height, OR a "No results" alert has appeared (nothing to render).
+    function ready(){
+      var f = main.querySelector('iframe[title*="agGrid"],iframe[title*="aggrid"],iframe[title*="calendar"]');
+      if(f && f.clientHeight > 60) return true;
+      var t = main.querySelector('[data-testid="stDataFrame"],[data-testid="stTable"]');
+      if(t && t.clientHeight > 60) return true;
+      var a = main.querySelector('[data-testid="stAlert"],[data-testid="stAlertContainer"],[data-testid="stException"]');
+      if(a) return true;  // "No key development events found" / error → nothing to wait for
+      return false;
+    }
+    var done=false;
+    function hide(){ if(done) return; done=true;
+      clearInterval(iv);
+      ov.style.transition='opacity .3s ease'; ov.style.opacity='0';
+      setTimeout(function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }, 320);
+    }
+    var iv = setInterval(function(){ if(ready()) hide(); }, 150);
+    // hard cap: never trap the user behind the overlay (also covers the rare
+    // no-iframe / no-alert page whose content is plain HTML).
+    setTimeout(hide, 20000);
+  }catch(e){
+    try{ var o=window.parent.document.getElementById('cs-sticky-loader');
+         if(o&&o.parentNode) o.parentNode.removeChild(o);}catch(_){}
+  }
+})();
+</script>
+"""
+
+
+class _NoOpHolder:
+    """Stand-in for an st.empty() placeholder whose .empty() is a no-op — the sticky
+    overlay is removed by JS after the grid paints, so callers that still call
+    `.empty()` (legacy inline-loader clears) must NOT tear it down early."""
+    def empty(self, *a, **k):
+        return None
+    def markdown(self, *a, **k):
+        return None
+
+
+def render_sticky_loader(label: str = "Loading"):
+    """Branded overlay that PERSISTS until the page's heavy content has actually painted
+    client-side (AgGrid results grid / streamlit_calendar), then fades itself out via JS.
+    Use on pages whose results render in an iframe AFTER Python returns, so the spinner
+    never disappears onto a blank area (the screening "2000 events found + blank grid"
+    and the earnings-calendar cases). Call ONCE, early in the render — the JS self-removes,
+    so NO .empty() is needed. Returns a no-op holder so legacy `.empty()` calls are safe.
+    """
+    try:
+        st.markdown(_branded_overlay_html(label, oid="cs-sticky-loader"), unsafe_allow_html=True)
+        from streamlit.components.v1 import html as _sthtml
+        _sthtml(_STICKY_REMOVER_JS, height=0)
+    except Exception as e:
+        log_structured_error(e, page="loading", component="render_sticky_loader", operation="render sticky loader")
+    return _NoOpHolder()
+
+
 def render_scan_progress_overlay(progress: dict):
     """
     Render a loading overlay specifically for background scan progress.

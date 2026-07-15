@@ -83,12 +83,29 @@ def ensure_quarterly_forecast_table() -> None:
 
 
 def _quarter_end_date(fiscal_year: int, fiscal_quarter: int) -> Optional[datetime.date]:
-    """Last calendar day of the given fiscal quarter (Q1→Mar, Q2→Jun, Q3→Sep, Q4→Dec)."""
+    """Last calendar day of the given fiscal quarter (Q1→Mar, Q2→Jun, Q3→Sep, Q4→Dec).
+
+    Calendar-quarter fallback only — used when there is no last-actual date to
+    project a real cadence from. Prefer `_add_months_eom(last_actual, 3*n)`.
+    """
     if fiscal_quarter not in (1, 2, 3, 4):
         return None
     month = fiscal_quarter * 3
     last_day = calendar.monthrange(fiscal_year, month)[1]
     return datetime.date(fiscal_year, month, last_day)
+
+
+def _add_months_eom(d: datetime.date, n: int) -> datetime.date:
+    """`d` advanced by `n` months, snapped to the last day of the resulting month.
+
+    Used to project real quarter-end dates from the last actual quarter so the
+    forecast follows each company's true fiscal cadence (e.g. Apr 30 → Jul 31 →
+    Oct 31 → Jan 31 for a January fiscal year), not a generic calendar-quarter map.
+    """
+    m = d.month - 1 + n
+    y = d.year + m // 12
+    m = m % 12 + 1
+    return datetime.date(y, m, calendar.monthrange(y, m)[1])
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +181,23 @@ def upsert_forecasts(
     computed_at = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     last_actual_str = last_actual_date.strftime("%Y-%m-%d") if last_actual_date else None
 
+    # Map each forecast (fiscal_year, fiscal_quarter) to its REAL projected quarter-end
+    # date by stepping +3 months (end-of-month) from the last actual quarter. Built once
+    # from the full frame so every model shares the same, correct dates. Falls back to the
+    # calendar-quarter map only when there is no last-actual date.
+    _period_dates: Dict[tuple, Optional[str]] = {}
+    try:
+        _uniq = sorted({(int(a), int(b)) for a, b in
+                        zip(forecast_df["fiscal_year"], forecast_df["fiscal_quarter"])})
+        for _idx, _fyq in enumerate(_uniq, start=1):
+            if last_actual_date is not None:
+                _d = _add_months_eom(last_actual_date, 3 * _idx)
+            else:
+                _d = _quarter_end_date(_fyq[0], _fyq[1])
+            _period_dates[_fyq] = _d.strftime("%Y-%m-%d") if _d else None
+    except Exception:
+        _period_dates = {}
+
     rows: List[Dict[str, Any]] = []
     for model_key in model_keys:
         if model_key not in forecast_df.columns:
@@ -181,12 +215,15 @@ def upsert_forecasts(
             fq = int(r["fiscal_quarter"])
             val_b = r[model_key]
             val_mm = float(val_b) * _BILLIONS_TO_MILLIONS if val_b is not None else None
-            qend = _quarter_end_date(fy, fq)
+            _fdate = _period_dates.get((fy, fq))
+            if _fdate is None:
+                _qend = _quarter_end_date(fy, fq)
+                _fdate = _qend.strftime("%Y-%m-%d") if _qend else None
             rows.append({
                 "ticker":           ticker,
                 "fiscal_year":      fy,
                 "fiscal_quarter":   fq,
-                "forecast_date":    qend.strftime("%Y-%m-%d") if qend else None,
+                "forecast_date":    _fdate,
                 "metric":           metric,
                 "model_key":        model_key,
                 "value_millions":   round(val_mm, 4) if val_mm is not None else None,

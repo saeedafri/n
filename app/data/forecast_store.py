@@ -311,6 +311,43 @@ def get_all_model_forecasts(
         return {}
 
 
+def prune_stale_years(
+    ticker: str,
+    last_actual_date: datetime.date,
+    metric: str = _METRIC_TOTAL_REVENUE,
+) -> int:
+    """
+    Delete annual forecast rows that have aged into the past for this ticker.
+
+    A fresh forecast only ever covers fiscal years AFTER `last_actual_date`, so any
+    stored row whose `forecast_date <= last_actual_date` is a projection for a year
+    that has since been reported — stale, and safe to drop. Mirrors the quarterly
+    `prune_stale_quarters`; without it the annual table accumulates a dead forecast
+    row for every year that becomes actual (shown in the UI as a phantom "forecast"
+    column for a past year). Called after each successful annual upsert.
+    """
+    if last_actual_date is None:
+        return 0
+    try:
+        return db_manager.execute_delete(
+            """
+            DELETE FROM coreiq_model_forecasts
+            WHERE ticker = :ticker
+              AND metric = :metric
+              AND forecast_date IS NOT NULL
+              AND forecast_date <= :last_actual_date
+            """,
+            {"ticker": ticker, "metric": metric,
+             "last_actual_date": last_actual_date.strftime("%Y-%m-%d")},
+        )
+    except Exception as exc:
+        log_structured_error(
+            exc, page="forecast_store", component="prune_stale_years",
+            operation="DELETE", context={"ticker": ticker},
+        )
+        return 0
+
+
 def delete_forecasts_beyond_horizon(max_periods_ahead: int = 5) -> int:
     """
     Remove rows from coreiq_model_forecasts where periods_ahead exceeds the

@@ -345,16 +345,18 @@ from components.navigation import render_header, render_coresight_footer
 
 try:
     from utils.server_logger import (
-        new_rerun_id, PageLoadTracker,
-        log_structured_error, log_error, log_timing, log_info,
+        new_rerun_id, PageLoadTracker, log_render_complete,
+        log_structured_error, log_error, log_warning, log_timing, log_info,
     )
 except ImportError:
     def new_rerun_id(*a, **kw): return ''
     PageLoadTracker = None
     def log_structured_error(*a, **kw): pass
     def log_error(*a, **kw): pass
+    def log_warning(*a, **kw): pass
     def log_timing(*a, **kw): pass
     def log_info(*a, **kw): pass
+    def log_render_complete(*a, **kw): pass
 
 hide_sidebar()
 # =============================================================================
@@ -2161,8 +2163,6 @@ def _inline_add_keydevs(cid, working, wk_key, show_form_key):
             key=f"_scr_nk_{cid}", placeholder="Select categories…",
         )
         date_fields = _render_keydevs_date_filter(None, f"_scr_nk_{cid}")
-        show_headline = st.checkbox("Show latest event in results",
-                                    value=True, key=f"_scr_nkh_{cid}")
 
         fc1, fc2 = st.columns([1, 1])
         with fc1:
@@ -2176,7 +2176,7 @@ def _inline_add_keydevs(cid, working, wk_key, show_form_key):
                         "type": "keydevs",
                         "categories": cat_keys,
                         "category_labels": selected_labels,
-                        "show_headline": show_headline,
+                        "show_headline": True,   # always show event details
                     }
                     err = _apply_keydevs_date_fields(new_crit, date_fields)
                     if err:
@@ -2186,8 +2186,11 @@ def _inline_add_keydevs(cid, working, wk_key, show_form_key):
                     new_crit["summary"] = _keydevs_summary_from_fields(
                         selected_labels, date_fields,
                     )
-                    if show_headline:
-                        new_crit["display_col"] = display_col
+                    # Always attach a results column for a key-dev criterion so the
+                    # grid never silently drops it ("nothing is coming"). It carries
+                    # the latest matched events (date · type · headline) — see
+                    # apply_keydevs_criterion.
+                    new_crit["display_col"] = display_col
                     working.append(new_crit)
                     st.session_state[wk_key] = working
                     st.session_state.pop(show_form_key, None)
@@ -2642,6 +2645,14 @@ def _dialog_watchlist_manager():
                                               if c.get("sector") in sel_sec_new],
                                              user_email)
                         _invalidate_watchlist_cache()
+                        # Analytics: watchlist created (discrete click, fires once).
+                        try:
+                            from utils.server_logger import track_action
+                            track_action("watchlist_create", page="screening",
+                                         companies=len(sel_cos_new or []),
+                                         sectors=len(sel_sec_new or []))
+                        except Exception:
+                            pass
                         # Auto-select the new watchlist on the main page
                         st.session_state.scr_active_watchlist_id   = new_id
                         st.session_state.scr_active_watchlist_name = nm.strip()
@@ -3973,12 +3984,6 @@ def _render_keydevs_form():
                     key="scr_kd_categories",
                 )
                 date_fields = _collect_keydevs_date_fields(prefill_for_dates, "scr_kd")
-                default_headline = prefill.get("show_headline", True) if is_edit else True
-                show_headline = st.checkbox(
-                    "Show latest event in results",
-                    value=default_headline,
-                    key="scr_kd_headline",
-                )
 
                 # ── Additional Data add-on ───────────────────────────────────
                 st.markdown("---")
@@ -4023,15 +4028,16 @@ def _render_keydevs_form():
                             "type":            "keydevs",
                             "categories":      cat_keys,
                             "category_labels": selected_labels,
-                            "show_headline":   show_headline,
+                            "show_headline":   True,   # always show event details
                         }
                         err = _apply_keydevs_date_fields(criterion, date_fields)
                         if err:
                             st.error(err)
                             return
                         criterion["summary"] = _keydevs_summary_from_fields(selected_labels, date_fields)
-                        if show_headline:
-                            criterion["display_col"] = _keydevs_display_col(date_fields)
+                        # Always attach a results column (see the other key-dev form
+                        # and apply_keydevs_criterion) so the grid is never blank.
+                        criterion["display_col"] = _keydevs_display_col(date_fields)
                         _add_criterion(criterion)
 
                     # Add additional data criteria if checked
@@ -4668,8 +4674,14 @@ def _render_keydevs_results():
             st.info("No companies match the current criteria. Try relaxing a filter.")
             return
 
-        # Gather keydevs criterion params (categories + days) for event query
+        # Gather keydevs criterion params (categories + days) for event query.
+        # STICKY branded loader: stays up through the (uncached) event query AND until
+        # the AgGrid results grid actually paints client-side — previously the spinner
+        # vanished the moment Python returned, leaving "2000 events found" over a BLANK
+        # grid (Image #18). The JS self-removes once the grid has real height.
+        from components.loading import render_sticky_loader
         keydev_criteria = [c for c in criteria if c.get("type") == "keydevs"]
+        render_sticky_loader("Loading Key Developments")
         if not keydev_criteria:
             # No Key Dev criterion — show all events for matched companies, all categories
             # Use KEYDEV_CATEGORIES_ALL values (exact DB event_category strings)
@@ -5698,6 +5710,21 @@ def _render_filterable_results_grid(
             header_checkbox=True,
         )
     grid_options = gb.build()
+    # configure_selection puts the checkbox on columnDefs[0], but the identity
+    # column ("Company Name(s)") is pinned LEFT — so the pinned name column ends
+    # up leftmost while the checkbox stays on whatever was column 0 (e.g. "Key
+    # Developments By Date"). Move the checkbox onto the pinned column so the
+    # selection box sits in the first column the user reads (matches Company
+    # Screening). STG 03-Jul: keydev checkbox was showing in column 2.
+    if enable_selection and pin_col:
+        for _cd in grid_options.get("columnDefs", []):
+            _cd.pop("checkboxSelection", None)
+            _cd.pop("headerCheckboxSelection", None)
+        for _cd in grid_options.get("columnDefs", []):
+            if _cd.get("field") == pin_col or _cd.get("headerName") == pin_col:
+                _cd["checkboxSelection"] = True
+                _cd["headerCheckboxSelection"] = True
+                break
     # ── Read / copy long cells (e.g. Summary) ───────────────────────────────
     # AG Grid cells are not editable here, so clicking does nothing by design.
     # enableBrowserTooltips → hover a cell to read its FULL value in a tooltip.
@@ -5739,6 +5766,30 @@ def _render_filterable_results_grid(
     ) if enable_selection else (
         GridUpdateMode.FILTERING_CHANGED | GridUpdateMode.SORTING_CHANGED
     )
+    # ── Every cell selectable + copyable (ALL screening grids use this helper) ──
+    # enableCellTextSelection (set above) is version-fragile — some AG Grid builds
+    # stop honoring it, leaving cells unselectable. custom_css injects INTO the grid
+    # iframe and forces user-select:text on every cell, so an analyst can drag-select
+    # and Cmd/Ctrl+C the FULL value of ANY column (even when visually truncated) —
+    # not just Company/Key-Dev. Pairs with enableBrowserTooltips (hover to read the
+    # full value). This is deterministic regardless of the AG Grid version deployed.
+    _selectable_css = {
+        ".ag-cell": {
+            "user-select": "text !important",
+            "-webkit-user-select": "text !important",
+            "-moz-user-select": "text !important",
+            "-ms-user-select": "text !important",
+            "cursor": "text !important",
+        },
+        ".ag-cell-value": {
+            "user-select": "text !important",
+            "-webkit-user-select": "text !important",
+        },
+        ".ag-cell-value span, .ag-cell span, .ag-cell a": {
+            "user-select": "text !important",
+            "-webkit-user-select": "text !important",
+        },
+    }
     # Keyed shell lets CSS mask the AG Grid iframe's grey bootstrap flash
     # (white fill + spinner behind the iframe — see [class*="st-key-scr_grid_shell"]).
     # Key is per-grid so segment mode (several grids in one run) never collides.
@@ -5757,6 +5808,7 @@ def _render_filterable_results_grid(
             update_mode=_update_mode,
             data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
             theme="streamlit",
+            custom_css=_selectable_css,
         )
     return grid_response if enable_selection else None
 
@@ -5858,6 +5910,11 @@ def _render_results():
             )
             if show_clicked:
                 log_timing("SHOW_RESULTS_CLICK", 0, f"criteria={len(criteria)}")
+                _rerun_n = st.session_state.get("_rerun_count_screening", 0)
+                log_warning(
+                    f"[SHOW_RESULTS] criteria={len(criteria)} "
+                    f"page_rerun#={_rerun_n} watchlist={wl_active}"
+                )
                 st.session_state.scr_results_loading = True
                 st.session_state.scr_results_pending_paint = True
                 st.session_state.scr_show_results_requested = True
@@ -5913,6 +5970,12 @@ def _render_results():
             finally:
                 st.session_state.scr_results_loading = False
                 st.session_state.scr_show_results_requested = False
+                _final_rerun = st.session_state.get("_rerun_count_screening", 0)
+                log_timing(
+                    "SHOW_RESULTS_RERUN_TOTAL",
+                    0.0,
+                    f"page_rerun#={_final_rerun} criteria={len(criteria)}",
+                )
                 st.rerun()
 
         if st.session_state.get("scr_results_error"):
@@ -6020,6 +6083,18 @@ def _render_results():
                 _builder = lambda: _build_screening_excel(display_df, len(criteria))
             _render_excel_download(_sig, _builder)
 
+        # Analytics: a screen with real criteria was executed → record run + result
+        # count (best-effort, deduped on the result-set signature so re-renders of the
+        # same result set don't repeat).
+        try:
+            if criteria:
+                from utils.server_logger import track_action
+                track_action("screen_run", page="screening",
+                             results=len(display_df), criteria_count=len(criteria),
+                             segment=has_segment_results, dedupe_key=_sig)
+        except Exception:
+            pass
+
         t_table = time.perf_counter()
         if has_segment_results:
             _render_segment_expanded_table(df, criteria, seg_criteria)
@@ -6075,6 +6150,7 @@ def main():
     try:
         t0 = time.perf_counter()
         new_rerun_id("screening")
+        _tracker = PageLoadTracker("screening") if PageLoadTracker else None
 
         # ── Initialize session state ──
         _init_state()
@@ -6123,6 +6199,26 @@ def main():
             # Active criteria stack
             _render_active_criteria()
 
+            # Analytics: screening writes NOTHING to the URL, so the auto page_view had
+            # zero filter data. Capture the mode + the active criteria (type + summary).
+            try:
+                from utils.server_logger import log_filters_if_changed
+                _acrit = st.session_state.get("scr_active_criteria", []) or []
+                log_filters_if_changed(
+                    "screening",
+                    screen_for=screen_for,
+                    criteria_count=len(_acrit),
+                    criteria=[
+                        {"type": _c.get("type"),
+                         "summary": (_c.get("summary") or _c.get("display_col")
+                                     or _c.get("statement") or _c.get("metric_label"))}
+                        for _c in _acrit if isinstance(_c, dict) and not _c.get("hidden")
+                    ] or None,
+                    watchlist=st.session_state.get("scr_active_watchlist_name") or None,
+                )
+            except Exception:
+                pass
+
             # Results — mode-specific rendering
             if screen_for == "Companies":
                 _render_results()
@@ -6139,6 +6235,9 @@ def main():
 
         # ── Footer ──
         render_coresight_footer(full_width=True, stick_to_bottom=True)
+        if _tracker:
+            _tracker.finish()
+        log_render_complete("screening", time.perf_counter() - t0)
 
     except Exception as e:
         log_structured_error(e, page="screening", component="main", operation="main")

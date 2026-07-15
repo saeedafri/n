@@ -133,6 +133,13 @@ def get_global_css() -> str:
         return f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* Material Symbols Rounded — Streamlit renders its expander/UI icons as FONT
+       LIGATURES in this family. Behind the STG reverse proxy the bundled font can
+       fail to load, so the raw ligature text ("keyboard_arrow_right") leaks next to
+       labels like "For Reference". Loading it from the (already-allowed) Google CDN
+       guarantees the glyph resolves. display=block hides the fallback text until the
+       glyph is ready, so no ligature flash. */
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
 
     /* Root Variables */
     :root {{
@@ -421,6 +428,16 @@ def get_global_css() -> str:
         animation: cs-fade 0.3s ease both;
     }}
 
+    /* Expander toggle icon: Streamlit draws it as a Material Symbols FONT LIGATURE.
+       Force the icon family so a stray Inter override can never make the raw
+       "keyboard_arrow_right" text leak next to the label (pairs with the global
+       Material Symbols Rounded @import that guarantees the glyph is available). */
+    [data-testid="stExpander"] summary [data-testid="stIconMaterial"],
+    [data-testid="stExpanderToggleIcon"],
+    [data-testid="stExpander"] summary span[class*="material"] {{
+        font-family: 'Material Symbols Rounded', 'Material Symbols Outlined' !important;
+    }}
+
     /* Spinners: don't animate spinners themselves — they already have motion */
     [data-testid="stSpinner"] {{
         animation: none !important;
@@ -607,6 +624,32 @@ def _build_sidebar_css():
         padding: 0 !important;
         overflow: hidden !important;
         line-height: 0 !important;
+    }
+
+    /* ── WHITE-SPACE-ABOVE-HEADER FIX (every filter / tab change, every page) ────────
+       The invisible, data-only `streamlit_local_storage` component (getAll/setItem/…
+       calls that persist filter state) renders a 0px iframe, but Streamlit still wraps
+       it in an stElementContainer that occupies ~25px in the NORMAL flow (plus the flex
+       gap ≈ 57px total). When a filter/tab change triggers a localStorage save, that
+       container is emitted ABOVE the sticky header, pushing it down and opening a white
+       gap above the header. Pull the container fully OUT of flow (position:fixed
+       off-screen — the same proven idiom as .st-key-cs_hidden_nav) so the component
+       keeps running (its JS + Streamlit postMessage handshake are unaffected by CSS
+       position) while reserving ZERO layout space. */
+    div[data-testid="stElementContainer"]:has(> div > iframe[title="streamlit_local_storage.st_local_storage"]),
+    div[data-testid="stElementContainer"]:has(iframe[title="streamlit_local_storage.st_local_storage"]) {
+        position: fixed !important;
+        left: -99999px !important;
+        top: 0 !important;
+        width: 1px !important;
+        height: 1px !important;
+        max-height: 1px !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
 
     /* Hide sidebar immediately on page load - prevents skeleton flash */

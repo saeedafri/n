@@ -123,7 +123,7 @@ class LocalStorageManager:
             return value
 
         except Exception as e:
-            logger.error(f"Error retrieving local storage key {key_str}: {e}")
+            log_error(f"Error retrieving local storage key {key_str}: {e}")
             return default
 
     def set(
@@ -158,7 +158,7 @@ class LocalStorageManager:
             return True
 
         except Exception as e:
-            logger.error(f"Error storing local storage key {key_str}: {e}")
+            log_error(f"Error storing local storage key {key_str}: {e}")
             return False
 
     def update(
@@ -210,7 +210,7 @@ class LocalStorageManager:
 
             return True
         except Exception as e:
-            logger.error(f"Error deleting local storage key {key_str}: {e}")
+            log_error(f"Error deleting local storage key {key_str}: {e}")
             return False
 
     def clear(self) -> bool:
@@ -222,7 +222,7 @@ class LocalStorageManager:
             self._cache.clear()
             return True
         except Exception as e:
-            logger.error(f"Error clearing local storage: {e}")
+            log_error(f"Error clearing local storage: {e}")
             return False
 
     def get_filter_state(self) -> UserFilterState:

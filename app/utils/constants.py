@@ -8,6 +8,18 @@ from typing import Optional
 from utils.server_logger import log_structured_error
 
 # =============================================================================
+# FEATURE FLAGS
+# =============================================================================
+
+# Quarterly revenue forecasting is paused at the Data team's request (2026-07-13).
+# When False, every quarterly-forecasting surface falls back to its Annual-only
+# behavior: the /forecasting Quarterly toggle, the /market_data Forecasting-tab
+# Quarterly view, and the twice-daily background quarterly refresh are all hidden
+# or skipped. Annual forecasting is unaffected and does not read this flag.
+# To fully restore quarterly forecasting, flip this to True — one-line revert.
+QUARTERLY_FORECASTING_ENABLED = False
+
+# =============================================================================
 # CURRENCY MAPPINGS
 # =============================================================================
 
@@ -547,6 +559,12 @@ EXCHANGE_CODE_MAP = {
     "KOREA": "KRX",
     "KRX": "KRX",
     "KSE": "KRX",
+    # Direct keys MUST exist for these — otherwise the partial-match fallback
+    # below matches 'KS' inside 'HKSE' and mislabels Korean stocks as Hong Kong
+    # (HKEX). 'KS' is yfinance's Korea suffix (e.g. 005930.KS); 'KSC' is Samsung's
+    # info.exchange value.
+    "KS": "KRX",
+    "KSC": "KRX",
     "KOSPI": "KRX",
     "KOSDAQ": "KOSDAQ",
     "KR": "KRX",

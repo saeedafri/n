@@ -1,35 +1,18 @@
 """
 Cache Manager - Centralized cache control for Research Portal
-===============================================================
-
-Provides:
-- Manual cache clear functions for emergency updates
-- Cache statistics and monitoring
-- Automatic cache warming for static data
-- BACKGROUND cache warming for heavy queries
-
-Usage:
-    from utils.cache_manager import clear_news_cache, get_cache_stats
-
-    # Clear cache when new company added
-    clear_news_cache()
-
-    # Get cache statistics
-    stats = get_cache_stats()
-
-    # Start background warming on app startup
-    start_background_warmup()
-
-Date: March 8, 2026
-Author: AI Assistant
 """
+import builtins
+import os
 import streamlit as st
 import time
 import threading
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-# Background warmup state
+# Process-global warm-once guard — survives Streamlit script reloads within one worker.
+if not hasattr(builtins, "_mdp_warmup_started"):
+    builtins._mdp_warmup_started = False
+
 _background_warmup_started = False
 _background_warmup_lock = threading.Lock()
 
@@ -352,55 +335,110 @@ def _background_warmup_thread():
     try:
         time.sleep(0.5)  # Minimal delay to let pg.run() start (engines are initialized)
         from datetime import date, timedelta
+
+        # ── Track -1: Earnings calls company lists (FIRST — ~23s cold without warmup) ──
+        try:
+            from data.repository import EarningsCallRepository
+            from concurrent.futures import ThreadPoolExecutor as _ETP
+
+            def _warm_sec_companies():
+                EarningsCallRepository.get_companies_with_earnings()
+
+            def _warm_non_sec_companies():
+                EarningsCallRepository.get_non_sec_transcript_companies()
+
+            with _ETP(max_workers=2) as _ep:
+                _ef1 = _ep.submit(_warm_sec_companies)
+                _ef2 = _ep.submit(_warm_non_sec_companies)
+                try:
+                    _ef1.result(timeout=90)
+                except Exception:
+                    pass
+                try:
+                    _ef2.result(timeout=90)
+                except Exception:
+                    pass
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Earnings calls warmup error: {e}")
+
         _warm_date_to   = date.today()
         _warm_date_from = _warm_date_to - timedelta(days=7)
 
-        # ── Track 0: Earnings Calendar warmup (FIRST — it's the slowest page) ──
-        # The calendar page runs three independent slow queries on a cold cache
-        # (events UNION ~8.8s, fiscal-year-end map ~7.1s, tickers ~6.6s). Warm
-        # them up front so EC is cached within ~15s of boot — before real users
-        # navigate to it. Run SEQUENTIALLY (not a parallel pool): the page itself
-        # already parallelizes these four queries, so a concurrent warmup would
-        # double DB load (thundering herd) for any visit during the warmup window
-        # and run SLOWER than no warmup at all. Sequential keeps DB pressure low.
+        # ── Track 0: Calendar warmup (FIRST — it's the slowest page) ──
+        # Warm tickers, FYE map, the full deduped event set, and M&A completions.
+        # Sequential to avoid thundering herd with the page's own parallel fetch.
         try:
             from data.repository import EarningsCalendarRepository
+
+            for _warm_fn, _warm_args in (
+                (EarningsCalendarRepository.get_available_tickers, ()),
+                (EarningsCalendarRepository._get_fiscal_year_end_map, ()),
+                # Warm the FULL deduped set (disk-materialized) — the calendar page
+                # now counts this for its badge and windows it in Python for render,
+                # so warming it means both the first load AND every month/year
+                # navigation are cache hits (no ~3.6s dedup SQL).
+                (EarningsCalendarRepository.get_calendar_events_full, ()),
+                (EarningsCalendarRepository.get_ma_completion_events, ()),
+            ):
+                try:
+                    _warm_fn(*_warm_args)
+                except Exception:
+                    pass
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Earnings calendar warmup error: {e}")
+
+        # ── Track 1: populate @st.cache_data for static dropdowns (SEQUENTIAL) ──
+        # Sequential to avoid connection storms on Azure MySQL cold start.
+        try:
+            from data.repository import NewsRepository, CompanyRepository
+            from data.revenue_forecast_service import RevenueForecastService
+
             for _warm_fn in (
-                EarningsCalendarRepository.get_available_tickers,
-                EarningsCalendarRepository._get_fiscal_year_end_map,
-                EarningsCalendarRepository.get_calendar_events,  # also warms IR + companies map
+                NewsRepository.get_sectors,
+                NewsRepository.get_ticker_sector_map,
+                NewsRepository.get_news_date_range,
+                CompanyRepository.get_companies_rows,
+                RevenueForecastService.get_companies,
             ):
                 try:
                     _warm_fn()
                 except Exception:
                     pass
         except Exception as e:
-            log_error(f"[CACHE_WARM_BG] Earnings calendar warmup error: {e}")
-
-        # ── Track 1: populate @st.cache_data for static dropdowns (PARALLEL) ──
-        # All 4 calls fire concurrently. Total = max(individual) ≈ 2.7s
-        # instead of sum ≈ 3.7s when sequential.
-        try:
-            from data.repository import NewsRepository, CompanyRepository
-            from concurrent.futures import ThreadPoolExecutor as _T1Pool
-
-            def _safe_call(fn):
-                try:
-                    fn()
-                except Exception:
-                    pass
-
-            with _T1Pool(max_workers=4) as _t1:
-                _t1_futs = [
-                    _t1.submit(_safe_call, NewsRepository.get_sectors),
-                    _t1.submit(_safe_call, NewsRepository.get_ticker_sector_map),
-                    _t1.submit(_safe_call, NewsRepository.get_news_date_range),
-                    _t1.submit(_safe_call, CompanyRepository.get_companies_rows),
-                ]
-                for _f in _t1_futs:
-                    _f.result(timeout=30)
-        except Exception as e:
             log_error(f"[CACHE_WARM_BG] Dropdown warmup error: {e}")
+
+        # ── Track 1b: Company Filings dropdown (SEC master + NON-SEC blob scan) ──
+        try:
+            from pages.company_filings import _load_companies_cached
+
+            _load_companies_cached()
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Filings companies warmup error: {e}")
+
+        # ── Track 1c: Market Data DEFAULT ticker (AMZN) slow tabs ──────────────
+        # STG 03-Jul: the Segment (date_range ~4.6s) and Ratings (~10s) tabs pay
+        # cold Azure-buffer latency on first touch per ticker. AMZN is the default
+        # landing ticker, so warming its two heaviest fetches makes the common
+        # market_data landing fast; other tickers still warm lazily on first view.
+        try:
+            from data.repository import SegmentDataRepository, RatingsDataRepository
+            try:
+                # Segment tab: AMZN is the default landing ticker (has segments).
+                # Underlies get_date_range / get_available_dates / get_segment_data.
+                SegmentDataRepository._fetch_all_db_rows("AMZN")
+            except Exception:
+                pass
+            try:
+                # Ratings tab: warm a flagship RETAILER that has credit ratings
+                # (AMZN has none — ratings are retailer-only). M (Macy's) hit ~10s
+                # cold on STG 03-Jul; warming it makes that common view fast.
+                _r1, _r2 = RatingsDataRepository.get_date_range("M")
+                if _r1 and _r2:
+                    RatingsDataRepository.get_ratings_data("M", _r1, _r2)
+            except Exception:
+                pass
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Market data warmup error: {e}")
 
         # ── Track 2: raw DB buffer-pool warmup for AV + YF (PARALLEL) ─────────
         # Does NOT call @st.cache_data decorated functions — no lock contention.
@@ -455,73 +493,32 @@ def _background_warmup_thread():
         except Exception as e:
             log_error(f"[CACHE_WARM_BG] Buffer-pool warmup error: {e}")
 
-        # ── Earnings (parallelized SEC + non-SEC warmup) ─────────────────────
-        try:
-            from data.repository import EarningsCallRepository
-            from concurrent.futures import ThreadPoolExecutor as _ETP
-
-            def _warm_sec_companies():
-                EarningsCallRepository.get_companies_with_earnings()
-
-            def _warm_non_sec_companies():
-                EarningsCallRepository.get_non_sec_transcript_companies()
-
-            with _ETP(max_workers=2) as _ep:
-                _ef1 = _ep.submit(_warm_sec_companies)
-                _ef2 = _ep.submit(_warm_non_sec_companies)
-                try:
-                    _ef1.result(timeout=60)
-                except Exception:
-                    pass
-                try:
-                    _ef2.result(timeout=60)
-                except Exception:
-                    pass
-        except Exception as e:
-            log_error(f"[CACHE_WARM_BG] Earnings warmup error: {e}")
-
     except Exception as exc:
         log_structured_error(exc, page="cache_manager", component="_background_warmup_thread",
                              operation="background_warmup", context="background thread fatal error")
 
 
 def start_background_warmup() -> bool:
-    """
-    Start background cache warming in a separate thread.
-
-    Call this ONCE during app startup (main.py). The heavy queries
-    (like earnings companies) will load in background while user
-    interacts with other pages.
-
-    Returns:
-        True if thread started, False if already running
-
-    Example (in main.py):
-        from utils.cache_manager import start_background_warmup
-        start_background_warmup()  # Non-blocking
-    """
+    """Start background cache warming in a separate thread (once per process)."""
     global _background_warmup_started
+
+    if os.getenv("WARM_ON_BOOT", "1").strip().lower() in ("0", "false", "no", "off"):
+        return False
 
     try:
         with _background_warmup_lock:
-            if _background_warmup_started:
-
+            if _background_warmup_started or getattr(builtins, "_mdp_warmup_started", False):
                 return False
 
             _background_warmup_started = True
+            builtins._mdp_warmup_started = True
 
             thread = threading.Thread(
                 target=_background_warmup_thread,
                 name="CacheWarmup",
                 daemon=True,
             )
-            # NOTE: do NOT add_script_run_ctx here.
-            # The heavy warmup queries (AV/YF) bypass @st.cache_data intentionally.
-            # Propagating session context would cause @st.cache_data lock contention
-            # and block the first real user request for up to 33s on cold DB.
             thread.start()
-
-
             return True
     except Exception as exc:
         log_structured_error(exc, page="cache_manager", component="start_background_warmup",

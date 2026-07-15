@@ -124,8 +124,9 @@ def _get_filing_units_from_db(ticker: str, year: str, doc_type: str) -> Optional
 
     except Exception as e:
         # Log error but don't crash - fallback to filesystem
-        import logging
-        logging.getLogger(__name__).warning(f"DB filing_units query failed: {e}")
+        from utils.server_logger import log_structured_error
+        log_structured_error(e, page="filing_units", component="_get_filing_units_from_db",
+                             operation="DB_QUERY")
         return None
 
 

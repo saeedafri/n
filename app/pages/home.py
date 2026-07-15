@@ -8,7 +8,10 @@ from core.auth_manager import require_auth
 from data.repository import CompanyRepository
 from utils.local_storage import set_marketdata_tab
 from utils.local_storage_manager import set_persistent_state, save_market_data_state
-from utils.server_logger import log_structured_error, log_error, error_boundary
+from utils.server_logger import log_structured_error, log_error, error_boundary, new_rerun_id, PageLoadTracker, log_render_complete
+import time as _perf_time
+
+new_rerun_id("home")
 
 # require_auth(page="home")
 hide_sidebar()
@@ -58,6 +61,8 @@ except Exception as _exc:
 SECTORS = ["Apparel & Footwear", "Department Stores", "Discount Stores", "Luxury Goods"]
 
 def main():
+  _page_start = _perf_time.perf_counter()
+  _tracker = PageLoadTracker("home")
   try:
     import time as _time
     _t0_page = _time.perf_counter()
@@ -242,6 +247,8 @@ def main():
 
     st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
     render_coresight_footer(full_width=True, stick_to_bottom=True)
+    _tracker.finish()
+    log_render_complete("home", _perf_time.perf_counter() - _page_start)
   except Exception as _exc:
     log_structured_error(_exc, page="home", component="main", operation="PAGE_RENDER")
     st.error("An unexpected error occurred. Please refresh the page.")

@@ -1217,8 +1217,10 @@ def send_model_refresh_email(
     if not recipients:
         recipients = _get_admin_recipients()
 
-    # Always include the person who triggered the run
-    if triggered_by and triggered_by not in recipients:
+    # Include the human who triggered the run. Guard on "@" so a non-email
+    # trigger label (e.g. the "auto-scheduler" automated run) is never added as
+    # a recipient — that would be an invalid SMTP address and fail the send.
+    if triggered_by and "@" in triggered_by and triggered_by not in recipients:
         recipients = recipients + [triggered_by]
 
     cc_preview = [a for a in _FORECAST_CC if a not in recipients]

@@ -33,9 +33,11 @@ from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
 from utils.constants import NEWS_TOPIC_LABELS, get_topic_display_label
 from utils.server_logger import (
     PageLoadTracker, new_rerun_id,
-    log_structured_error, log_warning,
+    log_structured_error, log_warning, log_timing,
 )
 import time
+
+new_rerun_id("newsroom")
 
 
 # =============================================================================
@@ -44,6 +46,12 @@ import time
 _CHUNK_DAYS = 7          # each chunk spans 7 days
 _MAX_WORKERS = 6         # max parallel DB workers for chunk fetching
 _BG_PREFETCH_WEEKS = 4   # how many extra weeks to pre-populate in background
+_WAVE_WEEKS = 8          # weeks fetched per wave for wide date ranges (see below)
+# Wide ranges are fetched in WAVES of _WAVE_WEEKS, newest-first (or oldest-first
+# for "Earliest" sort), stopping once a screenful is loaded; a "Load older
+# articles" button pulls the next wave. STG 03-Jul evidence for why: a full
+# history range fanned out 758 week-chunks in one shot — 92.9s, 465k rows in
+# session RAM, all to show the first page of cards.
 
 
 def _split_into_chunks(
@@ -97,10 +105,13 @@ def _fetch_chunked(
 
     Returns (all_av_articles, all_yf_articles) merged across all chunks.
     """
+    _fetch_t0 = time.perf_counter()
     chunks = _split_into_chunks(d_from, d_to)
     n_chunks = len(chunks)
     # Each chunk needs 2 workers (AV + YF).  Cap total workers.
     workers = min(_MAX_WORKERS, n_chunks * 2)
+    _chunk_av_rows: dict = {}
+    _chunk_yf_rows: dict = {}
 
     all_av: List[NewsArticle] = []
     all_yf: List[NewsArticle] = []
@@ -120,6 +131,8 @@ def _fetch_chunked(
             limit=yf_limit, sort_ascending=sort_ascending,
             sector=sector,
         )
+        _chunk_av_rows[0] = len(all_av)
+        _chunk_yf_rows[0] = len(all_yf)
     else:
         # Multi-chunk — fire all AV + YF calls in one pool
         av_results: dict = {}  # chunk_idx -> List[NewsArticle]
@@ -152,8 +165,10 @@ def _fetch_chunked(
                     result = fut.result(timeout=120)
                     if kind == 'av':
                         av_results[idx] = result
+                        _chunk_av_rows[idx] = len(result)
                     else:
                         yf_results[idx] = result
+                        _chunk_yf_rows[idx] = len(result)
                 except Exception as exc:
                     log_warning(f"[CHUNKED_FETCH] {kind} chunk {idx} failed: {exc}")
                     if kind == 'av':
@@ -174,7 +189,242 @@ def _fetch_chunked(
     all_av = [a for a in all_av if _d_from_dt <= a.time_published <= _d_to_dt]
     all_yf = [a for a in all_yf if _d_from_dt <= a.time_published <= _d_to_dt]
 
+    _fetch_ms = (time.perf_counter() - _fetch_t0) * 1000
+    _av_per_chunk = ",".join(str(_chunk_av_rows.get(i, 0)) for i in range(n_chunks))
+    _yf_per_chunk = ",".join(str(_chunk_yf_rows.get(i, 0)) for i in range(n_chunks))
+    _dedupe_ratio_av = (
+        f"{len(all_av)}/{_pre_av}" if _pre_av else f"{len(all_av)}/0"
+    )
+    _dedupe_ratio_yf = (
+        f"{len(all_yf)}/{_pre_yf}" if _pre_yf else f"{len(all_yf)}/0"
+    )
+    log_timing(
+        "NEWSROOM_CHUNK_FETCH",
+        _fetch_ms,
+        (
+            f"chunks={n_chunks} workers={workers} "
+            f"av_rows={len(all_av)} yf_rows={len(all_yf)} "
+            f"av_per_chunk=[{_av_per_chunk}] yf_per_chunk=[{_yf_per_chunk}] "
+            f"trim_ratio_av={_dedupe_ratio_av} trim_ratio_yf={_dedupe_ratio_yf} "
+            f"sector={sector or 'ALL'} ticker={company_ticker or 'ALL'}"
+        ),
+    )
+
     return all_av, all_yf
+
+
+def _wave_subranges(
+    d_from: date, d_to: date, newest_first: bool, wave_weeks: int = _WAVE_WEEKS,
+) -> List[Tuple[date, date]]:
+    """Split [d_from, d_to] into wave subranges of up to `wave_weeks` ISO weeks.
+
+    Waves are ordered newest-first (or oldest-first when `newest_first` is
+    False, i.e. "Earliest" sort) so wave 0 always covers the articles the user
+    sees first. Subrange edges are clamped to [d_from, d_to]; the underlying
+    per-week @st.cache_data chunks stay full-week aligned inside _fetch_chunked,
+    so cache keys are unchanged.
+    """
+    weeks = _split_into_chunks(d_from, d_to)  # newest-first Mon–Sun weeks
+    if not newest_first:
+        weeks = list(reversed(weeks))
+    waves: List[Tuple[date, date]] = []
+    for i in range(0, len(weeks), wave_weeks):
+        grp = weeks[i:i + wave_weeks]
+        lo = min(w[0] for w in grp)
+        hi = max(w[1] for w in grp)
+        waves.append((max(lo, d_from), min(hi, d_to)))
+    return waves
+
+
+def _loading_spinner_html(message: str) -> str:
+    """Spinner card used by the progressive loader (same style as _LOADING_SPINNER)."""
+    return (
+        '<div style="display:flex;align-items:center;gap:14px;padding:24px 28px;'
+        'background:#fafafa;border:1px solid #f0f0f0;border-radius:10px;'
+        'box-shadow:0 1px 4px rgba(0,0,0,0.04);animation:nwsPageEntry .3s ease-out">'
+        '<div style="width:22px;height:22px;border:2.5px solid #eee;'
+        'border-top-color:#D62E2F;border-radius:50%;'
+        'animation:nws-spin .8s linear infinite;flex-shrink:0"></div>'
+        f'<span style="color:#444;font-size:14px">{message}</span>'
+        '</div>'
+        '<style>@keyframes nws-spin{to{transform:rotate(360deg)}}</style>'
+    )
+
+
+def _fetch_waves_until(
+    waves: List[Tuple[date, date]],
+    start_idx: int,
+    target_rows: int,
+    hint=None,
+    seed_av: Optional[List[NewsArticle]] = None,
+    seed_yf: Optional[List[NewsArticle]] = None,
+) -> Tuple[List[NewsArticle], List[NewsArticle], int]:
+    """Fetch waves[start_idx:] until accumulated raw rows >= target_rows.
+
+    Returns (av_articles, yf_articles, next_unfetched_wave_idx). Accumulates on
+    top of the optional seed lists (used when wave 0 came from the prefetch
+    future). Every wave logs NEWSROOM_WAVE_FETCH with cumulative counts so STG
+    logs show exactly how far a range was loaded and how long each wave took.
+    """
+    av_all: List[NewsArticle] = list(seed_av or [])
+    yf_all: List[NewsArticle] = list(seed_yf or [])
+    idx = start_idx
+    while idx < len(waves) and (len(av_all) + len(yf_all)) < target_rows:
+        w_from, w_to = waves[idx]
+        if hint is not None and len(waves) > 1:
+            hint.markdown(
+                _loading_spinner_html(
+                    f"Loading news articles… (section {idx + 1} of {len(waves)})"
+                ),
+                unsafe_allow_html=True,
+            )
+        _w_t0 = time.perf_counter()
+        wave_av, wave_yf = _fetch_chunked(w_from, w_to, None, None, False)
+        av_all.extend(wave_av)
+        yf_all.extend(wave_yf)
+        idx += 1
+        log_timing(
+            "NEWSROOM_WAVE_FETCH",
+            (time.perf_counter() - _w_t0) * 1000,
+            (
+                f"wave={idx}/{len(waves)} range={w_from}->{w_to} "
+                f"av+={len(wave_av)} yf+={len(wave_yf)} "
+                f"acc_av={len(av_all)} acc_yf={len(yf_all)} target={target_rows}"
+            ),
+            level="WARNING",
+        )
+    return av_all, yf_all, idx
+
+
+# ── Server-side full-range keyword search ────────────────────────────────────
+_KW_AV_LIMIT = 1000        # max AV matches fetched (mirrors browse av_limit)
+_KW_YF_LIMIT = 2000        # max YF matches fetched (mirrors browse yf_limit)
+_KW_NARROW_MAX_DAYS = 366  # ranges <= this use LIKE only (window-bounded scan)
+_KW_PROBE_DAYS = 14        # wide-range density probe window (newest end)
+_KW_DENSE_MIN = 10         # probe matches >= this → LIKE path, else FT path
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _keyword_search_serverside(
+    keyword: str, d_from: date, d_to: date, sort_ascending: bool,
+) -> Tuple[List[NewsArticle], List[NewsArticle], Dict[str, int]]:
+    """Server-side keyword search over the ENTIRE selected date range.
+
+    Business requirement (2026-07-03): a keyword must search the whole selected
+    range, not just loaded articles — fast, low RAM. Two primitives (both timed
+    on STG), each with a failure mode the other covers:
+
+    * LIKE scan down the (time,title) ICP index — cost tracks how FAR it walks
+      to fill the limit. Bounded by the window, so it's fast for ANY term over
+      a narrow range; over a WIDE range it early-exits for dense terms but
+      walks the whole range for rare ones (30s+ abort).
+    * FULLTEXT (ft_av_title / ft_yf_title) — cost tracks the term's global
+      doc-list, which MySQL builds IGNORING the date filter. Tiny/fast for rare
+      terms; catastrophic for common ones ('earnings' = 124s) AND useless to
+      narrow by date (a 7-day '+tariff*' still scans 11 years → the 20s bug).
+
+    Router:
+    * NARROW range (<= _KW_NARROW_MAX_DAYS): LIKE only. Window-bounded → fast
+      for every term; FT is never worth its whole-doc-list scan here.
+    * WIDE range: a bounded 14-day LIKE density probe picks the path —
+      DENSE/short (>=_KW_DENSE_MIN recent hits, or <3 chars) → LIKE, with an
+      FT fallback if LIKE hits its execution cap (a term dense recently but
+      sparse across the full range, esp. "Earliest" sort); SPARSE → FT
+      (rare term = small doc-list = fast).
+
+    Single capped queries (no slicing — slicing can't shrink an FT doc-list,
+    and LIKE already early-exits); AV+YF run in parallel; LIMIT bounds RAM to
+    ~3k articles regardless of range width. Every branch is st.cache_data
+    cached in the repository.
+    """
+    from concurrent.futures import ThreadPoolExecutor as _KwPool
+    _t0 = time.perf_counter()
+    asc = sort_ascending
+
+    def _like_av(lim):
+        return NewsRepository.search_av_articles_by_title(
+            keyword, d_from, d_to, limit=lim, sort_ascending=asc) or []
+
+    def _like_yf(lim):
+        return NewsRepository.search_yf_articles_by_title(
+            keyword, d_from, d_to, limit=lim, sort_ascending=asc) or []
+
+    def _ft_av(lim):
+        return NewsRepository.get_articles(
+            date_from=d_from, date_to=d_to, sector=None, company_ticker=None,
+            keyword=keyword, limit=lim, offset=0, sort_ascending=asc) or []
+
+    def _ft_yf(lim):
+        return NewsRepository.get_yf_articles(
+            date_from=d_from, date_to=d_to, keyword=keyword, limit=lim,
+            sort_ascending=asc) or []
+
+    def _safe(fn, lim, tag):
+        try:
+            return fn(lim)
+        except Exception as exc:
+            log_structured_error(exc, page="newsroom",
+                                 component="_keyword_search_serverside",
+                                 operation=f"kw_fetch_{tag}")
+            return []
+
+    def _like_or_ft(like_fn, ft_fn, lim, tag):
+        # LIKE first; if it raises (execution-cap timeout on a rare-over-range
+        # term) fall back to FT, which is fast precisely when LIKE was slow.
+        try:
+            return like_fn(lim)
+        except Exception:
+            return _safe(ft_fn, lim, tag)
+
+    range_days = (d_to - d_from).days + 1
+    probe_hits = -1
+
+    if range_days <= _KW_NARROW_MAX_DAYS:
+        mode = "LIKE_NARROW"
+        with _KwPool(max_workers=2) as pool:
+            f_av = pool.submit(_safe, _like_av, _KW_AV_LIMIT, "av")
+            f_yf = pool.submit(_safe, _like_yf, _KW_YF_LIMIT, "yf")
+            av_all, yf_all = f_av.result(), f_yf.result()
+    else:
+        _probe_from = max(d_from, d_to - timedelta(days=_KW_PROBE_DAYS - 1))
+        try:
+            probe_hits = len(NewsRepository.search_av_articles_by_title(
+                keyword, _probe_from, d_to, limit=30, sort_ascending=False))
+        except Exception:
+            probe_hits = 0
+        dense = probe_hits >= _KW_DENSE_MIN or len(keyword) < 3
+        with _KwPool(max_workers=2) as pool:
+            if dense:
+                mode = "LIKE_WIDE"
+                f_av = pool.submit(_like_or_ft, _like_av, _ft_av, _KW_AV_LIMIT, "av")
+                f_yf = pool.submit(_like_or_ft, _like_yf, _ft_yf, _KW_YF_LIMIT, "yf")
+            else:
+                mode = "FT_WIDE"
+                f_av = pool.submit(_safe, _ft_av, _KW_AV_LIMIT, "av")
+                f_yf = pool.submit(_safe, _ft_yf, _KW_YF_LIMIT, "yf")
+            av_all, yf_all = f_av.result(), f_yf.result()
+
+    # Defensive sort+truncate (each query is already ORDER BY time, but AV/YF
+    # are independent result sets and the cap must keep the correct end).
+    _kw_sort = (lambda a: a.time_published or datetime.min)
+    av_all = sorted(av_all, key=_kw_sort, reverse=not asc)[:_KW_AV_LIMIT]
+    yf_all = sorted(yf_all, key=_kw_sort, reverse=not asc)[:_KW_YF_LIMIT]
+    meta = {
+        "av": len(av_all), "yf": len(yf_all),
+        "av_capped": int(len(av_all) >= _KW_AV_LIMIT),
+        "yf_capped": int(len(yf_all) >= _KW_YF_LIMIT),
+        "mode": mode, "probe_hits": probe_hits, "range_days": range_days,
+    }
+    log_timing(
+        "NEWSROOM_KEYWORD_SEARCH",
+        (time.perf_counter() - _t0) * 1000,
+        f"kw='{keyword}' mode={mode} probe_hits={probe_hits} "
+        f"range={d_from}->{d_to} range_days={range_days} "
+        f"av={len(av_all)} yf={len(yf_all)} "
+        f"av_capped={meta['av_capped']} yf_capped={meta['yf_capped']}",
+        level="WARNING",
+    )
+    return av_all, yf_all, meta
 
 
 def _spawn_background_prefetch(
@@ -990,16 +1240,23 @@ def render_page():
         _existing_key      = st.session_state.get('_news_data_key')
         _cache_hit         = bool(_existing_articles and _existing_key == _pf_filter_key)
 
+    # Prefetch only WAVE 0 of the range (newest _WAVE_WEEKS weeks, or oldest for
+    # "Earliest" sort) — never the whole range. The wave loop below fetches more
+    # only if wave 0 doesn't fill the first page.
+    _pf_newest_first = st.session_state.get('news_sort_order', 'Latest') != 'Earliest'
+    _pf_wave0 = None
+
     if not _cache_hit and not _first_load:
         # Returning visit with changed filters → fire date_range + chunked fetch
         _prefetch_exec = ThreadPoolExecutor(max_workers=2)
         _date_range_future = _prefetch_exec.submit(
             NewsRepository.get_news_date_range,
         )
-        # Start chunked fetch immediately (chunks hit @st.cache_data per-week)
+        # Start wave-0 fetch immediately (chunks hit @st.cache_data per-week)
+        _pf_wave0 = _wave_subranges(_pf_date_from, _pf_date_to, _pf_newest_first)[0]
         _chunked_future = _prefetch_exec.submit(
             _fetch_chunked,
-            _pf_date_from, _pf_date_to,
+            _pf_wave0[0], _pf_wave0[1],
             None, None, False,  # Always fetch unfiltered for cache stability
         )
     tracker.step_end("PREFETCH_SETUP")
@@ -1020,10 +1277,12 @@ def render_page():
         _pf_date_from = st.session_state.date_from
         _pf_date_to   = st.session_state.date_to
         _pf_filter_key = f"{_pf_date_from}|{_pf_date_to}"
-        # Fire week-chunked fetch with correct dates (date_range done)
+        # Fire wave-0 fetch with correct dates (date_range done). Default range
+        # is 7 days → a single wave, identical to the old full-range fetch.
+        _pf_wave0 = _wave_subranges(_pf_date_from, _pf_date_to, _pf_newest_first)[0]
         _chunked_future = _prefetch_exec.submit(
             _fetch_chunked,
-            _pf_date_from, _pf_date_to,
+            _pf_wave0[0], _pf_wave0[1],
             None, None, False,  # Always fetch unfiltered for cache stability
         )
     # ── CSS inject ───────────────────────────────────────────────────────────
@@ -1078,7 +1337,9 @@ def render_page():
                                  context=f"label={st.session_state.get('news_watchlist_filter', '')}")
 
     search_col, col_from, col_to, col_sort, col_sector, col_category, col_watchlist = st.columns(
-        [2.3, 1, 1, 0.9, 1.8, 2.0, 1.8], gap="small"
+        # Sort widened (0.9 → 1.35): at 0.9 the "Earliest" option + the dropdown
+        # chevron overflowed the column and truncated to "Ear…".
+        [2.3, 1, 1, 1.35, 1.7, 2.0, 1.7], gap="small"
     )
 
     with search_col:
@@ -1130,7 +1391,8 @@ def render_page():
     sort_ascending = sort_order == "Earliest"
 
     _LOADING_SPINNER = (
-        '<div style="display:flex;align-items:center;gap:14px;padding:24px 28px;'
+        '<div class="cs-page-subspinner" '
+        'style="display:flex;align-items:center;gap:14px;padding:24px 28px;'
         'background:#fafafa;border:1px solid #f0f0f0;border-radius:10px;'
         'box-shadow:0 1px 4px rgba(0,0,0,0.04);animation:nwsPageEntry .3s ease-out">'
         '<div style="width:22px;height:22px;border:2.5px solid #eee;'
@@ -1195,6 +1457,22 @@ def render_page():
     st.session_state.news_selected_category = selected_category
     query_category = None if selected_category == 'All' else selected_category
 
+    # Analytics: newsroom filters live in session-state (not the URL), so the auto
+    # page_view misses them. Capture the full filter state explicitly.
+    try:
+        from utils.server_logger import log_filters_if_changed
+        log_filters_if_changed(
+            "newsroom",
+            keyword=search_term or None,
+            date_from=str(date_from) if date_from else None,
+            date_to=str(date_to) if date_to else None,
+            sort=sort_order,
+            sector=None if selected_sector == 'All' else selected_sector,
+            category=query_category,
+        )
+    except Exception:
+        pass
+
     # ── Persist category to localStorage (survives across browser sessions) ──
     st.markdown(
         f"<script>localStorage.setItem('newsroom_category','{selected_category}');</script>",
@@ -1254,6 +1532,11 @@ def render_page():
 
     query_company  = None  # Company filter disabled; pass None to DB queries
     active_keyword = search_term.strip() if search_term and search_term.strip() else None
+    # Server-mode keyword search (>=2 chars) replaces the browse feed entirely,
+    # so the wave loader below is skipped while it's active — no point fetching
+    # browse waves nobody sees. Cleared keyword → loaded articles empty →
+    # _need_load fires then.
+    _kw_server_mode = bool(active_keyword and len(active_keyword.strip()) >= 2)
     tracker.step_end("FILTER_WIDGETS")
 
     # ── Two-level filter detection ───────────────────────────────────────────
@@ -1276,8 +1559,25 @@ def render_page():
         st.session_state['_yf_loaded']              = False
         st.session_state['_av_raw']                 = []
     elif _view_changed:
-        # Sort/sector changed — re-filter from raw data, no DB fetch needed
+        # Sort/sector changed — re-filter from raw data, no DB fetch needed.
+        # EXCEPTION: if the range is only PARTIALLY loaded (waves) and the sort
+        # direction flipped, the loaded end of the range is the wrong end —
+        # refetch from the other end so results match a full-range fetch.
         st.session_state['_news_view_key']          = _view_key
+        _flip_to_wrong_end = (
+            st.session_state.get('_news_has_more')
+            and st.session_state.get('_news_loaded_newest_first') == sort_ascending
+        )
+        if _flip_to_wrong_end:
+            log_timing("NEWSROOM_SORT_FLIP_REFRESH", 0,
+                       f"loaded_newest_first={st.session_state.get('_news_loaded_newest_first')} "
+                       f"new_sort_ascending={sort_ascending} — partial load, refetching from other end",
+                       level="WARNING")
+            st.session_state['_news_loaded_articles'] = []
+            st.session_state['_news_has_more']        = False
+            st.session_state['_yf_raw']               = []
+            st.session_state['_yf_loaded']            = False
+            st.session_state['_av_raw']               = []
 
     new_av_articles: List[NewsArticle] = []
     new_yf_articles: List[NewsArticle] = []
@@ -1288,35 +1588,65 @@ def render_page():
 
     # =========================================================================
     # INITIAL DATA LOAD — Week-Chunked Progressive Fetch
+    # (skipped while a server-side keyword search is displayed — the browse
+    # feed isn't rendered then; it loads on demand when the keyword clears)
     # =========================================================================
-    if _need_load:
+    if _need_load and not _kw_server_mode:
         tracker.step_start("DATA_LOAD", "cache_miss")
         _article_loading_hint.markdown(_LOADING_SPINNER, unsafe_allow_html=True)
 
-        # Check if prefetch future matches current date range
+        _newest_first = not sort_ascending
+        _waves = _wave_subranges(date_from, date_to, _newest_first)
+        log_timing(
+            "NEWSROOM_WAVE_PLAN", 0,
+            f"waves={len(_waves)} wave_weeks={_WAVE_WEEKS} "
+            f"range={date_from}->{date_to} newest_first={_newest_first}",
+            level="WARNING",
+        )
+
+        # Prefetch future covers wave 0 only — usable when the date range AND
+        # the wave-0 subrange it was fired for still match.
         _pf_key_matches = (
             _chunked_future is not None
             and date_from == _pf_date_from and date_to == _pf_date_to
+            and _pf_wave0 is not None and _pf_wave0 == _waves[0]
         )
 
         try:
 
             if _pf_key_matches:
-                # Use the already-running chunked future
-                new_av_articles, new_yf_articles = _chunked_future.result(timeout=180)
+                # Wave 0 from the already-running future; fetch further waves
+                # only if it didn't fill the first page.
+                _w0_av, _w0_yf = _chunked_future.result(timeout=180)
+                new_av_articles, new_yf_articles, _next_wave = _fetch_waves_until(
+                    _waves, 1, _PAGE_SIZE, hint=_article_loading_hint,
+                    seed_av=_w0_av, seed_yf=_w0_yf,
+                )
             else:
-                # Filters changed after prefetch — cancel and do fresh chunked fetch
+                # Filters changed after prefetch — cancel and fetch waves fresh
                 if _chunked_future is not None:
                     _chunked_future.cancel()
-                new_av_articles, new_yf_articles = _fetch_chunked(
-                    date_from, date_to,
-                    None, None, False,  # Always fetch unfiltered for cache stability
+                new_av_articles, new_yf_articles, _next_wave = _fetch_waves_until(
+                    _waves, 0, _PAGE_SIZE, hint=_article_loading_hint,
                 )
 
             # Store unfiltered raw data for client-side re-filtering
             st.session_state['_av_raw'] = new_av_articles
             st.session_state['_yf_raw'] = new_yf_articles
             st.session_state['_yf_loaded'] = True
+            # Wave continuation state (drives the "Load older articles" button)
+            st.session_state['_news_waves'] = [
+                (w[0].isoformat(), w[1].isoformat()) for w in _waves
+            ]
+            st.session_state['_news_wave_idx'] = _next_wave
+            st.session_state['_news_loaded_newest_first'] = _newest_first
+            st.session_state['_news_has_more'] = _next_wave < len(_waves)
+            log_timing(
+                "NEWSROOM_LOAD_STATE", 0,
+                f"loaded_waves={_next_wave}/{len(_waves)} av={len(new_av_articles)} "
+                f"yf={len(new_yf_articles)} has_more={_next_wave < len(_waves)}",
+                level="WARNING",
+            )
 
             # Sector filter (client-side for both AV and YF)
             if query_sector:
@@ -1326,8 +1656,6 @@ def render_page():
             merged = _union_and_sort_articles(new_av_articles, new_yf_articles, sort_ascending)
 
             st.session_state['_news_loaded_articles'] = merged
-            # No more pagination offset — chunked fetch gets everything for the date range
-            st.session_state['_news_has_more'] = False
 
             # ── Background prefetch: pre-populate @st.cache_data for extra weeks ──
             _spawn_background_prefetch(
@@ -1359,10 +1687,91 @@ def render_page():
         merged = _union_and_sort_articles(raw_av, raw_yf, sort_ascending)
         st.session_state['_news_loaded_articles'] = merged
 
+    # =========================================================================
+    # LOAD MORE WAVES — user clicked "Load older articles" (wide ranges only)
+    # =========================================================================
+    if (st.session_state.pop('_news_load_more_requested', False)
+            and st.session_state.get('_news_has_more')
+            and not _data_changed):
+        _waves_iso = st.session_state.get('_news_waves') or []
+        _lm_waves = [(date.fromisoformat(a), date.fromisoformat(b)) for a, b in _waves_iso]
+        _lm_idx = int(st.session_state.get('_news_wave_idx', len(_lm_waves)))
+        _article_loading_hint.markdown(
+            _loading_spinner_html("Loading more news articles…"), unsafe_allow_html=True,
+        )
+        _lm_t0 = time.perf_counter()
+        try:
+            _add_av, _add_yf, _lm_next = _fetch_waves_until(
+                _lm_waves, _lm_idx, _PAGE_SIZE, hint=_article_loading_hint,
+            )
+            st.session_state['_av_raw'] = (st.session_state.get('_av_raw') or []) + _add_av
+            st.session_state['_yf_raw'] = (st.session_state.get('_yf_raw') or []) + _add_yf
+            st.session_state['_news_wave_idx'] = _lm_next
+            st.session_state['_news_has_more'] = _lm_next < len(_lm_waves)
+            log_timing(
+                "NEWSROOM_LOAD_MORE",
+                (time.perf_counter() - _lm_t0) * 1000,
+                f"waves={_lm_idx}->{_lm_next}/{len(_lm_waves)} av+={len(_add_av)} "
+                f"yf+={len(_add_yf)} total_av={len(st.session_state['_av_raw'])} "
+                f"total_yf={len(st.session_state['_yf_raw'])} "
+                f"has_more={_lm_next < len(_lm_waves)}",
+                level="WARNING",
+            )
+            raw_av = st.session_state['_av_raw']
+            raw_yf = st.session_state['_yf_raw']
+            if query_sector:
+                raw_av = _filter_av_by_sector(raw_av, query_sector)
+                raw_yf = _filter_yf_by_sector(raw_yf, query_sector)
+            st.session_state['_news_loaded_articles'] = _union_and_sort_articles(
+                raw_av, raw_yf, sort_ascending,
+            )
+        except Exception as _lm_exc:
+            log_structured_error(_lm_exc, page="newsroom", component="render_page",
+                                 operation="LOAD_MORE_WAVES")
+        _article_loading_hint.empty()
+
     if _prefetch_exec is not None:
         _prefetch_exec.shutdown(wait=False)
 
     articles = st.session_state.get('_news_loaded_articles', [])
+
+    # =========================================================================
+    # SERVER-SIDE FULL-RANGE KEYWORD SEARCH — business requirement: a keyword
+    # must search the ENTIRE selected date range, not just loaded articles.
+    # Substring LIKE scans down the (time,title) ICP indexes do the work in
+    # the DB; RAM stays bounded (~3k articles) no matter how wide the range
+    # is. Keywords under 2 chars fall back to the legacy client-side filter
+    # over loaded articles (single chars are noise).
+    # =========================================================================
+    _kw_meta = None
+    if _kw_server_mode:
+        _article_loading_hint.markdown(
+            _loading_spinner_html(
+                f'Searching "{active_keyword.strip()}" across the selected date range…'
+            ),
+            unsafe_allow_html=True,
+        )
+        try:
+            _kw_av, _kw_yf, _kw_meta = _keyword_search_serverside(
+                active_keyword.strip(), date_from, date_to, sort_ascending,
+            )
+            if query_sector:
+                _kw_av = _filter_av_by_sector(_kw_av, query_sector)
+                _kw_yf = _filter_yf_by_sector(_kw_yf, query_sector)
+            articles = _union_and_sort_articles(_kw_av, _kw_yf, sort_ascending)
+            # Analytics: capture the actual search term + result count (best-effort).
+            try:
+                from utils.server_logger import track_search
+                track_search("newsroom", active_keyword.strip(),
+                             results=len(articles), kind="news_keyword",
+                             sector=(query_sector or None))
+            except Exception:
+                pass
+        except Exception as _kw_exc:
+            log_structured_error(_kw_exc, page="newsroom", component="render_page",
+                                 operation="KEYWORD_SERVER_SEARCH")
+            _kw_server_mode = False  # graceful degrade → client filter below
+        _article_loading_hint.empty()
 
     # =========================================================================
     # LOCAL WATCHLIST FILTER — applied before keyword/category
@@ -1386,9 +1795,10 @@ def render_page():
         )
 
     # =========================================================================
-    # LOCAL KEYWORD FILTER
+    # LOCAL KEYWORD FILTER — only for short (<3 char) keywords; longer ones
+    # were already resolved server-side across the full range above.
     # =========================================================================
-    if active_keyword:
+    if active_keyword and not _kw_server_mode:
         articles = _filter_articles_by_keyword(articles, active_keyword)
 
     # =========================================================================
@@ -1488,11 +1898,15 @@ def render_page():
             if active_keyword:
                 if articles:
                     _total_loaded = len(articles)
-                    _all_loaded = len(st.session_state.get('_news_loaded_articles', []))
+                    if _kw_server_mode:
+                        _scope_note = "(in the selected date range)"
+                    else:
+                        _all_loaded = len(st.session_state.get('_news_loaded_articles', []))
+                        _scope_note = f"(in {_all_loaded} most recent)"
                     st.markdown(
                         f'<div class="news-search-count">{_total_loaded} article{"s" if _total_loaded != 1 else ""}'
                         f' matching "<b>{active_keyword}</b>"'
-                        f' <span style="color:#999;font-size:12px">(in {_all_loaded} most recent)</span></div>',
+                        f' <span style="color:#999;font-size:12px">{_scope_note}</span></div>',
                         unsafe_allow_html=True,
                     )
                     _LEFT_RENDER_LIMIT = 2000000
@@ -1527,10 +1941,16 @@ def render_page():
                     st.markdown("".join(_left_html_parts), unsafe_allow_html=True)
 
                 else:
-                    _all_loaded = len(st.session_state.get('_news_loaded_articles', []))
+                    if _kw_server_mode:
+                        _no_match_scope = "in the selected date range"
+                    else:
+                        _no_match_scope = (
+                            f"in the {len(st.session_state.get('_news_loaded_articles', []))} "
+                            f"most recent articles"
+                        )
                     st.markdown(
                         f'<div class="news-search-placeholder">'
-                        f'No matches for "<b>{active_keyword}</b>" in the {_all_loaded} most recent articles.'
+                        f'No matches for "<b>{active_keyword}</b>" {_no_match_scope}.'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1552,7 +1972,11 @@ def render_page():
                     keyword=active_keyword, chunk_size=500,
                 )
             else:
-                if active_keyword and st.session_state.get('_news_loaded_articles'):
+                if active_keyword and _kw_server_mode:
+                    st.info(
+                        f"No matches for **\"{active_keyword}\"** in the selected date range."
+                    )
+                elif active_keyword and st.session_state.get('_news_loaded_articles'):
                     st.info(
                         f"No matches for **\"{active_keyword}\"** in the "
                         f"{len(st.session_state['_news_loaded_articles'])} most recent articles."
@@ -1563,15 +1987,37 @@ def render_page():
         # ── Article count indicator ───────────────────────────────────────────
         _loaded_articles = st.session_state.get('_news_loaded_articles', [])
 
-        if _loaded_articles:
+        if _kw_server_mode:
+            _days_span = (date_to - date_from).days + 1
+            _capped = bool(_kw_meta and (_kw_meta.get("av_capped") or _kw_meta.get("yf_capped")))
+            _cap_note = " &nbsp;·&nbsp; newest matches shown" if _capped else ""
+            st.markdown(
+                f"<div style='text-align:center;color:#888;font-size:13px;padding:8px 0'>"
+                f"{len(articles):,} matching articles in the selected range "
+                f"({_days_span} days searched){_cap_note}</div>",
+                unsafe_allow_html=True,
+            )
+        elif _loaded_articles:
             _loaded_count = len(_loaded_articles)
             _display_count = len(articles)
             _days_span = (date_to - date_from).days + 1
+            _partial = bool(st.session_state.get('_news_has_more'))
             if active_keyword and _display_count != _loaded_count:
                 st.markdown(
                     f"<div style='text-align:center;color:#888;font-size:13px;padding:8px 0'>"
                     f"{_display_count:,} matching / {_loaded_count:,} loaded "
                     f"({_days_span} days)</div>",
+                    unsafe_allow_html=True,
+                )
+            elif _partial:
+                _dir_word = (
+                    "most recent" if st.session_state.get('_news_loaded_newest_first', True)
+                    else "earliest"
+                )
+                st.markdown(
+                    f"<div style='text-align:center;color:#888;font-size:13px;padding:8px 0'>"
+                    f"{_loaded_count:,} {_dir_word} articles loaded "
+                    f"({_days_span} days selected)</div>",
                     unsafe_allow_html=True,
                 )
             else:
@@ -1582,6 +2028,27 @@ def render_page():
                     unsafe_allow_html=True,
                 )
 
+        # ── Load-more button — only for partially loaded wide ranges, and not
+        # while a server-side keyword search is displayed (search already covers
+        # the whole range; browse state is intact when the keyword is cleared) ──
+        if st.session_state.get('_news_has_more') and not _kw_server_mode:
+            _lm_total = len(st.session_state.get('_news_waves') or [])
+            _lm_done = int(st.session_state.get('_news_wave_idx', 0))
+            _lm_label = (
+                "Load older articles"
+                if st.session_state.get('_news_loaded_newest_first', True)
+                else "Load more articles"
+            )
+            _btn_pad_l, _btn_mid, _btn_pad_r = st.columns([1, 2, 1])
+            with _btn_mid:
+                if st.button(
+                    f"{_lm_label}  ({_lm_total - _lm_done} more sections)",
+                    key="news_load_more_btn",
+                    width="stretch",
+                ):
+                    st.session_state['_news_load_more_requested'] = True
+                    st.rerun()
+
     tracker.step_end("RENDER_LAYOUT")
     tracker.finish()
 
@@ -1591,8 +2058,6 @@ def render_page():
 # =============================================================================
 def main():
     """Newsroom page entry point."""
-    _rid = new_rerun_id("newsroom")
-
     render_styles()
     st.set_page_config(page_title="Newsroom", layout="wide")
     set_page_layout(

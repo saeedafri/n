@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from data.models import MarketMetric
 from components.styles import COLORS, TYPOGRAPHY
-from utils.server_logger import log_structured_error
+from utils.server_logger import log_structured_error, timed_render
 
 
 # Chart configuration defaults
@@ -398,12 +398,13 @@ def render_chart(
         key: Optional unique key for the chart
     """
     try:
-        st.plotly_chart(
-            fig,
-            width=width,
-            config=CHART_CONFIG,
-            key=key,
-        )
+        with timed_render("CHART_PLOTLY"):
+            st.plotly_chart(
+                fig,
+                width=width,
+                config=CHART_CONFIG,
+                key=key,
+            )
     except Exception as e:
         log_structured_error(e, page="charts", component="render_chart", operation="rendering plotly chart")
         st.error("Failed to render chart.")

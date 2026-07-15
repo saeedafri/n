@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from utils.server_logger import (
     log_structured_error,
     log_error,
+    log_info,
     error_boundary,
     get_rerun_id,
     new_rerun_id,
@@ -44,6 +45,7 @@ from utils.constants import (
     CURRENCY_SYMBOLS,
     get_currency_symbol,
     format_currency_full as format_currency_display,
+    QUARTERLY_FORECASTING_ENABLED,
 )
 
 
@@ -264,7 +266,11 @@ def get_available_period_types(ticker: str, tab: str) -> list:
         return ["Annual"]
 
     # Forecasting: Annual always; Quarterly only when quarterly forecasts exist.
+    # Quarterly forecasting paused (see constants.QUARTERLY_FORECASTING_ENABLED):
+    # offer Annual only, which clamps the tab's effective period type to Annual.
     if tab == "forecasting":
+        if not QUARTERLY_FORECASTING_ENABLED:
+            return ["Annual"]
         try:
             from data.repository import ModelForecastsRepository
             if ModelForecastsRepository.get_quarterly_date_range(ticker)[0] is not None:
@@ -814,6 +820,8 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
         _t_fetch = _time.perf_counter()
         data = RatingsDataRepository.get_ratings_data(ticker, start_date, end_date)
         _fetch_ms = (_time.perf_counter() - _t_fetch) * 1000
+        # Stash for the Excel-export block — avoids a second full fetch per render
+        st.session_state[f"_ratings_data_{ticker}_{start_date}_{end_date}"] = data
         _rt_log("RATINGS_data_fetch", _fetch_ms, details=f"ticker={ticker} years={len(data.get('years',[]))} cr={data.get('has_credit_ratings')} sc={data.get('has_store_counts')} source={data.get('_source','?')}")
 
         years = data["years"]
@@ -839,10 +847,32 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             years = merged if sort_ascending else list(reversed(merged))
 
         if not years or (not credit_ratings and not store_counts and not sbc_countries and not sqft_metrics):
+            # Data may still be warming in the background (bounded fetch waits).
+            # Retry up to twice before concluding there is nothing — prevents a
+            # blank tab from being the first thing the user sees.
+            _retry_key = f"_ratings_retry_{ticker}"
+            _n_retry = st.session_state.get(_retry_key, 0)
+            if _n_retry < 2:
+                st.session_state[_retry_key] = _n_retry + 1
+                with st.spinner("Loading store & ratings data..."):
+                    _time.sleep(1.5)
+                st.rerun()
             st.info("No extracted data available. Check official filings.")
             return
+        st.session_state.pop(f"_ratings_retry_{ticker}", None)
 
-        period_dates = data.get("period_dates", {})
+        # When the country breakdown covers every year the worldwide series has,
+        # the separate "Store Count" section would duplicate the Total (Worldwide)
+        # row inside Stores by Country — show only the country section then.
+        _sbc_total_row = stores_by_country.get("total_row", {}) if (sbc_years and sbc_countries) else {}
+        _hide_sc_section = bool(_sbc_total_row) and all(
+            (yr in _sbc_total_row) for sc in store_counts
+            for yr, v in sc["values"].items() if v is not None
+        )
+
+        # Fiscal-year-end display dates (match Income Statement / Key Stats);
+        # fall back to filing dates only when the FYE month is unknown.
+        period_dates = data.get("period_display_dates") or data.get("period_dates", {})
         _parts = []
         _parts.append('<div class="table-container"><div class="table-scroll"><table class="data-table"><thead>')
 
@@ -895,9 +925,9 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                         _parts.append(f'<td class="data-cell" style="text-align:center;">{html_escape(str(st_val)) if st_val else "-"}</td>')
                     _parts.append('</tr>')
 
-        # ── Store Counts Section ──
-        if store_counts:
-            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">Store Count</td>')
+        # ── Store Counts Section (hidden when Stores by Country covers it) ──
+        if store_counts and not _hide_sc_section:
+            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">Store Count (Worldwide)</td>')
             for _ in years:
                 _parts.append('<td class="data-cell"></td>')
             _parts.append('</tr>')
@@ -913,19 +943,24 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                         _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
                 _parts.append('</tr>')
 
-                # YoY change row
+                # YoY change row — always computed on chronological year order;
+                # iterating display order inverts the % when Sort = Latest.
+                _yoy_pct: Dict[int, float] = {}
+                _prev_val = None
+                for _cy in sorted(years):
+                    _cv = sc["values"].get(_cy)
+                    if _cv is not None and _prev_val is not None and _prev_val != 0:
+                        _yoy_pct[_cy] = ((_cv - _prev_val) / _prev_val) * 100
+                    _prev_val = _cv
                 _parts.append(f'<tr><td class="indent-2" style="color:#4B5563;">YoY Change</td>')
-                prev_val = None
                 for yr in years:
-                    val = sc["values"].get(yr)
-                    if val is not None and prev_val is not None and prev_val != 0:
-                        pct = ((val - prev_val) / prev_val) * 100
+                    pct = _yoy_pct.get(yr)
+                    if pct is not None:
                         _color = '#059669' if pct > 0 else '#DC2626' if pct < 0 else '#6B7280'
                         _sign = '+' if pct > 0 else ''
                         _parts.append(f'<td class="data-cell" style="text-align:center;color:{_color};">{_sign}{pct:.1f}%</td>')
                     else:
                         _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
-                    prev_val = val
                 _parts.append('</tr>')
 
         # ── Stores by Country Section (edgartools XBRL) ──
@@ -947,6 +982,38 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                     val = sbc_countries[country].get(yr)
                     if val is not None:
                         _parts.append(f'<td class="data-cell" style="text-align:center;font-weight:600;">{int(val):,}</td>')
+                    else:
+                        _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
+                _parts.append('</tr>')
+
+            # Worldwide total as the LAST row (bold, left) + YoY beneath —
+            # verified against the Store Count series; a year only renders
+            # country rows when they reconcile.
+            sbc_total_row = stores_by_country.get("total_row", {})
+            if sbc_total_row:
+                _parts.append('<tr class="row-bold"><td class="indent-0" style="font-weight:700;">Total (Worldwide)</td>')
+                for yr in years:
+                    _tv = sbc_total_row.get(yr)
+                    if _tv is not None:
+                        _parts.append(f'<td class="data-cell" style="text-align:center;font-weight:700;">{int(_tv):,}</td>')
+                    else:
+                        _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
+                _parts.append('</tr>')
+
+                _yoy_pct = {}
+                _prev_val = None
+                for _cy in sorted(years):
+                    _cv = sbc_total_row.get(_cy)
+                    if _cv is not None and _prev_val is not None and _prev_val != 0:
+                        _yoy_pct[_cy] = ((_cv - _prev_val) / _prev_val) * 100
+                    _prev_val = _cv
+                _parts.append(f'<tr><td class="indent-2" style="color:#4B5563;">YoY Change</td>')
+                for yr in years:
+                    pct = _yoy_pct.get(yr)
+                    if pct is not None:
+                        _color = '#059669' if pct > 0 else '#DC2626' if pct < 0 else '#6B7280'
+                        _sign = '+' if pct > 0 else ''
+                        _parts.append(f'<td class="data-cell" style="text-align:center;color:{_color};">{_sign}{pct:.1f}%</td>')
                     else:
                         _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
                 _parts.append('</tr>')
@@ -978,23 +1045,27 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                         _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
                 _parts.append('</tr>')
 
-                # YoY change row for area metrics
-                _parts.append(f'<tr><td class="indent-2" style="color:#4B5563;">YoY Change</td>')
-                prev_val = None
-                for yr in years:
-                    val = metric["values"].get(yr)
+                # YoY change row for area metrics — chronological order (see store counts)
+                _yoy_pct = {}
+                _prev_val = None
+                for _cy in sorted(years):
+                    _v = metric["values"].get(_cy)
                     try:
-                        _cur = float(val) if val is not None else None
+                        _cv = float(_v) if _v is not None else None
                     except (ValueError, TypeError):
-                        _cur = None
-                    if _cur is not None and prev_val is not None and prev_val != 0:
-                        pct = ((_cur - prev_val) / prev_val) * 100
+                        _cv = None
+                    if _cv is not None and _prev_val is not None and _prev_val != 0:
+                        _yoy_pct[_cy] = ((_cv - _prev_val) / _prev_val) * 100
+                    _prev_val = _cv
+                _parts.append(f'<tr><td class="indent-2" style="color:#4B5563;">YoY Change</td>')
+                for yr in years:
+                    pct = _yoy_pct.get(yr)
+                    if pct is not None:
                         _color = '#059669' if pct > 0 else '#DC2626' if pct < 0 else '#6B7280'
                         _sign = '+' if pct > 0 else ''
                         _parts.append(f'<td class="data-cell" style="text-align:center;color:{_color};">{_sign}{pct:.1f}%</td>')
                     else:
                         _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
-                    prev_val = _cur
                 _parts.append('</tr>')
 
         _parts.append('</tbody></table></div></div>')
@@ -1379,7 +1450,7 @@ def render_page():
         st.session_state[_early_period_key] = "Annual"
 
     _rid = get_rerun_id()
-    log_error(
+    log_info(
         f"[MD_PHASE] rerun={_rid} phase=render_start "
         f"ticker={st.query_params.get('ticker')} tab={st.query_params.get('tab')} "
         f"qp_period={st.query_params.get('period_type')} ss_period={st.session_state.get(_early_period_key)} "
@@ -1387,34 +1458,39 @@ def render_page():
     )
     st.session_state["_md_run_counter"] = int(st.session_state.get("_md_run_counter", 0)) + 1
     if st.session_state["_md_run_counter"] > 80:
-        log_error(
+        log_info(
             f"[MD_WARN] rerun={_rid} high_run_counter={st.session_state['_md_run_counter']} "
             "possible Streamlit rerun storm — check query_params writes"
         )
 
-    log_error(f"[RENDER_START] ticker={st.query_params.get('ticker')} tab={st.query_params.get('tab')} period={st.query_params.get('period_type')} ss_period={st.session_state.get('period_type_market_data_shared')}")
+    log_info(f"[RENDER_START] ticker={st.query_params.get('ticker')} tab={st.query_params.get('tab')} period={st.query_params.get('period_type')} ss_period={st.session_state.get('period_type_market_data_shared')}")
 
-    # Show spinner immediately so users see feedback before blocking DB work
-    _tab_loading_hint = st.empty()
-    _tab_loading_hint.markdown(
-        '<div style="display:flex;align-items:center;gap:14px;padding:24px 28px;'
-        'background:#fafafa;border:1px solid #f0f0f0;border-radius:10px;'
-        'box-shadow:0 1px 4px rgba(0,0,0,0.04);animation:mdPageEntry .3s ease-out">'
-        '<div style="width:22px;height:22px;border:2.5px solid #eee;'
-        'border-top-color:#D62E2F;border-radius:50%;'
-        'animation:md-spin .8s linear infinite;flex-shrink:0"></div>'
-        '<span style="color:#444;font-size:14px">Loading financial data\u2026</span>'
-        '</div>'
-        '<style>@keyframes md-spin{to{transform:rotate(360deg)}}'
-        '@keyframes mdPageEntry{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}</style>',
-        unsafe_allow_html=True,
-    )
+    # Loading indicator as a FIXED, centered OVERLAY \u2014 it floats IN FRONT of the
+    # page instead of being inserted at the top of the content flow. The old
+    # in-flow block pushed the whole page down while loading, then collapsed when
+    # cleared, so every tab click jumped/flickered. A fixed overlay occupies zero
+    # layout space, so the page underneath stays put and there is no jump.
+    # Canonical Coresight loader (overlay = zero layout space, so an in-place tab
+    # swap does not push existing content down \u2014 same visual as every other page).
+    from components.loading import render_page_loader
+    # Dynamic per-tab label so the loader reads e.g. "Loading Income Statement".
+    _MD_TAB_LABELS = {
+        "company_profile": "Loading Company Profile", "key_stats": "Loading Key Stats",
+        "income_statement": "Loading Income Statement", "balance_sheet": "Loading Balance Sheet",
+        "cash_flow": "Loading Cash Flow", "ratios": "Loading Ratios",
+        "segment_data": "Loading Segment Data", "ratings": "Loading Ratings",
+        "estimates": "Loading Estimates", "forecasting": "Loading Forecasting",
+        "additional_data": "Loading Additional Data",
+    }
+    _md_tab_qp = (st.query_params.get("tab") or "").strip().lower()
+    _tab_loading_hint = render_page_loader(
+        _MD_TAB_LABELS.get(_md_tab_qp, "Loading Market Data"), overlay=True)
 
     # Initialize local storage manager and sync state
     _t0 = _time.perf_counter()
     storage_manager = sync_market_data_state()
     _timings['local_storage_sync'] = (_time.perf_counter() - _t0) * 1000
-    log_error(
+    log_info(
         f"[MD_PHASE] rerun={get_rerun_id()} phase=after_local_storage_sync "
         f"ms={_timings['local_storage_sync']:.1f} qp={dict(st.query_params)}"
     )
@@ -1692,9 +1768,24 @@ def render_page():
     # Store the selected tab in session state for persistence
     st.session_state.selected_tab_market_data = selected_tab
 
+    # Analytics: the URL page_view captures tab/ticker/period/dates/sort, but NOT the
+    # currency conversion target or units — capture those (session-state) too.
+    try:
+        from utils.server_logger import log_filters_if_changed
+        log_filters_if_changed(
+            "market_data",
+            ticker=selected_ticker,
+            tab=selected_tab,
+            from_currency=st.session_state.get("from_currency") or None,
+            to_currency=st.session_state.get("target_currency") or None,
+            units=st.session_state.get("units_label") or st.session_state.get("units_sel") or None,
+        )
+    except Exception:
+        pass
+
     # Save to local storage for persistence across sessions
     set_marketdata_tab(selected_tab)
-    log_error(
+    log_info(
         f"[MD_PHASE] rerun={get_rerun_id()} phase=after_tab_resolve "
         f"selected_tab={selected_tab} qp_tab={st.query_params.get('tab')}"
     )
@@ -1703,8 +1794,9 @@ def render_page():
     # Fire background preload immediately (any tab) so that by the time
     # the user clicks the Ratings tab, data is already cached.
     try:
-        from data.repository import preload_edgartools_ratings
+        from data.repository import preload_edgartools_ratings, preload_store_totals
         preload_edgartools_ratings(selected_ticker)
+        preload_store_totals(selected_ticker)
     except Exception:
         pass  # best-effort, never block page load
 
@@ -1913,7 +2005,7 @@ def render_page():
             log_structured_error(exc, page="market_data", component="render_page", operation="fetch_date_range")
 
         _timings['date_range_fetch'] = (_time.perf_counter() - _t0) * 1000
-        log_error(
+        log_info(
             f"[MD_PHASE] rerun={get_rerun_id()} phase=after_date_range_fetch "
             f"tab={selected_tab} period={_period_type_db} min={min_date} max={max_date} "
             f"n_dates={len(available_dates) if available_dates else 0} "
@@ -2077,6 +2169,18 @@ def render_page():
         display: block;
         padding-top: 12px;
 
+    }
+
+    /* ── Ghost-filter fix (#38) ──────────────────────────────────────────────
+       On a slow rerun (changing Period Type triggers a multi-second cold data
+       fetch), Streamlit keeps the PREVIOUS run's widgets mounted — marked
+       data-stale="true" — next to the freshly-rendered ones, so a second "ghost"
+       filter row appears until the run finishes. The fresh copy renders
+       immediately (before the slow fetch), so hiding the STALE copy of any select
+       control leaves exactly one visible filter row. Scoped to selectbox
+       containers so data tables / notices keep their normal stale-then-update. */
+    [data-testid="stElementContainer"][data-stale="true"]:has(div[data-testid="stSelectbox"]) {
+        display: none !important;
     }
 
     /* Streamlit selectbox styling to match Figma */
@@ -2413,7 +2517,7 @@ def render_page():
         # 2. User manual selection -> respect user's choice (even if 20 years)
         # 3. Tab switch/refresh -> preserve current selection
 
-        log_error(f"[DATE_RESOLVE] START ticker={selected_ticker} tab={selected_tab} period={_period_type_db} min={min_date} max={max_date} default_start={_default_start} key_in_ss={_active_date_key in st.session_state}")
+        log_info(f"[DATE_RESOLVE] START ticker={selected_ticker} tab={selected_tab} period={_period_type_db} min={min_date} max={max_date} default_start={_default_start} key_in_ss={_active_date_key in st.session_state}")
 
         if selected_tab in _EST_FCST_TABS:
             # Estimates / Forecasting: isolated date state — never read from or write to
@@ -2430,19 +2534,19 @@ def render_page():
             else:
                 start_date, end_date = _default_start, max_date
             st.session_state[_active_date_key] = (start_date.isoformat(), end_date.isoformat())
-            log_error(f"[DATE_RESOLVE] EST_FCST_ISOLATED start={start_date} end={end_date}")
+            log_info(f"[DATE_RESOLVE] EST_FCST_ISOLATED start={start_date} end={end_date}")
         elif date_range_key in st.session_state:
             stored_start, stored_end = st.session_state[date_range_key]
             start_date = date.fromisoformat(stored_start) if stored_start else _default_start
             end_date = date.fromisoformat(stored_end) if stored_end else max_date
-            log_error(f"[DATE_RESOLVE] FROM_SS start={start_date} end={end_date} ticker_changed={_ticker_truly_changed}")
+            log_info(f"[DATE_RESOLVE] FROM_SS start={start_date} end={end_date} ticker_changed={_ticker_truly_changed}")
 
             # Check if this is a company change with old wide range (from previous company)
             # Only reset to 5-year default if company TRULY changed and we haven't saved new range yet
             _loaded_span = (end_date - start_date).days / 365.25
             if _ticker_truly_changed and _loaded_span > 6:
                 start_date, end_date = _default_start, max_date
-                log_error(f"[DATE_RESOLVE] TICKER_CHANGE_RESET start={start_date} end={end_date}")
+                log_info(f"[DATE_RESOLVE] TICKER_CHANGE_RESET start={start_date} end={end_date}")
                 st.session_state[date_range_key] = (start_date.isoformat(), end_date.isoformat())
                 set_marketdata_date_range(start_date.isoformat(), end_date.isoformat())
             else:
@@ -2450,13 +2554,13 @@ def render_page():
                 if end_date > max_date:
                     end_date = max_date
                     st.session_state[date_range_key] = (start_date.isoformat(), end_date.isoformat())
-                    log_error(f"[DATE_RESOLVE] END_CLAMPED_TO_MAX end={end_date}")
+                    log_info(f"[DATE_RESOLVE] END_CLAMPED_TO_MAX end={end_date}")
                 if start_date > max_date or start_date > end_date:
                     start_date, end_date = _default_start, max_date
-                    log_error(f"[DATE_RESOLVE] START_BEYOND_MAX_RESET start={start_date} end={end_date}")
+                    log_info(f"[DATE_RESOLVE] START_BEYOND_MAX_RESET start={start_date} end={end_date}")
                     st.session_state[date_range_key] = (start_date.isoformat(), end_date.isoformat())
                 else:
-                    log_error(f"[DATE_RESOLVE] KEPT_AS_IS start={start_date} end={end_date}")
+                    log_info(f"[DATE_RESOLVE] KEPT_AS_IS start={start_date} end={end_date}")
         else:
             # Try query params first (synchronous, survives page refresh)
             _qp_start = st.query_params.get("start_dt")
@@ -2573,7 +2677,7 @@ def render_page():
         _sw_in_ss   = _sw_key in st.session_state
         _sw_in_opts = (st.session_state.get(_sw_key) in date_options) if _sw_in_ss else False
         _date_sync  = (_dr_now != _dr_lc or not _sw_in_ss or not _sw_in_opts)
-        log_error(f"[DATE_SYNC] ticker={selected_ticker} period={_period_type_db} "
+        log_info(f"[DATE_SYNC] ticker={selected_ticker} period={_period_type_db} "
                   f"date_sync={_date_sync} dr_now={_dr_now} dr_lc={_dr_lc} "
                   f"sw_val={st.session_state.get(_sw_key)!r} sw_in_opts={_sw_in_opts} "
                   f"start_idx={start_idx} end_idx={end_idx} n_opts={len(date_options)} "
@@ -2595,7 +2699,7 @@ def render_page():
         if _date_sync:
             _new_sw = date_options[start_idx] if date_options else None
             _new_ew = date_options[end_idx]   if date_options else None
-            log_error(f"[DATE_SYNC] WIDGET_UPDATE sw={_new_sw!r} ew={_new_ew!r}")
+            log_info(f"[DATE_SYNC] WIDGET_UPDATE sw={_new_sw!r} ew={_new_ew!r}")
             st.session_state[_sw_key] = _new_sw
             st.session_state[_ew_key] = _new_ew
             # Keep authoritative date key in sync with what the widgets now show
@@ -2632,7 +2736,7 @@ def render_page():
         def _on_period_type_change():
             try:
                 _new_pt = st.session_state.get(_pt_key)
-                log_error(f"[FILTER_CB] period_type_change tab={selected_tab} ticker={selected_ticker} new_period={_new_pt}")
+                log_info(f"[FILTER_CB] period_type_change tab={selected_tab} ticker={selected_ticker} new_period={_new_pt}")
                 st.session_state[_active_period_type_key] = _new_pt
                 if st.query_params.get("period_type") != st.session_state[_active_period_type_key]:
                     st.query_params["period_type"] = st.session_state[_active_period_type_key]
@@ -2641,7 +2745,7 @@ def render_page():
                     if _k.startswith("_est_html_") or _k.startswith("_fcst_html_"):
                         del st.session_state[_k]
                 save_market_data_state()
-                log_error(f"[FILTER_CB] period_type_change DONE tab={selected_tab}")
+                log_info(f"[FILTER_CB] period_type_change DONE tab={selected_tab}")
             except Exception as exc:
                 log_structured_error(exc, page="market_data", component="render_page", operation="_on_period_type_change")
 
@@ -2661,7 +2765,7 @@ def render_page():
 
         def _on_from_currency_change():
             try:
-                log_error(f"[FILTER_CB] from_currency_change tab={selected_tab} ticker={selected_ticker}")
+                log_info(f"[FILTER_CB] from_currency_change tab={selected_tab} ticker={selected_ticker}")
                 st.session_state.from_currency = st.session_state["currency_from_unified"]
                 if selected_tab in ("estimates", "forecasting"):
                     _clear_est_fcst_cache()
@@ -2671,7 +2775,7 @@ def render_page():
 
         def _on_to_currency_change():
             try:
-                log_error(f"[FILTER_CB] to_currency_change tab={selected_tab} ticker={selected_ticker}")
+                log_info(f"[FILTER_CB] to_currency_change tab={selected_tab} ticker={selected_ticker}")
                 st.session_state.target_currency = st.session_state["currency_to_unified"]
                 if st.query_params.get("to_curr") != st.session_state.target_currency:
                     st.query_params["to_curr"] = st.session_state.target_currency
@@ -2683,7 +2787,7 @@ def render_page():
 
         def _on_units_change():
             try:
-                log_error(f"[FILTER_CB] units_change tab={selected_tab} ticker={selected_ticker}")
+                log_info(f"[FILTER_CB] units_change tab={selected_tab} ticker={selected_ticker}")
                 st.session_state.units = st.session_state["units_select"]
                 if st.query_params.get("units_sel") != st.session_state.units:
                     st.query_params["units_sel"] = st.session_state.units
@@ -2698,7 +2802,7 @@ def render_page():
                 _new_start = date_values.get(st.session_state.get(_sw_key), start_date)
                 _new_end   = date_values.get(st.session_state.get(_ew_key), end_date)
                 _new_sort  = st.session_state.get(_so_key, st.session_state.get(sort_order_key))
-                log_error(f"[FILTER_CB] date_sort_change tab={selected_tab} ticker={selected_ticker} new_start={_new_start} new_end={_new_end} new_sort={_new_sort}")
+                log_info(f"[FILTER_CB] date_sort_change tab={selected_tab} ticker={selected_ticker} new_start={_new_start} new_end={_new_end} new_sort={_new_sort}")
                 if _new_start and _new_end and _new_start > _new_end:
                     return  # Invalid range — leave state unchanged; error shown below
                 if _new_start and _new_end:
@@ -2724,9 +2828,11 @@ def render_page():
 
         # Ratios & Ratings tabs: hide Conversion/Currency/Units filters (text-based, not currency-convertible)
         _hide_currency_filters = (selected_tab in ("ratios", "ratings"))
-        # Ratings + Forecasting: always Annual, hide Period Type filter.
-        # Segment: show Period Type only when quarterly data is available (checked below via _available_period_types)
-        _hide_period_type = (selected_tab in ("ratings", "forecasting"))
+        # Ratings: always Annual, hide Period Type filter.
+        # Forecasting & Segment: show Period Type only when quarterly data is
+        # available (checked via _available_period_types → single disabled option
+        # when Annual-only, Annual/Quarterly dropdown when quarterly forecasts exist).
+        _hide_period_type = (selected_tab in ("ratings",))
 
         if _hide_currency_filters:
             if _hide_period_type:
@@ -3126,7 +3232,7 @@ def render_page():
                 def _ff(v):
                     if v is None: return None
                     try: return float(v)
-                    except: return None
+                    except Exception: return None
 
                 if _is_sec:
                     _sp_rows_raw = _db.execute_query_readonly("""
@@ -3409,13 +3515,13 @@ def render_page():
                         _render_excel_js_download(_ks_xl_cached, f"{selected_ticker}_Key_Stats.xlsx", "Excel")
             else:
                 _t0 = _time.perf_counter()
-                log_error(
+                log_info(
                     f"[MD_PHASE] rerun={get_rerun_id()} phase=key_stats_fetch_start "
                     f"ticker={selected_ticker} period={_period_type_db} start={start_date} end={end_date}"
                 )
                 data = KeyStatsRepository.get_key_stats_data(selected_ticker, start_date, end_date, _period_type_db)
                 _timings['key_stats_fetch'] = (_time.perf_counter() - _t0) * 1000
-                log_error(
+                log_info(
                     f"[MD_PHASE] rerun={get_rerun_id()} phase=key_stats_fetch_done "
                     f"ms={_timings['key_stats_fetch']:.1f} n_periods={len(data.get('periods', []))}"
                 )
@@ -3763,17 +3869,17 @@ def render_page():
             _est_period_type = (st.session_state.get(period_type_key) or 'Annual').lower()
             _est_ck = f"_est_html_{selected_ticker}_{start_date}_{end_date}_{_est_period_type}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}"
             _est_cached = st.session_state.get(_est_ck)
-            log_error(f"[EST_TAB] ticker={selected_ticker} period={_est_period_type} start={start_date} end={end_date} sort={sort_ascending} cached={'YES' if _est_cached else 'NO'}")
+            log_info(f"[EST_TAB] ticker={selected_ticker} period={_est_period_type} start={start_date} end={end_date} sort={sort_ascending} cached={'YES' if _est_cached else 'NO'}")
             if _est_cached is not None:
                 st.html(_est_cached)
             else:
                 _t0 = _time.perf_counter()
-                log_error(f"[EST_FETCH] calling get_estimates_data ticker={selected_ticker} period={_est_period_type}")
+                log_info(f"[EST_FETCH] calling get_estimates_data ticker={selected_ticker} period={_est_period_type}")
                 _est_data = AnalystEstimatesRepository.get_estimates_data(
                     selected_ticker, start_date, end_date, _est_period_type
                 )
                 _timings['estimates_fetch'] = (_time.perf_counter() - _t0) * 1000
-                log_error(f"[EST_FETCH] done in {_timings['estimates_fetch']:.0f}ms periods={len(_est_data.get('periods', []))} sections={len(_est_data.get('sections', []))}")
+                log_info(f"[EST_FETCH] done in {_timings['estimates_fetch']:.0f}ms periods={len(_est_data.get('periods', []))} sections={len(_est_data.get('sections', []))}")
 
                 periods = _est_data.get("periods", [])
                 sections = _est_data.get("sections", [])
@@ -3868,7 +3974,10 @@ def render_page():
         _t0_tab = _time.perf_counter()
         try:
             _t0 = _time.perf_counter()
-            _is_quarterly_fcst = _period_type_db == "quarterly"
+            # Defense-in-depth: quarterly forecasting paused
+            # (see constants.QUARTERLY_FORECASTING_ENABLED). The effective period
+            # type is already clamped to Annual upstream, but gate the render too.
+            _is_quarterly_fcst = QUARTERLY_FORECASTING_ENABLED and _period_type_db == "quarterly"
             if _is_quarterly_fcst:
                 _fcst_data = ModelForecastsRepository.get_quarterly_forecasts_data(selected_ticker, max_quarters=8)
             else:
@@ -3889,7 +3998,7 @@ def render_page():
 
             if _fcst_periods and _fcst_sections:
                 # ── HTML table (with session-state cache) ─────────────────
-                _fcst_ck = f"_fcst_html_v3_{selected_ticker}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}"
+                _fcst_ck = f"_fcst_html_v5_{selected_ticker}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}"
                 _fcst_cached = st.session_state.get(_fcst_ck)
                 if _fcst_cached is not None:
                     st.html(_fcst_cached)
@@ -3914,15 +4023,28 @@ def render_page():
                               f'<span class="header-subtext">{units_label} of {st.session_state.get("target_currency","USD")}.'
                               + (f' Last actual: {_last_actual.strftime("%b %d, %Y")}' if _last_actual else '')
                               + '</span></th>']
+                    # Quarterly headers mirror the Key Stats format — fiscal + calendar
+                    # quarter + period-end date — via the SAME FiscalPeriod.from_date()
+                    # helper Key Stats uses (no new quarter math). Annual unchanged.
+                    from data.models import FiscalPeriod as _FP_FCST
+                    _fcst_fye = getattr(company, "fiscal_year_end", None) if company else None
                     for _p in _fcst_periods:
+                        _top = _fcst_period_label
                         if _is_quarterly_fcst:
-                            _lbl = str(_p.get("label", ""))
+                            _pdt = _p.get("date")
+                            _fp_lbl = _FP_FCST.from_date(_pdt, "quarterly", _fcst_fye).label if _pdt is not None else ""
+                            if "\n" in _fp_lbl:
+                                _top, _bot = _fp_lbl.split("\n", 1)
+                            else:
+                                _bot = _fp_lbl or str(_p.get("label", ""))
                         else:
-                            _lbl = str(_p.get("fiscal_year", _p.get("label", "")))
+                            # Use label (= forecast_date's year, authoritative) over the
+                            # raw fiscal_year, which some companies store off by one.
+                            _bot = str(_p.get("label", _p.get("fiscal_year", "")))
                         _parts.append(
                             f'<th class="data-col fcst-tab-col">'
-                            f'<span class="period-label">{_fcst_period_label}</span>'
-                            f'<span class="period-date">{_lbl}</span></th>'
+                            f'<span class="period-label">{_top}</span>'
+                            f'<span class="period-date">{_bot}</span></th>'
                         )
                     _parts.append('</tr></thead><tbody>')
 
@@ -4088,7 +4210,9 @@ def render_page():
             try:
                 from utils.excel_export import export_financial_excel
                 from data.repository import RatingsDataRepository
-                _rat_data = RatingsDataRepository.get_ratings_data(selected_ticker, start_date, end_date)
+                _rat_data = st.session_state.get(f"_ratings_data_{selected_ticker}_{start_date}_{end_date}")
+                if _rat_data is None:
+                    _rat_data = RatingsDataRepository.get_ratings_data(selected_ticker, start_date, end_date)
                 _rat_years = _rat_data["years"]
                 if not sort_ascending:
                     _rat_years = list(reversed(_rat_years))
@@ -4100,13 +4224,33 @@ def render_page():
                         for cr in _rat_data["credit_ratings"]:
                             _rat_rows.append({"label": f"{cr['agency']} Rating", "values": [cr["values"].get(yr, '') or '' for yr in _rat_years], "is_bold": False, "indent": 1, "is_percent": False, "is_text": True, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
                             _rat_rows.append({"label": "Outlook", "values": [cr["outlooks"].get(yr, '') or '' for yr in _rat_years], "is_bold": False, "indent": 2, "is_percent": False, "is_text": True, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
-                    # Store counts section
-                    if _rat_data["store_counts"]:
-                        _rat_rows.append({"label": "Store Count", "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
+                    # Store counts section (hidden when Stores by Country covers it)
+                    _sbc_tot = (_rat_data.get("stores_by_country", {}) or {}).get("total_row", {})
+                    _hide_sc = bool(_sbc_tot) and all(
+                        (yr in _sbc_tot) for sc in _rat_data["store_counts"]
+                        for yr, v in sc["values"].items() if v is not None)
+                    if _rat_data["store_counts"] and not _hide_sc:
+                        _rat_rows.append({"label": "Store Count (Worldwide)", "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
                         for sc in _rat_data["store_counts"]:
                             _vals = [int(sc["values"].get(yr)) if sc["values"].get(yr) is not None else None for yr in _rat_years]
                             _rat_rows.append({"label": sc["store_type"].title(), "values": _vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
-                    _rat_col_headers = [str(yr) for yr in _rat_years]
+                    # Stores by Country section (+ worldwide total last)
+                    _sbc = _rat_data.get("stores_by_country", {}) or {}
+                    if _sbc.get("countries"):
+                        _rat_rows.append({"label": "Stores by Country", "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
+                        for _cn in sorted(_sbc["countries"]):
+                            _cv = _sbc["countries"][_cn]
+                            _vals = [int(_cv.get(yr)) if _cv.get(yr) is not None else None for yr in _rat_years]
+                            _rat_rows.append({"label": _cn, "values": _vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
+                        _trow = _sbc.get("total_row", {})
+                        if _trow:
+                            _vals = [int(_trow.get(yr)) if _trow.get(yr) is not None else None for yr in _rat_years]
+                            _rat_rows.append({"label": "Total (Worldwide)", "values": _vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
+                    _rat_disp_dates = _rat_data.get("period_display_dates") or _rat_data.get("period_dates", {})
+                    _rat_col_headers = [
+                        _pd.strftime("%b-%d-%Y") if (_pd := _rat_disp_dates.get(yr)) and hasattr(_pd, "strftime") else str(yr)
+                        for yr in _rat_years
+                    ]
                     _rat_xl = export_financial_excel("Ratings & Store Data", company.name or "", selected_ticker, _rat_col_headers, _rat_rows, "", "USD", start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
                     _, _dl_col = st.columns([8, 2])
                     with _dl_col:
@@ -4123,7 +4267,7 @@ def render_page():
 
     # Clear the loading spinner now that tab content has rendered
     _tab_loading_hint.empty()
-    log_error(
+    log_info(
         f"[MD_PHASE] rerun={get_rerun_id()} phase=page_render_complete "
         f"ticker={selected_ticker} tab={selected_tab} "
         f"period_ss={st.session_state.get(period_type_key)} qp_period={st.query_params.get('period_type')}"
@@ -4140,16 +4284,35 @@ def render_page():
         log_timing(f"PAGE_{_tk}", _tv, details=f"tab={_tab_ctx} ticker={_ticker_ctx}")
     # Single summary line
     _timing_summary = " | ".join(f"{k}={v:.0f}ms" for k, v in sorted(_timings.items(), key=lambda x: -x[1]))
+    _TAB_TIMING_NAMES = {
+        "income_statement": "Income_Statement",
+        "balance_sheet": "Balance_Sheet",
+        "cash_flow": "Cash_Flow",
+        "key_stats": "Key_Statistics",
+        "segment_data": "Segments",
+        "estimates": "Estimates",
+        "company_profile": "Company_Profile",
+        "ratios": "Ratios",
+        "forecasting": "Forecasting",
+        "ratings": "Ratings",
+    }
+    _tab_timing_key = _TAB_TIMING_NAMES.get(_tab_ctx, _tab_ctx)
+    log_timing(
+        f"TAB_{_tab_timing_key}",
+        _page_elapsed,
+        details=f"ticker={_ticker_ctx} [{_timing_summary}]",
+    )
     log_timing("PAGE_SUMMARY", _page_elapsed, details=f"tab={_tab_ctx} ticker={_ticker_ctx} [{_timing_summary}]")
 
 
 def main():
     """Market data page entry point."""
     import time as _time
-    from utils.server_logger import log_timing, log_exception
+    from utils.server_logger import log_timing, log_exception, PageLoadTracker, log_render_complete
 
     new_rerun_id("market_data")
     _main_start = _time.perf_counter()
+    _tracker = PageLoadTracker("market_data")
     try:
         render_styles()
 
@@ -4171,6 +4334,8 @@ def main():
         render_coresight_footer(full_width=True, stick_to_bottom=True)
         _main_total = (_time.perf_counter() - _main_start) * 1000
         log_timing("MAIN_TOTAL", _main_total, details=f"includes pre_render={_pre_render_elapsed:.0f}ms")
+        log_render_complete("market_data", _time.perf_counter() - _main_start)
+        _tracker.finish()
     except Exception as _main_exc:
         import traceback as _tb
         log_exception(f"[MAIN_CRASH] UNHANDLED ticker={st.query_params.get('ticker')} tab={st.query_params.get('tab')} period={st.query_params.get('period_type')} err={_main_exc}\n{_tb.format_exc()}")

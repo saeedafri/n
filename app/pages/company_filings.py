@@ -28,7 +28,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =============================================================================
 _module_load_start = time.perf_counter()
 
-from utils.server_logger import log_error, log_info, log_warning, log_structured_error
+from utils.server_logger import log_error, log_info, log_warning, log_structured_error, new_rerun_id, PageLoadTracker, log_render_complete, log_timing
+
+new_rerun_id("company_filings")
 
 from components.styles import hide_sidebar, set_page_layout
 from core.auth_manager import require_auth
@@ -127,7 +129,7 @@ def _on_company_change():
     try:
         from utils.filing_units import _get_filing_units_from_db
         _get_filing_units_from_db.clear()
-    except:
+    except Exception:
         pass
 
     # Pick the most recent annual or quarterly filing (SEC or non-SEC).
@@ -176,7 +178,7 @@ def _on_doc_type_change():
     try:
         from utils.filing_units import _get_filing_units_from_db
         _get_filing_units_from_db.clear()
-    except:
+    except Exception:
         pass
 
     try:
@@ -214,7 +216,7 @@ def _on_year_change():
     try:
         from utils.filing_units import _get_filing_units_from_db
         _get_filing_units_from_db.clear()
-    except:
+    except Exception:
         pass
 
     # For 8-K/6-K, update filing units when year changes
@@ -492,7 +494,7 @@ def _ensure_local_blob_optimized(blob_name: str, use_temp: bool = False) -> Opti
                 os.remove(tmp_path)
             except OSError:
                 pass
-            log_error(f"[AZURE_DL] blob={blob_name!r} — blob exists but downloaded 0 bytes, skipping cache")
+            log_warning(f"[AZURE_DL] blob={blob_name!r} — blob exists but downloaded 0 bytes, skipping cache")
             return None
 
         os.replace(tmp_path, local_path)
@@ -500,7 +502,7 @@ def _ensure_local_blob_optimized(blob_name: str, use_temp: bool = False) -> Opti
         download_end = _perf_time.time()
         download_duration = download_end - download_start
         _mb = total_bytes / (1024 * 1024)
-        log_error(
+        log_info(
             f"[AZURE_DL] blob={blob_name!r} size={_mb:.2f}MB "
             f"duration={download_duration:.2f}s speed={_mb/max(download_duration, 0.001):.1f}MB/s chunks={chunk_count}"
         )
@@ -1430,31 +1432,22 @@ _COMPANY_NAMES_CACHE = None
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_company_names_from_db():
-    """Load ticker→company_name map directly from coreiq_filing_metrics_v5 with proper formatting.
+    """Load ticker→company_name map from coreiq_companies (indexed master table).
 
-    OPTIMIZED: Using DISTINCT instead of MAX() - simpler and faster
-    Gets one company_name per ticker (any one, since they're usually consistent).
+    Replaces the previous DISTINCT scan on coreiq_filing_metrics_v5 (~7.75M rows).
     """
     _start = _perf_time.time()
 
     try:
-        from core.database import db_manager
-        # OPTIMIZED: Using DISTINCT instead of MAX() - no aggregation needed
-        # Since company_name is usually consistent per ticker, we just need any one
-
+        from data.repository import CompanyRepository
 
         _query_start = _perf_time.time()
-        rows = db_manager.execute_query_readonly("""
-            SELECT DISTINCT ticker, company_name
-            FROM coreiq_filing_metrics_v5
-            ORDER BY ticker
-        """)
-
+        company_rows = CompanyRepository.get_companies_rows()
         _process_start = _perf_time.time()
         result = {}
-        for row in rows:
-            ticker = row["ticker"]
-            name = row["company_name"]
+        for row in company_rows:
+            ticker = row.get("ticker")
+            name = row.get("name_coresight") or row.get("name")
             if ticker and name and name.upper() != ticker.upper():
                 formatted_name = _format_company_name(name)
                 result[ticker] = formatted_name
@@ -1492,6 +1485,11 @@ def _render_filing_download_button(pdf_bytes: bytes, filename: str, auto_click: 
     Matches the red border styling from earnings_calls.
     If auto_click=True, triggers the download automatically on load (no user click needed).
     """
+    try:
+        from utils.server_logger import track_download
+        track_download("filing_pdf", name=filename, page="company_filings")
+    except Exception:
+        pass
     import base64
     from streamlit.components.v1 import html as _sthtml
 
@@ -1694,31 +1692,23 @@ from data.repository import FilingMetricRepository
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_companies_from_db():
-    """Get (ticker, display_label) for companies that have data in coreiq_filing_metrics_v5.
-    Uses DISTINCT for unique tickers + COMPANY_NAMES for display names.
-    Display format: "Company Name (TICKER)"
+    """Get (ticker, display_label) for the company dropdown.
 
-    OPTIMIZED: Using DISTINCT instead of GROUP BY (no aggregation needed)
-    OPTIMIZED: Removed redundant WHERE clauses (ticker is NOT NULL in schema)
+    SEC tickers come from coreiq_companies (indexed master) instead of a DISTINCT
+    scan on coreiq_filing_metrics_v5 (~7.75M rows). NON-SEC tickers are merged
+    from coreiq_companies + Azure Blob scan (unchanged).
+    Display format: "Company Name (TICKER)"
     """
     _func_start = _perf_time.time()
 
 
     try:
-        from core.database import db_manager
+        from data.repository import CompanyRepository
 
-        # Step 1: Execute SINGLE query — one row per ticker using the most recent
-        # filing's company_name (ROW_NUMBER by year DESC, id DESC is deterministic).
-        # This avoids the non-deterministic multiple-name problem where DISTINCT
-        # returns e.g. both "TRACTOR SUPPLY CO /DE/" and "Tractor Supply Company"
-        # for the same ticker and the last one processed wins by accident.
+        # Step 1: SEC companies from coreiq_companies master (cached 1h).
         _query_start = _perf_time.time()
 
-        rows = db_manager.execute_query_readonly("""
-            SELECT DISTINCT ticker, company_name
-            FROM coreiq_filing_metrics_v5
-            ORDER BY ticker
-        """)
+        company_rows = CompanyRepository.get_companies_rows()
         _query_elapsed = _perf_time.time() - _query_start
 
         # Step 2: Build both ticker list and company names map from single result
@@ -1728,13 +1718,15 @@ def _load_companies_from_db():
         global _COMPANY_NAMES_CACHE
         _built_names = {}
         seen_tickers = {}
-        for row in rows:
-            ticker = row["ticker"]
-            name = row.get("company_name")
+        for row in company_rows:
+            if (row.get("source") or "").strip() != "SEC":
+                continue
+            ticker = row.get("ticker")
+            name = row.get("name_coresight") or row.get("name")
             if ticker and name and name.upper() != ticker.upper():
                 formatted_name = _format_company_name(name)
                 _built_names[ticker] = formatted_name
-            if ticker not in seen_tickers:
+            if ticker and ticker not in seen_tickers:
                 seen_tickers[ticker] = True
 
         # NON-SEC: pull all companies from coreiq_companies (source != SEC) AND
@@ -1791,6 +1783,14 @@ def _load_companies_from_db():
 
         # Step 3: Return
         _total_elapsed = _perf_time.time() - _func_start
+        try:
+            log_timing(
+                "DB_load_companies_from_db",
+                _total_elapsed * 1000,
+                f"table=coreiq_companies rows={len(results)} query_ms={_query_elapsed * 1000:.0f}",
+            )
+        except Exception:
+            pass
 
         return results
     except Exception as e:
@@ -1863,6 +1863,15 @@ def _prefetch_ticker_filter_data(ticker: str):
             ORDER BY doc_type, bucket_year DESC
         """, {"ticker": ticker})
         _query_elapsed = _perf_time.time() - _query_start
+
+        try:
+            log_timing(
+                "FILINGS_PREFETCH",
+                _query_elapsed * 1000,
+                f"ticker={ticker} table=coreiq_filing_metrics_v5 rows={len(rows)}",
+            )
+        except Exception:
+            pass
 
         # bucket_year = physical blob bucket → drives file loading and ALL plumbing
         #               (unchanged from v4; the blob loader's year/year-1 fallback relies on it).
@@ -2949,6 +2958,7 @@ def main():
     User sees UI immediately, then data loads.
     """
     main_start = _perf_time.time()
+    _tracker = PageLoadTracker("company_filings")
 
     # ═══════════════════════════════════════════════════════════════════════
     # CRITICAL: HEADER RENDERS FIRST - NO DELAYS!
@@ -3126,7 +3136,8 @@ def main():
     # STEP 9: Render Page Content (Dropdowns + Document Viewer)
     # ═══════════════════════════════════════════════════════════════════════
     _step9_start = _perf_time.time()
-
+    html_path = ""
+    blob_name = None
 
     header_col1, header_col2 = st.columns([1, 2])
 
@@ -3959,9 +3970,22 @@ def main():
     # Clear the early loading placeholder now that content is rendered
     _cf_loading_hint.empty()
 
+    _step9_elapsed_ms = (_perf_time.time() - _step9_start) * 1000
+    _file_loaded = bool(html_path and os.path.exists(html_path))
+    log_timing(
+        "FILINGS_LOAD",
+        _step9_elapsed_ms,
+        (
+            f"ticker={company} doc={doc_type} year={year} "
+            f"file_ok={_file_loaded} companies={len(_companies_list)}"
+        ),
+    )
+
     render_coresight_footer(full_width=True, stick_to_bottom=True)
 
     _total_main = _perf_time.time() - main_start
+    log_render_complete("company_filings", _total_main)
+    _tracker.finish()
     if _total_main > 10.0:
         log_warning(f"[PERFORMANCE_ALERT] Page load CRITICAL - {_total_main:.3f}s. User likely experiencing broken page!")
     elif _total_main > 5.0:

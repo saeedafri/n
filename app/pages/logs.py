@@ -18,28 +18,43 @@ import streamlit as st
 from utils.server_logger import (
     clear_logs,
     download_logs,
+    download_analytics_logs,
+    get_analytics_stats,
+    get_log_content,
     get_log_stats,
+    analyze_slow_operations,
     log_error,
     log_structured_error,
     error_boundary,
-    SERVER_LOG_FILE
+    new_rerun_id,
+    SERVER_LOG_FILE,
+    SERVER_LOGS_DIR,
 )
 from core.auth_manager import require_auth, get_current_user
-# require_auth()
+from core.access_control import UserRolesManager
+
+new_rerun_id("logs")
 
 # ---------------------------------------------------
-# OWNER-ONLY ACCESS GATE
+# ADMIN ALLOWLIST ACCESS GATE (stealth page — not public)
 # ---------------------------------------------------
-# _OWNER_EMAIL = "mohdsaeedafri@coresight.com"
-# try:
-#     _current_user = get_current_user()
-#     if _current_user != _OWNER_EMAIL:
-#         st.error("Access Denied - This page is restricted to the system owner.")
-#         st.stop()
-# except Exception as e:
-#     log_structured_error(e, page="logs", component="module_init", operation="ACCESS_GATE_CHECK")
-#     st.error("Something went wrong. Please try again.")
-#     st.stop()
+_ADMIN_EMAILS = {
+    "mohdsaeedafri@coresight.com",
+    "philipmoore@coresight.com",
+    "shashankgupta@coresight.com",
+}
+try:
+  if os.getenv("ENFORCE_PAGE_AUTH", "0").strip() == "1":
+    require_auth(page="logs")
+  _current_user = (get_current_user() or "").strip().lower()
+  if _current_user and _current_user not in {e.lower() for e in _ADMIN_EMAILS}:
+    if not UserRolesManager.is_admin_or_super_user(_current_user):
+      st.error("Access Denied - This page is restricted to administrators.")
+      st.stop()
+except Exception as e:
+    log_structured_error(e, page="logs", component="module_init", operation="ACCESS_GATE_CHECK")
+    st.error("Something went wrong. Please try again.")
+    st.stop()
 
 # Hide sidebar on this page
 from components.styles import hide_sidebar, render_styles, set_page_layout
@@ -512,36 +527,93 @@ def main():
         with tab1:
             def _render_log_body():
                 try:
+                    # Constrain the whole tab panel FIRST so neither the toolbar nor the log
+                    # box can stretch the page. The baseweb tab-panel defaults to
+                    # min-width:auto and otherwise grows to the widest (non-wrapping) log line,
+                    # which pushed the buttons off-screen (they needed a horizontal scroll).
+                    st.markdown(
+                        "<style>"
+                        "[data-testid='stMain']{overflow-x:hidden!important;}"
+                        "[data-testid='stMainBlockContainer'],.block-container"
+                        "{max-width:100%!important;min-width:0!important;overflow-x:hidden!important;}"
+                        "[data-baseweb='tab-panel'],[role='tabpanel']"
+                        "{min-width:0!important;max-width:100%!important;overflow-x:hidden!important;}"
+                        "[data-testid='stVerticalBlock'],[data-testid='stHorizontalBlock'],"
+                        "[data-testid='stElementContainer'],[data-testid='stMarkdown'],"
+                        "[data-testid='stMarkdownContainer']{min-width:0!important;max-width:100%!important;}"
+                        ".cs-logbox{width:100%!important;max-width:100%!important;min-width:0!important;"
+                        "overflow:auto!important;box-sizing:border-box;}"
+                        "</style>",
+                        unsafe_allow_html=True,
+                    )
                     stats = get_log_stats()
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("File Size", f"{stats['size']:,} bytes" if stats['exists'] else "0 bytes")
-                    with col2:
-                        st.metric("Total Lines", stats['lines'] if stats['exists'] else 0)
-                    with col3:
-                        st.metric("Last Modified", stats['modified'] if stats['exists'] else "Never")
-                    with col4:
-                        st.metric("Log File", "server-log.log")
-                    st.divider()
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
+                    # Single compact toolbar row — Refresh / Download / Clear (+ Analytics if
+                    # present) — all on ONE page, no horizontal scroll. The old big
+                    # File-Size / Total-Lines / Last-Modified / Log-File stat block above the
+                    # logs ("recent logs section") is removed per request; the essentials are
+                    # now the one small caption line below.
+                    _has_analytics = get_analytics_stats().get("exists")
+                    _cols = st.columns(4 if _has_analytics else 3)
+                    with _cols[0]:
+                        if st.button("🔄 Refresh", width='stretch', type="primary"):
+                            st.rerun()
+                    with _cols[1]:
+                        st.download_button(
+                            "⬇️ Download Logs",
+                            data=download_logs(),
+                            file_name=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+                            mime="text/plain",
+                            width='stretch',
+                        )
+                    with _cols[2]:
                         if st.button("🗑️ Clear Logs", width='stretch', type="secondary"):
                             if clear_logs():
                                 st.toast("✅ Logs cleared successfully!")
                                 st.rerun()
                             else:
                                 st.error("❌ Failed to clear logs")
-                    with col2:
-                        st.download_button(
-                            label="⬇️ Download Logs",
-                            data=download_logs(),
-                            file_name=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
-                            mime="text/plain",
-                            width='stretch'
+                    if _has_analytics:
+                        with _cols[3]:
+                            st.download_button(
+                                "⬇️ Analytics",
+                                data=download_analytics_logs(),
+                                file_name=f"user-analytics-{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl",
+                                mime="application/json",
+                                width='stretch',
+                            )
+                    _size = f"{stats['size']:,} B" if stats['exists'] else "0 B"
+                    _mod = stats['modified'] if stats['exists'] else "Never"
+                    st.caption(
+                        f"server-log.log · {_size} · {stats.get('lines', 0):,} lines · {_mod} · "
+                        f"`{stats.get('dir', SERVER_LOGS_DIR)}` · persistent={stats.get('persistent', False)}"
+                    )
+                    # Dense, small monospace log viewer (SIP-style) — the old st.text_area
+                    # was huge and hard to scan. white-space:pre keeps the `|`-delimited
+                    # columns aligned; horizontal + vertical scroll inside the box.
+                    import html as _html
+                    _lines_list = (get_log_content(max_lines=500) or "").split("\n")
+                    # Newest at the top, and render each entry as its OWN row so the
+                    # date/time is always at the start of a line (SIP-style). Zebra
+                    # striping + no-wrap (horizontal scroll) keeps the `|` columns aligned.
+                    _rows = []
+                    for _i, _ln in enumerate(reversed([l for l in _lines_list if l.strip()])):
+                        _bg = "#ffffff" if _i % 2 else "#f0f3f6"
+                        _rows.append(
+                            f"<div style='background:{_bg};padding:1px 10px;'>{_html.escape(_ln)}</div>"
                         )
-                    with col3:
-                        if st.button("🔄 Refresh Now", width='stretch', type="primary"):
-                            st.rerun()
+                    _body = "".join(_rows) or "<div style='padding:8px 10px;color:#8a8f98;'>(no log lines yet)</div>"
+                    # `white-space:pre` keeps the `|` columns aligned; the tab-panel/flex
+                    # constraint emitted at the top of this tab keeps the box from stretching
+                    # the page, so long lines scroll INSIDE the box (`.cs-logbox` overflow:auto).
+                    st.markdown(
+                        "<div class='cs-logbox' style='background:#f6f8fa;border:1px solid #d0d7de;"
+                        "border-radius:8px;max-height:600px;overflow:auto;"
+                        "font-family:\"SF Mono\",\"Menlo\",\"Consolas\","
+                        "\"Liberation Mono\",monospace;font-size:11px;line-height:1.7;color:#1f2328;"
+                        "white-space:pre;'>"
+                        f"{_body}</div>",
+                        unsafe_allow_html=True,
+                    )
                 except Exception as e:
                     log_structured_error(e, page="logs", component="_render_log_body", operation="RENDER_LOG_BODY")
                     st.error("Failed to render log content.")

@@ -34,6 +34,9 @@ from urllib.parse import urlencode
 import streamlit as st
 from dotenv import load_dotenv
 from core.auth_environment import is_production_deploy
+from utils.server_logger import new_rerun_id, log_structured_error
+
+new_rerun_id("logout_bridge")
 
 try:
     from utils.server_logger import log_warning as slog_warning, log_error as slog_error, log_timing

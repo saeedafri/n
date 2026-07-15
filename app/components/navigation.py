@@ -25,7 +25,7 @@ from core.auth_manager import (
     _auth_request_meta,
 )
 from data.forecast_admin_service import is_forecast_admin
-from utils.server_logger import log_error, log_exception, log_structured_error, log_critical, log_timing
+from utils.server_logger import log_error, log_exception, log_structured_error, log_critical, log_timing, log_warning
 
 # Lazy import to avoid circular dependency — called only inside render_coresight_footer
 def _can_access_mgmt(user_email: str) -> bool:
@@ -106,27 +106,40 @@ def _inject_transition_js() -> None:
 
   if (doc.body){ doc.body.style.background='#f2f2f2'; doc.documentElement.style.background='#f2f2f2'; }
 
-  /* ── Styles (once) ─────────────────────────────────────────────────────── */
+  /* ── Styles (once) ─────────────────────────────────────────────────────────
+     The nav overlay card is PIXEL-IDENTICAL to the boot splash (boot_overlay.py)
+     and the in-app page loader (loading.py `.cs-al-card`): translucent
+     click-through backdrop + white card with logo, red ring, a TEXT label and a
+     shimmer. Identical visuals are what make a nav-overlay → page-loader handoff
+     read as ONE continuous spinner instead of "two different spinners". */
   if (!doc.getElementById('cs-styles')){
     var el = doc.createElement('style'); el.id='cs-styles';
     el.textContent =
-      '#cs-ov{position:fixed;inset:0;z-index:99998;background:#f2f2f2;' +
+      '#cs-ov{position:fixed;inset:0;z-index:2147483400;' +
+        'background:rgba(244,244,244,.62);' +
+        '-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);' +
         'display:flex;align-items:center;justify-content:center;' +
-        'opacity:0;pointer-events:none;transition:opacity 0.2s ease;}' +
+        'opacity:0;pointer-events:none;transition:opacity 0.18s ease;}' +
       '#cs-ov.on{opacity:1;}' +
-      '.cs-c{display:flex;flex-direction:column;align-items:center;gap:18px;' +
-        'padding:32px 44px;background:#fff;border-radius:14px;' +
-        'box-shadow:0 6px 40px rgba(0,0,0,0.10);}' +
-      '.cs-c img{width:144px;height:auto;display:block;}' +
+      /* ONE SPINNER ONLY: the instant a page-owned loader mounts, fade the nav
+         overlay out — the (identical) page loader continues the same visual and
+         owns the "content painted" removal. Never two cards on screen at once. */
+      'body:has(.cs-al-ov) #cs-ov,body:has(#cs-sticky-loader) #cs-ov{opacity:0!important;}' +
+      '.cs-c{display:flex;flex-direction:column;align-items:center;gap:16px;' +
+        'padding:30px 44px;background:#fff;border-radius:14px;' +
+        'box-shadow:0 6px 40px rgba(0,0,0,0.12);pointer-events:none;}' +
+      '.cs-c img{width:132px;height:auto;display:block;}' +
       '.cs-r{width:32px;height:32px;border-radius:50%;' +
-        'border:3px solid rgba(214,46,47,0.12);border-top-color:#d62e2f;' +
+        'border:3px solid rgba(214,46,47,0.14);border-top-color:#d62e2f;' +
         'animation:cs-sp 0.7s linear infinite;}' +
       '@keyframes cs-sp{to{transform:rotate(360deg)}}' +
+      '.cs-t{font-family:Montserrat,\'Source Sans Pro\',system-ui,sans-serif;' +
+        'font-size:14px;font-weight:600;color:#555;letter-spacing:.01em;text-align:center;}' +
       '.cs-s{width:108px;height:2px;border-radius:1px;' +
         'background:linear-gradient(90deg,#ebebeb 25%,#d62e2f 50%,#ebebeb 75%);' +
         'background-size:200% 100%;animation:cs-sh 1.6s ease infinite;}' +
       '@keyframes cs-sh{0%{background-position:200% 0}100%{background-position:-200% 0}}' +
-      '#cs-pb{position:fixed;top:0;left:0;height:3px;z-index:99999;' +
+      '#cs-pb{position:fixed;top:0;left:0;height:3px;z-index:2147483401;' +
         'width:0%;opacity:0;pointer-events:none;' +
         'background:linear-gradient(90deg,#d62e2f,#ff7575);}' +
       '.main .block-container{animation:cs-fi 0.32s ease both;}' +
@@ -142,39 +155,66 @@ def _inject_transition_js() -> None:
     ov.innerHTML =
       '<div class="cs-c">' +
         '<img src="https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net' +
-             '/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight" referrerpolicy="no-referrer">' +
-        '<div class="cs-r"></div><div class="cs-s"></div>' +
+             '/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight" ' +
+             'referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">' +
+        '<div class="cs-r"></div><div class="cs-t" id="cs-ov-txt">Loading</div>' +
+        '<div class="cs-s"></div>' +
       '</div>';
     doc.body.appendChild(ov);
   }
   var pb = doc.getElementById('cs-pb');
   if (!pb){ pb = doc.createElement('div'); pb.id='cs-pb'; doc.body.appendChild(pb); }
 
-  /* Concrete content widgets — NOT element-container (it also wraps skeletons). */
-  var READY =
-    '[data-testid="stMarkdownContainer"],[data-testid="stDataFrame"],' +
-    '[data-testid="stSelectbox"],[data-testid="stTable"],[data-testid="stMetric"],' +
-    '[data-testid="stTabs"],[data-testid="stImage"],[data-testid="stForm"],' +
-    '[data-testid="stTextInput"],[data-testid="stMultiSelect"],[data-testid="stSpinner"]';
+  /* Per-destination label so the card reads e.g. "Loading Earnings Calls" —
+     mirrors boot_overlay.py so a boot/nav/page handoff shows the same text. */
+  var LBL = {'/market_data':'Loading Market Data','/earnings_calls':'Loading Earnings Calls',
+    '/earnings_calendar':'Loading Calendar','/screening':'Loading Screening',
+    '/newsroom':'Loading News','/home':'Loading Home','/company_filings':'Loading Filings',
+    '/forecasting':'Loading Forecasting','/live_earnings_transcript':'Loading Transcript',
+    '/access_management':'Loading Access','/logs':'Loading Logs',
+    '/logout_bridge':'Signing out','/login':'Loading Login'};
+  function labelFor(path){ for (var k in LBL){ if (path && path.indexOf(k)===0) return LBL[k]; } return 'Loading'; }
 
-  win.__csShow = function(){
+  function mainEl(){ return doc.querySelector('[data-testid="stMain"]'); }
+  function mainLen(){ var m = mainEl(); return m ? (m.innerText||'').length : 0; }
+  function pageLoaderUp(){ return !!doc.querySelector('.cs-al-ov,#cs-sticky-loader'); }
+  /* Which nav page the CURRENT header marks active. On the source page this is the
+     source route; it flips to the destination only once the NEW page's header has
+     rendered — our reliable "the destination is actually on screen now" signal. */
+  function activePath(){
+    var a = doc.querySelector('.coresight-header-nav a.active');
+    if (!a) return null;
+    try { return new URL(a.href, win.location.origin).pathname; } catch(e){ return null; }
+  }
+
+  /* Show the branded overlay for a navigation heading to `targetPath`. The overlay
+     hides ONLY once the destination has really rendered — never while the page we
+     left is still visible (that reveal was the "comes back to same page" flash). */
+  win.__csShow = function(targetPath){
+    var tp = targetPath || win.location.pathname;
+    var tx = doc.getElementById('cs-ov-txt'); if (tx) tx.textContent = labelFor(tp);
     ov.classList.add('on');
-    pb.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:99999;' +
+    pb.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:2147483401;' +
       'pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);' +
       'width:0%;opacity:1;transition:none;';
     clearTimeout(win.__csBt);
     win.__csBt = setTimeout(function(){ pb.style.transition='width 3s cubic-bezier(0.05,0.5,0.9,1)'; pb.style.width='78%'; }, 35);
-    /* Settle-poll: on a page change Streamlit clears stMain then re-renders.
-       Hide once we've seen it clear AND content is back. Fallbacks: content
-       present continuously (~700ms) for a no-clear rerun; hard safety. */
     clearInterval(win.__csPoll);
-    var sawEmpty=false, contentTicks=0, ticks=0;
+    var ticks = 0;
     win.__csPoll = setInterval(function(){
       ticks++;
-      var main = doc.querySelector('[data-testid="stMain"]');
-      var has = !!(main && main.querySelector(READY));
-      if (!has){ sawEmpty=true; contentTicks=0; } else { contentTicks++; }
-      if ((sawEmpty && has) || contentTicks>=7 || ticks>=150){ win.__csHide(); }
+      var onDest = (win.location.pathname === tp);
+      var act = activePath();
+      /* Source page still on screen (header marks a DIFFERENT nav page) → hold. */
+      var sourceStillShown = act && act !== tp;
+      /* Hide only when the destination has really painted: its OWN loader has
+         taken over (seamless — identical card) OR real content beyond the header
+         is present. We deliberately do NOT hide on "new header rendered" alone —
+         pages without their own loader (e.g. newsroom) would then flash an empty
+         body between overlay-gone and content-painted. */
+      var destReady = onDest && !sourceStillShown &&
+                      (pageLoaderUp() || mainLen() > 800);
+      if (destReady || ticks >= 150){ win.__csHide(); }   /* 15s hard safety */
     }, 100);
     clearTimeout(win.__csSt);
     win.__csSt = setTimeout(function(){ win.__csHide(); }, 15000);
@@ -187,7 +227,7 @@ def _inject_transition_js() -> None:
     pb.style.transition='width 0.14s ease'; pb.style.width='100%';
     setTimeout(function(){
       pb.style.transition='opacity 0.22s ease'; pb.style.opacity='0';
-      setTimeout(function(){ pb.style.cssText='position:fixed;top:0;left:0;height:3px;z-index:99999;pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);width:0%;opacity:0;transition:none;'; }, 260);
+      setTimeout(function(){ pb.style.cssText='position:fixed;top:0;left:0;height:3px;z-index:2147483401;pointer-events:none;background:linear-gradient(90deg,#d62e2f,#ff7575);width:0%;opacity:0;transition:none;'; }, 260);
     }, 150);
   };
 
@@ -204,36 +244,36 @@ def _inject_transition_js() -> None:
   doc.addEventListener('click', function(ev){
     var a = ev.target && ev.target.closest ? ev.target.closest('.coresight-header-nav a, .logout-btn') : null;
     if (!a) return;
-    if (a.classList && a.classList.contains('logout-btn')){ win.__csShow(); return; } /* full reload OK for logout */
+    if (a.classList && a.classList.contains('logout-btn')){ win.__csShow('/logout_bridge'); return; } /* full reload OK for logout */
     if (a.classList && a.classList.contains('active')){ ev.preventDefault(); return; }
     var path; try { path = new URL(a.href, win.location.origin).pathname; } catch(e){ return; }
     var target = findClientLink(path);
     if (target){
       ev.preventDefault();
-      win.__csShow();
+      win.__csNavigating = true;
+      win.__csShow(path);
+      var href = a.href;
+      target.click();   /* fast path: client-side rerun (no full reload) */
       /* NEVER-BLOCK fallback. A client-side switch is processed by the Streamlit
          SERVER, which runs one script at a time per session. If the CURRENT page
-         is mid-run (e.g. earnings_calendar's slow data load) the switch is queued
-         and the user is stuck. Streamlit changes the URL optimistically even when
-         the switch is queued, so we CANNOT use the path as the success signal —
-         we watch the MAIN content instead. If it hasn't changed shortly after the
-         click, the server is busy → force a full browser navigation, which makes
-         the browser abandon the busy page immediately. */
-      var mainText = function(){ var m=doc.querySelector('[data-testid="stMain"]'); return m ? (m.innerText||'').slice(0,400) : ''; };
-      var before = mainText(), href = a.href;
-      target.click();   /* fast path: client-side rerun (no full reload) */
-      /* Watch the main area. On a busy server it goes empty and STAYS empty (the
-         new page can't render until the current run finishes). The moment new,
-         non-empty content appears the client-side switch succeeded — stop. If it
-         never appears within the budget, the server is busy → hard-navigate so
-         the browser abandons the stuck page immediately. */
+         is mid-run the switch is queued and the user is stuck. We consider the
+         switch to have SUCCEEDED as soon as the destination is actually on screen
+         (its header marks it active, its own loader is up, or content painted).
+         Only if NONE of that happens within a generous budget do we assume the
+         server is wedged and force a full browser navigation — this is a rare
+         last resort, not the ~1.4s hair-trigger it used to be (that fired on every
+         slow-but-progressing STG render and caused the second, boot-splash spinner). */
       win.clearInterval(win.__csNavWatch);
       var ticks = 0;
       win.__csNavWatch = win.setInterval(function(){
         ticks++;
-        var now = mainText();
-        if (now.length > 0 && now !== before){ win.clearInterval(win.__csNavWatch); return; }
-        if (ticks >= 11){ win.clearInterval(win.__csNavWatch); win.location.href = href; }  /* ~1.4s */
+        var onDest = (win.location.pathname === path);
+        if (onDest && (activePath() === path || pageLoaderUp() || mainLen() > 800)){
+          win.clearInterval(win.__csNavWatch); win.__csNavigating = false; return;
+        }
+        if (ticks >= 64){   /* ~8s: switch is genuinely wedged → hard reload */
+          win.clearInterval(win.__csNavWatch); win.__csNavigating = false; win.location.href = href;
+        }
       }, 125);
     }
     /* else: no client link → native navigation proceeds (link still works) */
@@ -246,7 +286,8 @@ def _inject_transition_js() -> None:
     if (c === win.__csLhPath) return;
     win.__csLhPath = c;
     if (win.location.href.indexOf('/login') !== -1) return;
-    win.__csShow();
+    if (win.__csNavigating) return;   /* a header click already owns the overlay */
+    win.__csShow(win.location.pathname);   /* back/forward / external nav */
   }, 60);
 })();
 """
@@ -312,6 +353,12 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
     # Track the current active page so pages can detect navigation events
     st.session_state["_active_page"] = current_page
 
+    _prev_nav = st.session_state.get("_mdp_prev_page_for_nav")
+    if _prev_nav and _prev_nav != current_page:
+        from utils.server_logger import nav_tracker
+        nav_tracker.record_nav_click(_prev_nav, current_page)
+        nav_tracker.record_page_start(current_page)
+
     _ec_href = f"/earnings_calendar?ticker={actual_ticker}"
     log_timing(
         "NAV_LINK_EARNINGS_CALENDAR",
@@ -323,6 +370,15 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
 
     # STEP 3: Build header HTML
     header_html = '''<style>
+    /* SELF-CONTAINED FONTS — the header (nav links, logo/company text, footer) is
+       styled in Roboto + Montserrat, but pages import DIFFERENT Google-Font subsets
+       (some import Roboto 400/500/600/700, some none at all — e.g. screening &
+       earnings_calendar import only Inter/Montserrat). On those pages the nav fell
+       back to the OS font (Helvetica/Arial), so the header's weight/shape looked
+       different per page. Importing the header's own fonts HERE makes it render
+       IDENTICALLY everywhere, independent of the host page. @import MUST be the first
+       rule in a stylesheet, so it stays at the very top of this block. */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
     /* Header full-width wrapper - background #f2f2f2 */
     .coresight-header-exact {
       background-color: #f2f2f2;
@@ -469,14 +525,21 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
         <nav class="coresight-header-nav">
           <a href="/market_data?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_market_data else '""') + '''>Market Data Dashboard</a>
           <a href="/earnings_calls?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_earnings_calls else '""') + '''>Earnings Calls</a>
-          <a href="/earnings_calendar?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_earnings_calendar else '""') + '''>Earnings Calendar</a>
+          <a href="/earnings_calendar?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_earnings_calendar else '""') + '''>Calendar</a>
           <a href="/screening?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_screening else '""') + '''>Screening</a>
           <a href="/newsroom?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_newsroom else '""') + '''>News</a>
         </nav>
 
         <!-- Spacer to push logout to right -->
         <div style="flex: 1;"></div>
-        <a href="?action=logout" class="logout-btn">Logout</a>
+        <!-- Navigate straight to the logout bridge path (not "?action=logout" on the
+             CURRENT page). A relative query kept the path as e.g. /market_data, so the
+             browser re-ran the source page ("Loading Market Data…") before main.py
+             routed to the bridge — the visible bounce-back the user reported. The
+             absolute /logout_bridge path makes the boot overlay show "Signing out"
+             immediately and never re-renders the source page. action=logout is kept so
+             main.py still stashes the id_token for the OIDC end-session redirect. -->
+        <a href="/logout_bridge?action=logout" class="logout-btn">Logout</a>
         <!-- Logout placeholder - Streamlit button will be injected here -->
         <div id="logout-container" style="margin-right: 40px;"></div>
       </div>
@@ -1042,35 +1105,95 @@ def render_company_header(company_name: str, ticker: str, exchange: str = "NYSE"
         log_structured_error(e, page="navigation", component="render_company_header", operation="GET_COMPANIES")
         companies = []
 
-    # FIX: Add placeholder as first option so real companies start at index 1
-    # This fixes the first-item-click issue on initial load
+    # Placeholder first so real companies start at index 1 (fixes first-item-click).
     placeholder = "─ Select Company ─"
-    company_options = {placeholder: ""}  # Empty value for placeholder
-    company_options.update({f"{c['name']} ({c['ticker']})": c['ticker'].strip() for c in companies})
+    company_options = {placeholder: ""}  # label -> ticker value
+    for c in companies:
+        lbl = f"{c['name']} ({c['ticker']})"
+        company_options[lbl] = (c.get('ticker') or "").strip()
 
-    # Escape company name for dropdown display (handles apostrophes like Macy's)
-    display_company_name = _escape_html_for_display(company_name)
-    current_display = f"{display_company_name} ({ticker})"
+    # ── Resolve the label for the CURRENTLY-LOADED company ────────────────────
+    # The company universe stores foreign listings under a COMPOSITE ticker
+    # (e.g. '005930.KS'), while pages route/display by the BARE ticker ('005930').
+    # Worse, a composite company's CompanyOverview.ticker comes back BARE ('TSCO'
+    # for Tesco/TSCO.L), which collides with the US company that owns bare 'TSCO'
+    # (Tractor Supply). A Streamlit selectbox RAISES when the value held in its key
+    # is not among `options` — that mismatch silently killed the Samsung dropdown.
+    # We hand the widget a label that provably exists, resolving as:
+    #   • gather candidates whose ticker shares the loaded base ('TSCO' -> both
+    #     'TSCO' and 'TSCO.L');
+    #   • one candidate  -> use it (Samsung, all uncontested tickers);
+    #   • many candidates (shared base) -> disambiguate by NAME first
+    #     (company.name == the option's name_coresight), then exact ticker value;
+    #   • no candidate at all (data-only ticker) -> INJECT it as its own option.
+    # After this block the selectbox value is ALWAYS a member of option_list, so
+    # the "value not in options" crash is structurally impossible — AND shared
+    # tickers (TSCO/JD/LULU) resolve to the exact company on screen.
+    loaded_ticker = (ticker or "").strip()
+    company_name_clean = (company_name or "").strip()
+    resolved_label = None
+    if loaded_ticker:
+        base_loaded = loaded_ticker.split(".")[0]
+        candidates = [
+            (lbl, tk) for lbl, tk in company_options.items()
+            if tk and tk.split(".")[0] == base_loaded
+        ]
+        if len(candidates) == 1:
+            resolved_label = candidates[0][0]
+        elif candidates:
+            # Shared base ticker — pick the option that matches the loaded company
+            # by name (label is "Name (TICKER)"; name part == coreiq name_coresight).
+            if company_name_clean:
+                for lbl, tk in candidates:
+                    if lbl.rsplit(" (", 1)[0] == company_name_clean:
+                        resolved_label = lbl
+                        break
+            if resolved_label is None:  # then exact ticker value
+                for lbl, tk in candidates:
+                    if tk == loaded_ticker:
+                        resolved_label = lbl
+                        break
+            if resolved_label is None:  # last resort within the base group
+                resolved_label = candidates[0][0]
+    if resolved_label is None:
+        # Not in the universe — surface it anyway so the picker stays usable and
+        # correctly reflects the company on screen.
+        resolved_label = f"{company_name} ({loaded_ticker})" if loaded_ticker else placeholder
+        if resolved_label not in company_options:
+            company_options[resolved_label] = loaded_ticker
+        try:
+            log_warning(
+                f"[COMPANY_PICKER] loaded ticker not in universe — injected fallback option "
+                f"| ticker={loaded_ticker!r} label={resolved_label!r}"
+            )
+        except Exception:
+            pass
+
     option_list = list(company_options.keys())
 
-    # Set current value in session state
-    if "company_selector_header" not in st.session_state:
-        st.session_state.company_selector_header = current_display
+    # Keep the picker in sync with the loaded company on EVERY run (not just first
+    # init) so URL-driven navigation never strands a stale/invalid selection.
+    # resolved_label is guaranteed ∈ option_list above → assignment is always safe.
+    st.session_state.company_selector_header = resolved_label
 
     # Hidden Streamlit selectbox for functionality
     def on_company_change():
         selected = st.session_state.company_selector_header
-        # Skip if placeholder selected
+        # Skip if placeholder or an unknown/blank value
         if selected == placeholder:
             return
-        selected_ticker = company_options[selected]
+        selected_ticker = company_options.get(selected, "")
+        if not selected_ticker:
+            return
         # Update URL with new ticker - this automatically triggers a rerun
         st.query_params["ticker"] = selected_ticker
         # Also update active_ticker so the cross-page sync logic doesn't
         # override the new selection with the stale old ticker
         st.session_state.active_ticker = selected_ticker
 
-    # Render selectbox
+    # Render selectbox. resolved_label is proven to be in option_list, so this
+    # cannot raise the "default value not in options" error; the try/except is a
+    # last-resort safety net only.
     try:
         st.selectbox(
             "Select Company",

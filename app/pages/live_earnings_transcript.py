@@ -40,10 +40,13 @@ from data.live_earnings_transcript_store import (
 )
 
 try:
-    from utils.server_logger import log_structured_error
+    from utils.server_logger import log_structured_error, new_rerun_id
+    new_rerun_id("live_earnings_transcript")
 except ImportError:
     def log_structured_error(*a, **kw):  # type: ignore
         pass
+    def new_rerun_id(*a, **kw):  # type: ignore
+        return ""
 
 
 BACKEND_OPTIONS = ["Local faster-whisper", "OpenAI API"]
