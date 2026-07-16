@@ -11009,8 +11009,13 @@ class SegmentDataRepository:
         return bool(r and r[0].get('cnt', 0) > 0)
 
     @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)  # 1h — segment data is pre-ingested, not live
     def get_segment_data(ticker: str, start_date: date, end_date: date, period_type: str = "annual") -> Dict[str, Any]:
         """Get segment data in CapIQ format — two tables: Business + Geographic.
+
+        Cached (ttl=3600): the Segment tab render AND the lazy Excel builder both call
+        this with identical args, so the on-click Excel build reuses the render's fetch
+        (was a full DB re-read → ~600-800ms per download) and repeat tab renders are warm.
 
         Returns:
             {
@@ -11193,23 +11198,51 @@ def preload_store_totals(ticker: str) -> None:
     _get_edgar_executor().submit(_worker)
 
 
+# EDGAR disk-cache freshness window. Store counts, credit ratings and square
+# footage come from 10-K/10-Q filings, which appear at most quarterly — so a
+# 24h TTL re-fetched EDGAR daily for data that barely changes. 7 days still
+# catches a new quarterly filing within a week while cutting live EDGAR calls
+# ~7x. Combined with a persistent EDGAR_CACHE_DIR (/home/edgar_cache) and the
+# 12h warm sweep (which only re-fetches tickers whose cache is older than this),
+# users effectively never pay a live EDGAR fetch. Override with EDGAR_DISK_TTL_DAYS.
+def _edgar_disk_ttl_seconds() -> int:
+    import os
+    try:
+        days = float(os.getenv("EDGAR_DISK_TTL_DAYS", "7").strip() or "7")
+    except (TypeError, ValueError):
+        days = 7.0
+    return int(max(1.0, days) * 86_400)
+
+
 def edgar_cache_dir():
     """Root directory for the EDGAR disk caches (store_totals,
     stores_by_country, credit_ratings, sqft).
 
-    data/edgar_cache is GITIGNORED, so on Azure App Service every deploy
-    ships without it and the app starts fully cold — on STG (16-Jul: six
-    deploys/restarts in one day) the caches never survived long enough for
-    the warm sweep to finish building them, and every user paid cold EDGAR
-    fetches all day. Set EDGAR_CACHE_DIR to a persistent path (App Service:
-    anything under /home, e.g. /home/edgar_cache) so caches survive both
-    restarts AND deploys. Unset, it stays at <repo>/data/edgar_cache.
+    Resolution order:
+      1. EDGAR_CACHE_DIR env var, if set (explicit override — App Setting).
+      2. AUTO on Azure App Service: /home/edgar_cache. /home is a persistent
+         SMB share that survives restarts AND deploys, while the repo (wwwroot)
+         — and the gitignored data/edgar_cache under it — is REPLACED on every
+         deploy (STG: ~6 deploys/day), leaving the app cold and every user
+         paying live EDGAR fetches all day. We detect App Service via the
+         built-in WEBSITE_SITE_NAME env var (always set there) + a writable
+         /home, so the cache persists even when nobody set the App Setting
+         (a developer with only container access can't change control-plane
+         config). This makes persistence the DEFAULT on Azure, not opt-in.
+      3. Local/other: <repo>/data/edgar_cache.
     """
     import os
     from pathlib import Path
     override = os.getenv("EDGAR_CACHE_DIR", "").strip()
     if override:
         return Path(override)
+    # Auto-persist on Azure App Service (no App Setting required).
+    if os.getenv("WEBSITE_SITE_NAME"):
+        try:
+            if os.path.isdir("/home") and os.access("/home", os.W_OK):
+                return Path("/home/edgar_cache")
+        except Exception:
+            pass
     return Path(__file__).resolve().parent.parent.parent / "data" / "edgar_cache"
 
 
@@ -11617,7 +11650,7 @@ class RatingsDataRepository:
             try:
                 if _cache_file.exists():
                     _c = _json.loads(_cache_file.read_text())
-                    if _time_mod.time() - _c.get("cached_at", 0) < 86_400:
+                    if _time_mod.time() - _c.get("cached_at", 0) < _edgar_disk_ttl_seconds():
                         _res = {int(fy): v for fy, v in _c.get("results", {}).items()}
                         if _res:
                             _res["_filing_dates"] = {  # type: ignore[assignment]
@@ -11756,7 +11789,7 @@ class RatingsDataRepository:
             try:
                 if _cache_file.exists():
                     _c = _json.loads(_cache_file.read_text())
-                    if _time_mod.time() - _c.get("cached_at", 0) < 86_400:
+                    if _time_mod.time() - _c.get("cached_at", 0) < _edgar_disk_ttl_seconds():
                         _cc = {cn: {int(y): int(v) for y, v in yv.items()}
                                for cn, yv in (_c.get("countries") or {}).items()}
                         if not _cc:
@@ -12037,7 +12070,7 @@ class RatingsDataRepository:
             try:
                 if _cache_file.exists():
                     _c = _json.loads(_cache_file.read_text())
-                    if _time_mod.time() - _c.get("cached_at", 0) < 86_400:  # 24h TTL
+                    if _time_mod.time() - _c.get("cached_at", 0) < _edgar_disk_ttl_seconds():
                         _ct = _series_clean({int(y): int(v) for y, v in (_c.get("totals") or {}).items()})
                         if not _ct:
                             return {}
@@ -12270,7 +12303,7 @@ class RatingsDataRepository:
         try:
             if _cache_file.exists():
                 _c = _json.loads(_cache_file.read_text())
-                if _time_mod.time() - _c.get("cached_at", 0) < 86_400:
+                if _time_mod.time() - _c.get("cached_at", 0) < _edgar_disk_ttl_seconds():
                     return _c.get("rows", [])
         except Exception:
             pass

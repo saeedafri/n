@@ -93,6 +93,11 @@ def inject_red_spinner_css():
                 height: 100vh;
                 background: rgba(255, 255, 255, 0.95);
                 z-index: 9999;
+                /* CLICK-THROUGH — this is a full-viewport fixed overlay rendered via
+                   st.markdown (not st.empty), so it can orphan on any rerun. Without
+                   this it defaults to pointer-events:auto and would swallow every
+                   click, exactly the Round-11k freeze. Keep it none. */
+                pointer-events: none;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
@@ -433,17 +438,24 @@ body:has(.cs-al-ov) .cs-inline-loading,
 body:has(.cs-al-ov) .cs-page-subspinner{display:none!important;}
 
 /* Overlay: full viewport, translucent (the page stays visible + keeps loading
-   behind it), and CLICK-BLOCKING (16-Jul, per business): while a tab loads,
-   nothing behind may be clicked — clicks during a load only queue behind the
-   running script and made the app feel broken (users opened dropdowns behind
-   the spinner). The 22s pure-CSS failsafe also flips pointer-events off, so
-   the overlay can never trap the user even if the remover JS fails. */
+   behind it), CLICK-THROUGH (pointer-events:none).
+   DO NOT make this click-blocking. Tried 16-Jul-2026 and REVERTED same day —
+   it froze STG for ~13s at a time: this overlay is rendered into an st.empty()
+   placeholder that is only cleared at the END of render_page(), so ANY path
+   that reruns first (the ratings retry/auto-heal reruns, st.switch_page, an
+   exception) leaves the element orphaned in the DOM. While click-through that
+   is harmless; while click-blocking it swallows every click until the CSS
+   failsafe fires, and the user sees a spinner over content that already
+   rendered (server said 553ms; user clicked Ratios for 12.8s with nothing
+   happening — STG log 16-Jul 22:20:57→22:21:10).
+   Failsafe shortened 22s → 6s: nothing here legitimately renders that long
+   (a bounded tab fetch caps at ~4s), so a spinner still up at 6s is stuck. */
 .cs-al-ov{position:fixed!important;inset:0!important;z-index:2147483000;
   background:rgba(244,244,244,.62);
   -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
   display:flex;align-items:center;justify-content:center;
-  pointer-events:auto;cursor:wait;touch-action:none;
-  animation:cs-al-in .18s ease both, cs-al-failsafe .4s ease 22s forwards;}
+  pointer-events:none!important;
+  animation:cs-al-in .18s ease both, cs-al-failsafe .4s ease 6s forwards;}
 @keyframes cs-al-in{from{opacity:0}to{opacity:1}}
 @keyframes cs-al-failsafe{to{opacity:0;visibility:hidden;pointer-events:none;}}
 /* Card: IDENTICAL to the boot-splash card (logo + ring + label + shimmer) so a

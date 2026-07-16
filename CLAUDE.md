@@ -228,6 +228,59 @@ Data from Alpha Vantage and Yahoo Finance is pre-ingested into DB — not called
 
 ---
 
+## Deployment / Infrastructure (STG) — stable facts, do not re-derive
+
+**Hosting**
+- App Service (STG): **`csr-awa-data-portal-stg`** — Azure App Service **Linux**.
+- Plan/SKU: **Premium0V3 (P0v3)** → **2 vCPU / 4,794 MB RAM**. No cgroup memory
+  limit (`failcnt=0`); observed peak RSS ~1.3–2.8 GB — NOT OOM-killed.
+- Region: **centralus** (Des Moines, Iowa). Users are in India → ~233 ms RTT per
+  request; ALPN negotiates http/1.1. The app is fast; the network is the latency
+  (see spec Round 11j). No app-side code change fixes that — CDN/HTTP2/region do.
+- Public URL: `https://marketdata-stg.coresight.com` (behind a proxy). Default host:
+  `csr-awa-data-portal-stg-gug0gxghbvgmhdc2.centralus-01.azurewebsites.net`.
+- OS: **Ubuntu 24.04 LTS** container. Runtime: **Python 3.14.4**, **Streamlit on
+  internal port 8000** (`WEBSITES_PORT` unset → default). `APP_ENV=staging`. Startup:
+  `streamlit run --server.port=8000 --server.address=0.0.0.0 --client.showSidebarNavigation=False --ui.hideTopBar=True app/main.py`
+- **Resource group: `csr-awa-rg-stg`** · **Subscription: `c749e5c1-f1f5-4d4e-87bf-3b07d7541703`**
+
+**Filesystem (critical for caches)**
+- `/home` = **persistent** Azure share (SMB `//…/volume-…`) — **500 GB, ~499 GB free**
+  (storage is NOT a constraint). Survives restart AND deploy (~29 ms/write, ~2.4 ms
+  cold read, ~0.1 ms warm). Use for anything that must outlive a deploy.
+- Container root `/` (overlay) = 74 GB, ~48 GB free — ephemeral, replaced on deploy.
+- `/tmp` = local SSD, very fast (~0.1 ms) but **WIPED on restart/deploy**.
+- `wwwroot` (the repo, incl. `data/edgar_cache`) is **REPLACED on every deploy** →
+  anything gitignored there is lost. STG deploys ~6×/day → cold caches all day.
+
+**Required App Settings (set them; they are NOT in code)**
+- `EDGAR_CACHE_DIR=/home/edgar_cache` — persists the 4 EDGAR disk caches across
+  deploys. UNSET (current STG state) = cold EDGAR on every deploy = the "EDGAR every
+  run" slowness (spec Round 13).
+- `WEBSITES_ENABLE_APP_SERVICE_STORAGE=true` — keeps `/home` mounted.
+- Optional `EDGAR_DISK_TTL_DAYS` (default **7**) — how long EDGAR disk cache stays
+  fresh before a background re-fetch (data changes ~quarterly).
+
+**Database**
+- `csr-mysql8-flex-stg.mysql.database.azure.com:3306` — Azure MySQL **Flexible**.
+- **Firewalled**: reachable from a dev Mac ONLY over the company **VPN**.
+  `bash .claude/dev/run_local.sh` connects to this STG DB. If TCP to :3306 times
+  out, the VPN is down — stop and reconnect before testing UI.
+
+**How to change App Settings (never from inside the container)**
+- `az` is NOT installed in the App Service SSH, and env vars set there do not persist.
+  Change settings from OUTSIDE: **Azure Portal** (Configuration → Application
+  settings) or **`az` on a VPN'd Mac / Cloud Shell**:
+  ```bash
+  az login
+  az webapp config appsettings set -g csr-awa-rg-stg -n csr-awa-data-portal-stg \
+    --settings EDGAR_CACHE_DIR=/home/edgar_cache WEBSITES_ENABLE_APP_SERVICE_STORAGE=true
+  ```
+  (Setting an app setting restarts the app.) **Claude must NOT set these itself —
+  hand the user the command** (same spirit as the never-commit/never-deploy rule).
+
+---
+
 ## Core Module Reference
 
 | Module | Key exports |

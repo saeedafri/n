@@ -49,63 +49,37 @@ from utils.constants import (
 )
 
 
-def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "Excel", auto_click: bool = False) -> None:
-    """
-    Render an Excel download button that works entirely client-side via JavaScript
-    Blob API — bypasses Streamlit's /media/ endpoint (which fails on proxied
-    deployments when Nginx doesn't forward that path).
-    Uses Material Symbols Outlined table icon.
-    If auto_click=True, triggers the download automatically (no second button click needed).
+def _trigger_excel_download(excel_bytes: bytes, filename: str) -> None:
+    """INVISIBLE client-side download trigger — renders NO button and no layout space.
+
+    Downloads `excel_bytes` via the Blob API, which bypasses Streamlit's /media/
+    endpoint (that path is not forwarded on the proxied deployment). The visible
+    control is the st.button in _lazy_excel_download; this component must never draw
+    one of its own — a second, differently-styled "Excel" button appearing under the
+    real one after a click was exactly the 17-Jul regression. height=0 + no body
+    content keeps it invisible, and nothing here touches the network (no font).
     """
     try:
         import base64
+        import time as _t
         from streamlit.components.v1 import html as _sthtml
 
         b64 = base64.b64encode(excel_bytes).decode("ascii")
         safe_name = filename.replace("'", "\\'").replace('"', '\\"')
-        safe_label = label.replace("'", "\\'").replace('"', '\\"')
-        auto_trigger = "window.addEventListener('load', function(){ setTimeout(dl, 100); });" if auto_click else ""
-
-        btn_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=table" rel="stylesheet">
-<style>
-*{{margin:0;padding:0;box-sizing:border-box;}}
-body{{
-  display:flex;justify-content:flex-end;align-items:center;
-  height:52px;background:transparent;
-  font-family:'Inter','Roboto',Helvetica,Arial,sans-serif;
-  padding:0 20px;
-}}
-button{{
-  background:transparent;
-  border:1px solid #D62E2F;
-  color:#D62E2F;
-  border-radius:4px;
-  padding:7px 12px;
-  font-size:13px;
-  font-weight:500;
-  cursor:pointer;
-  white-space:nowrap;
-  transition:background 0.15s,color 0.15s;
-  letter-spacing:0.01em;
-  display:flex;align-items:center;gap:6px;
-}}
-button:hover{{background:#D62E2F;color:#fff;}}
-button:active{{opacity:0.85;}}
-.material-symbols-outlined {{
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  font-size:18px;
-}}
-</style>
-</head>
-<body>
-<button onclick="dl()"><span class="material-symbols-outlined">table</span>&nbsp;&nbsp;{safe_label}</button>
+        # Unique nonce per invocation: openpyxl serialises timestamps at 1-second
+        # resolution, so two builds in the same second are byte-identical → identical
+        # iframe srcdoc → Streamlit keeps the existing DOM node and the download script
+        # never re-runs (a deliberate quick re-download would silently do nothing). The
+        # nonce forces a fresh srcdoc so every click remounts and re-fires.
+        _nonce = _t.time_ns()
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;height:0;overflow:hidden;">
+<!-- dl-nonce {_nonce} -->
 <script>
-var _d="{b64}";
-function dl(){{
+(function(){{
   try{{
-    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
+    var bin=atob("{b64}"),n=bin.length,u8=new Uint8Array(n);
     for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
     var blob=new Blob([u8],{{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
     var url=URL.createObjectURL(blob);
@@ -113,15 +87,105 @@ function dl(){{
     a.href=url; a.download="{safe_name}";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
-    setTimeout(function(){{URL.revokeObjectURL(url);}},200);
+    setTimeout(function(){{URL.revokeObjectURL(url);}},1000);
   }}catch(e){{console.error("Excel download failed:",e);}}
-}}
-{auto_trigger}
+}})();
 </script>
 </body></html>"""
-        _sthtml(btn_html, height=52, scrolling=False)
+        _sthtml(html, height=0, width=0, scrolling=False)
     except Exception as e:
-        log_structured_error(e, page="market_data", component="_render_excel_js_download", operation="render_excel_download_button")
+        log_structured_error(e, page="market_data", component="_trigger_excel_download", operation="trigger_excel_download")
+
+
+def _lazy_excel_download(widget_key: str, filename: str, build_fn, label: str = "Excel") -> None:
+    """ONE right-aligned Excel button that builds the workbook only when clicked.
+
+    Why a fragment: the eager flow rebuilt a full openpyxl workbook on EVERY tab
+    render (measured 60-216ms avg, up to 1.6s — STG log 16-Jul) and re-fetched the
+    tab's data to do it. Gating the build on a plain st.button was worse: the click
+    triggered a FULL-page rerun, so the whole market_data page re-rendered and the
+    app visibly froze (STG log 17-Jul: `MD_RUN_START tab=ratios gap=-1` twice
+    back-to-back). @st.fragment scopes the click's rerun to THIS button alone — the
+    page is untouched, nothing else re-renders, and only build_fn() runs. The file
+    then downloads through an invisible trigger, so the user sees one button and
+    gets one file. Bytes are built fresh per click (never memoised — the workbook
+    depends on period/currency/sort/units; a stale cache would serve the wrong file).
+    """
+    @st.fragment
+    def _excel_button():
+        if st.button(label, key=f"_xlbtn_{widget_key}", help="Download this table as an Excel file"):
+            try:
+                xl = build_fn()
+            except Exception as e:
+                log_structured_error(e, page="market_data", component="_lazy_excel_download",
+                                     operation=f"build_excel:{widget_key}")
+                st.error("Could not build the Excel file. Please try again.")
+                return
+            if xl:
+                _trigger_excel_download(xl, filename)
+            else:
+                # build_fn returns None when the on-click re-fetch yields no rows.
+                # Never leave the click silent — that reads as a dead button.
+                st.toast("No data available to export for this view.", icon="⚠️")
+
+    _excel_button()
+
+
+def _income_excel_rows(data, historical_rate_map, conversion_rate, units_scale):
+    """Excel rows for the Income Statement tab (relocated from the inline render so
+    the workbook is built only when the user clicks Excel — see _lazy_excel_download)."""
+    rows = []
+    for _it in data.line_items:
+        _rates = [historical_rate_map.get(data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(data.periods))]
+        rows.append({"label": _it.label, "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_bold_row(_it.label), "indent": get_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
+    return rows
+
+
+def _key_stats_excel_rows(data, historical_rate_map, conversion_rate, units_scale):
+    """Excel rows for the Key Stats tab (relocated for lazy Excel build)."""
+    rows = []
+    for _item in data["line_items"]:
+        _lbl = _item["label"]
+        if not _lbl:
+            rows.append({"label": "", "values": [], "is_bold": False, "indent": 0, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": []})
+            continue
+        _is_pct = _item.get("is_percent", False)
+        _is_txt = _item.get("is_text", False)
+        _is_eps = (_lbl == "Diluted EPS Excl. Extra Items")
+        _vals, _est = [], []
+        for _ci, _v in enumerate(_item["values"]):
+            _col_est = _ci < len(data["periods"]) and data["periods"][_ci].is_estimated
+            _est.append(_col_est)
+            if _v is None:
+                _vals.append(None)
+            elif _is_txt:
+                _vals.append(_v)
+            elif _is_pct:
+                _vals.append(_v)  # raw %, will be divided by 100 in export
+            elif _is_eps:
+                _vals.append(_v)
+            else:
+                _cr = conversion_rate if _col_est else (historical_rate_map.get(data["periods"][_ci].date, conversion_rate) if historical_rate_map and _ci < len(data["periods"]) else conversion_rate)
+                _vals.append(_v * _cr * units_scale)
+        rows.append({"label": _lbl, "values": _vals, "is_bold": _item.get("is_bold", False), "indent": _item.get("indent", 0), "is_percent": _is_pct, "is_text": _is_txt, "has_separator": _item.get("has_grey_sep", False), "is_estimated": _est})
+    return rows
+
+
+def _ratios_excel_rows(data):
+    """Excel rows for the Ratios tab (relocated for lazy Excel build)."""
+    rows = []
+    for _it in data["line_items"]:
+        rows.append({
+            "label": _it.get("label", ""),
+            "values": _it.get("values", []),
+            "is_bold": _it.get("is_bold", False) or _it.get("is_section_header", False),
+            "indent": min(_it.get("indent", 0), 2),
+            "is_percent": _it.get("is_percent", False),
+            "is_text": _it.get("is_section_header", False),
+            "has_separator": _it.get("is_section_header", False),
+            "is_estimated": [False] * len(_it.get("values", [])),
+        })
+    return rows
 
 
 def format_value(value: Optional[float], conversion_rate: float = 1.0, units_scale: float = 1.0) -> str:
@@ -792,6 +856,21 @@ def render_segment_data(ticker: str, start_date: date, end_date: date, conversio
         st.error("Something went wrong. Please try again.")
 
 
+def _clear_md_tab_loader():
+    """Tear down the market_data branded tab overlay before an early st.rerun().
+
+    render_page() only clears the overlay at its END; a rerun that fires first
+    (the ratings auto-heal reruns below) would orphan it in the DOM until the CSS
+    failsafe fades it. Clearing it here removes the lingering spinner immediately.
+    """
+    _ldr = st.session_state.pop("_md_tab_loader", None)
+    if _ldr is not None:
+        try:
+            _ldr.empty()
+        except Exception:
+            pass
+
+
 def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_ascending: bool = True):
     """Render credit ratings + store counts table with same structure as segment data.
 
@@ -854,6 +933,7 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                 st.session_state[_retry_key] = _n_retry + 1
                 with st.spinner("Loading store & ratings data..."):
                     _time.sleep(1.5)
+                _clear_md_tab_loader()
                 st.rerun()
             st.info("No extracted data available. Check official filings.")
             return
@@ -881,6 +961,7 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                 st.session_state[_pending_key] = _n_pending + 1
                 with st.spinner("Loading full store & ratings data..."):
                     _time.sleep(2.0)
+                _clear_md_tab_loader()
                 st.rerun()
         else:
             st.session_state.pop(_pending_key, None)
@@ -1535,6 +1616,29 @@ def render_page():
     _md_tab_qp = (st.query_params.get("tab") or "").strip().lower()
     _tab_loading_hint = render_page_loader(
         _MD_TAB_LABELS.get(_md_tab_qp, "Loading Market Data"), overlay=True)
+    # Stash the placeholder so any code that reruns mid-render (e.g. the ratings
+    # auto-heal reruns in render_ratings_data) can tear the overlay down FIRST —
+    # otherwise the st.empty() is only cleared at the end of render_page(), and a
+    # rerun orphans it in the DOM. It is click-through (pointer-events:none) so an
+    # orphan is harmless, but clearing it up front removes the lingering spinner.
+    st.session_state["_md_tab_loader"] = _tab_loading_hint
+    # Style the lazy Excel buttons (native st.button, keyed `_xlbtn_*`) to match the
+    # former red-outline control AND right-align them, as the old iframe button was
+    # (its body had justify-content:flex-end). Injected once per full render; the
+    # rules stay in the DOM across fragment-only reruns. Scoped by Streamlit's stable
+    # st-key- wrapper class so it never leaks to other buttons.
+    st.markdown(
+        "<style>"
+        '[class*="st-key-_xlbtn_"]{display:flex!important;justify-content:flex-end!important;}'
+        '[class*="st-key-_xlbtn_"] button{'
+        "background:transparent!important;border:1px solid #D62E2F!important;"
+        "color:#D62E2F!important;border-radius:4px!important;padding:6px 14px!important;"
+        "font-size:13px!important;font-weight:500!important;min-height:0!important;"
+        "width:auto!important;}"
+        '[class*="st-key-_xlbtn_"] button:hover{background:#D62E2F!important;color:#fff!important;}'
+        "</style>",
+        unsafe_allow_html=True,
+    )
 
     # Initialize local storage manager and sync state
     _t0 = _time.perf_counter()
@@ -3328,20 +3432,22 @@ def render_page():
                 log_structured_error(_sp_e, page="market_data", component="render_page", operation="get_shares_with_price")
 
             if _price_history:
-                _xl_bytes = export_company_profile_simple_excel(
-                    company_name=company.name or "",
-                    ticker=selected_ticker,
-                    profile_rows=get_profile_rows_for_excel(company),
-                    price_history=_price_history,  # 60 months of data
-                    currency=_sq_currency,
-                    shares_price_data=_shares_price_data,
-                    compensation_rows=_comp_rows_for_xl,
-                    compensation_col_defs=_comp_col_defs_for_xl,
-                )
-
                 _, _dl_col = st.columns([8, 2])
                 with _dl_col:
-                    _render_excel_js_download(_xl_bytes, f"{selected_ticker}_Company_Profile.xlsx", "Excel")
+                    _lazy_excel_download(
+                        f"cp_{selected_ticker}",
+                        f"{selected_ticker}_Company_Profile.xlsx",
+                        lambda: export_company_profile_simple_excel(
+                            company_name=company.name or "",
+                            ticker=selected_ticker,
+                            profile_rows=get_profile_rows_for_excel(company),
+                            price_history=_price_history,  # 60 months of data
+                            currency=_sq_currency,
+                            shares_price_data=_shares_price_data,
+                            compensation_rows=_comp_rows_for_xl,
+                            compensation_col_defs=_comp_col_defs_for_xl,
+                        ),
+                    )
         except Exception as _xl_e:
             log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_BALANCE")
 
@@ -3383,26 +3489,25 @@ def render_page():
         _render_period_fallback_notice()
         render_balance_sheet(selected_ticker, start_date, end_date, conversion_rate, reported_currency, sort_ascending, historical_rate_map, units_scale, units_label, _period_type_db)
         _timings['balance_sheet_render'] = (_time.perf_counter() - _t0) * 1000
-        # Excel download
+        # Excel download (built lazily — only when the user clicks Excel)
         _t_xl_bs = _time.perf_counter()
-        try:
+        def _build_bs_xl():
             from utils.excel_export import export_financial_excel
             _bs_data = BalanceSheetRepository.get_balance_sheet_data(selected_ticker, start_date, end_date, _period_type_db)
             if not sort_ascending:
                 _bs_data.periods = list(reversed(_bs_data.periods))
                 for _it in _bs_data.line_items:
                     _it.values = list(reversed(_it.values))
-            if _bs_data.periods and _bs_data.line_items:
-                _bs_rows = []
-                for _it in _bs_data.line_items:
-                    _rates = [historical_rate_map.get(_bs_data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(_bs_data.periods))]
-                    _bs_rows.append({"label": _it.label.strip(), "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_balance_sheet_bold_row(_it.label), "indent": get_balance_sheet_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_balance_sheet_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
-                _bs_xl = export_financial_excel("Balance Sheet", company.name or "", selected_ticker, [p.label for p in _bs_data.periods], _bs_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-                _, _dl_col = st.columns([8, 2])
-                with _dl_col:
-                    _render_excel_js_download(_bs_xl, f"{selected_ticker}_Balance_Sheet.xlsx", "Excel")
-        except Exception as _xl_e:
-            log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_BALANCE")
+            if not (_bs_data.periods and _bs_data.line_items):
+                return None
+            _bs_rows = []
+            for _it in _bs_data.line_items:
+                _rates = [historical_rate_map.get(_bs_data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(_bs_data.periods))]
+                _bs_rows.append({"label": _it.label.strip(), "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_balance_sheet_bold_row(_it.label), "indent": get_balance_sheet_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_balance_sheet_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
+            return export_financial_excel("Balance Sheet", company.name or "", selected_ticker, [p.label for p in _bs_data.periods], _bs_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
+        _, _dl_col = st.columns([8, 2])
+        with _dl_col:
+            _lazy_excel_download(f"bs_{selected_ticker}", f"{selected_ticker}_Balance_Sheet.xlsx", _build_bs_xl)
         _timings['balance_sheet_excel'] = (_time.perf_counter() - _t_xl_bs) * 1000
         _timings['balance_sheet_total'] = (_time.perf_counter() - _t0_tab) * 1000
     elif selected_tab == "cash_flow":
@@ -3412,9 +3517,9 @@ def render_page():
         _render_period_fallback_notice()
         render_cash_flow(selected_ticker, start_date, end_date, conversion_rate, reported_currency, sort_ascending, historical_rate_map, units_scale, units_label, _period_type_db)
         _timings['cash_flow_render'] = (_time.perf_counter() - _t0) * 1000
-        # Excel download
+        # Excel download (built lazily — only when the user clicks Excel)
         _t_xl_cf = _time.perf_counter()
-        try:
+        def _build_cf_xl():
             from utils.excel_export import export_financial_excel
             from data.repository import CashFlowRepository
             _cf_data = CashFlowRepository.get_cash_flow_data(selected_ticker, start_date, end_date, _period_type_db)
@@ -3422,17 +3527,16 @@ def render_page():
                 _cf_data.periods = list(reversed(_cf_data.periods))
                 for _it in _cf_data.line_items:
                     _it.values = list(reversed(_it.values))
-            if _cf_data.periods and _cf_data.line_items:
-                _cf_rows = []
-                for _it in _cf_data.line_items:
-                    _rates = [historical_rate_map.get(_cf_data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(_cf_data.periods))]
-                    _cf_rows.append({"label": _it.label.strip(), "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_cash_flow_bold_row(_it.label), "indent": get_cash_flow_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_cash_flow_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
-                _cf_xl = export_financial_excel("Cash Flow", company.name or "", selected_ticker, [p.label for p in _cf_data.periods], _cf_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-                _, _dl_col = st.columns([8, 2])
-                with _dl_col:
-                    _render_excel_js_download(_cf_xl, f"{selected_ticker}_Cash_Flow.xlsx", "Excel")
-        except Exception as _xl_e:
-            log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_CASH_FLOW")
+            if not (_cf_data.periods and _cf_data.line_items):
+                return None
+            _cf_rows = []
+            for _it in _cf_data.line_items:
+                _rates = [historical_rate_map.get(_cf_data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(_cf_data.periods))]
+                _cf_rows.append({"label": _it.label.strip(), "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_cash_flow_bold_row(_it.label), "indent": get_cash_flow_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_cash_flow_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
+            return export_financial_excel("Cash Flow", company.name or "", selected_ticker, [p.label for p in _cf_data.periods], _cf_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
+        _, _dl_col = st.columns([8, 2])
+        with _dl_col:
+            _lazy_excel_download(f"cf_{selected_ticker}", f"{selected_ticker}_Cash_Flow.xlsx", _build_cf_xl)
         _timings['cash_flow_excel'] = (_time.perf_counter() - _t_xl_cf) * 1000
         _timings['cash_flow_total'] = (_time.perf_counter() - _t0_tab) * 1000
     elif selected_tab == "income_statement":
@@ -3443,15 +3547,23 @@ def render_page():
             # Session-state short-circuit — reuse cached HTML when inputs unchanged
             _conv_mode = st.session_state.get('conversion_mode', 'spot')
             _is_ck = f"_is_html_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}_{_conv_mode}"
+            def _build_is_xl():
+                from utils.excel_export import export_financial_excel as _xl_fn
+                _d = IncomeStatementRepository.get_income_statement_data(selected_ticker, start_date, end_date, _period_type_db)
+                if not sort_ascending:
+                    _d.periods = list(reversed(_d.periods))
+                    for _it in _d.line_items:
+                        _it.values = list(reversed(_it.values))
+                if not (_d.periods and _d.line_items):
+                    return None
+                return _xl_fn("Income Statement", company.name or "", selected_ticker, [p.label for p in _d.periods], _income_excel_rows(_d, historical_rate_map, conversion_rate, units_scale), units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
             _is_cached = st.session_state.get(_is_ck)
             if _is_cached is not None:
                 _timings['income_data_fetch'] = 0.0
                 st.html(_is_cached)
-                _is_xl_cached = st.session_state.get(_is_ck + "_xl")
-                if _is_xl_cached:
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _render_excel_js_download(_is_xl_cached, f"{selected_ticker}_Income_Statement.xlsx", "Excel")
+                _, _dl_col = st.columns([8, 2])
+                with _dl_col:
+                    _lazy_excel_download(f"is_{selected_ticker}", f"{selected_ticker}_Income_Statement.xlsx", _build_is_xl)
             else:
                 _t0 = _time.perf_counter()
                 data = IncomeStatementRepository.get_income_statement_data(
@@ -3530,21 +3642,11 @@ def render_page():
                     st.html(html)
                     st.session_state[_is_ck] = html
 
-                    # Excel download
+                    # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_is = _time.perf_counter()
-                    try:
-                        from utils.excel_export import export_financial_excel as _xl_fn
-                        _is_rows = []
-                        for _it in data.line_items:
-                            _rates = [historical_rate_map.get(data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(data.periods))]
-                            _is_rows.append({"label": _it.label, "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_bold_row(_it.label), "indent": get_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
-                        _is_xl = _xl_fn("Income Statement", company.name or "", selected_ticker, [p.label for p in data.periods], _is_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-                        _, _dl_col = st.columns([8, 2])
-                        with _dl_col:
-                            _render_excel_js_download(_is_xl, f"{selected_ticker}_Income_Statement.xlsx", "Excel")
-                        st.session_state[_is_ck + "_xl"] = _is_xl
-                    except Exception as _xl_e:
-                        log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_INCOME")
+                    _, _dl_col = st.columns([8, 2])
+                    with _dl_col:
+                        _lazy_excel_download(f"is_{selected_ticker}", f"{selected_ticker}_Income_Statement.xlsx", _build_is_xl)
                     _timings['income_excel'] = (_time.perf_counter() - _t_xl_is) * 1000
 
                 else:
@@ -3562,15 +3664,23 @@ def render_page():
             # Session-state short-circuit — reuse cached HTML when inputs unchanged
             _conv_mode = st.session_state.get('conversion_mode', 'spot')
             _ks_ck = f"_ks_html_v2_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}_{conversion_rate:.6f}_{units_scale}_{_conv_mode}"
+            def _build_ks_xl():
+                from utils.excel_export import export_financial_excel as _xl_fn
+                _d = KeyStatsRepository.get_key_stats_data(selected_ticker, start_date, end_date, _period_type_db)
+                if not sort_ascending:
+                    _d["periods"] = list(reversed(_d["periods"]))
+                    for _it in _d["line_items"]:
+                        _it["values"] = list(reversed(_it["values"]))
+                if not (_d["periods"] and _d["line_items"]):
+                    return None
+                return _xl_fn("Key Stats", company.name or "", selected_ticker, [p.label for p in _d["periods"]], _key_stats_excel_rows(_d, historical_rate_map, conversion_rate, units_scale), units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
             _ks_cached = st.session_state.get(_ks_ck)
             if _ks_cached is not None:
                 _timings['key_stats_fetch'] = 0.0
                 st.html(_ks_cached)
-                _ks_xl_cached = st.session_state.get(_ks_ck + "_xl")
-                if _ks_xl_cached:
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _render_excel_js_download(_ks_xl_cached, f"{selected_ticker}_Key_Stats.xlsx", "Excel")
+                _, _dl_col = st.columns([8, 2])
+                with _dl_col:
+                    _lazy_excel_download(f"ks_{selected_ticker}", f"{selected_ticker}_Key_Stats.xlsx", _build_ks_xl)
             else:
                 _t0 = _time.perf_counter()
                 log_info(
@@ -3744,42 +3854,11 @@ def render_page():
                         )
                     st.html(_legend_html)
 
-                    # Excel download
+                    # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_ks = _time.perf_counter()
-                    try:
-                        from utils.excel_export import export_financial_excel as _xl_fn
-                        _ks_rows = []
-                        for _item in data["line_items"]:
-                            _lbl = _item["label"]
-                            if not _lbl:
-                                _ks_rows.append({"label": "", "values": [], "is_bold": False, "indent": 0, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": []})
-                                continue
-                            _is_pct  = _item.get("is_percent", False)
-                            _is_txt  = _item.get("is_text", False)
-                            _is_eps  = (_lbl == "Diluted EPS Excl. Extra Items")
-                            _vals, _est = [], []
-                            for _ci, _v in enumerate(_item["values"]):
-                                _col_est = _ci < len(data["periods"]) and data["periods"][_ci].is_estimated
-                                _est.append(_col_est)
-                                if _v is None:
-                                    _vals.append(None)
-                                elif _is_txt:
-                                    _vals.append(_v)
-                                elif _is_pct:
-                                    _vals.append(_v)  # raw %, will be divided by 100 in export
-                                elif _is_eps:
-                                    _vals.append(_v)
-                                else:
-                                    _cr = conversion_rate if _col_est else (historical_rate_map.get(data["periods"][_ci].date, conversion_rate) if historical_rate_map and _ci < len(data["periods"]) else conversion_rate)
-                                    _vals.append(_v * _cr * units_scale)
-                            _ks_rows.append({"label": _lbl, "values": _vals, "is_bold": _item.get("is_bold", False), "indent": _item.get("indent", 0), "is_percent": _is_pct, "is_text": _is_txt, "has_separator": _item.get("has_grey_sep", False), "is_estimated": _est})
-                        _ks_xl = _xl_fn("Key Stats", company.name or "", selected_ticker, [p.label for p in data["periods"]], _ks_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-                        _, _dl_col = st.columns([8, 2])
-                        with _dl_col:
-                            _render_excel_js_download(_ks_xl, f"{selected_ticker}_Key_Stats.xlsx", "Excel")
-                        st.session_state[_ks_ck + "_xl"] = _ks_xl
-                    except Exception as _xl_e:
-                        log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_KEY_STATS")
+                    _, _dl_col = st.columns([8, 2])
+                    with _dl_col:
+                        _lazy_excel_download(f"ks_{selected_ticker}", f"{selected_ticker}_Key_Stats.xlsx", _build_ks_xl)
                     _timings['key_stats_excel'] = (_time.perf_counter() - _t_xl_ks) * 1000
 
                 else:
@@ -3796,6 +3875,17 @@ def render_page():
             _period_type_db = _period_type_eff_title.lower()
             _render_period_fallback_notice()
 
+            def _build_ratios_xl():
+                from utils.excel_export import export_financial_excel as _xl_fn
+                _d = RatiosRepository.get_ratios_data(selected_ticker, start_date, end_date, _period_type_db)
+                if not sort_ascending:
+                    _d["periods"] = list(reversed(_d["periods"]))
+                    for _it in _d["line_items"]:
+                        _it["values"] = list(reversed(_it["values"]))
+                if not (_d["periods"] and _d["line_items"]):
+                    return None
+                return _xl_fn("Ratios", company.name or "", selected_ticker, [p.label for p in _d["periods"]], _ratios_excel_rows(_d), "", st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
+
             # Phase 5: Session-state short-circuit — reuse cached HTML when inputs unchanged
             _ratios_cache_key = f"_ratios_html_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}"
             _cached_html = st.session_state.get(_ratios_cache_key)
@@ -3808,12 +3898,9 @@ def render_page():
                 st.html(_cached_html)
                 if _cached_notes:
                     st.caption("Ratios assumptions: " + " | ".join(_cached_notes))
-                # Cached Excel download
-                _cached_xl = st.session_state.get(_ratios_cache_key + "_xl")
-                if _cached_xl:
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _render_excel_js_download(_cached_xl, f"{selected_ticker}_Ratios.xlsx", "Excel")
+                _, _dl_col = st.columns([8, 2])
+                with _dl_col:
+                    _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
                 _timings['ratios_render'] = (_time.perf_counter() - _t0_render) * 1000
                 _timings['ratios_total'] = (_time.perf_counter() - _t0_tab) * 1000
             else:
@@ -3879,40 +3966,16 @@ def render_page():
                     if notes:
                         st.caption("Ratios assumptions: " + " | ".join(notes))
 
-                    # Excel download
+                    # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_rat_inner = _time.perf_counter()
-                    try:
-                        from utils.excel_export import export_financial_excel as _xl_fn
-                        _ratio_rows = []
-                        for _it in data["line_items"]:
-                            _ratio_rows.append({
-                                "label": _it.get("label", ""),
-                                "values": _it.get("values", []),
-                                "is_bold": _it.get("is_bold", False) or _it.get("is_section_header", False),
-                                "indent": min(_it.get("indent", 0), 2),
-                                "is_percent": _it.get("is_percent", False),
-                                "is_text": _it.get("is_section_header", False),
-                                "has_separator": _it.get("is_section_header", False),
-                                "is_estimated": [False] * len(_it.get("values", [])),
-                            })
-                        _ratio_xl = _xl_fn(
-                            "Ratios", company.name or "", selected_ticker,
-                            [p.label for p in data["periods"]], _ratio_rows,
-                            "", st.session_state.get("target_currency", "USD"),
-                            start_date.strftime("%b %Y"), end_date.strftime("%b %Y"),
-                        )
-                        _, _dl_col = st.columns([8, 2])
-                        with _dl_col:
-                            _render_excel_js_download(_ratio_xl, f"{selected_ticker}_Ratios.xlsx", "Excel")
-                    except Exception as _xl_e:
-                        log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_RATIOS")
+                    _, _dl_col = st.columns([8, 2])
+                    with _dl_col:
+                        _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
                     _timings['ratios_excel'] = (_time.perf_counter() - _t_xl_rat_inner) * 1000
 
                     # Store in session_state for instant reuse on next rerun
                     st.session_state[_ratios_cache_key] = html
                     st.session_state[_ratios_cache_key + "_notes"] = notes
-                    if '_ratio_xl' in dir() and _ratio_xl:
-                        st.session_state[_ratios_cache_key + "_xl"] = _ratio_xl
                 else:
                     st.info("No ratios data available for the selected date range")
 
@@ -4182,9 +4245,9 @@ def render_page():
             render_segment_data(selected_ticker, start_date, end_date, conversion_rate, reported_currency, sort_ascending, historical_rate_map, units_scale, units_label, _seg_period_type, fiscal_year_end=_seg_fye)
             _timings['segment_data_render'] = (_time.perf_counter() - _t0) * 1000
 
-            # Excel download
+            # Excel download (built lazily — only when the user clicks Excel)
             _t_xl_seg = _time.perf_counter()
-            try:
+            def _build_seg_xl():
                 from utils.excel_export import export_financial_excel
                 from data.repository import SegmentDataRepository
                 from utils.constants import SEGMENT_METRIC_GROUPS
@@ -4196,60 +4259,59 @@ def render_page():
                 _seg_period_display = _seg_data.get("period_display_dates") or _seg_period_dates
                 if not sort_ascending:
                     _seg_years = list(reversed(_seg_years))
-                if _seg_years and (_seg_biz or _seg_geo):
-                    _seg_rows = []
+                if not (_seg_years and (_seg_biz or _seg_geo)):
+                    return None
+                _seg_rows = []
 
-                    def _xl_add_section(title, seg_dict):
-                        if not seg_dict:
-                            return
-                        # Section title row
-                        _seg_rows.append({"label": title, "values": [None] * len(_seg_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_seg_years)})
-                        for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                            if metric_name not in seg_dict:
-                                continue
-                            members_data = seg_dict[metric_name]
-                            if not members_data:
-                                continue
-                            # Metric heading row
-                            _seg_rows.append({"label": cfg["display"], "values": [None] * len(_seg_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_seg_years)})
-                            totals = {yr: 0.0 for yr in _seg_years}
-                            has_total = False
-                            for member in sorted(members_data.keys(), key=lambda m: m.lower()):
-                                yr_vals = members_data[member]
-                                _vals = [yr_vals.get(yr) for yr in _seg_years]
-                                _conv_vals = [v * conversion_rate * units_scale if v is not None else None for v in _vals]
-                                _seg_rows.append({"label": member, "values": _conv_vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_seg_years)})
-                                for yr in _seg_years:
-                                    v = yr_vals.get(yr)
-                                    if v is not None:
-                                        totals[yr] += v
-                                        has_total = True
-                            if has_total and len(members_data) > 1:
-                                _t_vals = [totals[yr] * conversion_rate * units_scale if totals[yr] != 0 else None for yr in _seg_years]
-                                _seg_rows.append({"label": "Total", "values": _t_vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_seg_years)})
+                def _xl_add_section(title, seg_dict):
+                    if not seg_dict:
+                        return
+                    # Section title row
+                    _seg_rows.append({"label": title, "values": [None] * len(_seg_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_seg_years)})
+                    for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
+                        if metric_name not in seg_dict:
+                            continue
+                        members_data = seg_dict[metric_name]
+                        if not members_data:
+                            continue
+                        # Metric heading row
+                        _seg_rows.append({"label": cfg["display"], "values": [None] * len(_seg_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_seg_years)})
+                        totals = {yr: 0.0 for yr in _seg_years}
+                        has_total = False
+                        for member in sorted(members_data.keys(), key=lambda m: m.lower()):
+                            yr_vals = members_data[member]
+                            _vals = [yr_vals.get(yr) for yr in _seg_years]
+                            _conv_vals = [v * conversion_rate * units_scale if v is not None else None for v in _vals]
+                            _seg_rows.append({"label": member, "values": _conv_vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_seg_years)})
+                            for yr in _seg_years:
+                                v = yr_vals.get(yr)
+                                if v is not None:
+                                    totals[yr] += v
+                                    has_total = True
+                        if has_total and len(members_data) > 1:
+                            _t_vals = [totals[yr] * conversion_rate * units_scale if totals[yr] != 0 else None for yr in _seg_years]
+                            _seg_rows.append({"label": "Total", "values": _t_vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_seg_years)})
 
-                    _xl_add_section("Business Segments", _seg_biz)
-                    _xl_add_section("Geographic Segments", _seg_geo)
+                _xl_add_section("Business Segments", _seg_biz)
+                _xl_add_section("Geographic Segments", _seg_geo)
 
-                    # Format year headers
-                    _seg_col_headers = []
-                    for yr in _seg_years:
-                        pd = _seg_period_display.get(yr)
-                        if pd:
-                            if _seg_period_type == "quarterly":
-                                from data.models import FiscalPeriod as _FP2
-                                _fp2 = _FP2.from_date(pd, "quarterly", _seg_fye)
-                                _seg_col_headers.append(_fp2.label.replace("\n", " / "))
-                            else:
-                                _seg_col_headers.append(f"12 Months / {pd.strftime('%b-%d-%Y')}")
+                # Format year headers
+                _seg_col_headers = []
+                for yr in _seg_years:
+                    pd = _seg_period_display.get(yr)
+                    if pd:
+                        if _seg_period_type == "quarterly":
+                            from data.models import FiscalPeriod as _FP2
+                            _fp2 = _FP2.from_date(pd, "quarterly", _seg_fye)
+                            _seg_col_headers.append(_fp2.label.replace("\n", " / "))
                         else:
-                            _seg_col_headers.append(str(yr))
-                    _seg_xl = export_financial_excel("Segment Data", company.name or "", selected_ticker, _seg_col_headers, _seg_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _render_excel_js_download(_seg_xl, f"{selected_ticker}_Segment_Data.xlsx", "Excel")
-            except Exception as _xl_e:
-                log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_SEGMENT")
+                            _seg_col_headers.append(f"12 Months / {pd.strftime('%b-%d-%Y')}")
+                    else:
+                        _seg_col_headers.append(str(yr))
+                return export_financial_excel("Segment Data", company.name or "", selected_ticker, _seg_col_headers, _seg_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
+            _, _dl_col = st.columns([8, 2])
+            with _dl_col:
+                _lazy_excel_download(f"seg_{selected_ticker}", f"{selected_ticker}_Segment_Data.xlsx", _build_seg_xl)
             _timings['segment_data_excel'] = (_time.perf_counter() - _t_xl_seg) * 1000
 
             _timings['segment_data_total'] = (_time.perf_counter() - _t0_tab) * 1000
@@ -4263,9 +4325,9 @@ def render_page():
             render_ratings_data(selected_ticker, start_date, end_date, sort_ascending)
             _timings['ratings_render'] = (_time.perf_counter() - _t0) * 1000
 
-            # Excel download
+            # Excel download (built lazily — only when the user clicks Excel)
             _t_xl_rat = _time.perf_counter()
-            try:
+            def _build_rat_xl():
                 from utils.excel_export import export_financial_excel
                 from data.repository import RatingsDataRepository
                 _rat_data = st.session_state.get(f"_ratings_data_{selected_ticker}_{start_date}_{end_date}")
@@ -4324,12 +4386,11 @@ def render_page():
                         _pd.strftime("%b-%d-%Y") if (_pd := _rat_disp_dates.get(yr)) and hasattr(_pd, "strftime") else str(yr)
                         for yr in _rat_years
                     ]
-                    _rat_xl = export_financial_excel("Ratings & Store Data", company.name or "", selected_ticker, _rat_col_headers, _rat_rows, "", "USD", start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _render_excel_js_download(_rat_xl, f"{selected_ticker}_Ratings.xlsx", "Excel")
-            except Exception as _xl_e:
-                log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_RATINGS_TAB")
+                    return export_financial_excel("Ratings & Store Data", company.name or "", selected_ticker, _rat_col_headers, _rat_rows, "", "USD", start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
+                return None
+            _, _dl_col = st.columns([8, 2])
+            with _dl_col:
+                _lazy_excel_download(f"rat_{selected_ticker}", f"{selected_ticker}_Ratings.xlsx", _build_rat_xl)
             _timings['ratings_excel'] = (_time.perf_counter() - _t_xl_rat) * 1000
 
             _timings['ratings_total'] = (_time.perf_counter() - _t0_tab) * 1000
@@ -4340,6 +4401,7 @@ def render_page():
 
     # Clear the loading spinner now that tab content has rendered
     _tab_loading_hint.empty()
+    st.session_state.pop("_md_tab_loader", None)
     log_info(
         f"[MD_PHASE] rerun={get_rerun_id()} phase=page_render_complete "
         f"ticker={selected_ticker} tab={selected_tab} "

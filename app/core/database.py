@@ -80,7 +80,25 @@ class DatabaseManager:
         try:
             ssl_enabled = self._config.ssl_enabled
             # Get actual connect_args (triggers late-binding if needed)
-            connect_args = self._config.connect_args
+            connect_args = dict(self._config.connect_args)
+            # Bound EVERY DB operation at the driver level (PyMySQL). Without a
+            # read_timeout a hung/half-open socket blocks the query — and therefore
+            # the Streamlit render thread and any executor .result() waiting on it —
+            # indefinitely, which reads to the user as a frozen tab. These are hang
+            # ceilings, not latency targets: the slowest legitimate query measured is
+            # ~5.7s cold (sub-second warm since the STG index), and read_timeout only
+            # trips when NO bytes arrive for the interval, so a long streaming query
+            # is unaffected. connect_timeout guards the ~250ms Azure TLS handshake.
+            # Env-tunable so IT can adjust without a code change.
+            import os
+            def _to_int(name, default):
+                try:
+                    return int(os.getenv(name, "").strip() or default)
+                except (TypeError, ValueError):
+                    return default
+            connect_args.setdefault("connect_timeout", _to_int("DB_CONNECT_TIMEOUT", 15))
+            connect_args.setdefault("read_timeout", _to_int("DB_READ_TIMEOUT", 120))
+            connect_args.setdefault("write_timeout", _to_int("DB_WRITE_TIMEOUT", 120))
 
             # pool_pre_ping=True sends a SELECT 1 before every connection checkout.
             # On local (RTT ~0ms) this is free. On Azure MySQL (RTT ~240ms) it adds

@@ -840,3 +840,269 @@ That is the 10-15 s users feel, and no app-side change can fix it.
 - `APP_RUN_START` in main.py for EVERY page: page name +
   `gap_since_prev_run_end_ms`, flagged `interaction_QUEUED_behind_previous_run`
   when <100 ms (mirrors MD_RUN_START).
+
+### Round 11k — ROOT CAUSE of the 10-15s tab freeze: MY click-blocking overlay (16-Jul, 22:40)
+
+**I caused this regression in Round 11c.** The branded tab loader was
+deliberately `pointer-events:none` with a comment saying it must stay
+click-through. On 16-Jul I changed it to `pointer-events:auto` so the
+background could not be clicked while loading. That broke STG.
+
+**Mechanism (proved, not guessed):**
+The overlay is rendered into an `st.empty()` placeholder that is only cleared
+at the END of `render_page()` (`_tab_loading_hint.empty()`). Any path that
+reruns before reaching that line — the ratings retry/auto-heal `st.rerun()`
+calls, `st.switch_page`, an exception — leaves the overlay element ORPHANED in
+the DOM. While click-through that was harmless. While click-blocking it
+swallows EVERY click until the CSS failsafe fires (was 22s).
+
+**STG log evidence (user's test window, server-logs-20260716_165317.log):**
+```
+22:20:57  MD_RUN_START tab=ratios gap=1798
+22:20:57  TAB_Ratios | 552.83ms          <- server rendered Ratios in 0.5s
+22:21:10  MD_RUN_START tab=ratios gap_since_prev_run_end_ms=12835
+```
+The server was IDLE for 12.8s while the user clicked Ratios repeatedly — the
+clicks were hitting my invisible overlay, not the tab. Matches the user's
+report exactly ("clicking continuously, not loading at all") and their earlier
+screenshot (spinner + blurred content + open dropdown behind it).
+
+**Local reproduction & fix verification:**
+- before: `overlays in DOM = 1, still CLICK-BLOCKING = 1` (10s after render settled)
+- after : `{'count': 1, 'blocking': 0}`
+
+**Fix:** revert to `pointer-events:none !important` with a DO-NOT-DO-THIS
+comment recording this incident, and shorten the CSS failsafe 22s → 6s (no
+legitimate render takes that long; bounded tab fetches cap at ~4s), so a stuck
+spinner fades instead of confusing users.
+
+**Also confirmed NOT the cause (measured, ruled out):**
+- websocket payload: landing on a market_data tab = 66 KB / 32 frames — small.
+- server render times in the same window are all healthy: Income_Statement
+  305ms, Key_Statistics 848ms, Cash_Flow 390ms, Ratios 553ms, Segments 1458ms.
+- every tab click logs TWO `[CLICK->RENDER]` lines — that is double LOGGING
+  (main.py + PageLoadTracker), worth tidying, not a double render.
+
+**Still open / separate:** `_render_excel_js_download` base64-embeds a full
+Excel file into an iframe on EVERY tab render, and that iframe fetches a
+stylesheet from fonts.googleapis.com each time. Not the freeze cause, but it
+is per-tab waste on a 233ms-RTT link — candidate for lazy generation (build the
+file only when the user clicks Excel).
+
+### Round 12 — App-wide audit for the Round-11k bug signature + per-render waste (17-Jul)
+
+**Task:** hunt the whole app for the class of bug Round 11k self-inflicted —
+UI cleanup skipped by an early rerun/switch/exception, anything that covers/eats
+clicks, per-render waste, and unbounded work in the render path — and fix at the
+root. Verify in the real UI.
+
+#### 1. Round-11k fix is still in place (re-verified)
+`app/components/loading.py` `.cs-al-ov` is `pointer-events:none !important` with
+the DO-NOT-DO-THIS comment (loading.py:448–453); CSS failsafe is 6s. Playwright on
+the running app: `.cs-al-ov` present in DOM with `pointerEvents=none`,
+`blocking_overlays=[]`. The overlay still orphans on rerun (expected) but is
+click-through, so harmless.
+
+#### 2. Click-blocking overlays — audited ALL fixed overlays, all safe
+Every active full-viewport `position:fixed` overlay already sets
+`pointer-events:none`: `.cs-al-ov` (loading.py), `#cs-ov` nav overlay
+(navigation.py:122), `#cs-pb` progress bar, `.cs-c` card, boot splash. Prior
+rounds hardened these. **One latent footgun found & fixed:** `.cs-loading-overlay`
+(loading.py:88, `z-index:9999`) had NO `pointer-events` → defaults to `auto` →
+would swallow clicks if ever shown. It is currently DEAD (its only callers,
+`show_loading_overlay`/`render_scan_progress_overlay`, are unused) but is exactly
+the Round-11k trap waiting to happen. Added `pointer-events:none` + a comment.
+
+#### 3. Per-render waste — Excel build made lazy + external font removed (the big one)
+`app/pages/market_data.py`: every financial tab built a full openpyxl workbook AND
+base64-embedded it into a `components.v1.html` iframe on EVERY render — 8 call
+sites (Company Profile, Balance Sheet, Cash Flow, Income Statement, Key Stats,
+Ratios, Segment, Ratings). Balance Sheet / Cash Flow / Segment / Ratings even
+**re-fetched their data from the DB** each render just to build the file nobody
+asked for. The iframe also pulled a Material-Symbols stylesheet from
+`fonts.googleapis.com` on each instance — a network round trip on the 233ms-RTT
+India→centralus link.
+
+Root fix:
+- New `_lazy_excel_download(widget_key, filename, build_fn)` — renders a native
+  button; `build_fn()` (which does the fetch + openpyxl build) runs ONLY on the
+  rerun where the user clicks. Then the file streams via the existing client-side
+  blob download (`auto_click=True`) — still bypasses the `/media/` endpoint that
+  fails behind the STG proxy. A normal tab render now builds nothing and embeds no
+  iframe. Bytes are built fresh per click (never memoised — the file depends on
+  period/currency/sort/units; a stale cache would hand the wrong download).
+- Each of the 8 sites converted to a build closure. Excel-row derivation for the
+  three HTML-cached tabs relocated to module-level `_income_excel_rows` /
+  `_key_stats_excel_rows` / `_ratios_excel_rows` (no copy-paste; the closures
+  re-fetch so they work on both the cached-HTML and cold paths). Removed the now
+  dead `_ck + "_xl"` byte caches.
+- `_render_excel_js_download`: dropped the `<link>` to fonts.googleapis.com and
+  the Material-Symbols icon; the button icon is now an inline `<svg>`
+  (self-contained, zero network).
+
+**Verified (real function source, DB-independent harness — see below):**
+`build_count_on_render=0`, `iframes_on_render=0`, `googleapis_on_render=0`; after
+one click `build_count=1`, download fires (`Harness_Report.xlsx`),
+`googleapis_after_click=0`, the download iframe uses `<svg>` (`svg=1, font=0`).
+Tradeoff: the Excel control is now a native button (styled red-outline to match
+the old one via the stable `st-key-_xlbtn_` wrapper) and a download is
+click→build→download (one extra round trip) instead of one-click — exactly the
+"only build when clicked" behaviour the task asked for.
+
+The other `fonts.googleapis.com` hits on market_data (3 on load) are page-level
+`@import`s (styles.py Inter + Material Symbols Rounded; navigation.py Roboto/
+Montserrat; market_data.py:2178 Roboto). Those are injected once and HTTP-cached
+across renders (the `<style>` URL is stable), so they are NOT per-render network
+waste. Self-hosting them to kill the external dependency entirely is a separate
+infra item (see Round 11j).
+
+#### 4. Overlay cleanup skipped by mid-render rerun — fixed at the known skip path
+`render_page()` only clears the branded tab overlay (`_tab_loading_hint.empty()`)
+at its END. The ratings auto-heal `st.rerun()` calls (market_data.py ~957 & ~985,
+inside `render_ratings_data`) fire before that line and orphan the overlay. It is
+`pointer-events:none` so harmless, but it lingers until the 6s failsafe. Rather
+than reindent ~2,700 lines in a try/finally, the placeholder is now stashed in
+`st.session_state["_md_tab_loader"]` at creation and a new module helper
+`_clear_md_tab_loader()` tears it down immediately before each of those two
+reruns; the end-of-render clear also pops the key. Overlay now vanishes on the
+rerun instead of lingering.
+
+#### 5. Inline spinners (company_filings / newsroom) — inspected, NOT the bug class
+`_cf_loading_hint` (company_filings) and `_article_loading_hint` (newsroom) are
+`display:flex` inline spinners, not fixed overlays — they never cover the viewport
+or eat clicks. They are recreated at a stable DOM position at the top of each
+render and re-cleared each run, so a mid-render rerun simply re-shows them (normal
+spinner behaviour) and they self-heal; the only `return`s between create and clear
+are inside nested helper functions, so no top-level early-return leaves one stuck.
+Left unchanged (scope discipline — no real bug of the target class).
+
+#### 6. Unbounded work in the render path — driver-level DB timeouts (root fix)
+Audited every render-path `.result()` / `requests.*` / `time.sleep`:
+- **login.py** `requests.post`/`get` (OIDC) — ALL already carry `timeout=20`
+  (my first line-scoped grep missed the continuation-line kwargs). No change.
+- **~20 `future.result()` calls** (market_data / earnings_calendar / newsroom /
+  screening) wrap ThreadPoolExecutor DB reads with NO Python-level timeout. The
+  real hole is upstream: `DatabaseConfig.connect_args` set only SSL — the PyMySQL
+  connection had **no `read_timeout`**, so a hung/half-open socket blocks the
+  query, the render thread, and every `.result()` waiting on it, indefinitely
+  (reads to the user as a frozen tab). One-point root fix in
+  `app/core/database.py`: merge `connect_timeout=15, read_timeout=120,
+  write_timeout=120` into `connect_args` for both engines. These are hang
+  ceilings, not latency targets — the slowest legitimate query measured is ~5.7s
+  cold (sub-second warm since the STG index), and `read_timeout` only trips when
+  no bytes arrive for the interval, so a long streaming query is unaffected. This
+  bounds all ~20 `.result()` sites at the source instead of touching each.
+
+#### Verification notes (honest limits)
+- **Overlay click-safety:** Playwright on the live app (localhost:8501) —
+  `.cs-al-ov` `pointerEvents=none`, `blocking_overlays=[]`. ✓
+- **Lazy Excel + font removal + download:** proved end-to-end against the REAL
+  `_render_excel_js_download` / `_lazy_excel_download` source, `exec`'d into a
+  standalone Streamlit harness (no DB): 0 builds / 0 iframes / 0 font fetches on
+  render; 1 build + working blob download + inline-SVG-only iframe on click. ✓
+- **DB timeout:** kwargs accepted by PyMySQL (the connect proceeds to attempt the
+  TCP handshake). ✓
+- **Full financial-tab E2E with real data is NOT verified locally** — the STG
+  MySQL (`csr-mysql8-flex-stg…azure.com:3306`) is currently unreachable from this
+  Mac (raw TCP times out at 10s; the SAME `(2003, timed out)` errors appear in the
+  pre-change server log, so this is the known firewall/network limitation, not a
+  regression from these changes). The market_data page renders its shell but shows
+  "Unable to load company data" until DB access is restored. Re-run the financial
+  tabs (Excel click → download; ratings auto-heal overlay) once the STG firewall
+  admits this host.
+
+#### Files changed (Round 12)
+- `app/pages/market_data.py` — `_lazy_excel_download` + 8 lazy call sites; module
+  `_income_excel_rows`/`_key_stats_excel_rows`/`_ratios_excel_rows`; inline-SVG
+  Excel icon + removed googleapis `<link>`; `_clear_md_tab_loader` + overlay stash/
+  clear before ratings reruns; scoped Excel-button CSS.
+- `app/components/loading.py` — `.cs-loading-overlay` `pointer-events:none`.
+- `app/core/database.py` — PyMySQL `connect_timeout`/`read_timeout`/`write_timeout`.
+
+### Round 13 — Round-12 Excel regression fixed + EDGAR-every-run + download speed (17-Jul)
+
+**Round 12 shipped a regression** (my fault — shipped the lazy Excel behind a DB-free
+harness instead of demanding the VPN and testing end-to-end). On the deployed app it
+produced: (a) TWO Excel buttons — one after clicking; (b) the whole page froze on
+click. STG log proof (server-logs-20260716_191807.log): `MD_RUN_START tab=ratios
+gap_since_prev_run_end_ms=-1` twice back-to-back = a full-page rerun chain.
+
+**Root causes (both mine):**
+1. `_lazy_excel_download` gated on a bare `st.button` → clicking triggered a FULL
+   `render_page` rerun (every tab, all fetches) → visible freeze.
+2. `_render_excel_js_download(auto_click=True)` still drew its own visible 52px
+   button inside the download iframe → a second, differently-styled "Excel" appeared
+   under the real one after the click.
+
+**Fix (verified E2E against real STG data, VPN up):**
+- `_lazy_excel_download` now wraps its single `st.button` in **`@st.fragment`** —
+  the click reruns ONLY that button, not the page. `build_fn()` (fetch + openpyxl)
+  runs, then the file streams via a new **invisible** `_trigger_excel_download`
+  (`height=0`, no `<body>` button, no font) — one button, one click, one file.
+- Replaced the old `_render_excel_js_download` entirely (no visible-button variant
+  exists anymore, so the duplicate can't recur).
+- Excel buttons styled + right-aligned via the stable `st-key-_xlbtn_` wrapper.
+
+**Why the eager build was worth removing (measured, STG log):** per-render Excel
+build cost — segment 216ms avg (max 501), ratings 180ms (max 1656), key_stats 162ms
+(max 1648), balance 123ms, cash_flow 112ms, income 71ms, ratios 60ms — on EVERY tab
+render. Only `get_ratios_data` was `@st.cache_data`, so the other tabs' Excel blocks
+re-fetched from the DB too.
+
+**E2E evidence (localhost:8501, STG DB via VPN), all 8 tabs:**
+- Visible Excel buttons: **1 before click, 1 after click** (no second button).
+- Download fires: ULTA_{tab}.xlsx for every tab.
+- `MD_RUN_START` count unchanged across the click (6→6) → **the page does NOT rerun**.
+- Button right-aligned (`gap_to_right=0`).
+- Stale-closure test: change Sort Earliest→Latest (a widget OUTSIDE the fragment →
+  full rerun recreates the closure), download again → columns correctly flip
+  `Jan-2021→2025` to `Jan-2026→2022` (fresh data + FY2026 revealed). No stale file.
+- Click→download latency: income 126ms / ratios 143ms / ratings 138ms; **segment
+  781ms → 136ms** after caching (below).
+
+**"Why go to EDGAR on every run?" — root cause + fixes:**
+1. **`EDGAR_CACHE_DIR` is UNSET on STG** (confirmed from the user's box:
+   `EDGAR_CACHE_DIR=UNSET`, `find /home/edgar_cache … = 0`). `edgar_cache_dir()`
+   (repository.py:11210) honors the env var but, unset, falls back to
+   `<repo>/data/edgar_cache` inside wwwroot — **wiped on every deploy** (6/day on
+   16-Jul) → every user paid cold EDGAR all day. FIX = set the App Setting
+   `EDGAR_CACHE_DIR=/home/edgar_cache` (persistent share; infra, not code).
+2. **Disk TTL was 24h** for all four EDGAR families (store_totals, stores_by_country,
+   credit_ratings, sqft) → daily re-fetch of data that changes ~quarterly. New
+   `_edgar_disk_ttl_seconds()` (repository.py) → **7 days** default, overridable via
+   `EDGAR_DISK_TTL_DAYS`. Cuts live EDGAR ~7x; a new 10-Q is still caught within a
+   week. The 12h warm sweep already RESPECTS this TTL (it re-validates, never
+   force-refreshes — confirmed cache_manager.py:555), so with a persistent dir +
+   7-day TTL users effectively never pay a live EDGAR fetch; only stale tickers
+   refresh, in the background.
+
+**Download speed:** for <50-row tables the cost was the DB re-fetch, not openpyxl.
+`SegmentDataRepository.get_segment_data` was the only financial repo NOT cached →
+added `@st.cache_data(ttl=3600)` so the render's fetch and the on-click Excel build
+share it (segment Excel 781ms→136ms; segment tab re-renders also warm). income/
+ratios/ratings already ~130ms.
+
+**Verification honesty:** the VPN was connected for Round 13, so this was tested
+end-to-end on the REAL UI with live STG data (ULTA), unlike Round 12. Setting the two
+App Settings above is still required on STG/PROD (infra) — I cannot set Azure config.
+
+**Adversarial verification (5-lens refute pass) — 2 findings fixed:**
+- MEDIUM: `build_fn()` returning None (on-click re-fetch yields no rows) was a SILENT
+  no-op — no file, no message → dead-button feel (the exact symptom being complained
+  about). Fix: `else: st.toast("No data available to export for this view.")`.
+- LOW: two Excel clicks in the SAME second built byte-identical xlsx (openpyxl
+  timestamps are 1s-resolution) → identical iframe srcdoc → Streamlit kept the DOM
+  node → the second download silently didn't fire. Fix: a `time.time_ns()` nonce in
+  the trigger HTML forces a fresh srcdoc every click. Verified: 2 rapid clicks now
+  yield 2 downloads.
+
+**Files changed (Round 13)**
+- `app/pages/market_data.py` — `_lazy_excel_download` now `@st.fragment`-scoped, with
+  a toast on empty export; `_render_excel_js_download` replaced by invisible
+  `_trigger_excel_download` (per-click nonce); right-align CSS.
+- `app/data/repository.py` — `_edgar_disk_ttl_seconds()` (24h→7d, env-tunable) on all
+  four EDGAR families; `@st.cache_data` on `get_segment_data`.
+
+**Infra to set on STG + PROD (App Settings, then restart):**
+`EDGAR_CACHE_DIR=/home/edgar_cache`, `WEBSITES_ENABLE_APP_SERVICE_STORAGE=true`
+(optional `EDGAR_DISK_TTL_DAYS` to tune).
