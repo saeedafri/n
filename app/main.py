@@ -675,7 +675,29 @@ except Exception:
     pass
 
 try:
+    # Per-run queue instrumentation for EVERY page (market_data has its own
+    # MD_RUN_START). Streamlit runs a session's scripts sequentially: a click
+    # during a run waits for it to finish, then starts a fresh run. A gap
+    # <100ms since the previous run ended means this run served an interaction
+    # that sat QUEUED — the "app is frozen" the user feels, invisible in
+    # per-phase timings. Also stamps process uptime so cold-start runs (the
+    # first ~30s after a deploy) are identifiable in the log.
+    _run_now = perf_counter()
+    _prev_end = st.session_state.get("_app_prev_run_end")
+    _gap_ms = (_run_now - _prev_end) * 1000 if _prev_end else -1.0
+    log_timing(
+        "APP_RUN_START", 0,
+        f"page={_page_obs_key or '?'} gap_since_prev_run_end_ms={_gap_ms:.0f}"
+        f"{' interaction_QUEUED_behind_previous_run' if 0 <= _gap_ms < 100 else ''}",
+        level="WARNING",
+    )
     pg.run()
+    st.session_state["_app_prev_run_end"] = perf_counter()
+    try:
+        from core.perf_panel import render_perf_panel_if_requested
+        render_perf_panel_if_requested()  # ?perf=1 → browser-side breakdown
+    except Exception:
+        pass
 except Exception as e:
     log_exception("FATAL: Error running page")
     raise

