@@ -931,64 +931,145 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
 .ec-detail-key { color:#6B6B6B; }
 .ec-detail-val { color:#2D2A29; font-weight:500; text-align:right; }
 
-/* Email alerts — modal dialog (replaces expander; tight vertical rhythm) */
-[data-testid="stDialogContent"] [data-testid="stVerticalBlock"] {
-    gap:0.35rem !important;
+/* Email alerts — modal dialog (Figma node 24291-205047: 528px card, slate palette) */
+div[data-testid="stDialog"] div[role="dialog"] {
+    width:602px !important;
+    max-width:96vw !important;
+    border-radius:16px !important;
 }
-[data-testid="stDialogContent"] [data-testid="stVerticalBlock"] > div {
-    gap:0.35rem !important;
+/* Header: 20/700 slate-900 title + full-width divider under it */
+div[data-testid="stDialog"] div[role="dialog"] > div:first-child {
+    border-bottom:1px solid #E2E8F0 !important;
+    padding-bottom:14px !important;
 }
-[data-testid="stDialogContent"] [data-testid="element-container"] {
+div[data-testid="stDialog"] div[role="dialog"] > div:first-child span,
+div[data-testid="stDialog"] div[role="dialog"] > div:first-child div {
+    font-family:'Inter',sans-serif !important;
+    font-size:20px !important; font-weight:700 !important; color:#0F172B !important;
+}
+div[role="dialog"] [data-testid="stVerticalBlock"] {
+    gap:0.75rem !important;
+}
+div[role="dialog"] [data-testid="stVerticalBlock"] > div {
+    gap:0.75rem !important;
+}
+div[role="dialog"] [data-testid="stElementContainer"] {
     margin-bottom:0 !important;
 }
-[data-testid="stDialogContent"] [data-testid="stWidgetLabel"] {
+div[role="dialog"] [data-testid="stWidgetLabel"] {
     margin-bottom:0.1rem !important;
     min-height:0 !important;
     padding-bottom:0 !important;
 }
-[data-testid="stDialogContent"] [data-testid="stCaptionContainer"] {
+div[role="dialog"] [data-testid="stCaptionContainer"] {
     margin-top:-0.1rem !important;
     margin-bottom:0 !important;
 }
-[data-testid="stDialogContent"] .stButton { margin-top:0.15rem !important; }
-/* Save (primary) — Coresight D6 red */
-[data-testid="stDialogContent"] button[data-testid="baseButton-primary"],
-[data-testid="stDialogContent"] .stButton > button[kind="primary"] {
+div[role="dialog"] .stButton { margin-top:0.35rem !important; }
+/* Save (primary) — Coresight D6 red, full-width (design) */
+div[role="dialog"] button[data-testid="stBaseButton-primary"],
+div[role="dialog"] .stButton > button[kind="primary"] {
     background-color: #D62E2F !important;
     border-color: #D62E2F !important;
     color: #FFFFFF !important;
 }
-[data-testid="stDialogContent"] button[data-testid="baseButton-primary"]:hover,
-[data-testid="stDialogContent"] .stButton > button[kind="primary"]:hover {
+div[role="dialog"] button[data-testid="stBaseButton-primary"]:hover,
+div[role="dialog"] .stButton > button[kind="primary"]:hover {
     background-color: #b82526 !important;
     border-color: #b82526 !important;
     color: #FFFFFF !important;
 }
-[data-testid="stDialogContent"] div[data-testid="stRadio"] fieldset {
+.st-key-ec_save_alert_preferences,
+.st-key-ec_save_alert_preferences > div,
+.st-key-ec_save_alert_preferences button {
+    width:100% !important;
+}
+.st-key-ec_save_alert_preferences button {
+    min-height:46px !important; border-radius:10px !important;
+    font-family:'Inter',sans-serif !important;
+    font-size:16px !important; font-weight:600 !important;
+}
+div[role="dialog"] div[data-testid="stRadio"] fieldset {
     margin:0 !important;
     padding:0.15rem 0 0 0 !important;
 }
-[data-testid="stDialogContent"] div[data-testid="stRadio"] [role="radiogroup"] {
-    gap:0.5rem !important;
+div[role="dialog"] div[data-testid="stRadio"] [role="radiogroup"] {
+    gap:1.4rem !important;
     min-height:0 !important;
 }
-[data-testid="stDialogContent"] [data-testid="stWidgetLabel"] p,
-[data-testid="stDialogContent"] [data-testid="stWidgetLabel"] label {
-    color:#000000 !important;
+div[role="dialog"] [data-testid="stWidgetLabel"] p,
+div[role="dialog"] [data-testid="stWidgetLabel"] label {
+    color:#0F172B !important;
 }
-[data-testid="stDialogContent"] div[data-testid="stRadio"] label,
-[data-testid="stDialogContent"] div[data-testid="stRadio"] span {
-    color:#000000 !important;
+div[role="dialog"] div[data-testid="stRadio"] label,
+div[role="dialog"] div[data-testid="stRadio"] span {
+    color:#0F172B !important;
 }
-[data-testid="stDialogContent"] [data-testid="stCheckbox"] label,
-[data-testid="stDialogContent"] [data-testid="stCheckbox"] span {
-    color:#000000 !important;
+div[role="dialog"] div[data-testid="stRadio"] [role="radiogroup"] p {
+    font-size:15px !important; color:#0F172B !important;
+    font-family:'Inter',sans-serif !important;
 }
-[data-testid="stDialogContent"] [data-testid="stNumberInput"] input {
-    color:#000000 !important;
+div[role="dialog"] [data-testid="stCheckbox"] label,
+div[role="dialog"] [data-testid="stCheckbox"] span {
+    color:#0F172B !important;
 }
-[data-testid="stDialogContent"] [data-testid="stCaption"] {
-    color:#000000 !important;
+div[role="dialog"] [data-testid="stCheckbox"] p {
+    font-size:15px !important; color:#0F172B !important;
+    font-family:'Inter',sans-serif !important;
+}
+div[role="dialog"] [data-testid="stCaption"] {
+    color:#62748E !important;
+}
+/* Days-before row — label left, compact segmented [− | 1 | +] stepper right (design) */
+div[role="dialog"] [data-testid="stNumberInput"] {
+    display:flex !important; flex-direction:row !important;
+    align-items:center !important; justify-content:space-between !important;
+    gap:12px !important;
+}
+div[role="dialog"] [data-testid="stNumberInput"] > [data-testid="stWidgetLabel"] {
+    flex:0 1 auto !important; margin-bottom:0 !important;
+}
+div[role="dialog"] [data-testid="stNumberInput"] > [data-testid="stWidgetLabel"] p {
+    font-size:15px !important; color:#0F172B !important;
+    font-family:'Inter',sans-serif !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] {
+    flex:0 0 auto !important; width:140px !important; margin-left:auto !important;
+    display:flex !important; align-items:stretch !important;
+    border:1px solid #E2E8F0 !important; border-radius:10px !important;
+    background:#FFFFFF !important; overflow:hidden !important; height:44px !important;
+}
+/* Step buttons live in a wrapper div — flatten it so `order` can split − and + */
+div[role="dialog"] [data-testid="stNumberInputContainer"] > div:not([data-baseweb="input"]) {
+    display:contents !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] > div[data-baseweb="input"] {
+    order:0 !important; flex:1 1 auto !important;
+    border:none !important; background:#FFFFFF !important;
+    border-radius:0 !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] div[data-baseweb="base-input"] {
+    border:none !important; background:#FFFFFF !important;
+}
+div[role="dialog"] [data-testid="stNumberInput"] input {
+    color:#0F172B !important; text-align:center !important;
+    font-size:15px !important; font-weight:600 !important;
+    font-family:'Inter',sans-serif !important;
+    background:#FFFFFF !important; padding:0 !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] button {
+    background:#FFFFFF !important; color:#62748E !important;
+    border:none !important; border-radius:0 !important;
+    width:42px !important; flex:0 0 42px !important; min-height:0 !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] button:hover {
+    background:#F8FAFC !important; color:#0F172B !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] button[data-testid="stNumberInputStepDown"] {
+    order:-1 !important; border-right:1px solid #E2E8F0 !important;
+}
+div[role="dialog"] [data-testid="stNumberInputContainer"] button[data-testid="stNumberInputStepUp"] {
+    order:1 !important; border-left:1px solid #E2E8F0 !important;
 }
 /* Toolbar — Email Alerts in dialog only (calendar toolbar uses white outline btn) */
 
@@ -1047,7 +1128,7 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
 .st-key-ec_filter_expand [data-testid="stExpanderDetails"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {
     width:100% !important;
 }
-/* Email alert saved-state display */
+/* Email alert saved-state display (design: subtle slate pill, soft emerald when on) */
 .ec-alerts-status-wrap {
     display:flex;
     align-items:center;
@@ -1060,60 +1141,59 @@ div.block-container > div[data-testid="stVerticalBlock"] { padding-top:0 !import
     display:inline-flex;
     align-items:center;
     justify-content:center;
-    min-width:96px;
-    min-height:32px;
-    padding:6px 14px;
-    border-radius:8px;
+    min-height:34px;
+    padding:7px 16px;
+    border-radius:10px;
     font-family:'Inter',sans-serif;
-    font-size:12px;
-    font-weight:700;
+    font-size:13px;
+    font-weight:500;
     line-height:1.2;
-    border:1px solid #9E9E9E;
-    color:#424242;
-    background:#F4F5F7;
+    border:1px solid #E2E8F0;
+    color:#45556C;
+    background:#F8FAFC;
     text-align:center;
     white-space:nowrap;
 }
 .ec-alerts-status-pill--on {
-    border-color:#2E7D32;
-    color:#1B5E20;
-    background:#E8F5E9;
+    border-color:#A7F3D0;
+    color:#047857;
+    background:#ECFDF5;
 }
 .ec-alerts-lede {
-    font-size:13px; color:#000000; margin:0 0 2px 0; line-height:1.35;
+    font-size:14px; color:#62748E; margin:0 0 2px 0; line-height:1.45;
     font-family:'Inter',sans-serif;
 }
+.ec-alerts-lede strong { color:#0F172B; }
 .ec-alerts-foot {
-    font-size:11px; color:#000000; line-height:1.35; margin:4px 0 0 0;
+    font-size:13px; color:#90A1B9; line-height:1.5; margin:8px 0 0 0;
     font-family:'Inter',sans-serif;
 }
 .ec-alerts-hint {
-    font-size:12px; color:#000000; line-height:1.35; margin:0;
+    font-size:14px; color:#62748E; line-height:1.45; margin:0;
     font-family:'Inter',sans-serif;
 }
+.ec-alerts-hint strong { color:#0F172B; }
 .ec-alerts-section {
-    font-family:'Montserrat',sans-serif;
-    font-size:11px; font-weight:600; color:#000000;
-    text-transform:uppercase; letter-spacing:0.05em;
-    margin:10px 0 6px 0; padding-bottom:5px; border-bottom:1px solid #ECECEC;
+    font-family:'Inter',sans-serif;
+    font-size:12px; font-weight:600; color:#62748E;
+    text-transform:uppercase; letter-spacing:0.07em;
+    margin:14px 0 4px 0;
 }
 .ec-alerts-callout {
-    font-size:12px; color:#000000; line-height:1.45;
-    background:#F4F5F7; border-radius:8px; padding:9px 12px; margin:6px 0 10px 0;
-    border-left:4px solid #9E9E9E;
+    font-size:14px; color:#314158; line-height:1.55;
+    background:#F8FAFC; border:1px solid #E2E8F0;
+    border-radius:12px; padding:14px 16px; margin:8px 0 10px 0;
     font-family:'Inter',sans-serif;
 }
 .ec-alerts-callout--on {
-    background:#E8F5E9; border-left-color:#2E7D32; color:#000000;
+    background:#ECFDF5; border-color:#A7F3D0; color:#065F46;
 }
-.ec-alerts-callout strong,
-.ec-alerts-callout--on strong {
-    color:#000000;
-}
+.ec-alerts-callout strong { color:#0F172B; }
+.ec-alerts-callout--on strong { color:#065F46; }
 
 div[data-testid="stSelectbox"] label { font-size:11px !important; font-weight:500 !important; color:#6B6B6B !important; }
-[data-testid="stDialogContent"] div[data-testid="stSelectbox"] label {
-    color:#000000 !important;
+div[role="dialog"] div[data-testid="stSelectbox"] label {
+    color:#0F172B !important;
 }
 
 /* ── Figma filter controls ── */

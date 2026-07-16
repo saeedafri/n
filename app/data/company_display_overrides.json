@@ -1,0 +1,13 @@
+{
+  "_comment": "Read-only display corrections for corrupted coreiq_companies rows — each mixes two different companies in one row (verified 16-Jul-2026 against coreiq_av_company_overview + SEC EDGAR). All portal SEC data for these tickers belongs to the US issuer named here, so the header/dropdown must show it. The data team owns the real DB fix; see docs/superpowers/specs/2026-07-15-store-count-accuracy-investigation-and-worldwide-label.md (Round 11d) for the UPDATE statements.",
+  "CAL": {
+    "name": "Caleres, Inc.",
+    "name_coresight": "Caleres, Inc.",
+    "exchange": "NYSE"
+  },
+  "CFR": {
+    "name": "Cullen/Frost Bankers, Inc.",
+    "name_coresight": "Cullen/Frost Bankers, Inc.",
+    "exchange": "NYSE"
+  }
+}

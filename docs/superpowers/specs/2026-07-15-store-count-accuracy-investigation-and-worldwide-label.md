@@ -420,3 +420,312 @@ tabs (which use `fiscal_date_ending`, e.g. ANF = Jan-31 every year).
 (values 735/729/762/765/789 unchanged under the right columns), ULTA `Jan-31-*`,
 CMG `Dec-31-2024/Dec-31-2025` (FY2024 filed Feb-2025 correctly stays Dec-2024),
 AZO payload `Aug-31-*`.
+
+---
+
+## Round 11 — Continent totals, tab performance, data-team Q&A (2026-07-16)
+
+### 1. Continent grouping in Stores by Country (UI + Excel export)
+
+**Requirement (business, 16-Jul):** single-continent footprint → total labeled
+by its continent instead of "Worldwide"; multi-continent footprint →
+per-continent subtotals first, then the worldwide total.
+
+**Implementation:**
+- `repository.py` (module level, above `RatingsDataRepository`):
+  `CONTINENT_ORDER`, `COUNTRY_TO_CONTINENT` (7-continent model; covers the 30
+  country names the edgartools extraction emits + a superset), `continent_of()`,
+  and `group_countries_by_continent(countries)` → ordered
+  `[(continent, [country, ...], {year: subtotal})]`, US-first within a bucket
+  (exact-name match — "United States Virgin Islands" no longer floats first).
+- `market_data.py` render + ratings Excel export both consume the shared helper:
+  country rows grouped by continent; bold `Total (<continent>)` subtotal per
+  group when multi-continent; final row `Total (<continent>)` when
+  single-continent, else `Total (Worldwide)`.
+- **Partial-split guard:** the continent label is applied ONLY when the listed
+  countries account for the verified total exactly. The 2% reconciliation gate
+  admits partial splits — CMG lists only US restaurants while its total includes
+  the 10-K "international" aggregate — and those stay "Total (Worldwide)".
+
+**Verified live (Playwright, staging DB):** COST → Total (North America)
+692→781 / Total (Europe) 34→39 / Total (Asia) 57→78 / Total (Oceania) 12→16 /
+Total (Worldwide) 795→914; ORLY → single `Total (North America)` 5,616→6,585;
+PSMT → NA 46 + SA 10 → Worldwide 56; ULTA → NA 1,505 + Europe 86 → Worldwide
+1,591; CMG payload probe → label stays `Total (Worldwide)` (guard works).
+
+### 2. Additional Data tab performance
+
+**Evidence (server-log 15-Jul):** warm renders ~1ms; FIRST render per ticker
+2.0–4.3s. Root cause chain (probed 16-Jul):
+- `_fetch_all_rows` was the bottleneck: `coreiq_filing_metrics_v5` (12.5M rows)
+  has **no (ticker, source) composite index**, so MySQL serves the query from
+  the source-only index and post-filters ticker → ~1,020 scattered row pages →
+  ~5.7s on a cold Azure buffer (0.3s warm). ⚠ **Flag for data team: a composite
+  index on (ticker, source) is the root fix; we cannot do DDL.**
+- Cold EDGAR layers burned the bounded waits (2s CR + shared 4s phase-2).
+
+**Fixes (app-side, read-only):**
+- `_fetch_all_rows`: single round trip (was DISTINCT-years + one query per year
+  fanned out over a pool = 1+N RTTs); `st.cache_data` TTL 300s → 13h.
+- `_fetch_sqft_from_edgartools`: new 24h disk cache
+  (`data/edgar_cache/sqft/<TICKER>.json`) mirroring the other three EDGAR
+  families — it was the only path without one. Empty results cached too.
+- `cache_manager` Track 3 — **12-hourly full-universe warm sweep** (leverages
+  App Service Always On, `RATINGS_WARM_SWEEP=0` to disable): one buffer-pool
+  warm query for the credit_rating/store_count row pages, then a throttled
+  (1s/ticker) walk over all portal tickers warming `_fetch_all_rows`, the three
+  EDGAR disk layers, `get_square_footage_data`, and `_fye_month`. First sweep
+  on a fresh cache dir is slow (cold CR extraction 30–60s/ticker); later sweeps
+  are cache validations (~15 min).
+
+**Measured after fix:** ANF first open 886ms (was 3.8–4.0s); steady-state
+post-sweep render 0.75ms (AZO, new session). Mid-first-sweep renders of
+un-swept tickers can still hit the 4s bounded ceiling — one-time cost per
+deploy.
+
+### 3. Data-team Excel report refresh
+
+`docs/reports/MDP_Data_Quality_Report_2026-07-16.xlsx` (+ copy in ~/Downloads),
+new sheet **"Data Team Q&A (16-Jul)"** answering every 15-Jul comment:
+- **CAL "Can we add a total"** → TOTAL (Worldwide) row added from validated
+  XBRL totals (2020: 1,177 … 2026: 1,009); country rows stay hidden (the 10-K
+  split is a Brand-Portfolio-segment subset that never reconciles). Rule applied
+  generically to all hidden tickers with validated totals.
+- **CMG "which is the other country?"** → not a country: the 10-K's aggregate
+  "international" figure (Canada/UK/France/Germany, never split). Row labeled
+  `International (not split by country in 10-K)`; values 40/44/53/66 = verified
+  total − US, matching the 10-K exactly.
+- **LOW / ORLY "Total North America"** → done via the single-continent rule.
+- **PSMT "Total Americas"** → TOTAL (North America) + TOTAL (South America)
+  subtotals then TOTAL (Worldwide) ("Americas" is not a continent in the
+  7-continent model; Trinidad + Virgin Islands sit in North America).
+- Sheet 2 now mirrors the live continent logic (continent subtotals +
+  relabeled totals); Fixes & Method sheet gained rows 10–12 (FYE headers,
+  continent totals, performance).
+
+### Round 11b — user feedback fixes (16-Jul, afternoon)
+
+**Bug: continent section could vanish for a whole session.** The tab pinned its
+rendered HTML in `st.session_state`; a render that missed a bounded background
+fetch (Stores by Country starved by first-sweep DB contention) was cached
+incomplete and stuck until the session ended — user saw COST with no country
+rows. Fix: pin REMOVED (both read and write). The data fetch is layer-cached
+(st.cache_data 13h + 24h disk + sweep) and ~1ms warm, so rebuilding per rerun
+is cheap and self-healing; the `_ratings_data_` stash for the Excel button
+stays.
+
+**Enhancements:**
+- Indentation hierarchy (multi-continent): countries `indent-2` →
+  `Total (<continent>)` bold `indent-1` → grand total bold `indent-0`.
+  Mirrored in the ratings Excel export (indents 2/1/0).
+- `Total (Americas)` when the footprint is exactly North + South America and
+  the rows account for the total exactly — new shared helper
+  `stores_total_label(grouped, total_row)` in repository.py used by UI, Excel
+  export, and the data-quality report (AZO, PSMT get it).
+
+**Full-universe calculation audit (all sbc cache files, app gating logic):**
+8 tickers display country data; 7 are EXACT (grand total == sum of country
+rows for every displayed year): AZO/PSMT → Total (Americas), LOW/MOV/ORLY →
+Total (North America), COST/ULTA → Total (Worldwide). Continent subtotals ==
+sum of their countries by construction (asserted). The single genuine gap is
+CMG — total − rows = 40/44/53/66 = the 10-K's "international" aggregate, not
+split by country — so it stays Total (Worldwide) by design.
+
+**Verified live:** AZO `US+Mexico → Total (North America) 6,506…7,510; Brazil →
+Total (South America) 43…147; Total (Americas) 6,549…7,657` (sums exact),
+PSMT `NA 46 + SA 10 → Total (Americas) 56`, ORLY single `Total (North
+America)`, COST 4 subtotals + `Total (Worldwide)` (795=692+34+57+12 … exact
+every year). Report regenerated with the same labels.
+
+### Round 11c — critical UX fixes (16-Jul, evening)
+
+**1. "Old data first, real data after refresh" (critical).** First view of a
+ticker right after a server restart rendered a PARTIAL payload (bounded
+background fetches missed their deadline → DB store types like PSMT
+Clubs/Warehouses appeared instead of the XBRL Total + Stores by Country).
+Fixes:
+- `get_ratings_data` now returns `_pending_fetches` — exactly which bounded
+  waits timed out (db_rows / credit_ratings / store_totals /
+  stores_by_country / square_footage).
+- Render auto-heals: on a partial payload it logs `RATINGS_partial_payload`,
+  shows a spinner, and reruns (≤2×) — the background fetch completes meanwhile.
+  Verified cold-process PSMT: first fetch 4.3s flagged `pending=square_footage`,
+  auto-rerun 2s later fetched in 0.8ms and rendered `Total (Americas) 56` —
+  one visit, no manual refresh.
+- Disk-cache writes are now atomic (`_write_cache_atomic`, temp + os.replace):
+  the sweep rewriting a JSON while a render read it could yield a parse error
+  → silently missing section.
+
+**2. Totals looked same as normal rows.** `.row-bold` forces
+`color: dark-grey !important` + semibold — visually indistinguishable from
+black regular country rows. New `.row-total-strong` class (true bold, full
+black) applied to continent subtotals and the grand total; country rows
+explicitly regular weight.
+
+**3. "Oceania" renamed** to "Australia & New Zealand" everywhere (business
+clarity; only AU/NZ ever appear for portal retailers).
+
+**4. Launch window (tabs unresponsive 10–15s).** STG log evidence
+(user download, 07→16-Jul): the process restarted 21× in 9 days (3× on 16-Jul)
+— every restart wipes in-process caches and re-triggers the cold window; boot
+warmups + first-render DB fetches then compete for cold Azure I/O while
+Streamlit queues clicks during script runs. App-side mitigations: warm sweep
+now starts 5 min AFTER boot (was immediately) and paces 2s/ticker; explicit
+`APP_PROCESS_BOOT pid=` marker logs once per process so restarts are countable.
+⚠ Root causes outside app code: restart frequency (deploys/platform recycling
+— flag to team) and the missing (ticker, source) DB index (data team).
+
+### Round 11d — CAL showed "Chow Tai Seng Jewellery" with Caleres data (16-Jul)
+
+**Root cause — corrupted rows in `coreiq_companies` (data team owns fix):**
+one row per ticker mixes two different companies. Verified 16-Jul (STG):
+- `CAL`: name='Caleres, Inc.' (correct, SEC/NYSE — matches every SEC data
+  layer) but name_coresight='Chow Tai Seng Jewellery Co., Ltd.' and
+  exchange='GPW' (Warsaw). Header/dropdown use name_coresight → the page
+  titled a Chinese jeweller over Caleres' store data (1,086→960 = Caleres,
+  correct data, wrong nameplate).
+- `CFR`: name='CULLEN/FROST BANKERS, INC.' but
+  name_coresight='Compagnie Financière Richemont SA', exchange='SWX'.
+`coreiq_av_company_overview` is CORRECT for both (Caleres Inc/NYSE,
+Cullen/Frost Bankers Inc/NYSE). Full-universe scan found no other rows where
+name and name_coresight are different companies.
+
+**App-side fix (read-only overlay, ma_event_overrides pattern):**
+`app/data/company_display_overrides.json` + `company_display_overrides()`
+merged into `CompanyRepository.get_companies_rows()` — the single source for
+the dropdown, companies map, and Market Data header (get_company_overview
+deliberately prefers name_coresight). Verified live: header now
+"Caleres, Inc. (NYSE:CAL)".
+
+**SQL for the data team (the real fix; remove the overlay entries after):**
+```sql
+UPDATE coreiq_companies
+   SET name_coresight = 'Caleres, Inc.', exchange = 'NYSE'
+ WHERE ticker = 'CAL' AND name = 'Caleres, Inc.';
+UPDATE coreiq_companies
+   SET name_coresight = 'Cullen/Frost Bankers, Inc.', exchange = 'NYSE'
+ WHERE ticker = 'CFR' AND name LIKE 'CULLEN/FROST%';
+```
+(If Chow Tai Seng / Richemont are meant to be portal companies, they need
+their own rows with their own tickers — every coreiq_* data table keys these
+tickers to the US issuers.)
+
+**Square Footage noise gate:** CAL also showed two junk rows
+"Disposal Group, Held-for-Sale, Not Discontinued Operations (sq ft) = 9"
+(duplicated by label capitalization). `get_square_footage_data` now drops
+disposal-group / held-for-sale / discontinued-operations dimension slices and
+merges case-insensitive duplicate labels. CAL's Square Footage section (which
+contained only noise) is gone; real metrics elsewhere unaffected.
+
+### Round 11e — landing-click delay instrumentation, click-blocking loader, CAL/CMG data visibility (16-Jul, night)
+
+**1. Landing → immediate tab click felt dead (critical, STG).** Mechanics:
+Streamlit executes a session's script runs SEQUENTIALLY — a click during the
+landing run silently queues, then triggers a fresh full run; on STG the
+landing run itself is slow (cold DB + 21 restarts/9 days), so clicks felt
+dead for 10-15s with zero log evidence. Changes:
+- `MD_RUN_START` log at the top of every market_data run: tab, ticker, and
+  `gap_since_prev_run_end_ms` — a gap <100ms is flagged
+  `interaction_QUEUED_behind_previous_run`. Together with the existing
+  `PAGE_*`/`TAB_*` phase timings and the new `APP_PROCESS_BOOT` marker, STG
+  logs now show precisely WHERE any wait went (queue vs render vs restart).
+- The branded tab-loading overlay now BLOCKS background interaction
+  (pointer-events auto + cursor:wait; was deliberately click-through). Users
+  see a busy state instead of clicks that vanish into the queue; the 22s CSS
+  failsafe still guarantees it can never trap (no !important on
+  pointer-events so the failsafe keyframe wins).
+- Local repro (Playwright, cold process): tabs visible +1.5s, click blocked
+  1.5s by the visible busy overlay, Additional Data content 1.2s after click;
+  MD_RUN_START gap log captured the click-run sequence.
+- Fixed a latent `UnboundLocalError`: `main()` had a local
+  `import streamlit as st` shadowing the module import.
+
+**2. CAL "Excel shows countries, UI shows only worldwide".** The 2% recon
+gate hid non-reconciling splits entirely. Now: a split that exists but never
+reconciles renders AS DISCLOSED under
+"Stores by Country (partial — as disclosed in 10-K; does not sum to total)" —
+no subtotals, no total row (the validated Store Count total stays above).
+Verified live: CAL shows US 107/70/63/62/60, Canada 50, China 13/16/29.
+Report Sheet 2 aligned (values shown with the same partial note).
+
+**3. CMG "no data in UI".** `get_date_range`/`get_available_dates` used DB
+years only — CMG has just FY2024-25 in v5 while XBRL tags FY2020-25, so the
+tab collapsed to two columns and the Stores by Country section (recon years
+2020-23) fell outside the window. New `_all_known_years` merges DB years with
+the disk-cached XBRL total years (bounded 3s). Verified live: CMG now spans
+Dec-2020→Dec-2025, totals 2,764→4,042, country section renders.
+
+### Round 11f — Excel completeness audit + STG slowness/RAM root cause (16-Jul, late night)
+
+**Excel coverage:** programmatic audit — Sheet 1 holds all 112 tickers whose
+store counts the app can actually display. The warm sweep has since produced
+8 more XBRL cache files (AAPL, ABG, DBI, DPZ, DRI, GME, SBUX, WOOF); each was
+resolved through the app's own gates and **correctly rejected**: AAPL one
+stale year (463 @2015), DPZ franchise-deal counts (14/4/17/12/62 vs ~20k real
+stores), GME last tagged 2020, SBUX single-year subset (113), DBI last 2016,
+ABG single year =2, DRI blocklisted (Ruth's Chris subset). WOOF is the one
+borderline (1,433/1,423 @2022/24 — plausible but only 2 years; the ≥3-year
+gate holds) — flagged to the data team.
+
+**STG slowness root cause (from the user's 07→16-Jul log pull):**
+memory exhaustion → restart loop → permanent cold-start window.
+- RSS: median 940MB, p90 1.16GB, p99 1.71GB, **max 2.84GB**; 16-Jul 17:04 the
+  process sat at 2.4GB (malloc_trim reclaimed only 230MB → live Python
+  objects, not heap fragmentation) and by 17:08 the same worker was at 102MB
+  — recycled. 21 restarts in 9 days.
+- Each restart re-triggers: cold Azure DB buffer (ratings query 5.7s),
+  51s filings prefetch warm (background but I/O-competing),
+  calendar FYE bulk 2.7-4.9s, empty st.cache_data everywhere.
+- WARM steady-state is already fast: calendar CLICK→RENDER 0.28-0.53s in the
+  same log; ratings ~1ms. Users are not slow because the code is slow — they
+  are slow because the app keeps being reborn.
+- Historical tab pain (mostly pre-16-Jul fixes): TAB_Ratings avg 8.3s
+  (n=44, max 111s), TAB_Segments avg 4.4s, Company_Profile max 9.3s.
+
+**Recommendations (ranked):**
+1. Raise App Service memory headroom to ≥4GB (peaks hit 2.84GB) — stops the
+   restart loop; with Always On + the 12h warm sweep the app then stays warm
+   24/7 and calendar/market-data sit at their measured 0.3-1s warm numbers.
+2. Heap-profile a live worker (tracemalloc snapshot endpoint or dump on
+   HEARTBEAT when rss>2GB) to attribute the growth — likely large long-TTL
+   caches; fix at the source rather than guessing. (Offer open.)
+3. Existing instrumentation to watch: `[HEARTBEAT] app_rss=`,
+   `[MALLOC_TRIM]`, `restarts.log` ledger, new `APP_PROCESS_BOOT`,
+   `MD_RUN_START gap_since_prev_run_end_ms`.
+
+### Round 11g — STG forensics: empty ratings tab, login bounce, retry churn (16-Jul, 19:30)
+
+**Evidence base:** user log pull server-logs-20260716_131633.log (07-Jul → 16-Jul 18:46).
+
+**Finding 1 — STG deploys ship with NO edgar caches.** `data/edgar_cache/`
+is gitignored (line 734); Azure redeploys replace wwwroot, so all four disk
+cache families start EMPTY after every deploy. STG restarted/deployed 6× on
+16-Jul alone (12:42, 16:24, 16:56, 17:30, 17:59, 18:40); the warm sweep
+(needs hours cold — CR extraction is 30-60s/ticker) started at 17:35, 18:04,
+18:46 and was killed by the next restart every time → caches never built →
+every user view stayed cold all day.
+Fix: `edgar_cache_dir()` honors new env var **EDGAR_CACHE_DIR** (all four
+cache families). STG/PROD must set it to a persistent path, e.g.
+`/home/edgar_cache` (App Service /home survives restarts AND deploys).
+
+**Finding 2 — retry churn: pending=credit_ratings retry=2 ×14.** On cold STG
+the CR fetch can never finish inside the bounded wait, so the auto-heal loop
+burned ~15s of spinner (2 retries × (2s sleep + 2-6.8s refetch — CMG 6863ms,
+CRI 6453/6326/5673ms)) and then rendered the same table anyway. The user's
+screenshot (CMG, empty tab area) is this loop mid-flight. Fix: retry-rerun
+only when a STORE-shaping fetch is pending (db_rows / store_totals /
+stores_by_country / square_footage); credit-ratings-only partials render
+immediately and CR fills on a later rerun.
+
+**Finding 3 — "login issue":** both `[OIDC] invalid/expired state` errors
+(07-Jul 18:17:11+13) coincide EXACTLY with the 18:17:11 restart — a restart
+mid-login invalidates the state and bounces the user. Same restart-storm root
+cause. (16-Jul's only auth error is a correctly-denied personal gmail.)
+
+**Finding 4 — old noise ruled out:** `key='set'` localStorage errors and
+LocalStorageManager init failures are all from 07/09/15-Jul — pre-existing,
+unrelated to this week's changes.
+
+**Deploy checklist for STG:** set `EDGAR_CACHE_DIR=/home/edgar_cache`;
+stop deploying 6×/day to prod-like envs (each deploy = full cold start);
+memory headroom ≥4GB (Round 11f).

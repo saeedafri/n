@@ -433,14 +433,16 @@ body:has(.cs-al-ov) .cs-inline-loading,
 body:has(.cs-al-ov) .cs-page-subspinner{display:none!important;}
 
 /* Overlay: full viewport, translucent (the page stays visible + keeps loading
-   behind it), CLICK-THROUGH (pointer-events:none) so the header nav and tabs
-   remain usable while loading. Pure-CSS failsafe still removes it at 22s even
-   if the JS remover never loads — it can never trap the user. */
+   behind it), and CLICK-BLOCKING (16-Jul, per business): while a tab loads,
+   nothing behind may be clicked — clicks during a load only queue behind the
+   running script and made the app feel broken (users opened dropdowns behind
+   the spinner). The 22s pure-CSS failsafe also flips pointer-events off, so
+   the overlay can never trap the user even if the remover JS fails. */
 .cs-al-ov{position:fixed!important;inset:0!important;z-index:2147483000;
   background:rgba(244,244,244,.62);
   -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
   display:flex;align-items:center;justify-content:center;
-  pointer-events:none!important;
+  pointer-events:auto;cursor:wait;touch-action:none;
   animation:cs-al-in .18s ease both, cs-al-failsafe .4s ease 22s forwards;}
 @keyframes cs-al-in{from{opacity:0}to{opacity:1}}
 @keyframes cs-al-failsafe{to{opacity:0;visibility:hidden;pointer-events:none;}}

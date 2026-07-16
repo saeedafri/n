@@ -230,6 +230,36 @@ def _log_query_time(func):
             raise
     return wrapper
 
+
+_company_display_overrides_cache: Optional[Dict[str, Dict[str, str]]] = None
+
+
+def company_display_overrides() -> Dict[str, Dict[str, str]]:
+    """Read-only display corrections for corrupted coreiq_companies rows.
+
+    Shipped as app/data/company_display_overrides.json (same pattern as
+    ma_event_overrides.json): a row that mixes two different companies gets
+    its display fields corrected here until the data team fixes the DB.
+    Keys are tickers; values are field replacements merged into
+    get_companies_rows() output, which feeds the dropdown, the companies map,
+    and the Market Data header via get_company_overview().
+    """
+    global _company_display_overrides_cache
+    if _company_display_overrides_cache is None:
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+            path = _Path(__file__).resolve().parent / "company_display_overrides.json"
+            data = _json.loads(path.read_text())
+            _company_display_overrides_cache = {
+                k.upper(): v for k, v in data.items()
+                if not k.startswith("_") and isinstance(v, dict)
+            }
+        except Exception:
+            _company_display_overrides_cache = {}
+    return _company_display_overrides_cache
+
+
 class CompanyRepository:
     """Repository for coreiq_companies table."""
 
@@ -434,6 +464,18 @@ class CompanyRepository:
                 'primary_industry_coresight': row['primary_industry_coresight'] or '',
                 'country_of_incorporation': row.get('country_of_incorporation') or '',
             })
+        # Read-only display overlay for corrupted coreiq_companies rows — CAL
+        # and CFR each mix two different companies in one row (Caleres vs Chow
+        # Tai Seng Jewellery; Cullen/Frost vs Richemont). name_coresight from
+        # here is the canonical header/dropdown name, and all portal SEC data
+        # for these tickers belongs to the US issuer, so the display must name
+        # it. The data team owns the real DB fix (spec Round 11d).
+        overrides = company_display_overrides()
+        if overrides:
+            for entry in rows:
+                fix = overrides.get(str(entry.get('ticker') or '').upper())
+                if fix:
+                    entry.update(fix)
         return rows
 
     @staticmethod
@@ -11151,6 +11193,159 @@ def preload_store_totals(ticker: str) -> None:
     _get_edgar_executor().submit(_worker)
 
 
+def edgar_cache_dir():
+    """Root directory for the EDGAR disk caches (store_totals,
+    stores_by_country, credit_ratings, sqft).
+
+    data/edgar_cache is GITIGNORED, so on Azure App Service every deploy
+    ships without it and the app starts fully cold — on STG (16-Jul: six
+    deploys/restarts in one day) the caches never survived long enough for
+    the warm sweep to finish building them, and every user paid cold EDGAR
+    fetches all day. Set EDGAR_CACHE_DIR to a persistent path (App Service:
+    anything under /home, e.g. /home/edgar_cache) so caches survive both
+    restarts AND deploys. Unset, it stays at <repo>/data/edgar_cache.
+    """
+    import os
+    from pathlib import Path
+    override = os.getenv("EDGAR_CACHE_DIR", "").strip()
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parent.parent.parent / "data" / "edgar_cache"
+
+
+def _write_cache_atomic(path, payload) -> None:
+    """Write a JSON cache file via temp + rename.
+
+    The warm sweep rewrites these files while render threads read them; a
+    plain write_text lets a reader see a half-written file (JSON parse error
+    → section silently missing for that render). os.replace is atomic on the
+    same filesystem, so readers always see the old or the new file, never a
+    partial one.
+    """
+    import json as _json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(_json.dumps(payload, default=str))
+    tmp.replace(path)
+
+
+# ── Continent grouping for Stores by Country (16-Jul-2026, per business) ────
+# A single-continent footprint is labeled by its continent instead of
+# "Worldwide"; multi-continent footprints get per-continent subtotals before
+# the worldwide total. Keys are the ISO-style names the edgartools
+# stores-by-country extraction emits (plus common variants).
+# "Australia & New Zealand" instead of the formal "Oceania" — clearer for
+# business users (16-Jul feedback); only AU/NZ ever appear for our retailers.
+CONTINENT_ORDER = ["North America", "South America", "Europe", "Asia",
+                   "Africa", "Australia & New Zealand", "Other"]
+
+COUNTRY_TO_CONTINENT = {
+    # North America (incl. Central America + Caribbean)
+    "United States": "North America", "Canada": "North America",
+    "Mexico": "North America", "Costa Rica": "North America",
+    "Panama": "North America", "Guatemala": "North America",
+    "Honduras": "North America", "Nicaragua": "North America",
+    "El Salvador": "North America", "Belize": "North America",
+    "Aruba": "North America", "Barbados": "North America",
+    "Jamaica": "North America", "Trinidad": "North America",
+    "Trinidad and Tobago": "North America",
+    "Dominican Republic": "North America", "Puerto Rico": "North America",
+    "U.S. Virgin Islands": "North America",
+    "United States Virgin Islands": "North America",
+    "Bahamas": "North America", "Cayman Islands": "North America",
+    "Bermuda": "North America", "Cuba": "North America",
+    "Haiti": "North America",
+    # South America
+    "Brazil": "South America", "Colombia": "South America",
+    "Chile": "South America", "Peru": "South America",
+    "Argentina": "South America", "Ecuador": "South America",
+    "Uruguay": "South America", "Paraguay": "South America",
+    "Bolivia": "South America", "Venezuela": "South America",
+    "Guyana": "South America", "Suriname": "South America",
+    # Europe
+    "United Kingdom": "Europe", "Ireland": "Europe", "France": "Europe",
+    "Spain": "Europe", "Sweden": "Europe", "Iceland": "Europe",
+    "Germany": "Europe", "Italy": "Europe", "Netherlands": "Europe",
+    "Belgium": "Europe", "Portugal": "Europe", "Poland": "Europe",
+    "Austria": "Europe", "Switzerland": "Europe", "Denmark": "Europe",
+    "Norway": "Europe", "Finland": "Europe", "Czechia": "Europe",
+    "Czech Republic": "Europe", "Greece": "Europe", "Hungary": "Europe",
+    "Romania": "Europe", "Luxembourg": "Europe",
+    # Asia
+    "China": "Asia", "Japan": "Asia", "South Korea": "Asia",
+    "Taiwan": "Asia", "India": "Asia", "Singapore": "Asia",
+    "Hong Kong": "Asia", "Malaysia": "Asia", "Thailand": "Asia",
+    "Philippines": "Asia", "Vietnam": "Asia", "Indonesia": "Asia",
+    "United Arab Emirates": "Asia", "Saudi Arabia": "Asia",
+    "Kuwait": "Asia", "Qatar": "Asia", "Bahrain": "Asia",
+    "Israel": "Asia", "Turkey": "Asia",
+    # Africa
+    "South Africa": "Africa", "Egypt": "Africa", "Morocco": "Africa",
+    "Nigeria": "Africa", "Kenya": "Africa",
+    # Australia & New Zealand (formally Oceania)
+    "Australia": "Australia & New Zealand",
+    "New Zealand": "Australia & New Zealand",
+}
+
+
+def continent_of(country: str) -> str:
+    return COUNTRY_TO_CONTINENT.get((country or "").strip(), "Other")
+
+
+def group_countries_by_continent(countries: Dict[str, Dict[int, Any]]):
+    """Group a stores-by-country mapping into ordered continent buckets.
+
+    Returns [(continent, [country, ...], {year: subtotal}), ...] following
+    CONTINENT_ORDER; countries are United States-first then alphabetical
+    within their bucket, matching the existing display convention.
+    """
+    buckets: Dict[str, list] = {}
+    for name in countries:
+        buckets.setdefault(continent_of(name), []).append(name)
+    grouped = []
+    for cont in CONTINENT_ORDER:
+        names = buckets.get(cont)
+        if not names:
+            continue
+        # exact match — "United States Virgin Islands" must not float first
+        names.sort(key=lambda c: (c.strip().lower() not in ("united states", "us", "u.s.", "usa"), c))
+        subtotal: Dict[int, int] = {}
+        for name in names:
+            for year, value in countries[name].items():
+                if value is not None:
+                    subtotal[year] = subtotal.get(year, 0) + int(value)
+        grouped.append((cont, names, subtotal))
+    return grouped
+
+
+def stores_total_label(grouped, total_row: Dict[int, Any]) -> str:
+    """Label for the final Stores by Country total row.
+
+    "Total (<continent>)" when a single continent's countries account for the
+    verified total exactly; "Total (Americas)" when exactly North + South
+    America together do; otherwise "Total (Worldwide)". The exact-coverage
+    check matters because the 2% reconciliation gate admits partial splits
+    (CMG lists only US restaurants while its total includes the 10-K's
+    "international" aggregate) — those must honestly stay Worldwide.
+    """
+    if not grouped or not total_row:
+        return "Total (Worldwide)"
+    sums: Dict[int, int] = {}
+    for _, _, subtotal in grouped:
+        for year, value in subtotal.items():
+            sums[year] = sums.get(year, 0) + value
+    covers = all(sums.get(year) == total
+                 for year, total in total_row.items() if total is not None)
+    if not covers:
+        return "Total (Worldwide)"
+    continents = {cont for cont, _, _ in grouped}
+    if len(continents) == 1 and "Other" not in continents:
+        return f"Total ({next(iter(continents))})"
+    if continents == {"North America", "South America"}:
+        return "Total (Americas)"
+    return "Total (Worldwide)"
+
+
 # =============================================================================
 # RATINGS & STORE COUNT REPOSITORY — credit ratings + store counts
 # =============================================================================
@@ -11192,15 +11387,7 @@ class RatingsDataRepository:
         r = RatingsDataRepository._MOODYS_TO_SP.get(r, r)
         return RatingsDataRepository._SP_NOTCHES.get(r)
 
-    _YEAR_QUERY = """
-        SELECT DISTINCT report_fiscal_year
-        FROM coreiq_filing_metrics_v5
-        WHERE ticker = :ticker
-          AND source IN ('credit_rating', 'store_count')
-        ORDER BY report_fiscal_year ASC
-    """
-
-    _ROW_QUERY = """
+    _ALL_ROWS_QUERY = """
         SELECT ticker, company_name, report_fiscal_year, doc_type,
                concept, value, unit_ref, numeric_value,
                period_type, period_start, period_end, period_instant,
@@ -11211,46 +11398,30 @@ class RatingsDataRepository:
         FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND source IN ('credit_rating', 'store_count')
-          AND report_fiscal_year = :year
-        ORDER BY source ASC, dimension ASC, report_fiscal_year ASC
+        ORDER BY source ASC, report_fiscal_year ASC
     """
 
     @staticmethod
-    def _fetch_available_years(ticker: str) -> List[int]:
-        rows = db_manager.execute_query_readonly(
-            RatingsDataRepository._YEAR_QUERY, {"ticker": ticker},
-        )
-        return sorted(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year'))
-
-    @staticmethod
-    def _fetch_year_rows(ticker: str, year: int) -> List[Dict[str, Any]]:
-        return db_manager.execute_query_readonly(
-            RatingsDataRepository._ROW_QUERY, {"ticker": ticker, "year": year},
-        )
-
-    @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=46800, show_spinner=False)
     def _fetch_all_rows(ticker: str) -> List[Dict[str, Any]]:
-        """Fetch ALL credit_rating + store_count rows, years in parallel."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        """Fetch ALL credit_rating + store_count rows in ONE round trip.
 
-        years = RatingsDataRepository._fetch_available_years(ticker)
-        if not years:
-            return []
+        Was a DISTINCT-years query followed by one query per year fanned out
+        over a thread pool — two sequential phases and 1+N round trips
+        (~250ms each on Azure) to fetch rows the single unfiltered query
+        returns identically.
 
-        all_rows: List[Dict[str, Any]] = []
-        with ThreadPoolExecutor(max_workers=min(len(years), 6)) as pool:
-            futures = {
-                pool.submit(RatingsDataRepository._fetch_year_rows, ticker, yr): yr
-                for yr in years
-            }
-            for future in as_completed(futures):
-                rows = future.result()
-                if rows:
-                    all_rows.extend(rows)
-
-        all_rows.sort(key=lambda r: (r.get('source', ''), r.get('report_fiscal_year', 0)))
-        return all_rows
+        STG 16-Jul: this query is the Additional Data tab's bottleneck — the
+        optimizer serves it from the source-only index (no (ticker, source)
+        composite exists on coreiq_filing_metrics_v5, 12.5M rows) and
+        post-filters ticker, so a cold Azure buffer pays ~1,020 random page
+        reads ≈ 5.7s; warm ≈ 0.3s. Rows change only on data-team re-ingest,
+        so the 13h TTL lets the 12-hourly ratings warm sweep keep every
+        ticker's result permanently cached in-process.
+        """
+        return db_manager.execute_query_readonly(
+            RatingsDataRepository._ALL_ROWS_QUERY, {"ticker": ticker},
+        )
 
     # ─────────────────────────────────────────────────────────────────────
     #  EdgarTools fallback — regex credit rating extraction from 10-K text
@@ -11442,8 +11613,7 @@ class RatingsDataRepository:
 
             # ── Tier 0: disk cache (24h) — ratings change ~annually; a restart
             # must not cost another 30-60s section-text fetch per ticker.
-            _cache_file = (Path(__file__).resolve().parent.parent.parent
-                           / "data" / "edgar_cache" / "credit_ratings" / f"{ticker.upper()}.json")
+            _cache_file = edgar_cache_dir() / "credit_ratings" / f"{ticker.upper()}.json"
             try:
                 if _cache_file.exists():
                     _c = _json.loads(_cache_file.read_text())
@@ -11479,13 +11649,12 @@ class RatingsDataRepository:
                         filing_dates[fy] = fd
 
             try:
-                _cache_file.parent.mkdir(parents=True, exist_ok=True)
-                _cache_file.write_text(_json.dumps({
+                _write_cache_atomic(_cache_file, {
                     "cached_at": _time_mod.time(),
                     "results": {str(fy): v for fy, v in results.items()},
                     "filing_dates": {str(fy): fd.isoformat() for fy, fd in filing_dates.items()
                                      if hasattr(fd, 'isoformat')},
-                }))
+                })
             except Exception:
                 pass
 
@@ -11583,8 +11752,7 @@ class RatingsDataRepository:
             from concurrent.futures import ThreadPoolExecutor
 
             # ── Tier 0: disk cache ────────────────────────────────────────────
-            _cache_file = (_Path(__file__).resolve().parent.parent.parent
-                           / "data" / "edgar_cache" / "stores_by_country" / f"{ticker.upper()}.json")
+            _cache_file = edgar_cache_dir() / "stores_by_country" / f"{ticker.upper()}.json"
             try:
                 if _cache_file.exists():
                     _c = _json.loads(_cache_file.read_text())
@@ -11686,13 +11854,12 @@ class RatingsDataRepository:
                     period_dates[_y] = _instant
 
             try:
-                _cache_file.parent.mkdir(parents=True, exist_ok=True)
-                _cache_file.write_text(_json.dumps({
+                _write_cache_atomic(_cache_file, {
                     "cached_at": _time_mod.time(),
                     "countries": {cn: {str(y): v for y, v in yv.items()}
                                   for cn, yv in countries.items()},
                     "period_dates": {str(y): d.isoformat() for y, d in period_dates.items()},
-                }))
+                })
             except Exception:
                 pass
 
@@ -11865,7 +12032,7 @@ class RatingsDataRepository:
                 return {}
 
             # ── Tier 0: disk cache (survives restarts; 10-Ks change ~annually) ──
-            _cache_dir = _Path(__file__).resolve().parent.parent.parent / "data" / "edgar_cache" / "store_totals"
+            _cache_dir = edgar_cache_dir() / "store_totals"
             _cache_file = _cache_dir / f"{ticker.upper()}.json"
             try:
                 if _cache_file.exists():
@@ -11963,12 +12130,11 @@ class RatingsDataRepository:
 
             # ── Persist to disk cache (also caches the "no data" outcome) ────────
             try:
-                _cache_dir.mkdir(parents=True, exist_ok=True)
-                _cache_file.write_text(_json.dumps({
+                _write_cache_atomic(_cache_file, {
                     "cached_at": _time_mod.time(),
                     "totals": {str(y): v for y, v in totals.items()},
                     "period_dates": {str(y): d.isoformat() for y, d in period_dates.items()},
-                }))
+                })
             except Exception:
                 pass
 
@@ -12093,6 +12259,29 @@ class RatingsDataRepository:
         if _edgartools_path not in sys.path:
             sys.path.insert(0, _edgartools_path)
 
+        # Disk cache (24h) like store_totals/stores_by_country — this was the
+        # only EDGAR path without one, so every process restart re-paid the
+        # ~1s+ companyfacts call per ticker inside the render's bounded wait.
+        # Empty results are cached too: most tickers tag no area facts, and
+        # re-discovering that is as expensive as a hit.
+        import json as _json
+        import time as _time_mod
+        _cache_file = edgar_cache_dir() / "sqft" / f"{ticker.upper()}.json"
+        try:
+            if _cache_file.exists():
+                _c = _json.loads(_cache_file.read_text())
+                if _time_mod.time() - _c.get("cached_at", 0) < 86_400:
+                    return _c.get("rows", [])
+        except Exception:
+            pass
+
+        def _save_sqft_cache(rows: List[Dict[str, Any]]) -> None:
+            try:
+                _write_cache_atomic(
+                    _cache_file, {"cached_at": _time_mod.time(), "rows": rows})
+            except Exception:
+                pass
+
         _SQFT_CONCEPTS = {
             'us-gaap:AreaOfRealEstateProperty',
             'us-gaap:NetRentableArea',
@@ -12113,6 +12302,7 @@ class RatingsDataRepository:
             sqft_df = df[mask]
 
             if sqft_df.empty:
+                _save_sqft_cache([])
                 return []
 
             results = []
@@ -12128,9 +12318,10 @@ class RatingsDataRepository:
                     'fy': int(fy),
                     'fp': row.get('fiscal_period', ''),
                     'form': '',
-                    'end_date': row.get('period_end'),
+                    'end_date': str(row.get('period_end') or ''),
                     'label': row.get('label', ''),
                 })
+            _save_sqft_cache(results)
             return results
         except Exception:
             return []
@@ -12265,8 +12456,29 @@ class RatingsDataRepository:
                 metrics_map[group_key]["values"][fy] = val
             all_years.add(fy)
 
-        years = sorted(all_years)
-        metrics = sorted(metrics_map.values(), key=lambda x: x["metric"])
+        # Noise gate (16-Jul): disposal-group / held-for-sale / discontinued-
+        # operations dimension slices are accounting artifacts, not the
+        # footprint (CAL surfaced two "Disposal Group, Held-for-Sale, Not
+        # Discontinued Operations (sq ft) = 9" rows). Duplicates differing
+        # only by label capitalization ("Held-for-Sale" vs "Held-for-sale")
+        # merge into one series.
+        _NOISE_TERMS = ("disposal group", "held-for-sale", "held for sale",
+                        "discontinued operation")
+        deduped: Dict[tuple, Dict[str, Any]] = {}
+        for m in metrics_map.values():
+            label_lower = (m["metric"] or "").strip().lower()
+            if any(t in label_lower for t in _NOISE_TERMS):
+                continue
+            key = (label_lower, m.get("unit") or "")
+            kept = deduped.get(key)
+            if kept is None:
+                deduped[key] = m
+            else:
+                for _y, _v in m["values"].items():
+                    kept["values"].setdefault(_y, _v)
+
+        years = sorted({y for m in deduped.values() for y in m["values"]})
+        metrics = sorted(deduped.values(), key=lambda x: x["metric"])
 
         return {
             "years": years,
@@ -12276,26 +12488,43 @@ class RatingsDataRepository:
         }
 
     @staticmethod
-    def get_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
-        rows = RatingsDataRepository._fetch_all_rows(ticker)
-        years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
-        if years:
-            return date(years[0], 1, 31), date(years[-1], 12, 31)
+    def _all_known_years(ticker: str) -> List[int]:
+        """Every fiscal year the tab can display: DB rows MERGED with the
+        disk-cached XBRL store-total years.
 
-        # No DB rows: 225 of 341 companies land here (CASY, BKE, MCD, ...).
-        # Check XBRL store totals FIRST (disk-cached → ms) and BOUND every call —
-        # the credit-ratings wrapper can block up to 120s on an in-flight preload,
-        # which used to stall PAGE_date_range_fetch and blank the whole tab.
+        The DB alone can be a subset — CMG has only FY2024-25 in v5 while
+        XBRL tags FY2020-25 — and using it alone collapsed the tab's date
+        range and dropdowns to two years, hiding the older store data and the
+        whole Stores by Country section (recon years 2020-23 fell outside).
+        The XBRL read is bounded: warm hits are millisecond disk reads; a cold
+        fetch keeps running in the background for the next call.
+        """
+        rows = RatingsDataRepository._fetch_all_rows(ticker)
+        years = set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year'))
         from concurrent.futures import ThreadPoolExecutor as _TPE
-        _pool = _TPE(max_workers=2)
+        _pool = _TPE(max_workers=1)
         try:
             _f_tot = _pool.submit(RatingsDataRepository._edgartools_store_totals, ticker)
             try:
-                _tot = (_f_tot.result(timeout=3) or {}).get("totals", {})
-                if _tot:
-                    return date(min(_tot), 1, 31), date(max(_tot), 12, 31)
+                years |= set((_f_tot.result(timeout=3) or {}).get("totals", {}))
             except Exception:
                 pass
+        finally:
+            _pool.shutdown(wait=False)
+        return sorted(years)
+
+    @staticmethod
+    def get_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
+        years = RatingsDataRepository._all_known_years(ticker)
+        if years:
+            return date(years[0], 1, 31), date(years[-1], 12, 31)
+
+        # No DB rows and no XBRL totals — try credit ratings years, BOUNDED
+        # (the wrapper can block up to 120s on an in-flight preload, which
+        # used to stall PAGE_date_range_fetch and blank the whole tab).
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        _pool = _TPE(max_workers=1)
+        try:
             _f_cr = _pool.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
             try:
                 edgar_data = _f_cr.result(timeout=3) or {}
@@ -12310,9 +12539,7 @@ class RatingsDataRepository:
 
     @staticmethod
     def get_available_dates(ticker: str) -> List[date]:
-        rows = RatingsDataRepository._fetch_all_rows(ticker)
-        years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
-        return [date(y, 12, 31) for y in years]
+        return [date(y, 12, 31) for y in RatingsDataRepository._all_known_years(ticker)]
 
     @staticmethod
     def get_ratings_data(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
@@ -12341,6 +12568,10 @@ class RatingsDataRepository:
         # @st.cache_data has it warm for the next render. shutdown(wait=False) so we
         # never join the slow thread (a plain `with` would wait for it on exit = 50s).
         from concurrent.futures import ThreadPoolExecutor
+        # Fetches that missed their bounded wait this render — they keep
+        # running in the background, so the UI can retry-rerun to pick up the
+        # completed result instead of leaving a silently incomplete table.
+        _pending_fetches: List[str] = []
         _pool1 = ThreadPoolExecutor(max_workers=2)
         _f_db = _pool1.submit(RatingsDataRepository._fetch_all_rows, ticker)
         _f_cr = _pool1.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
@@ -12348,6 +12579,7 @@ class RatingsDataRepository:
             all_rows = _f_db.result(timeout=20)
         except Exception:
             all_rows = []
+            _pending_fetches.append("db_rows")
         _edgar_data_raw: Dict[str, Any] = {}
         try:
             # 2s: warm hits are disk-cache milliseconds; a cold section-text fetch
@@ -12355,7 +12587,7 @@ class RatingsDataRepository:
             # keeps running in the background and fills on the next rerun.
             _edgar_data_raw = _f_cr.result(timeout=2) or {}
         except Exception:
-            pass  # edgartools slow/cold → DB-only this render; warms for the next one
+            _pending_fetches.append("credit_ratings")
         _pool1.shutdown(wait=False)
 
         filtered = [r for r in all_rows if r.get('report_fiscal_year') and start_year <= r['report_fiscal_year'] <= end_year]
@@ -12657,15 +12889,15 @@ class RatingsDataRepository:
         try:
             _xbrl_totals_raw = _f_tot.result(timeout=_left()) or {}
         except Exception:
-            pass
+            _pending_fetches.append("store_totals")
         try:
             _sbc_raw = _f_sbc.result(timeout=_left()) or {}
         except Exception:
-            pass
+            _pending_fetches.append("stores_by_country")
         try:
             _sqft_raw = _f_sqft.result(timeout=_left()) or _sqft_raw
         except Exception:
-            pass
+            _pending_fetches.append("square_footage")
         _pool2.shutdown(wait=False)
 
         # ── Store-count source resolution ─────────────────────────────────────
@@ -12752,6 +12984,7 @@ class RatingsDataRepository:
         sbc_years: list = []
         sbc_countries: Dict[str, Any] = {}
         sbc_total_row: Dict[int, int] = {}
+        sbc_partial = False
         _sbc_countries_raw = _sbc_raw.get("countries", {}) or {}
         if _sbc_countries_raw:
             for _y in sorted(set(y for yv in _sbc_countries_raw.values() for y in yv)):
@@ -12762,6 +12995,19 @@ class RatingsDataRepository:
                 if _tot and abs(_sum - _tot) / _tot <= 0.02:
                     sbc_years.append(_y)
                     sbc_total_row[_y] = _tot
+            if not sbc_years:
+                # Partial disclosure (16-Jul, per business): the 10-K's country
+                # split exists but never sums near the worldwide total (CAL's
+                # covers only its Brand Portfolio segment stores). Hiding it
+                # entirely read as "no data" while the data-quality report
+                # listed the countries — show the split AS DISCLOSED instead,
+                # flagged partial so the UI labels it and adds no totals
+                # (the validated worldwide series above stays the total).
+                sbc_partial = True
+                sbc_years = [
+                    _y for _y in sorted(set(y for yv in _sbc_countries_raw.values() for y in yv))
+                    if start_year <= _y <= end_year
+                ]
             for _cn, _yv in _sbc_countries_raw.items():
                 _vals = {y: v for y, v in _yv.items() if y in sbc_years}
                 if _vals:
@@ -12797,7 +13043,8 @@ class RatingsDataRepository:
             "credit_ratings": credit_ratings,
             "store_counts": store_counts,
             "stores_by_country": {"years": sbc_years, "countries": sbc_countries,
-                                  "total_row": sbc_total_row},
+                                  "total_row": sbc_total_row,
+                                  "partial": sbc_partial},
             "square_footage": sqft_data,
             "has_credit_ratings": len(credit_ratings) > 0,
             "has_store_counts": len(store_counts) > 0,
@@ -12805,6 +13052,7 @@ class RatingsDataRepository:
             "has_square_footage": sqft_data.get("has_data", False),
             "_source": _source,
             "_sc_source": _sc_source,
+            "_pending_fetches": _pending_fetches,
         }
 
 

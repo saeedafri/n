@@ -806,13 +806,11 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
 
     from utils.server_logger import log_timing as _rt_log
 
-    # Session-state cache — reuse HTML when inputs unchanged
-    _cache_key = f"_ratings_html_{ticker}_{start_date}_{end_date}_{sort_ascending}"
-    _cached_html = st.session_state.get(_cache_key)
-    if _cached_html is not None:
-        _rt_log("RATINGS_render_cache_hit", 0, details=f"ticker={ticker}")
-        st.html(_cached_html)
-        return
+    # No session HTML pin here (removed 16-Jul): a render that missed a
+    # bounded background fetch (e.g. Stores by Country during the warm sweep)
+    # used to get cached and shown incomplete for the whole session. The data
+    # fetch is layer-cached (st.cache_data + disk + warm sweep) and ~1ms warm,
+    # so rebuilding per rerun is both cheap and self-healing.
     _t0 = _time.perf_counter()
     try:
         from data.repository import RatingsDataRepository
@@ -860,6 +858,32 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             st.info("No extracted data available. Check official filings.")
             return
         st.session_state.pop(f"_ratings_retry_{ticker}", None)
+
+        # Auto-heal partial renders (16-Jul): when a bounded background fetch
+        # missed its deadline (first view of a ticker right after a server
+        # restart / during the warm sweep), the payload arrives incomplete —
+        # e.g. DB store types instead of the XBRL total, no Stores by Country.
+        # The fetch keeps running, so retry-rerun up to twice instead of
+        # showing a wrong-looking table the user must manually refresh away.
+        _pending = data.get("_pending_fetches") or []
+        # Retry-rerun ONLY for store-shaping fetches. The table renders fine
+        # without credit ratings (most retailers have none), and on STG a cold
+        # credit-ratings extraction runs 30-60s — retrying for it burned ~15s
+        # of spinner per view for nothing (STG log 16-Jul:
+        # pending=credit_ratings retry=2 ×14). CR fills in on later reruns.
+        _retry_worthy = [p for p in _pending if p != "credit_ratings"]
+        _pending_key = f"_ratings_pending_retry_{ticker}"
+        if _pending:
+            _n_pending = st.session_state.get(_pending_key, 0)
+            _rt_log("RATINGS_partial_payload", 0,
+                    details=f"ticker={ticker} pending={','.join(_pending)} retry={_n_pending} retry_worthy={bool(_retry_worthy)}")
+            if _retry_worthy and _n_pending < 2:
+                st.session_state[_pending_key] = _n_pending + 1
+                with st.spinner("Loading full store & ratings data..."):
+                    _time.sleep(2.0)
+                st.rerun()
+        else:
+            st.session_state.pop(_pending_key, None)
 
         # When the country breakdown covers every year the worldwide series has,
         # the separate "Store Count" section would duplicate the Total (Worldwide)
@@ -965,33 +989,60 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
 
         # ── Stores by Country Section (edgartools XBRL) ──
         if sbc_years and sbc_countries:
-            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">Stores by Country</td>')
+            # Partial disclosure (16-Jul): the 10-K's split doesn't sum to the
+            # worldwide total (CAL discloses only Brand Portfolio stores by
+            # country) — label it and skip subtotals/total so nothing implies
+            # the rows add up; the Store Count section above keeps the total.
+            _sbc_partial = bool(stores_by_country.get("partial"))
+            _sbc_header = ("Stores by Country (partial — as disclosed in 10-K; does not sum to total)"
+                           if _sbc_partial else "Stores by Country")
+            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">{html_escape(_sbc_header)}</td>')
             for yr in years:
                 _parts.append('<td class="data-cell"></td>')
             _parts.append('</tr>')
 
-            sorted_countries = sorted(sbc_countries.keys())
-            # Put United States first, then alphabetical
-            us_variants = [c for c in sorted_countries if 'united states' in c.lower() or c.lower() in ('us', 'u.s.')]
-            rest = [c for c in sorted_countries if c not in us_variants]
-            ordered_countries = us_variants + rest
+            # Continent grouping (16-Jul-2026, per business), Excel-report
+            # layout: each continent's countries first (indented under it),
+            # then that continent's bold subtotal, and the grand total LAST.
+            # Single continent → grand total labeled by the continent;
+            # exactly North + South America → "Total (Americas)";
+            # otherwise "Total (Worldwide)".
+            from data.repository import group_countries_by_continent, stores_total_label
+            _sbc_groups = group_countries_by_continent(sbc_countries)
+            _multi_continent = len(_sbc_groups) > 1 and not _sbc_partial
+            _country_indent = "indent-2" if _multi_continent else "indent-1"
 
-            for country in ordered_countries:
-                _parts.append(f'<tr><td class="indent-1" style="font-weight:500;">{html_escape(country)}</td>')
-                for yr in years:
-                    val = sbc_countries[country].get(yr)
-                    if val is not None:
-                        _parts.append(f'<td class="data-cell" style="text-align:center;font-weight:600;">{int(val):,}</td>')
-                    else:
-                        _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
-                _parts.append('</tr>')
+            # Country rows render NORMAL weight so the bold continent/grand
+            # totals stand out (16-Jul, per business).
+            for _cont, _cont_countries, _cont_totals in _sbc_groups:
+                for country in _cont_countries:
+                    _parts.append(f'<tr><td class="{_country_indent}" style="font-weight:400;">{html_escape(country)}</td>')
+                    for yr in years:
+                        val = sbc_countries[country].get(yr)
+                        if val is not None:
+                            _parts.append(f'<td class="data-cell" style="text-align:center;font-weight:400;">{int(val):,}</td>')
+                        else:
+                            _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
+                    _parts.append('</tr>')
+                if _multi_continent:
+                    _parts.append(f'<tr class="row-total-strong"><td class="indent-1">Total ({html_escape(_cont)})</td>')
+                    for yr in years:
+                        _sv = _cont_totals.get(yr)
+                        if _sv is not None:
+                            _parts.append(f'<td class="data-cell" style="text-align:center;font-weight:700;">{int(_sv):,}</td>')
+                        else:
+                            _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
+                    _parts.append('</tr>')
 
-            # Worldwide total as the LAST row (bold, left) + YoY beneath —
-            # verified against the Store Count series; a year only renders
-            # country rows when they reconcile.
+            # Verified grand total as the LAST row (bold, left) + YoY beneath —
+            # a year only renders country rows when they reconcile. Label comes
+            # from stores_total_label: continent / Americas only when the listed
+            # countries account for the total EXACTLY; partial splits (CMG)
+            # honestly stay "Worldwide".
             sbc_total_row = stores_by_country.get("total_row", {})
+            _total_label = stores_total_label(_sbc_groups, sbc_total_row)
             if sbc_total_row:
-                _parts.append('<tr class="row-bold"><td class="indent-0" style="font-weight:700;">Total (Worldwide)</td>')
+                _parts.append(f'<tr class="row-total-strong"><td class="indent-0">{html_escape(_total_label)}</td>')
                 for yr in years:
                     _tv = sbc_total_row.get(yr)
                     if _tv is not None:
@@ -1072,7 +1123,6 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
         _t_html = _time.perf_counter()
         html = ''.join(_parts)
         st.html(html)
-        st.session_state[_cache_key] = html
         _html_ms = (_time.perf_counter() - _t_html) * 1000
         _total_ms = (_time.perf_counter() - _t0) * 1000
         _rt_log("RATINGS_html_render", _html_ms, details=f"ticker={ticker} html_len={len(html)}")
@@ -2410,6 +2460,14 @@ def render_page():
     .row-bold td.data-cell {
         font-weight: var(--font-weight-semibold) !important;
         color: var(--dark-grey) !important;
+    }
+
+    /* Strong totals (Stores by Country continent/grand totals): true bold,
+       full black — must be unmistakably heavier than the country rows. */
+    .row-total-strong td:first-child,
+    .row-total-strong td.data-cell {
+        font-weight: var(--font-weight-bold) !important;
+        color: var(--black) !important;
     }
 
     /* ========== UNDERLINES - 2px thick, dark grey ========== */
@@ -4234,18 +4292,33 @@ def render_page():
                         for sc in _rat_data["store_counts"]:
                             _vals = [int(sc["values"].get(yr)) if sc["values"].get(yr) is not None else None for yr in _rat_years]
                             _rat_rows.append({"label": sc["store_type"].title(), "values": _vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
-                    # Stores by Country section (+ worldwide total last)
+                    # Stores by Country section — continent-grouped like the UI:
+                    # countries indented under their continent subtotal when
+                    # multi-continent; grand total (continent / Americas /
+                    # Worldwide via stores_total_label) last.
                     _sbc = _rat_data.get("stores_by_country", {}) or {}
                     if _sbc.get("countries"):
-                        _rat_rows.append({"label": "Stores by Country", "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
-                        for _cn in sorted(_sbc["countries"]):
-                            _cv = _sbc["countries"][_cn]
-                            _vals = [int(_cv.get(yr)) if _cv.get(yr) is not None else None for yr in _rat_years]
-                            _rat_rows.append({"label": _cn, "values": _vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
+                        from data.repository import group_countries_by_continent, stores_total_label
+                        _sbc_part = bool(_sbc.get("partial"))
+                        _sbc_hdr = ("Stores by Country (partial — as disclosed in 10-K; does not sum to total)"
+                                    if _sbc_part else "Stores by Country")
+                        _rat_rows.append({"label": _sbc_hdr, "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
+                        _sbc_groups = group_countries_by_continent(_sbc["countries"])
+                        _multi_cont = len(_sbc_groups) > 1 and not _sbc_part
+                        _cn_indent = 2 if _multi_cont else 1
+                        for _cont, _cont_countries, _cont_totals in _sbc_groups:
+                            for _cn in _cont_countries:
+                                _cv = _sbc["countries"][_cn]
+                                _vals = [int(_cv.get(yr)) if _cv.get(yr) is not None else None for yr in _rat_years]
+                                _rat_rows.append({"label": _cn, "values": _vals, "is_bold": False, "indent": _cn_indent, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
+                            if _multi_cont:
+                                _vals = [int(_cont_totals.get(yr)) if _cont_totals.get(yr) is not None else None for yr in _rat_years]
+                                _rat_rows.append({"label": f"Total ({_cont})", "values": _vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
                         _trow = _sbc.get("total_row", {})
                         if _trow:
+                            _tlabel = stores_total_label(_sbc_groups, _trow)
                             _vals = [int(_trow.get(yr)) if _trow.get(yr) is not None else None for yr in _rat_years]
-                            _rat_rows.append({"label": "Total (Worldwide)", "values": _vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
+                            _rat_rows.append({"label": _tlabel, "values": _vals, "is_bold": True, "indent": 0, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
                     _rat_disp_dates = _rat_data.get("period_display_dates") or _rat_data.get("period_dates", {})
                     _rat_col_headers = [
                         _pd.strftime("%b-%d-%Y") if (_pd := _rat_disp_dates.get(yr)) and hasattr(_pd, "strftime") else str(yr)
@@ -4312,6 +4385,23 @@ def main():
 
     new_rerun_id("market_data")
     _main_start = _time.perf_counter()
+    # Queue-delay instrumentation (16-Jul): Streamlit processes a session's
+    # script runs SEQUENTIALLY — a click during a run waits for it to finish,
+    # then triggers a fresh full run. A run that starts <100ms after the
+    # previous one ended almost certainly served a click that sat QUEUED the
+    # whole previous run — that queue time is the "app is blocked" the user
+    # feels, and it never shows up inside any per-phase timing.
+    _md_now = _time.perf_counter()
+    _md_prev_end = st.session_state.get("_md_prev_run_end")
+    _md_gap_ms = (_md_now - _md_prev_end) * 1000 if _md_prev_end else -1.0
+    _md_gap_note = (" interaction_QUEUED_behind_previous_run"
+                    if 0 <= _md_gap_ms < 100 else "")
+    log_timing(
+        "MD_RUN_START", 0,
+        details=(f"tab={st.query_params.get('tab', '-')} "
+                 f"ticker={st.query_params.get('ticker', '-')} "
+                 f"gap_since_prev_run_end_ms={_md_gap_ms:.0f}{_md_gap_note}"),
+    )
     _tracker = PageLoadTracker("market_data")
     try:
         render_styles()
@@ -4325,7 +4415,6 @@ def main():
             footer_at_bottom=True
         )
 
-        import streamlit as st
         ticker_for_header = st.query_params.get("ticker", "M")
         render_header(full_width=True, current_page="market_data", ticker=ticker_for_header)
         _pre_render_elapsed = (_time.perf_counter() - _main_start) * 1000
@@ -4336,6 +4425,7 @@ def main():
         log_timing("MAIN_TOTAL", _main_total, details=f"includes pre_render={_pre_render_elapsed:.0f}ms")
         log_render_complete("market_data", _time.perf_counter() - _main_start)
         _tracker.finish()
+        st.session_state["_md_prev_run_end"] = _time.perf_counter()
     except Exception as _main_exc:
         import traceback as _tb
         log_exception(f"[MAIN_CRASH] UNHANDLED ticker={st.query_params.get('ticker')} tab={st.query_params.get('tab')} period={st.query_params.get('period_type')} err={_main_exc}\n{_tb.format_exc()}")

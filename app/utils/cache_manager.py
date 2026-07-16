@@ -493,6 +493,83 @@ def _background_warmup_thread():
         except Exception as e:
             log_error(f"[CACHE_WARM_BG] Buffer-pool warmup error: {e}")
 
+        # ── Track 3: Additional Data (ratings) full-universe warm sweep ───────
+        # STG evidence (15-Jul): the first open of the Additional Data tab per
+        # ticker burns 2-4.3s in bounded waits on cold EDGAR fetches, while a
+        # warm render is ~1ms. Every EDGAR layer persists on disk for 24h
+        # (edgar_cache/store_totals, stores_by_country, credit_ratings, sqft),
+        # so with App Service Always On this throttled walk over the whole
+        # company universe — repeated every 12h — keeps every ticker warm for
+        # every user. First sweep may take hours on a fresh cache dir (cold
+        # credit-rating extraction is 30-60s/ticker); later sweeps are mostly
+        # cache validations and finish in minutes. Runs LAST: it must never
+        # delay the page-critical tracks above. Disable with RATINGS_WARM_SWEEP=0.
+        if os.getenv("RATINGS_WARM_SWEEP", "1").strip().lower() not in ("0", "false", "no", "off"):
+            try:
+                from datetime import date as _sweep_date
+                from data.repository import CompanyRepository, RatingsDataRepository
+                from utils.server_logger import log_timing
+
+                _SWEEP_INTERVAL_S = 12 * 3600
+                _SWEEP_DELAY_S = 2.0   # gentle on SEC EDGAR and the DB
+                # Stay out of the post-boot window: STG restarts often
+                # (21 in the 9 days to 16-Jul), and right after a restart
+                # interactive traffic is already paying cold caches — the
+                # sweep competing for DB I/O then makes first clicks worse.
+                time.sleep(300)
+                while True:
+                    _sweep_t0 = time.time()
+                    log_timing("RATINGS_warm_sweep_start", 0,
+                               details=f"pid={os.getpid()}")
+                    # Buffer-pool warm for the tab's bottleneck query: no
+                    # (ticker, source) composite index exists on the 12.5M-row
+                    # coreiq_filing_metrics_v5, so MySQL serves the per-ticker
+                    # fetch from the source-only index + ticker post-filter —
+                    # ~1,020 scattered row pages, ~5.7s each on a cold Azure
+                    # buffer. One query touching those rows' off-index columns
+                    # pulls every page hot, making all per-ticker fetches ~0.3s.
+                    try:
+                        from core.database import db_manager as _dbm
+                        _dbm.execute_query_readonly(
+                            """
+                            SELECT COALESCE(SUM(LENGTH(value)), 0),
+                                   COALESCE(SUM(LENGTH(llm_query)), 0)
+                            FROM coreiq_filing_metrics_v5
+                            WHERE source IN ('credit_rating', 'store_count')
+                            """,
+                            {},
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        _rows = CompanyRepository.get_companies_rows() or []
+                        _sweep_tickers = sorted({str(r.get("ticker") or "").upper()
+                                                 for r in _rows if r.get("ticker")})
+                    except Exception:
+                        _sweep_tickers = []
+                    _warmed = 0
+                    for _tkr in _sweep_tickers:
+                        try:
+                            from data.repository import SegmentDataRepository
+                            RatingsDataRepository._fetch_all_rows(_tkr)
+                            RatingsDataRepository._edgartools_store_totals(_tkr)
+                            RatingsDataRepository._edgartools_stores_by_country(_tkr)
+                            RatingsDataRepository._edgartools_credit_ratings(_tkr)
+                            # DB-first like the render; only warms the EDGAR disk
+                            # layer for tickers whose sqft data isn't in the DB.
+                            RatingsDataRepository.get_square_footage_data(
+                                _tkr, 2000, _sweep_date.today().year)
+                            SegmentDataRepository._fye_month(_tkr)  # header dates
+                            _warmed += 1
+                        except Exception:
+                            pass
+                        time.sleep(_SWEEP_DELAY_S)
+                    log_timing("RATINGS_warm_sweep", (time.time() - _sweep_t0) * 1000,
+                               details=f"tickers={_warmed}/{len(_sweep_tickers)}")
+                    time.sleep(max(60.0, _SWEEP_INTERVAL_S - (time.time() - _sweep_t0)))
+            except Exception as e:
+                log_error(f"[CACHE_WARM_BG] Ratings warm sweep error: {e}")
+
     except Exception as exc:
         log_structured_error(exc, page="cache_manager", component="_background_warmup_thread",
                              operation="background_warmup", context="background thread fatal error")
@@ -512,6 +589,16 @@ def start_background_warmup() -> bool:
 
             _background_warmup_started = True
             builtins._mdp_warmup_started = True
+
+            # Explicit restart marker: fires exactly once per process, so
+            # counting these lines in the server log == counting restarts
+            # (STG restarted 21× in the 9 days to 16-Jul — each one wipes
+            # every in-process cache and re-triggers the cold-start window).
+            try:
+                from utils.server_logger import log_timing as _boot_log
+                _boot_log("APP_PROCESS_BOOT", 0, details=f"pid={os.getpid()}")
+            except Exception:
+                pass
 
             thread = threading.Thread(
                 target=_background_warmup_thread,
