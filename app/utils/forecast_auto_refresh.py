@@ -278,7 +278,8 @@ def _run_period(
                 f"msg={(r.get('message') or '')[:120]}"
             )
 
-    if _email_enabled():
+    # Only email when at least one company actually refreshed — no "0 updated" noise.
+    if _email_enabled() and _updated:
         try:
             send_model_refresh_email(
                 triggered_by=_TRIGGERED_BY, results=results, period_type=period_type,

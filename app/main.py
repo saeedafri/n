@@ -580,12 +580,29 @@ if _ENABLE_BG_WARMUP and _auth_ready_for_bg and os.environ.get("APP_BG_WARMUP_ST
 _ENABLE_BG_SCANNER = os.getenv("ENABLE_BG_SCANNER", "1").strip() != "0"
 if _ENABLE_BG_SCANNER and _auth_ready_for_bg and os.environ.get("APP_BG_SCANNER_STARTED") != "1":
     try:
-        _scanner_start = perf_counter()
-        from utils.background_scanner import ensure_cache_purge, init_background_scanner
-        ensure_cache_purge()
-        init_background_scanner(auto_start=True)
+        import threading as _scanner_threading
+
+        # Run OFF the render thread. ensure_cache_purge()/init_background_scanner()
+        # call _audit_file_cache() → an os.walk() of the filings blob cache, which
+        # on STG lives on the /home Azure SMB share and PERSISTS across restarts
+        # (~44k files). That walk took 52s SYNCHRONOUSLY here (STG log 17-Jul:
+        # MAIN_BG_SCANNER_INIT=52393ms) → the first authenticated page load after
+        # every restart was blank for ~52s. Every other warmup in this file is
+        # already threaded; this one wasn't. The env flag is set BEFORE the thread
+        # so a second concurrent request never spawns a duplicate.
+        def _init_bg_scanner():
+            _scanner_start = perf_counter()
+            try:
+                from utils.background_scanner import ensure_cache_purge, init_background_scanner
+                ensure_cache_purge()
+                init_background_scanner(auto_start=True)
+                log_timing("MAIN_BG_SCANNER_INIT", (perf_counter() - _scanner_start) * 1000)
+            except Exception:
+                log_exception("ERROR in background scanner init")
+
         os.environ["APP_BG_SCANNER_STARTED"] = "1"
-        log_timing("MAIN_BG_SCANNER_INIT", (perf_counter() - _scanner_start) * 1000)
+        _scanner_threading.Thread(target=_init_bg_scanner, daemon=True, name="bg-scanner-init").start()
+        del _scanner_threading
     except Exception:
         pass
 

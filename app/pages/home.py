@@ -17,31 +17,17 @@ new_rerun_id("home")
 hide_sidebar()
 
 # =============================================================================
-# START BACKGROUND FILINGS SCAN (INTELLIGENT - NON-BLOCKING)
-# Only scans if cache is insufficient. Skips redundant work for production.
+# NOTE: The background filings scanner is started ONCE per process in
+# app/main.py (see "BACKGROUND SCANNER", guarded by APP_BG_SCANNER_STARTED).
+# It used to be re-kicked here on every home render, but get_cache_audit()
+# does an UNCACHED os.walk() of the entire filings blob cache — on STG that
+# lives on the /home Azure SMB share (tens of thousands of files), so the walk
+# blocked the Streamlit render thread for 24–62s and the home page showed a
+# blank white screen the whole time (STG log 17-Jul: [CLICK->RENDER] home
+# render=60.39s SLOW while the page body itself was 77ms). Home displays
+# nothing about filings, so it must never touch that cache on the render path.
+# Do NOT re-add a synchronous scanner/audit/purge call here.
 # =============================================================================
-import time as _perf_time
-
-# Intelligent BG_SCAN - only runs if needed
-try:
-    from utils.background_scanner import init_background_scanner, get_scan_progress, get_cache_audit, ensure_cache_purge
-
-    # ONE-TIME PURGE: Must run BEFORE cache audit — regardless of scan decision.
-    # If cache is "healthy" but stale (pre-ixbrl update), purge must still clear it.
-    ensure_cache_purge()
-
-    # Check cache status after purge (purge clears it → audit will say SCAN needed)
-    _audit_start = _perf_time.time()
-    _audit = get_cache_audit()
-    _audit_end = _perf_time.time()
-
-    if _audit.get('should_scan'):
-        _init_result = init_background_scanner(auto_start=True)
-
-    pass  # Background scan logic executed
-
-except Exception as e:
-    log_structured_error(e, page="home", component="bg_scan_init", operation="BACKGROUND_SCAN_INIT")
 
 @st.cache_data(ttl=300)
 def _load_companies():

@@ -16,6 +16,7 @@ import os
 import smtplib
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
@@ -1215,7 +1216,13 @@ def send_model_refresh_email(
         return False
 
     if not recipients:
-        recipients = _get_admin_recipients()
+        # Explicit override wins (FORECAST_EMAIL_RECIPIENTS = comma-separated emails);
+        # otherwise the admin + super_user list from the DB (+ hardcoded fallback).
+        _override = os.getenv("FORECAST_EMAIL_RECIPIENTS", "").strip()
+        if _override:
+            recipients = [e.strip() for e in _override.split(",") if e.strip() and "@" in e]
+        else:
+            recipients = _get_admin_recipients()
 
     # Include the human who triggered the run. Guard on "@" so a non-email
     # trigger label (e.g. the "auto-scheduler" automated run) is never added as
@@ -1296,6 +1303,30 @@ def send_model_refresh_email(
   <p style="color:#888;font-size:11px;margin-top:16px;">Coresight Research · Revenue Forecasting · Automated notification</p>
 </body></html>"""
 
+    # Prefer the rich tabular + charts report (per company: forecast table, model
+    # backtest MAPE table, forecast+scenario chart, model-accuracy chart). The simple
+    # summary table built above stays as the fallback if the rich build or its DB
+    # reads fail — the notification is never lost.
+    inline_images: List[Any] = []
+    try:
+        from data import forecast_email_report as _rep
+        _period = "quarterly" if _is_quarterly else "annual"
+        _details = _rep.build_details(results, _period)
+        if _details:
+            _chart_src: Dict[str, str] = {}
+            for _det in _details:
+                for _cid, _png in _rep.render_charts(_det):
+                    inline_images.append((_cid, _png))
+                    _chart_src[_cid] = f"cid:{_cid}"
+            html_body = _rep.build_report_html(
+                period_type=_period, triggered_by=triggered_by, now_str=now_str,
+                details=_details, chart_src=_chart_src,
+            )
+    except Exception as _exc:
+        log_structured_error(_exc, page="forecast_refresh_service",
+                             component="send_model_refresh_email", operation="build_rich_html")
+        inline_images = []
+
     # Test mode: enrichment always runs (so it can be verified in logs), but SMTP
     # send is skipped unless FORECAST_EMAIL_TEST_MODE is explicitly set to "0".
     # Default "1" preserves the previous behaviour of not sending live emails.
@@ -1304,22 +1335,41 @@ def send_model_refresh_email(
                  "Set FORECAST_EMAIL_TEST_MODE=0 to enable live sends.")
         return True
 
-    cc = [a for a in _FORECAST_CC if a not in recipients]
+    # Cc: default dataautomation@; FORECAST_EMAIL_CC overrides it (empty string = no Cc).
+    _cc_env = os.getenv("FORECAST_EMAIL_CC")
+    if _cc_env is None:
+        cc = [a for a in _FORECAST_CC if a not in recipients]
+    else:
+        cc = [e.strip() for e in _cc_env.split(",")
+              if e.strip() and "@" in e and e.strip() not in recipients]
     all_recipients = recipients + cc
 
     try:
-        msg = MIMEMultipart("alternative")
+        if inline_images:
+            # multipart/related so the cid: chart images render inline (Outlook/Gmail).
+            msg = MIMEMultipart("related")
+            _alt = MIMEMultipart("alternative")
+            _alt.attach(MIMEText(html_body, "html", "utf-8"))
+            msg.attach(_alt)
+            for _cid, _png in inline_images:
+                _img = MIMEImage(_png, _subtype="png")
+                _img.add_header("Content-ID", f"<{_cid}>")
+                _img.add_header("Content-Disposition", "inline", filename=f"{_cid}.png")
+                msg.attach(_img)
+        else:
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
         msg["Subject"] = f"Forecast Refresh — {len(updated)} Updated · {now_str}"
         msg["From"] = from_addr
         msg["To"] = ", ".join(recipients)
         if cc:
             msg["Cc"] = ", ".join(cc)
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
             server.starttls()
             server.login(from_addr, password)
             server.sendmail(from_addr, all_recipients, msg.as_string())
+        log_info(f"[forecast_email] SENT to={recipients} cc={cc}")
         return True
     except Exception as exc:
         log_structured_error(

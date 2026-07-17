@@ -3769,11 +3769,22 @@ def main():
                 html_path = _disk_path
 
             else:
-                # File not in 2-year local cache — stream from Azure into /tmp/
-                # (no permanent disk cache: /tmp is OS-managed and auto-cleaned)
+                # File not yet cached — download into the PERSISTENT filings cache
+                # (/home on Azure, survives restarts AND deploys). The first view of
+                # a filing pays the Azure download once; every later view (any user,
+                # even after a deploy) hits the fast path above and is instant.
+                # Previously this streamed to /tmp (auto-wiped) so it re-downloaded
+                # forever — fine when the cache root was ephemeral wwwroot, wrong now
+                # that /home is a persistent 500GB share.
                 _spinner_t0 = _perf_time.time()
                 with st.spinner("Downloading filing from Azure..."):
-                    html_path = _ensure_local_blob_optimized(blob_name, use_temp=True)
+                    html_path = _ensure_local_blob_optimized(blob_name, use_temp=False)
+                    if not (html_path and os.path.exists(html_path)):
+                        # SAFETY NET: if the PERSISTENT /home write ever fails
+                        # (SMB hiccup, permission, quota) never block the user —
+                        # fall back to an ephemeral /tmp copy so the filing still
+                        # opens. It just won't be cached that one time.
+                        html_path = _ensure_local_blob_optimized(blob_name, use_temp=True)
                 _dl_elapsed = _perf_time.time() - _spinner_t0
                 if html_path and os.path.exists(html_path):
                     _dl_size_mb = os.path.getsize(html_path) / (1024 * 1024)
@@ -3792,7 +3803,7 @@ def main():
                             if _fb_disk and os.path.exists(_fb_disk):
                                 _fallback_html_path = _fb_disk
                             else:
-                                _fallback_html_path = _ensure_local_blob_optimized(_fb_blob, use_temp=True)
+                                _fallback_html_path = _ensure_local_blob_optimized(_fb_blob, use_temp=False)
                             if _fallback_html_path and os.path.exists(_fallback_html_path):
                                 blob_name = _fb_blob  # update so downloads use correct path
                         except Exception:

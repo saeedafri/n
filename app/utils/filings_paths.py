@@ -58,11 +58,49 @@ def _announce(path, source):
         _LOGGED = True
         persistent = source in ("FILINGS_CACHE_DIR", "azure_home_persistent")
         try:
-            from utils.server_logger import log_info
-            log_info(
+            # WARNING level on purpose — the STG server log only keeps WARNING+,
+            # and this one line is how we verify persistence after a deploy.
+            from utils.server_logger import log_warning
+            log_warning(
                 f"[FILINGS_CACHE_ROOT] path={path} source={source} "
                 f"persistent={'yes' if persistent else 'NO-wiped-on-deploy'}"
             )
         except Exception:
             pass
+        _log_cache_stats_async(path)
     return path
+
+
+def _log_cache_stats_async(root):
+    """Log how much is actually cached, so the server log can answer
+    'how many filings are downloaded?' — walking /home (SMB) can be slow, so
+    do it on a daemon thread that never blocks startup."""
+    def _walk():
+        files = pdfs = htmls = 0
+        total = 0
+        for dpath, _dirs, fnames in os.walk(os.path.join(root, "filings_blob_cache")):
+            for fn in fnames:
+                files += 1
+                low = fn.lower()
+                if low.endswith(".pdf"):
+                    pdfs += 1
+                elif low.endswith((".html", ".htm")):
+                    htmls += 1
+                try:
+                    total += os.path.getsize(os.path.join(dpath, fn))
+                except OSError:
+                    pass
+        try:
+            from utils.server_logger import log_warning
+            log_warning(
+                f"[FILINGS_CACHE_STATS] files={files} pdfs={pdfs} htmls={htmls} "
+                f"size_mb={total / 1048576:.1f} root={root}"
+            )
+        except Exception:
+            pass
+
+    try:
+        import threading
+        threading.Thread(target=_walk, name="filings-cache-stats", daemon=True).start()
+    except Exception:
+        pass
