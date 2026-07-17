@@ -41,9 +41,12 @@ NON_SEC_FALLBACK_DOC_TYPES = frozenset({
     "interim-report-Q4",
 })
 
-_APP_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_CACHE_FILE = os.path.join(_APP_ROOT, "data", "non_sec_blob_cache.json")
-_LOCAL_BLOB_CACHE = os.path.join(_APP_ROOT, "data", "filings_blob_cache")
+# Persistent /home root on Azure (survives deploys), <repo>/data locally.
+# _LOCAL_BLOB_CACHE MUST match background_scanner.FILINGS_BLOB_CACHE_DIR.
+from utils.filings_paths import filings_data_root
+_DATA_ROOT = filings_data_root()
+_CACHE_FILE = os.path.join(_DATA_ROOT, "non_sec_blob_cache.json")
+_LOCAL_BLOB_CACHE = os.path.join(_DATA_ROOT, "filings_blob_cache")
 
 # 24-hour TTL for locally-sourced data (only changes when scanner runs)
 _LOCAL_CACHE_TTL = 86_400

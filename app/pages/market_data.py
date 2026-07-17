@@ -923,18 +923,30 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             merged = sorted(set(years) | set(sqft_years))
             years = merged if sort_ascending else list(reversed(merged))
 
+        _rat_inc_key = f"_ratings_incomplete_{ticker}"
         if not years or (not credit_ratings and not store_counts and not sbc_countries and not sqft_metrics):
             # Data may still be warming in the background (bounded fetch waits).
-            # Retry up to twice before concluding there is nothing — prevents a
-            # blank tab from being the first thing the user sees.
+            # Poll a bounded number of times via the CALLER's st.fragment timer —
+            # NEVER _time.sleep() the session thread (Streamlit runs a session's
+            # runs sequentially on one thread, so sleeping here froze tab clicks for
+            # the whole session; STG "Additional Data → any tab is dead"). The
+            # fragment re-runs this subtree without blocking the thread.
             _retry_key = f"_ratings_retry_{ticker}"
             _n_retry = st.session_state.get(_retry_key, 0)
-            if _n_retry < 2:
+            if _n_retry < 4:
                 st.session_state[_retry_key] = _n_retry + 1
-                with st.spinner("Loading store & ratings data..."):
-                    _time.sleep(1.5)
-                _clear_md_tab_loader()
-                st.rerun()
+                st.session_state[_rat_inc_key] = True   # keep the fragment polling
+                st.markdown(
+                    '<div style="display:flex;align-items:center;gap:12px;padding:24px 0;">'
+                    '<div style="width:22px;height:22px;border:3px solid #eee;border-top:3px solid #d62e2f;'
+                    'border-radius:50%;animation:rd-spin 0.8s linear infinite;"></div>'
+                    '<span style="font-family:Montserrat,sans-serif;font-size:15px;color:#888;">'
+                    'Loading store &amp; ratings data&hellip;</span></div>'
+                    '<style>@keyframes rd-spin{to{transform:rotate(360deg)}}</style>',
+                    unsafe_allow_html=True)
+                return
+            st.session_state.pop(_retry_key, None)
+            st.session_state[_rat_inc_key] = False      # give up → stop polling
             st.info("No extracted data available. Check official filings.")
             return
         st.session_state.pop(f"_ratings_retry_{ticker}", None)
@@ -957,14 +969,18 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             _n_pending = st.session_state.get(_pending_key, 0)
             _rt_log("RATINGS_partial_payload", 0,
                     details=f"ticker={ticker} pending={','.join(_pending)} retry={_n_pending} retry_worthy={bool(_retry_worthy)}")
-            if _retry_worthy and _n_pending < 2:
+            if _retry_worthy and _n_pending < 4:
+                # Keep polling via the caller's fragment timer (no thread sleep) and
+                # render the partial table below meanwhile — self-heals to the full
+                # payload without ever blocking tab clicks.
                 st.session_state[_pending_key] = _n_pending + 1
-                with st.spinner("Loading full store & ratings data..."):
-                    _time.sleep(2.0)
-                _clear_md_tab_loader()
-                st.rerun()
+                st.session_state[_rat_inc_key] = True
+            else:
+                st.session_state.pop(_pending_key, None)
+                st.session_state[_rat_inc_key] = False
         else:
             st.session_state.pop(_pending_key, None)
+            st.session_state[_rat_inc_key] = False
 
         # When the country breakdown covers every year the worldwide series has,
         # the separate "Store Count" section would duplicate the Total (Worldwide)
@@ -1629,7 +1645,7 @@ def render_page():
     # st-key- wrapper class so it never leaks to other buttons.
     st.markdown(
         "<style>"
-        '[class*="st-key-_xlbtn_"]{display:flex!important;justify-content:flex-end!important;}'
+        '[class*="st-key-_xlbtn_"]{width:100%!important;display:flex!important;justify-content:flex-end!important;}'
         '[class*="st-key-_xlbtn_"] button{'
         "background:transparent!important;border:1px solid #D62E2F!important;"
         "color:#D62E2F!important;border-radius:4px!important;padding:6px 14px!important;"
@@ -2077,7 +2093,19 @@ def render_page():
         _period_type_eff_title = _period_type_sel_title
         _period_type_fell_back = False
     else:
+        _t_apt = _time.perf_counter()
         _available_period_types = get_available_period_types(selected_ticker, selected_tab)
+        _apt_ms = (_time.perf_counter() - _t_apt) * 1000
+        if _apt_ms > 300:
+            # Chief suspect inside the opaque tab_setup span: for segment_data
+            # this can re-run the same 9,493-row _fetch_all_db_rows the date-range
+            # and render also run — so segment fetches its rows 2-3× per render.
+            # Aliased import: `log_timing` is a local later in render_page (line
+            # ~4442), so the bare name is unbound here — use an alias like the
+            # other in-function timing calls (_lt / _seg_log_timing / _rt_log).
+            from utils.server_logger import log_timing as _apt_log
+            _apt_log("PAGE_available_period_types", _apt_ms,
+                     details=f"tab={selected_tab} ticker={selected_ticker} n={len(_available_period_types) if _available_period_types else 0}")
         if _period_type_sel_title in _available_period_types:
             _period_type_eff_title = _period_type_sel_title
         else:
@@ -3103,7 +3131,16 @@ def render_page():
 
         # 2. "To Currency": Get from forex table where from_currency = reported_currency
         # Include reported_currency as first option (1:1 conversion), then other currencies
+        _t_toc = _time.perf_counter()
         _forex_currencies = ForexRepository.get_to_currencies(_early_reported_currency) if _early_reported_currency else []
+        _toc_ms = (_time.perf_counter() - _t_toc) * 1000
+        if _toc_ms > 300:
+            # Dominant cost inside filter_area_render (the currency dropdown).
+            # On balance_sheet this alone was ~1.3s on STG. Aliased import — see
+            # PAGE_available_period_types note above (log_timing is a local here).
+            from utils.server_logger import log_timing as _toc_log
+            _toc_log("PAGE_forex_to_currencies", _toc_ms,
+                     details=f"tab={selected_tab} from={_early_reported_currency} n={len(_forex_currencies)}")
         # Build list: reported_currency first, then other valid targets
         _to_options = [_early_reported_currency] if _early_reported_currency else ["USD"]
         # Add other currencies (excluding reported_currency to avoid duplicate)
@@ -3432,22 +3469,20 @@ def render_page():
                 log_structured_error(_sp_e, page="market_data", component="render_page", operation="get_shares_with_price")
 
             if _price_history:
-                _, _dl_col = st.columns([8, 2])
-                with _dl_col:
-                    _lazy_excel_download(
-                        f"cp_{selected_ticker}",
-                        f"{selected_ticker}_Company_Profile.xlsx",
-                        lambda: export_company_profile_simple_excel(
-                            company_name=company.name or "",
-                            ticker=selected_ticker,
-                            profile_rows=get_profile_rows_for_excel(company),
-                            price_history=_price_history,  # 60 months of data
-                            currency=_sq_currency,
-                            shares_price_data=_shares_price_data,
-                            compensation_rows=_comp_rows_for_xl,
-                            compensation_col_defs=_comp_col_defs_for_xl,
-                        ),
-                    )
+                _lazy_excel_download(
+                    f"cp_{selected_ticker}",
+                    f"{selected_ticker}_Company_Profile.xlsx",
+                    lambda: export_company_profile_simple_excel(
+                        company_name=company.name or "",
+                        ticker=selected_ticker,
+                        profile_rows=get_profile_rows_for_excel(company),
+                        price_history=_price_history,  # 60 months of data
+                        currency=_sq_currency,
+                        shares_price_data=_shares_price_data,
+                        compensation_rows=_comp_rows_for_xl,
+                        compensation_col_defs=_comp_col_defs_for_xl,
+                    ),
+                )
         except Exception as _xl_e:
             log_structured_error(_xl_e, page="market_data", component="render_page", operation="EXCEL_DOWNLOAD_BALANCE")
 
@@ -3505,9 +3540,7 @@ def render_page():
                 _rates = [historical_rate_map.get(_bs_data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(_bs_data.periods))]
                 _bs_rows.append({"label": _it.label.strip(), "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_balance_sheet_bold_row(_it.label), "indent": get_balance_sheet_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_balance_sheet_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
             return export_financial_excel("Balance Sheet", company.name or "", selected_ticker, [p.label for p in _bs_data.periods], _bs_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-        _, _dl_col = st.columns([8, 2])
-        with _dl_col:
-            _lazy_excel_download(f"bs_{selected_ticker}", f"{selected_ticker}_Balance_Sheet.xlsx", _build_bs_xl)
+        _lazy_excel_download(f"bs_{selected_ticker}", f"{selected_ticker}_Balance_Sheet.xlsx", _build_bs_xl)
         _timings['balance_sheet_excel'] = (_time.perf_counter() - _t_xl_bs) * 1000
         _timings['balance_sheet_total'] = (_time.perf_counter() - _t0_tab) * 1000
     elif selected_tab == "cash_flow":
@@ -3534,9 +3567,7 @@ def render_page():
                 _rates = [historical_rate_map.get(_cf_data.periods[ci].date, conversion_rate) if historical_rate_map else conversion_rate for ci in range(len(_cf_data.periods))]
                 _cf_rows.append({"label": _it.label.strip(), "values": [v * _rates[ci] * units_scale if v is not None else None for ci, v in enumerate(_it.values)], "is_bold": is_cash_flow_bold_row(_it.label), "indent": get_cash_flow_indent_level(_it.label), "is_percent": False, "is_text": False, "has_separator": has_cash_flow_grey_separator(_it.label), "is_estimated": [False] * len(_it.values)})
             return export_financial_excel("Cash Flow", company.name or "", selected_ticker, [p.label for p in _cf_data.periods], _cf_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-        _, _dl_col = st.columns([8, 2])
-        with _dl_col:
-            _lazy_excel_download(f"cf_{selected_ticker}", f"{selected_ticker}_Cash_Flow.xlsx", _build_cf_xl)
+        _lazy_excel_download(f"cf_{selected_ticker}", f"{selected_ticker}_Cash_Flow.xlsx", _build_cf_xl)
         _timings['cash_flow_excel'] = (_time.perf_counter() - _t_xl_cf) * 1000
         _timings['cash_flow_total'] = (_time.perf_counter() - _t0_tab) * 1000
     elif selected_tab == "income_statement":
@@ -3561,9 +3592,7 @@ def render_page():
             if _is_cached is not None:
                 _timings['income_data_fetch'] = 0.0
                 st.html(_is_cached)
-                _, _dl_col = st.columns([8, 2])
-                with _dl_col:
-                    _lazy_excel_download(f"is_{selected_ticker}", f"{selected_ticker}_Income_Statement.xlsx", _build_is_xl)
+                _lazy_excel_download(f"is_{selected_ticker}", f"{selected_ticker}_Income_Statement.xlsx", _build_is_xl)
             else:
                 _t0 = _time.perf_counter()
                 data = IncomeStatementRepository.get_income_statement_data(
@@ -3644,9 +3673,7 @@ def render_page():
 
                     # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_is = _time.perf_counter()
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _lazy_excel_download(f"is_{selected_ticker}", f"{selected_ticker}_Income_Statement.xlsx", _build_is_xl)
+                    _lazy_excel_download(f"is_{selected_ticker}", f"{selected_ticker}_Income_Statement.xlsx", _build_is_xl)
                     _timings['income_excel'] = (_time.perf_counter() - _t_xl_is) * 1000
 
                 else:
@@ -3678,9 +3705,7 @@ def render_page():
             if _ks_cached is not None:
                 _timings['key_stats_fetch'] = 0.0
                 st.html(_ks_cached)
-                _, _dl_col = st.columns([8, 2])
-                with _dl_col:
-                    _lazy_excel_download(f"ks_{selected_ticker}", f"{selected_ticker}_Key_Stats.xlsx", _build_ks_xl)
+                _lazy_excel_download(f"ks_{selected_ticker}", f"{selected_ticker}_Key_Stats.xlsx", _build_ks_xl)
             else:
                 _t0 = _time.perf_counter()
                 log_info(
@@ -3856,9 +3881,7 @@ def render_page():
 
                     # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_ks = _time.perf_counter()
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _lazy_excel_download(f"ks_{selected_ticker}", f"{selected_ticker}_Key_Stats.xlsx", _build_ks_xl)
+                    _lazy_excel_download(f"ks_{selected_ticker}", f"{selected_ticker}_Key_Stats.xlsx", _build_ks_xl)
                     _timings['key_stats_excel'] = (_time.perf_counter() - _t_xl_ks) * 1000
 
                 else:
@@ -3898,9 +3921,7 @@ def render_page():
                 st.html(_cached_html)
                 if _cached_notes:
                     st.caption("Ratios assumptions: " + " | ".join(_cached_notes))
-                _, _dl_col = st.columns([8, 2])
-                with _dl_col:
-                    _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
+                _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
                 _timings['ratios_render'] = (_time.perf_counter() - _t0_render) * 1000
                 _timings['ratios_total'] = (_time.perf_counter() - _t0_tab) * 1000
             else:
@@ -3968,9 +3989,7 @@ def render_page():
 
                     # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_rat_inner = _time.perf_counter()
-                    _, _dl_col = st.columns([8, 2])
-                    with _dl_col:
-                        _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
+                    _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
                     _timings['ratios_excel'] = (_time.perf_counter() - _t_xl_rat_inner) * 1000
 
                     # Store in session_state for instant reuse on next rerun
@@ -4309,9 +4328,7 @@ def render_page():
                     else:
                         _seg_col_headers.append(str(yr))
                 return export_financial_excel("Segment Data", company.name or "", selected_ticker, _seg_col_headers, _seg_rows, units_label, st.session_state.get("target_currency", "USD"), start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
-            _, _dl_col = st.columns([8, 2])
-            with _dl_col:
-                _lazy_excel_download(f"seg_{selected_ticker}", f"{selected_ticker}_Segment_Data.xlsx", _build_seg_xl)
+            _lazy_excel_download(f"seg_{selected_ticker}", f"{selected_ticker}_Segment_Data.xlsx", _build_seg_xl)
             _timings['segment_data_excel'] = (_time.perf_counter() - _t_xl_seg) * 1000
 
             _timings['segment_data_total'] = (_time.perf_counter() - _t0_tab) * 1000
@@ -4321,11 +4338,29 @@ def render_page():
     elif selected_tab == "ratings":
         _t0_tab = _time.perf_counter()
         try:
-            _t0 = _time.perf_counter()
-            render_ratings_data(selected_ticker, start_date, end_date, sort_ascending)
-            _timings['ratings_render'] = (_time.perf_counter() - _t0) * 1000
+            # Non-blocking auto-heal: render the ratings/store table inside a fragment
+            # that re-runs ONLY this subtree every 1.5s while background fetches are
+            # still warming (render_ratings_data sets `_ratings_incomplete_<ticker>`).
+            # This replaced a `_time.sleep()`+`st.rerun()` loop that parked the
+            # session's single script thread, freezing every tab click for seconds
+            # (STG: "Additional Data → any tab is dead"). run_every is fixed at
+            # decoration, so once the flag flips to complete we do ONE full rerun to
+            # re-decorate with run_every=None and stop polling.
+            _rat_inc_key = f"_ratings_incomplete_{selected_ticker}"
+            _rat_incomplete = st.session_state.get(_rat_inc_key, True)
 
-            # Excel download (built lazily — only when the user clicks Excel)
+            @st.fragment(run_every=(1.5 if _rat_incomplete else None))
+            def _ratings_poll_fragment():
+                _t0 = _time.perf_counter()
+                render_ratings_data(selected_ticker, start_date, end_date, sort_ascending)
+                _timings['ratings_render'] = (_time.perf_counter() - _t0) * 1000
+                if _rat_incomplete and not st.session_state.get(_rat_inc_key, True):
+                    st.rerun(scope="app")
+
+            _ratings_poll_fragment()
+
+            # Excel download — OUTSIDE the polling fragment (it is itself an
+            # st.fragment; nesting is avoided). Built lazily only on click.
             _t_xl_rat = _time.perf_counter()
             def _build_rat_xl():
                 from utils.excel_export import export_financial_excel
@@ -4388,9 +4423,7 @@ def render_page():
                     ]
                     return export_financial_excel("Ratings & Store Data", company.name or "", selected_ticker, _rat_col_headers, _rat_rows, "", "USD", start_date.strftime("%b %Y"), end_date.strftime("%b %Y"))
                 return None
-            _, _dl_col = st.columns([8, 2])
-            with _dl_col:
-                _lazy_excel_download(f"rat_{selected_ticker}", f"{selected_ticker}_Ratings.xlsx", _build_rat_xl)
+            _lazy_excel_download(f"rat_{selected_ticker}", f"{selected_ticker}_Ratings.xlsx", _build_rat_xl)
             _timings['ratings_excel'] = (_time.perf_counter() - _t_xl_rat) * 1000
 
             _timings['ratings_total'] = (_time.perf_counter() - _t0_tab) * 1000
@@ -4458,11 +4491,24 @@ def main():
     _md_gap_ms = (_md_now - _md_prev_end) * 1000 if _md_prev_end else -1.0
     _md_gap_note = (" interaction_QUEUED_behind_previous_run"
                     if 0 <= _md_gap_ms < 100 else "")
+    # Memory at render START. STG slowdowns line up with low `avail` — under
+    # memory pressure st.cache_data evicts entries, so "cached" tab data
+    # re-hits the DB and slow queries thrash. Logging rss/avail at start (and
+    # the delta at end) makes that correlation visible per render.
+    _md_rss0 = _md_avail0 = None
+    try:
+        from utils.server_logger import ram_snapshot_mb as _ram_snap
+        _md_rss0, _md_used0, _md_total0, _md_avail0 = _ram_snap()
+    except Exception:
+        _ram_snap = None
+    _mem_note = (f" rss={_md_rss0:.0f}MB avail={_md_avail0:.0f}MB"
+                 f"{' LOW_MEM' if (_md_avail0 is not None and _md_avail0 < 500) else ''}"
+                 if _md_rss0 is not None else "")
     log_timing(
         "MD_RUN_START", 0,
         details=(f"tab={st.query_params.get('tab', '-')} "
                  f"ticker={st.query_params.get('ticker', '-')} "
-                 f"gap_since_prev_run_end_ms={_md_gap_ms:.0f}{_md_gap_note}"),
+                 f"gap_since_prev_run_end_ms={_md_gap_ms:.0f}{_md_gap_note}{_mem_note}"),
     )
     _tracker = PageLoadTracker("market_data")
     try:
@@ -4484,7 +4530,17 @@ def main():
         render_page()
         render_coresight_footer(full_width=True, stick_to_bottom=True)
         _main_total = (_time.perf_counter() - _main_start) * 1000
-        log_timing("MAIN_TOTAL", _main_total, details=f"includes pre_render={_pre_render_elapsed:.0f}ms")
+        _mem_end = ""
+        if _ram_snap is not None and _md_rss0 is not None:
+            try:
+                _rss1, _u1, _t1, _avail1 = _ram_snap()
+                _mem_end = (f" | mem rss={_rss1:.0f}MB (delta={_rss1 - _md_rss0:+.0f}MB) "
+                            f"avail={_avail1:.0f}MB"
+                            f"{' LOW_MEM' if (_avail1 is not None and _avail1 < 500) else ''}")
+            except Exception:
+                pass
+        log_timing("MAIN_TOTAL", _main_total,
+                   details=f"includes pre_render={_pre_render_elapsed:.0f}ms{_mem_end}")
         log_render_complete("market_data", _time.perf_counter() - _main_start)
         _tracker.finish()
         st.session_state["_md_prev_run_end"] = _time.perf_counter()

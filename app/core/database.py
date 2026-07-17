@@ -7,11 +7,74 @@ from typing import Any, Dict, List, Optional, Generator, Callable, Tuple
 from functools import wraps
 import threading
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 
 from .config import config
+
+
+def _install_db_slow_query_logging(engine, engine_label: str) -> None:
+    """Attach SQLAlchemy listeners that log EVERY slow SQL statement with the
+    context needed to explain WHY it was slow: server-execute+row-transfer time,
+    connection-pool saturation, and live process/host memory.
+
+    This is the missing signal on STG: the per-repository timers show a query
+    took 34s but not whether it was (a) waiting for a pooled connection because
+    the pool is exhausted, (b) the DB genuinely executing/transferring rows, or
+    (c) the app deserialising rows under memory pressure. `after_cursor_execute`
+    fires once the buffered cursor has the full result, so `execute_ms` here =
+    server query + network row transfer. Compare it to the repository wrapper's
+    total to isolate Python-side (GC/deserialise) cost. Threshold via
+    DB_SLOW_QUERY_MS (default 800ms) to keep the log quiet on fast queries.
+    """
+    import os as _os
+
+    try:
+        _slow_ms = float(_os.getenv("DB_SLOW_QUERY_MS", "800").strip() or "800")
+    except (TypeError, ValueError):
+        _slow_ms = 800.0
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        conn.info["_q_start"] = time.perf_counter()
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        try:
+            _t0 = conn.info.pop("_q_start", None)
+            if _t0 is None:
+                return
+            _ms = (time.perf_counter() - _t0) * 1000.0
+            if _ms < _slow_ms:
+                return
+            pool = engine.pool
+            try:
+                _pool = (f"pool_checkedout={pool.checkedout()} "
+                         f"pool_overflow={pool.overflow()} pool_size={pool.size()}")
+            except Exception:
+                _pool = "pool=?"
+            try:
+                from utils.server_logger import ram_snapshot_mb, log_warning
+                _rss, _used, _total, _avail = ram_snapshot_mb()
+                _mem = (f"rss={_rss:.0f}MB avail={_avail:.0f}MB"
+                        if _rss is not None and _avail is not None else "mem=?")
+            except Exception:
+                log_warning = None
+                _mem = "mem=?"
+            _sql = " ".join(str(statement).split())[:140]
+            _msg = (f"[DB_SLOW] engine={engine_label} execute_ms={_ms:.0f} | "
+                    f"{_pool} | {_mem} | sql={_sql}")
+            if log_warning is not None:
+                log_warning(_msg, _stacklevel=2)
+        except Exception:
+            pass  # instrumentation must never break a query
+
+    try:
+        from utils.server_logger import log_warning as _lw
+        _lw(f"[DB_INSTR] slow-query listeners attached engine={engine_label} threshold_ms={_slow_ms:.0f}", _stacklevel=2)
+    except Exception:
+        pass
 
 # Import error logger only
 try:
@@ -136,6 +199,15 @@ class DatabaseManager:
                 isolation_level="AUTOCOMMIT",
                 skip_autocommit_rollback=True,
             )
+
+            # Slow-query diagnostics on BOTH engines (write + read-only). Logs
+            # execute+transfer time, pool saturation and memory for any query
+            # over DB_SLOW_QUERY_MS — the signal missing from STG until now.
+            try:
+                _install_db_slow_query_logging(self._engine, "main")
+                _install_db_slow_query_logging(self._read_engine, "read")
+            except Exception:
+                pass
 
             # ── Step 2: Warm ALL connections in ONE parallel batch ────────
             # On SSL (Azure): 6 connections across both engines — all SSL
@@ -318,9 +390,30 @@ class DatabaseManager:
             self.connect()
         engine = self._read_engine or self._engine
         try:
+            _t_ck = time.perf_counter()
             with engine.connect() as conn:
+                _checkout_ms = (time.perf_counter() - _t_ck) * 1000.0
+                _t_ex = time.perf_counter()
                 result = conn.execute(text(query), params or {})
-                return [dict(row._mapping) for row in result]
+                rows = [dict(row._mapping) for row in result]
+                _exec_ms = (time.perf_counter() - _t_ex) * 1000.0
+                # Split the two costs the aggregate timers hide: pool-wait
+                # (checkout) vs query-execute+row-deserialise. A large
+                # checkout_ms => the pool is exhausted (queries holding
+                # connections); a large exec_ms with a small [DB_SLOW]
+                # execute_ms => Python-side deserialise under memory pressure.
+                if _checkout_ms > 500.0 or _exec_ms > 1500.0:
+                    try:
+                        from utils.server_logger import log_warning
+                        log_warning(
+                            f"[DB_READ_SPLIT] checkout_ms={_checkout_ms:.0f} "
+                            f"exec+deserialize_ms={_exec_ms:.0f} rows={len(rows)} "
+                            f"sql={' '.join(str(query).split())[:100]}",
+                            _stacklevel=2,
+                        )
+                    except Exception:
+                        pass
+                return rows
         except Exception as e:
             log_structured_error(e, page="database", component="DatabaseManager.execute_query_readonly", operation="readonly_query")
             return []

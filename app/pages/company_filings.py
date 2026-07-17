@@ -326,11 +326,11 @@ def _timing_decorator(func_name):
 
 # Local cache root where blobs are downloaded on-demand
 # (used only as a transient cache to keep the rest of the code unchanged)
-FILINGS_BASE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "data",
-    "filings_blob_cache",
-)
+# Persistent /home root on Azure (survives deploys), <repo>/data locally.
+# MUST match background_scanner.FILINGS_BLOB_CACHE_DIR so page-reads find
+# scanner-writes. See utils.filings_paths for the why.
+from utils.filings_paths import filings_data_root
+FILINGS_BASE_DIR = os.path.join(filings_data_root(), "filings_blob_cache")
 
 # DISABLED: Static file serving - using data/filings_blob_cache/ instead
 # Streamlit static folder has 1GB limit, we serve directly from data folder
@@ -3829,6 +3829,7 @@ def main():
                 header_cols = st.columns([0.8, 0.2])
                 with header_cols[0]:
                     _header_metadata = {}
+                    _hdr_t0 = _perf_time.time()
                     try:
                         _header_metadata = FilingMetricRepository.get_header_metadata(
                             ticker=company,
@@ -3844,6 +3845,8 @@ def main():
                             operation="GET_HEADER_METADATA",
                             context=f"ticker={company} year={year} doc_type={doc_type} filing_unit={filing_unit}",
                         )
+                    log_timing("FL_header_metadata", (_perf_time.time() - _hdr_t0) * 1000,
+                               f"ticker={company} doc={doc_type} year={year}")
                     header_html = _render_filing_header_html(
                         company_name=company_name,
                         ticker=company,
@@ -3941,7 +3944,8 @@ def main():
 
                     render_sec_html_viewer(html_path, st.session_state.cf_highlight_fact_id)
 
-
+                log_timing("FL_viewer_render", (_perf_time.time() - _render_viewer_start) * 1000,
+                           f"type={'pdf' if is_non_sec_doc else 'html'} ticker={company} doc={doc_type}")
 
                 # Calculate total time from view button click to render complete
                 if '_view_button_click_time' in st.session_state:

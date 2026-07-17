@@ -46,9 +46,9 @@ except ImportError:
         logging.error(f"[blob_doc_type_discovery] {exc}")
 
 # ─── paths ────────────────────────────────────────────────────────────────────
-_DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"
-)
+# Persistent /home root on Azure (survives deploys), <repo>/data locally.
+from utils.filings_paths import filings_data_root
+_DATA_DIR = filings_data_root()
 _STATE_FILE = os.path.join(_DATA_DIR, "blob_doc_type_scan_state.json")
 
 # ─── doc types the application currently knows about ──────────────────────────

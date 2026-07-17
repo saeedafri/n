@@ -29,8 +29,40 @@ import threading
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import glob
+
+# Lightweight stand-in for azure.storage.blob.BlobProperties.
+# list_blobs() returns full BlobProperties objects, each carrying nested
+# LeaseProperties / CopyProperties / ContentSettings / ImmutabilityPolicy
+# objects + a metadata dict — ~5-10x heavier than what we use. The scanner
+# holds every company's blobs at once, so retaining the full objects is what
+# drives RSS to GBs (and fragments the glibc heap). We only ever read
+# name / etag / last_modified downstream, so keep only those.
+BlobLite = namedtuple("BlobLite", ["name", "etag", "last_modified"])
+
+
+def _to_blob_lite(blob):
+    """Extract the three fields we use; drop the heavy Azure object immediately."""
+    return BlobLite(
+        getattr(blob, "name", "") or "",
+        getattr(blob, "etag", None),
+        getattr(blob, "last_modified", None),
+    )
+
+
+def _trim_heap():
+    """Return freed heap back to the OS after the scan.
+
+    The scan transiently allocates tens of thousands of small objects; when
+    Python frees them glibc keeps the pages on its free list (fragmentation),
+    so RSS stays high. malloc_trim(0) forces the release. No-op off glibc.
+    """
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
 
 # Import server logger
 try:
@@ -61,8 +93,10 @@ except Exception:
 # ============================================================================
 PREFETCH_YEARS = 2
 
-# File cache directory
-_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+# File cache directory — persistent /home root on Azure (survives deploys),
+# <repo>/data locally. See utils.filings_paths for the why.
+from utils.filings_paths import filings_data_root
+_DATA_DIR = filings_data_root()
 FILINGS_BLOB_CACHE_DIR     = os.path.join(_DATA_DIR, "filings_blob_cache")
 FILINGS_METADATA_CACHE_DIR = os.path.join(_DATA_DIR, "filings_metadata_cache")
 os.makedirs(FILINGS_BLOB_CACHE_DIR, exist_ok=True)
@@ -944,6 +978,10 @@ class BackgroundFilingsScanner:
             except Exception:
                 pass
 
+            # Release the freed blob-scan memory back to the OS now, rather than
+            # letting the fragmented heap sit at its peak until a heartbeat trim.
+            _trim_heap()
+
             overall_duration = time.time() - overall_start
 
         except Exception as e:
@@ -964,7 +1002,11 @@ class BackgroundFilingsScanner:
                 return None
 
             prefix = _blob_prefix_path(ticker) + "/"
-            all_blobs = list(container.list_blobs(name_starts_with=prefix))
+            # Build lightweight blobs one-at-a-time so the full Azure
+            # BlobProperties graph for a company is never all resident at once —
+            # each heavy object is dropped right after we copy the 3 fields used.
+            all_blobs = [_to_blob_lite(b)
+                         for b in container.list_blobs(name_starts_with=prefix)]
 
             if not all_blobs:
                 return None

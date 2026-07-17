@@ -3508,6 +3508,9 @@ def render_page() -> None:
                 alerts_on=_ec_tb_alerts_on,
                 open_email_dialog=lambda: _email_alerts_dialog(all_tickers_meta),
             )
+            # Calendar is FULL WIDTH when no card is selected (unchanged design); the
+            # body splits 3:1 only while a detail card is open, so the card sits beside
+            # a slightly-narrower grid.
             if _has_panel:
                 _cal_body, _detail_body = st.columns([3, 1], gap="medium")
             else:
@@ -3524,8 +3527,7 @@ def render_page() -> None:
                 )
                 log_timing("EC_PAGE_STCALENDAR_RENDER", (_time.perf_counter() - _t_fc_render) * 1000,
                            details=f"events={len(fc_events)} view={st.session_state.ec_view}", level="WARNING")
-                # Footer: count scoped to the displayed period only (no all-time
-                # total, no decorative Q1–Q4 badges — they were non-interactive).
+                # Footer: count scoped to the displayed period only.
                 st.html(
                     f'<div class="ec-year-foot"><span>Showing <b>{_n_total:,}</b> '
                     f'events in {html.escape(_period_label)}</span></div>'
@@ -3533,11 +3535,6 @@ def render_page() -> None:
 
             if _has_panel and _detail_body is not None:
                 with _detail_body:
-                    # Detail card in its own right-hand column — beside the calendar,
-                    # never on top of it. CLOSE bumps ec_cal_version to remount the
-                    # calendar: st_calendar keeps its last eventClick across a plain
-                    # rerun, so once ec_selected_event is cleared the stale click would
-                    # re-fire and instantly re-open the panel — remounting flushes it.
                     with st.container(key="ec_detail_col"):
                         _render_detail_panel(st.session_state.ec_selected_event)
                         if st.button("✕ Close", key="ec_close_detail"):

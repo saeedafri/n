@@ -10,6 +10,17 @@ import os
 # glibc malloc arenas — must be set before first heap allocation
 os.environ.setdefault("MALLOC_ARENA_MAX", "2")
 
+# Optional Python allocation tracing for the memory forensics report. Started
+# as early as possible (before heavy imports) so [MEM_REPORT] can name the exact
+# file:line holding RAM. Off unless MEM_TRACEMALLOC=1 (has ~memory+CPU overhead).
+if os.environ.get("MEM_TRACEMALLOC", "0").strip().lower() in ("1", "true", "yes", "on"):
+    try:
+        import tracemalloc as _tm
+        if not _tm.is_tracing():
+            _tm.start(int(os.environ.get("MEM_TRACEMALLOC_FRAMES", "1") or "1"))
+    except Exception:
+        pass
+
 from pathlib import Path
 
 # =============================================================================
@@ -510,9 +521,15 @@ if _auth_ready_for_bg:
                 _ok = 0
                 try:
                     from core.database import db_manager as _fm_db
+                    # Warm only the single largest filer by default. Its DISTINCT
+                    # scan pulls the shared coreiq_filing_metrics_v5 index into
+                    # MySQL's buffer pool, which is what makes EVERY ticker's
+                    # later prefetch fast — so warming 8 filers serially (~183s)
+                    # just saturated the 5-conn read pool while real users waited.
+                    # IT can override via the FILINGS_WARMUP_TICKERS App Setting.
                     _tickers = [t.strip().upper() for t in os.getenv(
                         "FILINGS_WARMUP_TICKERS",
-                        "AMZN,AAPL,WMT,TGT,COST,HD,NKE,M",
+                        "AMZN",
                     ).split(",") if t.strip()]
                     _q = (
                         "SELECT DISTINCT doc_type, "
@@ -605,9 +622,21 @@ if _auth_ready_for_bg and os.environ.get("APP_NON_SEC_WARMUP_STARTED") != "1":
 # =============================================================================
 if _auth_ready_for_bg and os.getenv("EARNINGS_ALERT_DISPATCH", "1").strip() != "0":
     try:
+        import threading as _ea_tick_threading
+
         from utils.earnings_alert_dispatcher import run_earnings_alert_dispatch_tick
 
-        run_earnings_alert_dispatch_tick()
+        # Run OFF the render thread (daemon). This tick loops enabled prefs ×
+        # lookback days calling get_calendar_events(); on a cold DB buffer pool the
+        # first calendar query (EC_QUERY_FYE_MAP) took ~10.4s and this ran
+        # SYNCHRONOUSLY in the main bootstrap BEFORE pg.run() — so the home page's
+        # first paint waited the full ~10.4s (STG log 16-Jul). The 120s min-interval
+        # guard inside the tick keeps the per-request kick cheap; the bg dispatch
+        # thread below still owns the steady-state loop.
+        _ea_tick_threading.Thread(
+            target=run_earnings_alert_dispatch_tick, daemon=True
+        ).start()
+        del _ea_tick_threading
     except Exception:
         pass
 

@@ -50,12 +50,10 @@ try:
 except ImportError:
     DISKCACHE_AVAILABLE = False
 
-# Cache directory configuration
-DEFAULT_CACHE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "data",
-    "filings_metadata_cache"
-)
+# Cache directory configuration — persistent /home root on Azure (survives
+# deploys), <repo>/data locally. See utils.filings_paths for the why.
+from utils.filings_paths import filings_data_root
+DEFAULT_CACHE_DIR = os.path.join(filings_data_root(), "filings_metadata_cache")
 
 # Ensure cache directory exists
 os.makedirs(DEFAULT_CACHE_DIR, exist_ok=True)

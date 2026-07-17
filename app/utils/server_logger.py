@@ -380,7 +380,12 @@ def _start_heartbeat():
                     except Exception:
                         pass
                 if _n % 3 == 0 and os.getenv("SERVER_RAM_CENSUS", "1").strip().lower() in ("1", "true", "yes", "on"):
-                    _ram_census()
+                    # Detailed forensic report (types by count+bytes, glibc heap,
+                    # rssAnon/File, sessions, caches, optional tracemalloc sites).
+                    try:
+                        mem_report("heartbeat")
+                    except Exception:
+                        _ram_census()  # fall back to the lightweight census
             except Exception:
                 pass
             time.sleep(_interval)
@@ -417,6 +422,193 @@ def _ram_census() -> None:
         _sizes = None
     except Exception as _e:
         log_warning(f"[RAM_CENSUS] failed: {type(_e).__name__}: {str(_e)[:120]}")
+
+
+def _glibc_mallinfo():
+    """Read glibc heap accounting via mallinfo2(). Separates memory the process
+    genuinely uses (uordblks) from memory glibc freed but has NOT returned to
+    the OS (fordblks = fragmentation/retention) — the number that explains an
+    RSS far larger than live Python objects."""
+    try:
+        import ctypes as _ct
+        _c = _ct.c_size_t
+
+        class _MI2(_ct.Structure):
+            _fields_ = [(_n, _c) for _n in (
+                "arena", "ordblks", "smblks", "hblks", "hblkhd", "usmblks",
+                "fsmblks", "uordblks", "fordblks", "keepcost")]
+
+        _libc = _ct.CDLL("libc.so.6")
+        _libc.mallinfo2.restype = _MI2
+        _mi = _libc.mallinfo2()
+        return {
+            "arena_MB": _mi.arena / 1e6,        # heap from sbrk (main arena)
+            "mmap_MB": _mi.hblkhd / 1e6,         # large allocs via mmap
+            "in_use_MB": _mi.uordblks / 1e6,     # actually allocated & used
+            "free_retained_MB": _mi.fordblks / 1e6,  # freed, NOT returned to OS
+            "releasable_MB": _mi.keepcost / 1e6,     # trimmable top-of-heap
+        }
+    except Exception:
+        return None
+
+
+def mem_report(tag: str = "heartbeat") -> None:
+    """Detailed 'where is my RAM' forensic report. One log block, greppable by
+    [MEM_REPORT]. Answers: is RSS in live Python objects (which types?), in glibc
+    heap fragmentation, or in file-backed pages — plus Streamlit session/cache
+    accumulation. Set MEM_TRACEMALLOC=1 (and it auto-starts tracemalloc at boot)
+    to also print the top Python allocation SITES (file:line)."""
+    import gc as _gc
+    import sys as _sys
+    from collections import defaultdict as _dd
+    _out = [f"[MEM_REPORT] tag={tag}"]
+
+    # ── 1. Process RSS split: anonymous (heap/data) vs file-backed (code/mmap)
+    try:
+        _anon = _file = _shr = _swap = None
+        try:
+            with open("/proc/self/smaps_rollup") as _f:
+                for _l in _f:
+                    if _l.startswith("Anonymous:"):
+                        _anon = int(_l.split()[1]) / 1024.0
+                    elif _l.startswith("Swap:") and not _l.startswith("SwapPss"):
+                        _swap = int(_l.split()[1]) / 1024.0
+                    elif _l.startswith("Shared_"):
+                        _shr = (_shr or 0) + int(_l.split()[1]) / 1024.0
+                    elif _l.startswith("Private_Dirty:"):
+                        _file = None  # placeholder; RssFile via status below
+        except Exception:
+            pass
+        _rssf = None
+        try:
+            with open("/proc/self/status") as _f:
+                for _l in _f:
+                    if _l.startswith("RssAnon:"):
+                        _anon = int(_l.split()[1]) / 1024.0
+                    elif _l.startswith("RssFile:"):
+                        _rssf = int(_l.split()[1]) / 1024.0
+                    elif _l.startswith("VmSwap:"):
+                        _swap = int(_l.split()[1]) / 1024.0
+        except Exception:
+            pass
+        _rss, _used, _total, _avail = ram_snapshot_mb()
+        _out.append(
+            f"rss={('?' if _rss is None else f'{_rss:.0f}')}MB "
+            f"rssAnon(heap)={('?' if _anon is None else f'{_anon:.0f}')}MB "
+            f"rssFile(code/mmap)={('?' if _rssf is None else f'{_rssf:.0f}')}MB "
+            f"swap={('?' if _swap is None else f'{_swap:.0f}')}MB "
+            f"host_avail={('?' if _avail is None else f'{_avail:.0f}')}MB")
+    except Exception:
+        pass
+
+    # ── 2. glibc heap: used vs freed-but-retained (fragmentation)
+    try:
+        _mi = _glibc_mallinfo()
+        if _mi:
+            _out.append(
+                "glibc: in_use={in_use_MB:.0f}MB free_retained={free_retained_MB:.0f}MB "
+                "arena={arena_MB:.0f}MB mmap={mmap_MB:.0f}MB releasable={releasable_MB:.0f}MB".format(**_mi))
+    except Exception:
+        pass
+
+    # ── 3. Python objects: ONE pass — count by type, size the big categories.
+    #    Catches the List[Dict] row data (dict/str/list/tuple) the DataFrame-only
+    #    census cannot see, plus numpy arrays.
+    try:
+        _objs = _gc.get_objects()
+        _cnt = _dd(int)
+        _byt = _dd(int)
+        _np_bytes = 0
+        _df_bytes = 0
+        try:
+            import numpy as _np
+            _ndarray = _np.ndarray
+        except Exception:
+            _ndarray = ()
+        try:
+            import pandas as _pd
+            _DF = _pd.DataFrame
+        except Exception:
+            _DF = ()
+        _SIZED = {"dict", "str", "bytes", "list", "tuple", "set", "frozenset", "float", "int"}
+        for _o in _objs:
+            _t = type(_o).__name__
+            _cnt[_t] += 1
+            if _ndarray and isinstance(_o, _ndarray):
+                try:
+                    _np_bytes += int(_o.nbytes)
+                except Exception:
+                    pass
+            elif _DF and type(_o) is _DF:
+                try:
+                    _df_bytes += int(_o.memory_usage(deep=True).sum())
+                except Exception:
+                    pass
+            elif _t in _SIZED:
+                try:
+                    _byt[_t] += _sys.getsizeof(_o)
+                except Exception:
+                    pass
+        _total_objs = len(_objs)
+        _gc_tracked_MB = sum(_byt.values()) / 1e6
+        _out.append(
+            f"py_objects={_total_objs:,} numpy={_np_bytes/1e6:.0f}MB "
+            f"dataframes={_df_bytes/1e6:.0f}MB shallow_sized={_gc_tracked_MB:.0f}MB")
+        _top_c = sorted(_cnt.items(), key=lambda _x: -_x[1])[:12]
+        _out.append("top_types_by_COUNT: " + " ".join(f"{_t}={_c:,}" for _t, _c in _top_c))
+        _top_b = sorted(_byt.items(), key=lambda _x: -_x[1])[:8]
+        _out.append("top_types_by_BYTES(shallow): "
+                    + " ".join(f"{_t}={_b/1e6:.0f}MB" for _t, _b in _top_b))
+        _objs = None
+    except Exception as _e:
+        _out.append(f"py_objects_failed={type(_e).__name__}")
+
+    # ── 4. Streamlit accumulation: live sessions + cache_data entries
+    try:
+        from streamlit.runtime import get_instance as _gi
+        _rt = _gi()
+        _ns = "?"
+        try:
+            _ns = len(_rt._session_mgr.list_sessions())
+        except Exception:
+            try:
+                _ns = len(list(_rt._session_mgr._session_info_by_id))
+            except Exception:
+                pass
+        _out.append(f"streamlit_sessions={_ns}")
+    except Exception:
+        pass
+    try:
+        from streamlit.runtime.caching import cache_data as _cd
+        _fc = getattr(getattr(_cd, "_data_caches", None), "_function_caches", {}) or {}
+        _n_fns = len(_fc)
+        _n_entries = 0
+        for _c in _fc.values():
+            try:
+                _mc = getattr(_c, "_mem_cache", None) or getattr(_c, "cache", None)
+                _n_entries += len(_mc) if _mc is not None else 0
+            except Exception:
+                pass
+        _out.append(f"st_cache_data functions={_n_fns} entries={_n_entries}")
+    except Exception:
+        pass
+
+    # ── 5. tracemalloc: the exact allocation SITES (opt-in, has overhead)
+    try:
+        if os.getenv("MEM_TRACEMALLOC", "0").strip().lower() in ("1", "true", "yes", "on"):
+            import tracemalloc as _tm
+            if _tm.is_tracing():
+                _snap = _tm.take_snapshot()
+                for _stat in _snap.statistics("lineno")[:12]:
+                    _fr = _stat.traceback[0]
+                    _out.append(f"  ALLOC {_stat.size/1e6:.1f}MB count={_stat.count:,} "
+                                f"{_fr.filename.split('/')[-1]}:{_fr.lineno}")
+            else:
+                _out.append("  tracemalloc=ENABLED_BUT_NOT_TRACING (call tracemalloc.start() at boot)")
+    except Exception:
+        pass
+
+    log_warning(" | ".join(_out))
 
 
 def log_render_complete(page: str, render_s: float, tab: str = "", data_status: str = "") -> None:
