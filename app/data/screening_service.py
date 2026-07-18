@@ -2007,6 +2007,13 @@ def refresh_segment_cache_if_stale(force: bool = False) -> dict:
             )
             t0 = time.perf_counter()
             stats = build_segment_values_cache()
+            # Same freshness gate rebuilds the additional-data cache (credit
+            # ratings / store counts) — both derive from coreiq_filing_metrics_v5.
+            try:
+                _addl = build_additional_data_cache()
+                log_info(f"[SEG_REFRESH] additional-data cache: {_addl}")
+            except Exception as _ae:
+                log_error(f"[SEG_REFRESH] additional-data cache build failed: {_ae}")
             elapsed = time.perf_counter() - t0
 
             db_manager.execute_update(
@@ -3798,22 +3805,66 @@ def _resolve_source_display(source_raw: str, source_detail: str) -> str:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
+def get_keydevs_events_count(
+    tickers: tuple,
+    categories: tuple,
+    days: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> int:
+    """Total number of key-dev events matching the criteria — for the paginated
+    results header. Cheap COUNT (no JOIN; index-served by idx_ticker_cat /
+    idx_cat_date). Lets the UI show the honest total instead of a capped count."""
+    if not tickers or not categories:
+        return 0
+    ticker_sql = _build_ticker_in_list(tickers)
+    cat_sql = ", ".join(f"'{c}'" for c in categories)
+    date_clause = _build_keydev_date_clause({
+        "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
+        "start_date": start_date,
+        "end_date": end_date,
+        "days": days,
+    })
+    query = f"""
+        SELECT COUNT(*) AS c
+        FROM coreiq_company_events e
+        WHERE e.ticker IN ({ticker_sql})
+          AND e.event_category IN ({cat_sql})
+          {date_clause}
+    """
+    try:
+        rows = db_manager.execute_query_readonly(query)
+        return int(rows[0]["c"]) if rows else 0
+    except Exception as exc:
+        log_error(f"[SCREENING] get_keydevs_events_count failed: {exc}")
+        return 0
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def get_keydevs_events_for_tickers(
     tickers: tuple,
     categories: tuple,
     days: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-) -> pd.DataFrame:
-    """Return event-per-row DataFrame for Key Devs mode.
+    limit: int = 500,
+    before_date: Optional[str] = None,
+    before_id: Optional[int] = None,
+) -> Tuple[pd.DataFrame, Optional[Tuple[str, int]]]:
+    """Return (events_df, next_cursor) for Key Devs mode — ONE page, newest-first.
 
-    Columns returned:
+    Keyset pagination: pass the previous page's ``next_cursor`` as
+    (before_date, before_id) to fetch the next-older page. ``next_cursor`` is None
+    once the final page is returned (fewer than ``limit`` rows). This replaces the
+    old hard ``LIMIT 2000`` that silently truncated "All History" to the newest
+    ~17 days (Jul-2026 alone has 2,118 events; the table holds ~119k since 2016).
+
+    Display columns:
       Key Developments By Date, Key Developments by Type, Company Name(s),
-      Key Development Headline, Summary,
-      Key Development Sources, Source Reference
+      Key Development Headline, Summary, Key Development Sources, Source Reference
     """
     if not tickers or not categories:
-        return pd.DataFrame()
+        return pd.DataFrame(), None
 
     # Simple exact match - categories are exact DB event_category values
     query_cats = list(categories)
@@ -3827,8 +3878,19 @@ def get_keydevs_events_for_tickers(
         "days": days,
     })
 
+    # Keyset (seek) pagination: fetch the page strictly older than the cursor.
+    # before_date is our own ISO date string; before_id is cast to int — safe to
+    # inline (same convention as ticker_sql/cat_sql literals above).
+    keyset_clause = ""
+    if before_date is not None and before_id is not None:
+        keyset_clause = (
+            f"AND (e.event_date < '{before_date}' "
+            f"OR (e.event_date = '{before_date}' AND e.event_id < {int(before_id)}))"
+        )
+    _lim = max(1, int(limit))
     query = f"""
         SELECT
+            e.event_id,
             e.event_date,
             e.event_subtype,
             e.event_category,
@@ -3846,17 +3908,27 @@ def get_keydevs_events_for_tickers(
         WHERE e.ticker IN ({ticker_sql})
           AND e.event_category IN ({cat_sql})
           {date_clause}
+          {keyset_clause}
         ORDER BY e.event_date DESC, e.event_id DESC
-        LIMIT 2000
+        LIMIT {_lim}
     """
     try:
         rows = db_manager.execute_query_readonly(query)
     except Exception as exc:
         log_error(f"[SCREENING] get_keydevs_events_for_tickers failed: {exc}")
-        return pd.DataFrame()
+        return pd.DataFrame(), None
 
     if not rows:
-        return pd.DataFrame()
+        return pd.DataFrame(), None
+
+    # Next-page cursor = last row's (event_date, event_id). None on the final page
+    # (a short page means no more rows exist).
+    next_cursor: Optional[Tuple[str, int]] = None
+    if len(rows) >= _lim:
+        _last = rows[-1]
+        _ld = _last.get("event_date")
+        if _ld is not None and _last.get("event_id") is not None:
+            next_cursor = (_ld.isoformat(), int(_last["event_id"]))
 
     records = []
     for r in rows:
@@ -3887,7 +3959,7 @@ def get_keydevs_events_for_tickers(
             "Source Reference": source_ref,
         })
 
-    return pd.DataFrame(records)
+    return pd.DataFrame(records), next_cursor
 
 
 # =============================================================================
@@ -4032,9 +4104,138 @@ def _fetch_revenue_from_is(ticker_tuple: tuple) -> Dict[str, float]:
     return results
 
 
+# ── Precomputed additional-data cache (credit ratings / store counts) ─────────
+# The live latest-value queries scan coreiq_filing_metrics_v5 (14.4M rows) and,
+# on a cold buffer, the credit-rating fetch took ~12s (the optimizer picks
+# idx_v2_source and reads every credit_rating row). That is the buffer-dependent
+# slowness behind the screener's "additional data" lag. These values change only
+# when a new 10-K lands, so we precompute the latest value per ticker into a tiny
+# (~150-row) cache table read in <1ms, refreshed by the same scheduler as the
+# segment cache (see refresh_segment_cache_if_stale). Falls back to the live
+# query only until the cache is first built.
+ADDITIONAL_CACHE_TABLE = "coreiq_screening_additional_cache"
+_ADDITIONAL_SOURCE = {"credit_ratings": "credit_rating", "store_counts": "store_count"}
+
+
+def ensure_additional_cache_table() -> bool:
+    try:
+        db_manager.execute_insert(
+            f"""
+            CREATE TABLE IF NOT EXISTS {ADDITIONAL_CACHE_TABLE} (
+                data_type     VARCHAR(32) NOT NULL,
+                ticker        VARCHAR(32) NOT NULL,
+                display_value VARCHAR(64) NOT NULL,
+                updated_at    TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+                    ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (data_type, ticker)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        return True
+    except Exception as exc:
+        log_error(f"[SCREENING] ensure_additional_cache_table failed: {exc}")
+        return False
+
+
+def _additional_cache_ready(data_type: str) -> bool:
+    """True once the precomputed cache holds rows for this data_type (instant probe)."""
+    try:
+        rows = db_manager.execute_query_readonly(
+            f"SELECT 1 FROM {ADDITIONAL_CACHE_TABLE} WHERE data_type = '{data_type}' LIMIT 1"
+        )
+        return bool(rows)
+    except Exception:
+        return False
+
+
+def _read_additional_cache(data_type: str, ticker_tuple: tuple) -> Dict[str, str]:
+    """{ticker: display_value} from the precomputed cache for the given tickers."""
+    ticker_sql = _build_ticker_in_list(list(ticker_tuple))
+    rows = db_manager.execute_query_readonly(
+        f"SELECT ticker, display_value FROM {ADDITIONAL_CACHE_TABLE} "
+        f"WHERE data_type = '{data_type}' AND ticker IN ({ticker_sql})"
+    ) or []
+    return {r["ticker"]: r["display_value"] for r in rows}
+
+
+def _fetch_additional_values_all(data_type: str) -> Dict[str, str]:
+    """Latest value per ticker for ALL tickers (no ticker filter) — build-time only."""
+    src = _ADDITIONAL_SOURCE.get(data_type)
+    if not src:
+        return {}
+    if data_type == "credit_ratings":
+        rows = db_manager.execute_query_readonly(
+            f"""
+            SELECT fmv.ticker, fmv.value AS v
+            FROM coreiq_filing_metrics_v5 fmv
+            INNER JOIN (
+                SELECT ticker, MAX(report_fiscal_year) AS yr
+                FROM coreiq_filing_metrics_v5 WHERE source = '{src}' GROUP BY ticker
+            ) ly ON fmv.ticker = ly.ticker AND fmv.report_fiscal_year = ly.yr
+            WHERE fmv.source = '{src}'
+            """
+        ) or []
+        seen: set = set()
+        out: Dict[str, str] = {}
+        for r in rows:
+            tk = r["ticker"]
+            if tk not in seen and r.get("v"):
+                out[tk] = str(r["v"]); seen.add(tk)
+        return out
+    rows = db_manager.execute_query_readonly(
+        f"""
+        SELECT fmv.ticker, MAX(fmv.numeric_value) AS v
+        FROM coreiq_filing_metrics_v5 fmv
+        INNER JOIN (
+            SELECT ticker, MAX(report_fiscal_year) AS yr
+            FROM coreiq_filing_metrics_v5 WHERE source = '{src}' GROUP BY ticker
+        ) ly ON fmv.ticker = ly.ticker AND fmv.report_fiscal_year = ly.yr
+        WHERE fmv.source = '{src}' GROUP BY fmv.ticker
+        """
+    ) or []
+    return {r["ticker"]: str(int(r["v"])) for r in rows if r.get("v") is not None}
+
+
+def build_additional_data_cache() -> dict:
+    """Rebuild the precomputed additional-data cache (credit ratings + store counts).
+    Per-data_type replace; ~150 rows total, so a single DELETE+INSERT is sub-second."""
+    ensure_additional_cache_table()
+    counts: Dict[str, int] = {}
+    for dt in ("credit_ratings", "store_counts"):
+        vals = _fetch_additional_values_all(dt)
+        db_manager.execute_delete(
+            f"DELETE FROM {ADDITIONAL_CACHE_TABLE} WHERE data_type = '{dt}'"
+        )
+        items = list(vals.items())
+        for off in range(0, len(items), 500):
+            block = items[off:off + 500]
+            vparts, p = [], {}
+            for i, (tk, val) in enumerate(block):
+                vparts.append(f"('{dt}', :tk{i}, :val{i})")
+                p[f"tk{i}"] = tk
+                p[f"val{i}"] = val
+            if vparts:
+                db_manager.execute_insert(
+                    f"INSERT INTO {ADDITIONAL_CACHE_TABLE} (data_type, ticker, display_value) "
+                    f"VALUES {', '.join(vparts)} "
+                    f"ON DUPLICATE KEY UPDATE display_value = VALUES(display_value)",
+                    p,
+                )
+        counts[dt] = len(vals)
+    log_info(f"[SCREENING] build_additional_data_cache: {counts}")
+    return counts
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def _fetch_additional_tickers(ticker_tuple: tuple, source_val: str) -> set:
-    """Return tickers that have credit_rating or store_count rows (fast via idx_v2_source)."""
+    """Return tickers that have credit_rating or store_count rows.
+    Precomputed cache first (instant); live idx_v2_source fallback until built."""
+    data_type = "credit_ratings" if source_val == "credit_rating" else "store_counts"
+    try:
+        if _additional_cache_ready(data_type):
+            return set(_read_additional_cache(data_type, ticker_tuple).keys())
+    except Exception:
+        pass
     ticker_sql = _build_ticker_in_list(list(ticker_tuple))
     try:
         rows = db_manager.execute_query_readonly(f"""
@@ -4051,7 +4252,14 @@ def _fetch_additional_tickers(ticker_tuple: tuple, source_val: str) -> set:
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dict[str, str]:
-    """Return {ticker: display_value} for credit ratings or store counts."""
+    """Return {ticker: display_value} for credit ratings or store counts.
+    Precomputed cache first (<1ms); the live v5 scan runs only until the cache is
+    first built (it was the ~12s cold-buffer credit-rating query in the screener)."""
+    try:
+        if _additional_cache_ready(data_type):
+            return _read_additional_cache(data_type, ticker_tuple)
+    except Exception:
+        pass
     ticker_sql = _build_ticker_in_list(list(ticker_tuple))
     try:
         if data_type == "credit_ratings":
@@ -4066,6 +4274,7 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
                     GROUP BY ticker
                 ) ly ON fmv.ticker = ly.ticker AND fmv.report_fiscal_year = ly.yr
                 WHERE fmv.source = 'credit_rating'
+                  AND fmv.ticker IN ({ticker_sql})
             """)
             seen: set = set()
             result: Dict[str, str] = {}
@@ -4091,6 +4300,7 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
                     GROUP BY ticker
                 ) ly ON fmv.ticker = ly.ticker AND fmv.report_fiscal_year = ly.yr
                 WHERE fmv.source = 'store_count'
+                  AND fmv.ticker IN ({ticker_sql})
                 GROUP BY fmv.ticker
             """)
             return {r["ticker"]: str(int(r["store_total"]))

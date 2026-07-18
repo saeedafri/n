@@ -142,6 +142,7 @@ from data.screening_service import (
     get_base_company_universe,
     filter_universe_to_members,
     get_keydevs_events_for_tickers,
+    get_keydevs_events_count,
     keydevs_period_display_label,
     resolve_keydevs_event_window,
 )
@@ -506,6 +507,18 @@ def _trigger_recompute():
     criteria = st.session_state.get("scr_active_criteria", [])
     wl_tickers = st.session_state.get("scr_watchlist_tickers")
     wl_members = st.session_state.get("scr_watchlist_members")
+    # Branded loading overlay during the (multi-second, uncached) criteria pipeline.
+    # EVERY apply/edit/remove path routes through here, so this single guard replaces
+    # the blank-no-spinner screen the criterion-apply path used to show while the
+    # additional-data / keydevs queries ran. The "Show Results" path renders its own
+    # overlay first, so skip the duplicate there.
+    if criteria and not st.session_state.get("scr_results_loading"):
+        try:
+            _render_coresight_loading_overlay(
+                "Applying criteria…", "Screening companies against your filters."
+            )
+        except Exception:
+            pass
     try:
         cache = st.session_state.get("scr_criterion_cache", {})
         log_info(
@@ -4681,44 +4694,55 @@ def _render_keydevs_results():
         # grid (Image #18). The JS self-removes once the grid has real height.
         from components.loading import render_sticky_loader
         keydev_criteria = [c for c in criteria if c.get("type") == "keydevs"]
-        render_sticky_loader("Loading Key Developments")
+
+        # Resolve query params: tickers + categories + date window.
+        _tickers = tuple(df["ticker"].values)
         if not keydev_criteria:
-            # No Key Dev criterion — show all events for matched companies, all categories
-            # Use KEYDEV_CATEGORIES_ALL values (exact DB event_category strings)
-            all_cats = list(KEYDEV_CATEGORIES_ALL.values())
-            _t_events = time.perf_counter()
-            events_df = get_keydevs_events_for_tickers(
-                tuple(df["ticker"].values), tuple(all_cats), days=365,
-            )
-            _ev_ms = (time.perf_counter() - _t_events) * 1000
+            # No Key Dev criterion — all categories, default 1-year window.
+            _cats = tuple(KEYDEV_CATEGORIES_ALL.values())
+            _window = {"days": 365}
         else:
-            combined_cats = []
-            for kc in keydev_criteria:
-                combined_cats.extend(kc.get("categories", []))
-            combined_cats = list(set(combined_cats))
-            window = resolve_keydevs_event_window(keydev_criteria)
-            _t_events = time.perf_counter()
-            events_df = get_keydevs_events_for_tickers(
-                tuple(df["ticker"].values),
-                tuple(combined_cats),
-                days=window.get("days"),
-                start_date=window.get("start_date"),
-                end_date=window.get("end_date"),
+            _cats = tuple(sorted({c for kc in keydev_criteria for c in kc.get("categories", [])}))
+            _window = resolve_keydevs_event_window(keydev_criteria)
+
+        # Date-windowed keyset pagination (newest-first, "Load older"). Replaces the
+        # old LIMIT 2000 that silently truncated "All History" to the newest ~17 days.
+        # Only _KD_PAGE rows live in memory per page; the honest total is shown up front.
+        _KD_PAGE = 500
+        _kd_sig = (_tickers, _cats, _window.get("days"),
+                   _window.get("start_date"), _window.get("end_date"))
+        if st.session_state.get("kd_sig") != _kd_sig:
+            render_sticky_loader("Loading Key Developments")
+            st.session_state["kd_sig"] = _kd_sig
+            st.session_state["kd_total"] = get_keydevs_events_count(
+                _tickers, _cats, days=_window.get("days"),
+                start_date=_window.get("start_date"), end_date=_window.get("end_date"),
             )
-            _ev_ms = (time.perf_counter() - _t_events) * 1000
+            _df0, _cur0 = get_keydevs_events_for_tickers(
+                _tickers, _cats, days=_window.get("days"),
+                start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                limit=_KD_PAGE,
+            )
+            st.session_state["kd_df"] = _df0
+            st.session_state["kd_cursor"] = _cur0
+
+        events_df = st.session_state.get("kd_df", pd.DataFrame())
+        _kd_total = int(st.session_state.get("kd_total", len(events_df)))
+        _kd_cursor = st.session_state.get("kd_cursor")
 
         if events_df.empty:
             st.info("No key development events found for the matched companies in the selected timeframe.")
             return
 
-        # Header row with Excel download
+        # Header row with Excel download — honest total, newest-first.
+        _shown = len(events_df)
         _hdr_col, _dl_col = st.columns([8, 2])
         with _hdr_col:
-            st.markdown(
-                f"<p class='results-header'>"
-                f"<strong>{len(events_df)}</strong> key development events found</p>",
-                unsafe_allow_html=True,
-            )
+            _hdr_txt = f"<strong>{_kd_total:,}</strong> key development events found"
+            if _kd_total > _shown:
+                _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
+                             f"· showing newest {_shown:,}</span>")
+            st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
         with _dl_col:
             _xl_bytes = _build_screening_excel(
                 events_df, len(criteria),
@@ -4786,6 +4810,25 @@ def _render_keydevs_results():
             enable_selection=True,
         )
         _render_save_as_watchlist_panel(_kd_resp)
+
+        # Load-older pager: fetch the next page strictly older than the cursor
+        # (keyset seek — no OFFSET scan). Accumulates in session; RAM grows by one
+        # page per click, and every historical event stays reachable.
+        if _kd_cursor is not None and _shown < _kd_total:
+            _remaining = _kd_total - _shown
+            _n = min(_KD_PAGE, _remaining)
+            if st.button(f"⬇  Load {_n:,} older  ·  {_remaining:,} remaining",
+                         key="kd_load_older", width="stretch"):
+                _df_next, _cur_next = get_keydevs_events_for_tickers(
+                    _tickers, _cats, days=_window.get("days"),
+                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                    limit=_KD_PAGE, before_date=_kd_cursor[0], before_id=_kd_cursor[1],
+                )
+                if not _df_next.empty:
+                    st.session_state["kd_df"] = pd.concat(
+                        [events_df, _df_next], ignore_index=True)
+                st.session_state["kd_cursor"] = _cur_next
+                st.rerun()
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_keydevs_results", operation="render_keydevs_results")
         st.error("Something went wrong. Please try again.")
