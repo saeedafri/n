@@ -1,15 +1,12 @@
 {
-    "servers": {
-        "code-review-graph": {
-            "type": "stdio",
-            "command": "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/code-review-graph",
-            "args": ["serve"]
-        },
-        "notebooklm": {
-            "type": "stdio",
-            "command": "npx",
-            "args": ["-y", "notebooklm-mcp-server", "start"]
-        }
-    },
-    "inputs": []
+	"inputs": [],
+	"servers": {
+		"code-review-graph": {
+			"type": "stdio",
+			"command": "/Users/mohdsaeedafri/Documents/Documents/Code-Base/Real/CapIQReplacement/.venv/bin/code-review-graph",
+			"args": [
+				"serve"
+			]
+		}
+	}
 }

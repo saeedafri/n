@@ -25,6 +25,7 @@ from utils.server_logger import (
     analyze_slow_operations,
     log_error,
     log_structured_error,
+    log_timing,
     error_boundary,
     new_rerun_id,
     SERVER_LOG_FILE,
@@ -69,18 +70,44 @@ except Exception as e:
 # HELPERS
 # ============================================================
 
-def run_command(cmd, timeout=15):
+def run_command(cmd, timeout=15, audit=False):
     """Run a shell command. Only predefined commands (from _ALLOWED_COMMANDS)
-    or commands explicitly entered by the owner may be executed."""
+    or commands explicitly entered by the owner may be executed.
+
+    Blocking scope: subprocess.run blocks ONLY the caller's own session/tab while
+    the command runs — it releases Python's GIL during the wait, so other users'
+    sessions keep serving. The `timeout` caps how long that tab can wait. A slow
+    command (e.g. `du` over the /home SMB cache) is therefore never an app-wide
+    freeze; the spinner in the console shows it's still working, not hung.
+
+    audit=True (the owner console) logs the command, exit code and duration to the
+    server log so it answers: what ran, did it succeed, how long. Predefined
+    read-outs pass audit=False to keep the log clean.
+    """
+    import time as _t
+    _start = _t.perf_counter()
     try:
         result = subprocess.run(
             cmd, shell=True, capture_output=True, text=True, timeout=timeout
         )
+        if audit:
+            log_timing(
+                "LOGS_SHELL_CMD", (_t.perf_counter() - _start) * 1000,
+                f"rc={result.returncode} ok={result.returncode == 0} "
+                f"out={len(result.stdout)}B err={len(result.stderr)}B cmd={cmd[:200]!r}",
+                level="WARNING",
+            )
         return result.stdout, result.stderr
     except subprocess.TimeoutExpired:
+        if audit:
+            log_timing(
+                "LOGS_SHELL_CMD", (_t.perf_counter() - _start) * 1000,
+                f"TIMEOUT after {timeout}s cmd={cmd[:200]!r}", level="WARNING",
+            )
         return "", f"Command timed out after {timeout}s"
     except Exception as e:
-        log_structured_error(e, page="logs", component="run_command", operation="EXECUTE_SHELL_CMD")
+        log_structured_error(e, page="logs", component="run_command",
+                             operation="EXECUTE_SHELL_CMD", context=f"cmd={cmd[:200]!r}")
         return "", str(e)
 
 
@@ -741,12 +768,17 @@ def main():
                                           label_visibility="collapsed", height=68)
                 submitted = st.form_submit_button(" ")
             if submitted and custom_cmd:
+                _cmd = custom_cmd.strip()
                 # 120s: benchmarks/probes need longer than the 15s default.
-                stdout, stderr = run_command(custom_cmd.strip(), timeout=120)
+                # Spinner = clear "running vs hung" signal; audit=True logs it.
+                with st.spinner(f"Running… {_cmd.splitlines()[0][:80]}"):
+                    stdout, stderr = run_command(_cmd, timeout=120, audit=True)
                 if stdout:
                     st.code(stdout, language="bash")
                 if stderr:
                     st.error(stderr)
+                if not stdout and not stderr:
+                    st.info("Command finished with no output.")
 
     except Exception as e:
         log_structured_error(e, page="logs", component="main", operation="PAGE_RENDER")

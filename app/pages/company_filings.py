@@ -80,6 +80,18 @@ def _clear_search_callback():
     st.session_state.cf_view_metric = None
 
 
+# Quarter rank for "latest filing" selection: annual=0, Q1=1, Q2=2, Q3=3, Q4=4, Q5=5.
+# A higher rank = a more recent fiscal period, so Q3 beats Q2 within the same year.
+_DOC_RANK = {
+    "10-K": 0, "annual-report": 0,
+    "10-Q-Q1": 1, "interim-report-Q1": 1,
+    "10-Q-Q2": 2, "interim-report-Q2": 2,
+    "10-Q-Q3": 3, "interim-report-Q3": 3,
+    "interim-report-Q4": 4,
+    "interim-report-Q5": 5,
+}
+
+
 def _get_best_landing_doc_and_year(company: str) -> tuple:
     """Return (doc_type, year) for the most recent 10-K or 10-Q filing.
 
@@ -89,20 +101,11 @@ def _get_best_landing_doc_and_year(company: str) -> tuple:
     Q2 filing in the same year, and any filing in a newer year beats all
     filings in older years.  Falls back to ("10-K", "") if no data is found.
     """
-    # Quarter rank: annual=0, Q1=1, Q2=2, Q3=3, Q4=4, Q5=5
-    _RANK = {
-        "10-K": 0, "annual-report": 0,
-        "10-Q-Q1": 1, "interim-report-Q1": 1,
-        "10-Q-Q2": 2, "interim-report-Q2": 2,
-        "10-Q-Q3": 3, "interim-report-Q3": 3,
-        "interim-report-Q4": 4,
-        "interim-report-Q5": 5,
-    }
     try:
         prefetch = _prefetch_ticker_filter_data(company)
         ybd = prefetch["years_by_doc_type"] if prefetch else {}
         best_doc, best_key = None, (-1, -1)
-        for dt, rank in _RANK.items():
+        for dt, rank in _DOC_RANK.items():
             years = ybd.get(dt, [])
             if not years:
                 continue
@@ -117,6 +120,41 @@ def _get_best_landing_doc_and_year(company: str) -> tuple:
     except Exception as _exc:
         log_structured_error(_exc, page="company_filings", component="_get_best_landing_doc_and_year", operation="PICK_BEST")
     return "10-K", ""
+
+
+def _get_available_doc_types_for_year(ticker: str, year: str):
+    """Doc types that have a filing in `year`, in the prefetch's canonical order.
+
+    Powers the Year → Document-Type hierarchy: the Document Type dropdown lists
+    ONLY the types present in the selected year (e.g. AMZN FY2026 → just
+    10-Q-Q1), instead of every type the company has ever filed. Falls back to
+    the full doc-type list if the year isn't found, so the dropdown is never
+    empty.
+    """
+    year = str(year)
+    prefetch = _prefetch_ticker_filter_data(ticker)
+    if not prefetch:
+        return [dt for dt in DOCUMENT_TYPES if dt not in _TRANSCRIPT_DOC_TYPES]
+    ybd = prefetch.get("years_by_doc_type", {})
+    in_year = [dt for dt in prefetch["doc_types"]
+               if dt not in _TRANSCRIPT_DOC_TYPES and year in ybd.get(dt, [])]
+    if in_year:
+        return in_year
+    return [dt for dt in prefetch["doc_types"] if dt not in _TRANSCRIPT_DOC_TYPES]
+
+
+def _get_best_doc_for_year(ticker: str, year: str) -> str:
+    """The 'latest' doc present in `year`: highest quarter (Q3>Q2>Q1) else 10-K,
+    else the first available type. Used to auto-select the default document when
+    a year (or company) is chosen — 'latest document, always', per the spec.
+    """
+    avail = _get_available_doc_types_for_year(ticker, year)
+    if not avail:
+        return ""
+    ranked = [dt for dt in avail if dt in _DOC_RANK]
+    if ranked:
+        return max(ranked, key=lambda dt: _DOC_RANK[dt])
+    return avail[0]
 
 
 def _on_company_change():
@@ -170,9 +208,14 @@ def _on_company_change():
 
 
 def _on_doc_type_change():
-    """Doc type changed → reset year to latest for company + new doc_type."""
+    """Doc type changed WITHIN the selected year → keep the year, refresh the
+    filing unit (8-K/6-K only). Year is now the PARENT filter, so changing the
+    document never moves the year. The Document Type dropdown only lists types
+    that exist in the current year, so the year always stays valid.
+    """
     new_doc = st.session_state.get("cf_doc_type_select", "10-K")
     company = st.session_state.get("cf_company_select") or st.session_state.get("cf_company", "")
+    cur_year = st.session_state.get("cf_year_select", "") or st.session_state.get("cf_year", "")
 
     # Clear filing units cache when doc type changes
     try:
@@ -181,22 +224,15 @@ def _on_doc_type_change():
     except Exception:
         pass
 
-    try:
-        new_years = _get_available_years_for_doc_type(company, new_doc)
-    except Exception as _exc:
-        log_structured_error(_exc, page="company_filings", component="_on_doc_type_change", operation="GET_YEARS")
-        new_years = []
-    new_year = new_years[0] if new_years else ""
-    # For 8-K/6-K, also reset filing unit
-    if new_doc in FILING_UNIT_DOC_TYPES and new_year:
-        filing_units = get_filing_units(company, new_year, new_doc, use_cache=False)
+    # Refresh filing unit for 8-K/6-K under the SAME year; other docs have none.
+    if new_doc in FILING_UNIT_DOC_TYPES and cur_year:
+        filing_units = get_filing_units(company, cur_year, new_doc, use_cache=False)
         new_filing_unit = get_default_filing_unit(filing_units) if filing_units else ""
         new_filing_unit_display = len(filing_units) if filing_units else 1
     else:
         new_filing_unit = ""
         new_filing_unit_display = 1
-    st.session_state.cf_year = new_year
-    st.session_state["cf_year_select"] = new_year
+    st.session_state.cf_doc_type = new_doc
     st.session_state.cf_filing_unit = new_filing_unit
     st.session_state["cf_filing_unit_select"] = new_filing_unit_display
     # Clear search
@@ -207,10 +243,12 @@ def _on_doc_type_change():
 
 
 def _on_year_change():
-    """Year changed → reset filing unit for 8-K/6-K docs, clear search."""
+    """Year changed (the PARENT filter) → re-scope Document Type to that year and
+    auto-select the LATEST document available in it, then refresh the filing
+    unit. 'Latest year → latest document' is the invariant the page keeps.
+    """
     company = st.session_state.get("cf_company_select") or st.session_state.get("cf_company", "")
     new_year = st.session_state.get("cf_year_select", "")
-    doc_type = st.session_state.get("cf_doc_type_select", "10-K")
 
     # Clear filing units cache to force fresh lookup for new year
     try:
@@ -219,13 +257,18 @@ def _on_year_change():
     except Exception:
         pass
 
-    # For 8-K/6-K, update filing units when year changes
-    if doc_type in FILING_UNIT_DOC_TYPES and new_year:
-        filing_units = get_filing_units(company, new_year, doc_type, use_cache=False)
-        new_filing_unit = get_default_filing_unit(filing_units) if filing_units else ""
-        new_filing_unit_display = len(filing_units) if filing_units else 1
-        st.session_state.cf_filing_unit = new_filing_unit
-        st.session_state["cf_filing_unit_select"] = new_filing_unit_display
+    # Re-scope the document to the latest one that exists in the new year.
+    new_doc = _get_best_doc_for_year(company, new_year) if new_year else ""
+    if not new_doc:
+        new_doc = st.session_state.get("cf_doc_type_select", "10-K")
+    st.session_state.cf_doc_type = new_doc
+    st.session_state["cf_doc_type_select"] = new_doc
+
+    # For 8-K/6-K, update filing units when year changes; other docs have none.
+    if new_doc in FILING_UNIT_DOC_TYPES and new_year:
+        filing_units = get_filing_units(company, new_year, new_doc, use_cache=False)
+        st.session_state.cf_filing_unit = get_default_filing_unit(filing_units) if filing_units else ""
+        st.session_state["cf_filing_unit_select"] = len(filing_units) if filing_units else 1
     else:
         st.session_state.cf_filing_unit = ""
         st.session_state["cf_filing_unit_select"] = 1
@@ -3188,16 +3231,36 @@ def main():
 
 
         _db_fetch_start = _perf_time.time()
-        available_doc_types = _get_available_doc_types_from_db(company) or DOCUMENT_TYPES
+        # ── HIERARCHY: Company → Year → Document Type ──────────────────────────
+        # Year is the PARENT filter (every year the company has). The Document
+        # Type dropdown lists ONLY the types that exist in the selected year, so
+        # AMZN FY2026 (only a Q1 filed so far) shows just 10-Q-Q1 — not every type
+        # the company has ever filed. The Year widget renders later (its column
+        # depends on whether the 8-K/6-K filing-unit box shows), but its selected
+        # value is read here from session_state so it can scope the doc list.
+        _pf = _prefetch_ticker_filter_data(company)
+        available_years = (_pf["all_years"] if _pf and _pf.get("all_years") else None) or ["2025"]
+        _cur_year = st.session_state.get("cf_year_select")
+        if _cur_year not in available_years:
+            _cur_year = (st.session_state.cf_year
+                         if st.session_state.cf_year in available_years else available_years[0])
+            st.session_state["cf_year_select"] = _cur_year
+        st.session_state.cf_year = _cur_year
+
+        available_doc_types = _get_available_doc_types_for_year(company, _cur_year) or DOCUMENT_TYPES
         _db_fetch_elapsed = _perf_time.time() - _db_fetch_start
 
 
         # Ensure widget key is initialised from logical state before first render.
         # Do NOT pass index= to the selectbox — that conflicts with session_state
-        # and triggers the ST_WIDGET_SESSION_STATE_CONFLICT warning.
-        _desired_doc = st.session_state.cf_doc_type if st.session_state.cf_doc_type in available_doc_types else available_doc_types[0]
+        # and triggers the ST_WIDGET_SESSION_STATE_CONFLICT warning. Default doc =
+        # the latest one available in the selected year.
         if st.session_state.get("cf_doc_type_select") not in available_doc_types:
-            st.session_state["cf_doc_type_select"] = _desired_doc
+            st.session_state["cf_doc_type_select"] = (
+                st.session_state.cf_doc_type
+                if st.session_state.cf_doc_type in available_doc_types
+                else (_get_best_doc_for_year(company, _cur_year) or available_doc_types[0])
+            )
 
         _dropdown_render_start = _perf_time.time()
         with f2:
@@ -3269,14 +3332,14 @@ def main():
 
 
         _years_db_start = _perf_time.time()
-        available_years = _get_available_years_for_doc_type(company, doc_type) or ["2025"]
+        # available_years (ALL years the company has) was computed above — the Year
+        # dropdown is the PARENT filter, so it is never scoped to the doc type.
         _years_db_elapsed = _perf_time.time() - _years_db_start
 
 
-        # Same pattern: pre-init session state, no index= to avoid the warning.
-        _desired_year = st.session_state.cf_year if st.session_state.cf_year in available_years else available_years[0]
+        # cf_year_select was pre-initialised above; keep it valid as a safety net.
         if st.session_state.get("cf_year_select") not in available_years:
-            st.session_state["cf_year_select"] = _desired_year
+            st.session_state["cf_year_select"] = available_years[0]
 
         _dropdown_render_start = _perf_time.time()
         with _year_col:
