@@ -1791,11 +1791,23 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
             except Exception:
                 pass
 
-    # Full replace: clear the table then bulk insert. REPLACE INTO alone would
-    # leave stale members behind (that is how the garbage 'Operating Segments'
-    # members accumulated). PK collisions within the fresh set are deduped via
-    # ON DUPLICATE KEY (last-wins; entries already first-wins-ordered upstream).
-    db_manager.execute_delete(f"DELETE FROM {SEGMENT_VALUES_CACHE_TABLE}")
+    # Zero-downtime publish (18-Jul-2026): build the full fresh set into STAGING
+    # tables, then atomically RENAME them into place. Once this rebuild became
+    # automated/periodic, the old in-place DELETE-then-INSERT left the live table
+    # partially populated for ~20-60s each run — a user hitting the screener then
+    # saw missing segments. The staging swap makes readers see either the whole
+    # old cache or the whole new one, never a partial state. The rows written are
+    # byte-for-byte identical to the old path (same columns, VALUES, and
+    # ON DUPLICATE KEY dedup) — only the publish mechanism changed, not the data.
+    values_stg = f"{SEGMENT_VALUES_CACHE_TABLE}_staging"
+    member_stg = f"{SEGMENT_MEMBER_CACHE_TABLE}_staging"
+    # Clean any leftovers from a prior crashed build, then clone the live schema
+    # (CREATE ... LIKE copies columns, PK, and every index verbatim).
+    for _t in (values_stg, member_stg, f"{values_stg}_old", f"{member_stg}_old"):
+        db_manager.execute_delete(f"DROP TABLE IF EXISTS {_t}")
+    db_manager.execute_insert(f"CREATE TABLE {values_stg} LIKE {SEGMENT_VALUES_CACHE_TABLE}")
+    db_manager.execute_insert(f"CREATE TABLE {member_stg} LIKE {SEGMENT_MEMBER_CACHE_TABLE}")
+
     inserted = 0
     ch = _SEGMENT_VALUES_CACHE_CHUNK
     for off in range(0, len(entries), ch):
@@ -1809,9 +1821,11 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
             p[f"mem{i}"] = mem
             p[f"yr{i}"] = yr
             p[f"val{i}"] = val
+        # PK collisions within the fresh set are deduped via ON DUPLICATE KEY
+        # (last-wins; entries already first-wins-ordered upstream).
         db_manager.execute_insert(
             f"""
-            INSERT INTO {SEGMENT_VALUES_CACHE_TABLE}
+            INSERT INTO {values_stg}
                 (ticker, segment_type, metric_key, member_label, report_fiscal_year, value_mm)
             VALUES {", ".join(vals)}
             ON DUPLICATE KEY UPDATE value_mm = VALUES(value_mm), updated_at = CURRENT_TIMESTAMP
@@ -1820,15 +1834,14 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
         )
         inserted += len(block)
 
-    # Refresh the member dropdown cache from the freshly built values cache.
-    db_manager.execute_delete(f"DELETE FROM {SEGMENT_MEMBER_CACHE_TABLE}")
+    # Build the member dropdown cache from the freshly staged values.
     db_manager.execute_insert(
         f"""
-        INSERT INTO {SEGMENT_MEMBER_CACHE_TABLE}
+        INSERT INTO {member_stg}
             (segment_type, member_label, member_label_normalized, company_count)
         SELECT segment_type, member_label, LOWER(TRIM(member_label)),
                COUNT(DISTINCT ticker)
-        FROM {SEGMENT_VALUES_CACHE_TABLE}
+        FROM {values_stg}
         WHERE metric_key = 'Revenues'
         GROUP BY segment_type, member_label
         ON DUPLICATE KEY UPDATE
@@ -1836,9 +1849,20 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
             updated_at = CURRENT_TIMESTAMP
         """
     )
+
+    # Atomic swap: both live tables flip to the fresh set in ONE statement
+    # (MySQL RENAME TABLE is all-or-nothing across every pair). Then drop old.
+    db_manager.execute_insert(
+        f"RENAME TABLE "
+        f"{SEGMENT_VALUES_CACHE_TABLE} TO {values_stg}_old, {values_stg} TO {SEGMENT_VALUES_CACHE_TABLE}, "
+        f"{SEGMENT_MEMBER_CACHE_TABLE} TO {member_stg}_old, {member_stg} TO {SEGMENT_MEMBER_CACHE_TABLE}"
+    )
+    db_manager.execute_delete(f"DROP TABLE IF EXISTS {values_stg}_old")
+    db_manager.execute_delete(f"DROP TABLE IF EXISTS {member_stg}_old")
+
     log_info(
         f"[SCREENING] build_segment_values_cache: {total_t} tickers → "
-        f"{inserted} rows ({len(entries)} entries)"
+        f"{inserted} rows ({len(entries)} entries) [zero-downtime swap]"
     )
     return {"tickers": total_t, "rows": inserted, "entries": len(entries)}
 
@@ -1887,6 +1911,134 @@ def rebuild_segment_values_cache_async() -> bool:
     t = _threading.Thread(target=_run, daemon=True, name="seg-cache-rebuild")
     t.start()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Scheduled staleness-driven refresh  (18-Jul-2026)
+# The lazy trigger (rebuild_segment_values_cache_async on total_rows==0) only
+# fires when the cache is EMPTY, but this is a persistent DB table that never
+# empties — so it never auto-refreshed and drifted 24 days stale (STG: last built
+# 2026-06-24) as new 10-K filings landed. Source coreiq_filing_metrics_v5 is
+# append-only, so MAX(id) (a PK seek — instant; data_insert_timestamp is
+# unindexed and full-scans 14.4M rows) is a cheap high-water mark: rebuild only
+# when it grew. Exactly-once across instances via an atomic conditional-UPDATE.
+# Spec: docs/superpowers/specs/2026-07-18-log-investigation-and-segment-cache-automation-design.md
+# ---------------------------------------------------------------------------
+SEGMENT_REFRESH_STATE_TABLE = "coreiq_screening_segment_refresh_state"
+_SEGMENT_STALE_RECLAIM_HOURS = 3  # a crashed build releases its claim after this
+
+
+def _ensure_segment_refresh_state_table() -> None:
+    db_manager.execute_insert(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SEGMENT_REFRESH_STATE_TABLE} (
+            id                TINYINT   NOT NULL DEFAULT 1,
+            last_built_max_id BIGINT    NOT NULL DEFAULT 0,
+            last_built_at     DATETIME  NULL,
+            building          TINYINT   NOT NULL DEFAULT 0,
+            building_since    DATETIME  NULL,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
+    db_manager.execute_insert(
+        f"INSERT IGNORE INTO {SEGMENT_REFRESH_STATE_TABLE} (id, last_built_max_id) VALUES (1, 0)"
+    )
+
+
+def _v5_max_id() -> int:
+    """Cheap append-only high-water mark of the source table (PK seek, instant)."""
+    rows = db_manager.execute_query_readonly(
+        "SELECT MAX(id) AS mx FROM coreiq_filing_metrics_v5", {}
+    ) or []
+    try:
+        return int(rows[0]["mx"] or 0) if rows else 0
+    except Exception:
+        return 0
+
+
+def refresh_segment_cache_if_stale(force: bool = False) -> dict:
+    """Rebuild the segment values+member caches ONLY when the source table grew.
+
+    Returns an action dict: {'action': 'built'|'fresh'|'claimed_elsewhere'|
+    'in_process'|'error', ...}. Safe to call from a scheduler tick or admin button.
+    On the very first run (last_built_max_id=0) it always rebuilds once, then only
+    when v5's MAX(id) advances.
+    """
+    out: dict = {"action": "fresh"}
+    try:
+        _ensure_segment_refresh_state_table()
+        cur_max = _v5_max_id()
+        st_rows = db_manager.execute_query_readonly(
+            f"SELECT last_built_max_id FROM {SEGMENT_REFRESH_STATE_TABLE} WHERE id = 1", {}
+        ) or []
+        last_max = int(st_rows[0]["last_built_max_id"] or 0) if st_rows else 0
+
+        if not force and cur_max <= last_max:
+            out.update(action="fresh", max_id=cur_max, last_built_max_id=last_max)
+            return out
+
+        # In-process guard: never run alongside the lazy async rebuild.
+        with _segment_cache_build_lock:
+            if _segment_cache_build_state["running"]:
+                out["action"] = "in_process"
+                return out
+            _segment_cache_build_state.update(running=True, progress=0, total=0, last_error="")
+
+        try:
+            # Cross-instance exactly-once: only the winner (building 0→1, or a
+            # >N-hour-stale stuck build reclaimed) proceeds. rowcount 1 == we won.
+            claimed = db_manager.execute_update(
+                f"""
+                UPDATE {SEGMENT_REFRESH_STATE_TABLE}
+                   SET building = 1, building_since = UTC_TIMESTAMP()
+                 WHERE id = 1
+                   AND (building = 0
+                        OR building_since IS NULL
+                        OR building_since < UTC_TIMESTAMP() - INTERVAL {_SEGMENT_STALE_RECLAIM_HOURS} HOUR)
+                """
+            )
+            if not force and claimed != 1:
+                out["action"] = "claimed_elsewhere"
+                return out
+
+            log_info(
+                f"[SEG_REFRESH] building — v5 max_id {last_max}→{cur_max} force={force}"
+            )
+            t0 = time.perf_counter()
+            stats = build_segment_values_cache()
+            elapsed = time.perf_counter() - t0
+
+            db_manager.execute_update(
+                f"""
+                UPDATE {SEGMENT_REFRESH_STATE_TABLE}
+                   SET building = 0, last_built_max_id = :mx, last_built_at = UTC_TIMESTAMP()
+                 WHERE id = 1
+                """,
+                {"mx": cur_max},
+            )
+            log_timing(
+                "SEGMENT_CACHE_REFRESH", elapsed * 1000,
+                f"tickers={stats.get('tickers')} rows={stats.get('rows')} max_id={cur_max}",
+                level="WARNING",
+            )
+            out.update(action="built", max_id=cur_max, elapsed_s=round(elapsed, 1), **stats)
+            return out
+        finally:
+            with _segment_cache_build_lock:
+                _segment_cache_build_state["running"] = False
+            # Release the claim if we bailed before the success UPDATE (build raised).
+            try:
+                db_manager.execute_update(
+                    f"UPDATE {SEGMENT_REFRESH_STATE_TABLE} SET building = 0 "
+                    f"WHERE id = 1 AND building = 1"
+                )
+            except Exception:
+                pass
+    except Exception as exc:
+        out.update(action="error", error=str(exc)[:200])
+        log_error(f"[SEG_REFRESH] refresh_segment_cache_if_stale failed: {exc}")
+        return out
 
 
 def _segment_statement_type(criterion: Dict) -> str:

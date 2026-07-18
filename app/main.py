@@ -706,6 +706,26 @@ if (_auth_ready_for_bg
         pass
 
 # =============================================================================
+# SEGMENT-CACHE AUTO-REFRESH (staleness-driven; ON by default). One daemon
+# thread rebuilds the screening segment values/member caches only when the
+# source coreiq_filing_metrics_v5 grew (cheap MAX(id) gate — the lazy trigger
+# only fired on an empty table, so on a persistent DB table it never refreshed
+# and drifted 24 days stale). Exactly-once across instances via an atomic DB
+# claim; RAM-safe (~10MB build). Disable with ENABLE_SEGMENT_CACHE_AUTO_REFRESH=0.
+# Spec: docs/superpowers/specs/2026-07-18-log-investigation-and-segment-cache-automation-design.md
+# =============================================================================
+if (_auth_ready_for_bg
+        and os.getenv("ENABLE_SEGMENT_CACHE_AUTO_REFRESH", "1").strip() not in ("0", "", "false", "False")
+        and os.environ.get("APP_SEG_CACHE_REFRESH_STARTED") != "1"):
+    try:
+        from utils.segment_cache_auto_refresh import start_segment_cache_auto_refresh
+
+        os.environ["APP_SEG_CACHE_REFRESH_STARTED"] = "1"
+        start_segment_cache_auto_refresh()
+    except Exception:
+        pass
+
+# =============================================================================
 # STARTUP COMPLETE - RUN APP
 # =============================================================================
 _page_obs_start = None

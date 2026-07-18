@@ -503,8 +503,13 @@ def _background_warmup_thread():
         # every user. First sweep may take hours on a fresh cache dir (cold
         # credit-rating extraction is 30-60s/ticker); later sweeps are mostly
         # cache validations and finish in minutes. Runs LAST: it must never
-        # delay the page-critical tracks above. Disable with RATINGS_WARM_SWEEP=0.
-        if os.getenv("RATINGS_WARM_SWEEP", "1").strip().lower() not in ("0", "false", "no", "off"):
+        # delay the page-critical tracks above.
+        # DISABLED BY DEFAULT (18-Jul): the per-ticker edgartools XBRL parse it does
+        # is the confirmed RAM driver — STG log 18-Jul shows RSS spiking to 3.7GB
+        # (avail→95MB, swap engaged) during this sweep, amplified by it running in
+        # BOTH gunicorn workers. Credit ratings still load on-demand when a user
+        # opens a filing. Re-enable explicitly with RATINGS_WARM_SWEEP=1.
+        if os.getenv("RATINGS_WARM_SWEEP", "0").strip().lower() in ("1", "true", "yes", "on"):
             try:
                 from datetime import date as _sweep_date
                 from data.repository import CompanyRepository, RatingsDataRepository
