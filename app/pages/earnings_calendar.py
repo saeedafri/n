@@ -723,7 +723,6 @@ def _get_calendar_css() -> str:
     """FullCalendar iframe CSS — Figma card events, today indicator, list view."""
     qbg, qtx = _QUARTER_STYLE["bg"], _QUARTER_STYLE["text"]
     return f"""
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
             .fc {{ font-family:'Inter',sans-serif !important; background:#FFFFFF !important; }}
 
             /* Hide FullCalendar built-in toolbar — custom Figma toolbar above iframe */
@@ -892,7 +891,6 @@ def _get_css() -> str:
     try:
         return """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap');
 
 [data-testid="stHeaderActionElements"] { display:none !important; }
 header[data-testid="stHeader"] { display:none !important; height:0 !important; overflow:hidden !important; }

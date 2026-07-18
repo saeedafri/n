@@ -301,6 +301,19 @@ def _inject_transition_js() -> None:
         "min-height:0!important;border:none!important;display:block!important;"
         "overflow:hidden!important;margin:0!important;padding:0!important;"
         "visibility:hidden!important;';}"
+        # Load Google Fonts ONCE into the PARENT <head> (persists across reruns,
+        # unlike the per-page @import which re-injected every rerun → font re-fetch
+        # + FOUT swap-flash on EVERY navigation, measured 9 URLs x4 navs). Idempotent
+        # via the id guard, so it runs at most once per document. Union of every
+        # subset the pages use: Roboto + Montserrat + Inter.
+        "if(!pd.getElementById('mdp-fonts')){"
+        "var _pc=pd.createElement('link');_pc.rel='preconnect';"
+        "_pc.href='https://fonts.gstatic.com';_pc.crossOrigin='anonymous';"
+        "var _fl=pd.createElement('link');_fl.id='mdp-fonts';_fl.rel='stylesheet';"
+        "_fl.href='https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,600;0,700;1,400"
+        "&family=Montserrat:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap';"
+        "(pd.head||pd.documentElement).appendChild(_pc);"
+        "(pd.head||pd.documentElement).appendChild(_fl);}"
         # Install the driver ONCE, in the PARENT realm (not this iframe), so its
         # timers + delegated listeners survive every client-side rerun.
         "if(pw.__csDriver)return; pw.__csDriver=true;"
@@ -378,7 +391,6 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
        different per page. Importing the header's own fonts HERE makes it render
        IDENTICALLY everywhere, independent of the host page. @import MUST be the first
        rule in a stylesheet, so it stays at the very top of this block. */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
     /* Header full-width wrapper - background #f2f2f2 */
     .coresight-header-exact {
       background-color: #f2f2f2;

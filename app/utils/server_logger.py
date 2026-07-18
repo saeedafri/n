@@ -647,12 +647,26 @@ def get_server_logger():
                 logger.setLevel(logging.WARNING)
                 logger.propagate = False
 
+                # RETENTION POLICY: never delete logs. Default = DAILY rotation with
+                # backupCount=0 → every day's log is kept forever in /home (persistent,
+                # ~500GB). At midnight server-log.log rolls to server-log.log.YYYY-MM-DD
+                # and a fresh file starts; nothing is ever purged. SERVER_LOG_ROTATION=size
+                # reverts to the old size scheme; SERVER_LOG_BACKUPS>0 caps retention
+                # (leave 0 = keep everything).
+                _backups = int(os.getenv("SERVER_LOG_BACKUPS", "0"))
                 _max_bytes = int(os.getenv("SERVER_LOG_MAX_BYTES", str(25 * 1024 * 1024)))
-                _backups = int(os.getenv("SERVER_LOG_BACKUPS", "8"))
-                fh = logging.handlers.RotatingFileHandler(
-                    SERVER_LOG_FILE, mode='a', maxBytes=_max_bytes,
-                    backupCount=_backups, encoding='utf-8'
-                )
+                if os.getenv("SERVER_LOG_ROTATION", "daily").strip().lower() == "size":
+                    fh = logging.handlers.RotatingFileHandler(
+                        SERVER_LOG_FILE, mode='a', maxBytes=_max_bytes,
+                        backupCount=_backups, encoding='utf-8'
+                    )
+                    _rotate_desc = f"size {_max_bytes // (1024 * 1024)}MB x{_backups or 'ALL'}"
+                else:
+                    fh = logging.handlers.TimedRotatingFileHandler(
+                        SERVER_LOG_FILE, when='midnight', backupCount=_backups,
+                        encoding='utf-8', utc=False
+                    )
+                    _rotate_desc = f"daily x{_backups or 'ALL-kept'}"
                 fh.setLevel(logging.WARNING)
                 formatter = ISTFormatter(
                     '%(asctime)s | %(levelname)-8s | %(rerun_id)-8s | page=%(page)-15s'
@@ -681,7 +695,7 @@ def get_server_logger():
                 )
                 logger.warning(
                     f"[BOOT] server_logger up | pid={os.getpid()} | log_dir={SERVER_LOGS_DIR} "
-                    f"| persistent={_persist} | rotate={_max_bytes // (1024*1024)}MBx{_backups} "
+                    f"| persistent={_persist} | rotate={_rotate_desc} "
                     f"| MALLOC_ARENA_MAX={_arena} | defaults_applied=[{_defaults_s}]"
                 )
                 _write_restart_ledger()
@@ -877,11 +891,18 @@ def get_analytics_logger():
         lg.setLevel(logging.INFO)
         lg.propagate = False
         _file = SERVER_LOGS_DIR / "user_analytics.log"
-        _mb = int(os.getenv("ANALYTICS_LOG_MAX_BYTES", str(50 * 1024 * 1024)))
-        _bk = int(os.getenv("ANALYTICS_LOG_BACKUPS", "10"))
-        fh = logging.handlers.RotatingFileHandler(
-            _file, mode='a', maxBytes=_mb, backupCount=_bk, encoding='utf-8'
-        )
+        # Same retention policy as the server log: DAILY rotation, keep every day
+        # forever (backupCount=0) — analytics history is never purged either.
+        _bk = int(os.getenv("ANALYTICS_LOG_BACKUPS", "0"))
+        if os.getenv("SERVER_LOG_ROTATION", "daily").strip().lower() == "size":
+            _mb = int(os.getenv("ANALYTICS_LOG_MAX_BYTES", str(50 * 1024 * 1024)))
+            fh = logging.handlers.RotatingFileHandler(
+                _file, mode='a', maxBytes=_mb, backupCount=_bk, encoding='utf-8'
+            )
+        else:
+            fh = logging.handlers.TimedRotatingFileHandler(
+                _file, when='midnight', backupCount=_bk, encoding='utf-8', utc=False
+            )
         fh.setFormatter(logging.Formatter('%(message)s'))
         _q: Queue = Queue(-1)
         qh = logging.handlers.QueueHandler(_q)
@@ -1538,53 +1559,44 @@ def get_log_content(max_lines: int = 1000, max_bytes: int = 500000) -> str:
         return f"Error reading logs: {e}"
 
 def clear_logs() -> bool:
-    """Clear all logs from the log file."""
-    ensure_log_dir()
+    """DISABLED by retention policy — logs are NEVER deleted.
 
+    Retention policy (2026-07): server + analytics logs rotate at midnight and are
+    kept FOREVER in persistent /home (server-log.log.YYYY-MM-DD). The old behaviour
+    (unlink every rotated segment + truncate the live file) permanently destroyed
+    history, so it is disabled. This is a non-destructive no-op — every byte is
+    preserved. Use Download Logs to export; browse the dated files for history.
+    """
     try:
-        logger = logging.getLogger("server_logger")
-        # Stop the queue listener (flushes the queue) then close handlers
-        global _queue_listener
-        if _queue_listener is not None:
-            _queue_listener.stop()
-            _queue_listener = None
-
-        for handler in list(logger.handlers):
-            handler.close()
-            logger.removeHandler(handler)
-
-        for p in _rotated_log_files():
-            if p != SERVER_LOG_FILE:
-                try:
-                    p.unlink()
-                except Exception:
-                    pass
-
-        ist_now = datetime.now(tz=_IST).strftime('%d-%b-%Y %I:%M:%S %p IST')
-        with open(SERVER_LOG_FILE, 'w', encoding='utf-8') as f:
-            f.write(
-                f"{ist_now} | WARNING  | -              "
-                f"| server_logger.py:0:clear_logs "
-                f"| Logs cleared by user\n"
-            )
-        return True
-    except Exception as e:
-        print(f"Error clearing logs: {e}")
-        return False
+        logging.getLogger("server_logger").warning(
+            "[RETENTION] clear_logs() requested but IGNORED — log deletion is "
+            "disabled; all server/analytics logs are retained in /home per policy."
+        )
+    except Exception:
+        pass
+    return False
 
 def _rotated_log_files() -> list:
+    """All log segments oldest→newest, for Download. Matches BOTH suffix styles:
+    daily rotation → date (server-log.log.2026-07-18); size rotation → numeric
+    (server-log.log.1). Without the date match, downloads would silently omit the
+    retained daily history."""
+    import re as _re
     base = SERVER_LOG_FILE
-    backups = []
+    dated, numbered = [], []
     try:
         for p in base.parent.glob(base.name + ".*"):
             suffix = p.name[len(base.name) + 1:]
-            if suffix.isdigit():
-                backups.append((int(suffix), p))
+            if _re.match(r"^\d{4}-\d{2}-\d{2}", suffix):
+                dated.append((suffix, p))
+            elif suffix.isdigit():
+                numbered.append((int(suffix), p))
     except Exception:
         pass
-    ordered = [p for _, p in sorted(backups, key=lambda t: t[0], reverse=True)]
+    ordered = [p for _, p in sorted(dated)]                    # oldest date first
+    ordered += [p for _, p in sorted(numbered, reverse=True)]  # oldest .N first
     if base.exists():
-        ordered.append(base)
+        ordered.append(base)                                   # current (newest) last
     return ordered
 
 

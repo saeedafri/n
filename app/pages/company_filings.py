@@ -991,6 +991,14 @@ def _render_pdf_viewer(pdf_path: str, highlight_page: int = 0, highlight_keyword
     cache_key = f"pdf_b64_{pdf_path}"
     _pdf_load_t0 = _perf_time.time()
     if cache_key not in st.session_state:
+        # Evict older cached PDFs first: each base64 blob is 1-24MB and they were
+        # accumulating unbounded in session_state as the user browsed filings.
+        # Keep at most the 2 most-recent (this one becomes the 3rd) → bounded RAM.
+        _old_pdf_keys = [k for k in list(st.session_state.keys())
+                         if k.startswith("pdf_b64_") and k != cache_key]
+        if len(_old_pdf_keys) >= 2:
+            for _k in _old_pdf_keys:
+                del st.session_state[_k]
         try:
             file_size = os.path.getsize(pdf_path)
 
@@ -2109,7 +2117,6 @@ def get_filings_css() -> str:
     """Get custom CSS for filings page."""
     return """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
 
     /* =======================================================================
        PAGE CONTAINER
@@ -2977,8 +2984,13 @@ def render_sec_html_viewer(html_path: str, highlight_fact_id: Optional[str] = No
 
     try:
         _st_html_start = _perf_time.time()
-        # CRITICAL FIX #2: Add nonce to fallback HTML too for consistency
-        nonce = f"<!-- fallback_nonce:{hash((html_path, highlight_fact_id, time.time_ns() // 1_000_000))} -->"
+        # Nonce keyed ONLY on the view identity (path + highlight) — NOT wall-clock.
+        # With time_ns() in the key the nonce changed every rerun, so components.html
+        # saw new content each time and Streamlit RE-MOUNTED the iframe + re-transmitted
+        # the full multi-MB filing HTML on every interaction (blank-flash flicker +
+        # wasted bandwidth). Keyed on identity, an unchanged view is byte-identical →
+        # Streamlit skips the re-mount.
+        nonce = f"<!-- fallback_nonce:{hash((html_path, highlight_fact_id))} -->"
         components.html(nonce + clean_html, height=800, scrolling=True)
         _st_html_elapsed = _perf_time.time() - _st_html_start
 

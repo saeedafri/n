@@ -111,6 +111,25 @@ def run_command(cmd, timeout=15, audit=False):
         return "", str(e)
 
 
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_download_logs(_sig):
+    """Download-button bytes, memoised on the log file's (mtime, size) signature.
+    st.download_button evaluates its `data=` on EVERY rerun, so calling
+    download_logs() directly re-read ALL log segments into RAM on every Logs
+    render (and the Logs page auto-refreshes). Keyed on the signature it re-reads
+    only when the log actually changes (or every 20s), not every rerun."""
+    return download_logs()
+
+
+def _log_download_bytes():
+    try:
+        _sig = (os.path.getmtime(SERVER_LOG_FILE), os.path.getsize(SERVER_LOG_FILE)) \
+            if os.path.exists(SERVER_LOG_FILE) else (0, 0)
+    except Exception:
+        _sig = (0, 0)
+    return _cached_download_logs(_sig)
+
+
 def get_system_info():
     try:
         return {
@@ -587,7 +606,7 @@ def main():
                     with _cols[1]:
                         st.download_button(
                             "⬇️ Download Logs",
-                            data=download_logs(),
+                            data=_log_download_bytes(),
                             file_name=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
                             mime="text/plain",
                             width='stretch',

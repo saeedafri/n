@@ -766,7 +766,6 @@ def get_news_css() -> str:
     """Get custom CSS for newsroom styling - matches Figma exactly."""
     return """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Montserrat:wght@400;500;600;700&display=swap');
 
     /* Keyword highlight — brand red theme */
     mark {
@@ -1909,15 +1908,34 @@ def render_page():
                         f' <span style="color:#999;font-size:12px">{_scope_note}</span></div>',
                         unsafe_allow_html=True,
                     )
-                    _LEFT_RENDER_LIMIT = 2000000
-                    _left_articles = articles[:_LEFT_RENDER_LIMIT]
+                    # Business rule: show EVERY article in the selected date range —
+                    # but render INCREMENTALLY so a large result set stays fast + low
+                    # RAM. The full count is already shown in the header above; here we
+                    # paint the first _shown and a "Load more" button reveals the next
+                    # batch. Building HTML + regex-highlighting only the visible slice is
+                    # what keeps this off the ~10s / high-RAM "render-all" path.
+                    _NEWS_BATCH = 200
+                    if st.session_state.get('_news_left_kw') != active_keyword:
+                        st.session_state['_news_left_kw'] = active_keyword
+                        st.session_state['news_left_shown'] = _NEWS_BATCH
+                    _shown = int(st.session_state.get('news_left_shown', _NEWS_BATCH))
+                    _left_articles = articles[:_shown]
+
+                    # Precompile the highlight patterns ONCE for this render (they were
+                    # recompiled per article per field → thousands of re.compile calls).
+                    _kw_pats = [re.compile(re.escape(_w.strip()), re.IGNORECASE)
+                                for _w in (active_keyword or '').split() if _w.strip()]
+                    def _hl(_text):
+                        for _p in _kw_pats:
+                            _text = _p.sub(lambda m: f'<mark>{m.group()}</mark>', _text)
+                        return _text
 
                     _left_html_parts = []
                     for idx, article in enumerate(_left_articles):
                         title_short   = (article.title[:80] + '...') if len(article.title) > 80 else article.title
                         summary_short = (article.summary[:100] + '...') if article.summary and len(article.summary) > 100 else (article.summary or '')
-                        title_short   = _highlight_keyword(title_short,   active_keyword)
-                        summary_short = _highlight_keyword(summary_short, active_keyword)
+                        title_short   = _hl(title_short)
+                        summary_short = _hl(summary_short)
                         source   = article.source_domain or article.source or ''
                         pub_date = article.time_published.strftime('%b %d, %Y') if article.time_published else ''
                         _article_id = f'article-{idx}'
@@ -1933,12 +1951,13 @@ def render_page():
                             f'<span>{pub_date}</span>'
                             f'</div></div>'
                         )
-                    if len(articles) > _LEFT_RENDER_LIMIT:
-                        _left_html_parts.append(
-                            f"<div style='text-align:center;color:#888;font-size:11px;padding:8px 0'>"
-                            f"+ {len(articles) - _LEFT_RENDER_LIMIT:,} more matches</div>"
-                        )
                     st.markdown("".join(_left_html_parts), unsafe_allow_html=True)
+                    _remaining = len(articles) - len(_left_articles)
+                    if _remaining > 0:
+                        if st.button(f"⬇  Load {min(_NEWS_BATCH, _remaining)} more  ·  {_remaining:,} remaining",
+                                     key="news_load_more", width='stretch'):
+                            st.session_state['news_left_shown'] = _shown + _NEWS_BATCH
+                            st.rerun()
 
                 else:
                     if _kw_server_mode:

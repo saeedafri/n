@@ -2199,7 +2199,6 @@ def render_page():
     # ==================== GLOBAL CSS - PIXEL PERFECT FIGMA SPECS ====================
     st.html("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,600;0,700;1,400&display=swap');
 
     :root {
         /* Figma Colors - Exact Match */

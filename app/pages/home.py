@@ -59,7 +59,6 @@ def main():
 
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
 
     .block-container { padding: 0 !important; max-width: 100% !important; }
     .appview-container .main .block-container { padding-top: 0 !important; }

@@ -67,7 +67,6 @@ def get_earnings_css() -> str:
     try:
         return """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
 
     /* =======================================================================
        HIDE STREAMLIT CHROME
@@ -2830,14 +2829,25 @@ def render_earnings_calls(active_ticker: str = None):
                 if fiscal_period_end_date and not _ec_date_equals(fiscal_period_end_date, report_date):
                     _pdf_meta_parts.append(f"QE {_format_ec_display_date(fiscal_period_end_date)}")
                 _pdf_date_line = " · ".join(_pdf_meta_parts) if _pdf_meta_parts else ""
-                _pdf_bytes = generate_transcript_pdf(
-                    company_name=company_name,
-                    ticker=company,
-                    year=str(year),
-                    quarter=str(quarter),
-                    segments=segments,
-                    earnings_date=_pdf_date_line or None,
-                )
+                # Memoize per transcript identity. This ran on EVERY rerun of the
+                # single-transcript view (hot path) and regenerating the whole PDF
+                # dominated the page load. Bounded to the last 8 transcripts so the
+                # base64 PDF blobs can't accumulate unbounded in session_state.
+                _pdf_cache = st.session_state.setdefault("_ec_pdf_cache", {})
+                _pdf_ck = (company, str(year), str(quarter), _pdf_date_line)
+                _pdf_bytes = _pdf_cache.get(_pdf_ck)
+                if _pdf_bytes is None:
+                    _pdf_bytes = generate_transcript_pdf(
+                        company_name=company_name,
+                        ticker=company,
+                        year=str(year),
+                        quarter=str(quarter),
+                        segments=segments,
+                        earnings_date=_pdf_date_line or None,
+                    )
+                    if len(_pdf_cache) > 8:
+                        _pdf_cache.clear()
+                    _pdf_cache[_pdf_ck] = _pdf_bytes
             except Exception as _pdf_err:
                 log_error(f"[EC] PDF generation failed for {company} {year} {quarter}: {_pdf_err}")
                 _pdf_bytes = None

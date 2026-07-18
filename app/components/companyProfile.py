@@ -31,7 +31,6 @@ def get_company_css() -> str:
     """Get custom CSS for company profile page - matches Figma exactly."""
     return """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
 
     /* Page Container */
     .company-profile-container {

@@ -132,7 +132,6 @@ def get_global_css() -> str:
     try:
         return f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     /* Material Symbols Rounded — Streamlit renders its expander/UI icons as FONT
        LIGATURES in this family. Behind the STG reverse proxy the bundled font can
        fail to load, so the raw ligature text ("keyboard_arrow_right") leaks next to

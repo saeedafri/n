@@ -91,7 +91,11 @@ except Exception:
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-PREFETCH_YEARS = 2
+# How many most-recent years of filings + transcripts to pre-download.
+# Business decision (18-Jul): last 5 years is the useful window — it covers every
+# doc type (10-K annual, 10-Q quarterly, interim, and transcript-Q1..Q4) for each
+# ticker. Override with env SCANNER_YEARS=<n>, or SCANNER_ALL_YEARS=1 for full history.
+PREFETCH_YEARS = 5
 
 # File cache directory — persistent /home root on Azure (survives deploys),
 # <repo>/data locally. See utils.filings_paths for the why.
@@ -327,10 +331,23 @@ def _get_prefetch_years() -> Set[str]:
         return set()
 
 
+def _years_window() -> int:
+    """How many most-recent years to pre-download. Env SCANNER_YEARS overrides
+    PREFETCH_YEARS; clamped to >= 1."""
+    try:
+        n = int(os.getenv("SCANNER_YEARS", str(PREFETCH_YEARS)).strip())
+        return n if n >= 1 else PREFETCH_YEARS
+    except Exception:
+        return PREFETCH_YEARS
+
+
 def _discover_years_from_blobs(all_blobs_by_company: Dict[str, list]) -> Set[str]:
     """
-    Return only the last PREFETCH_YEARS years from available blob paths.
-    Older files are downloaded on-demand from Azure when a user opens them.
+    Return the set of years to pre-download. By default: the last N years
+    (N = SCANNER_YEARS, default PREFETCH_YEARS=5) of everything found in the blob
+    paths — every doc type (10-K/10-Q/interim/transcript-Q1..Q4) within that
+    window. Older years still load on-demand when a user opens them.
+    Set SCANNER_ALL_YEARS=1 to pre-download the full history instead.
     Falls back to _get_prefetch_years() if no years found.
     """
     try:
@@ -345,10 +362,16 @@ def _discover_years_from_blobs(all_blobs_by_company: Dict[str, list]) -> Set[str
                 if year:
                     discovered.add(year)
         if discovered:
-            # Keep only the most recent PREFETCH_YEARS years
+            # FULL-HISTORY escape hatch: pre-download every available year.
+            # Persistent /home is 500GB (~499GB free); full history is ~150-250GB.
+            if os.getenv("SCANNER_ALL_YEARS", "0").strip().lower() in ("1", "true", "yes"):
+                return discovered
+            # DEFAULT: last N years only (covers all doc types in that window).
+            # Downloads stream to disk (bounded RAM); older years load on-demand.
             current_year = _get_current_year()
-            cutoff = current_year - PREFETCH_YEARS
-            return {y for y in discovered if int(y) > cutoff}
+            cutoff = current_year - _years_window()
+            recent = {y for y in discovered if int(y) > cutoff}
+            return recent or discovered
     except Exception as e:
         log_structured_error(e, page="", component="_discover_years_from_blobs", operation="discover years from blob paths")
     return _get_prefetch_years()
@@ -1100,11 +1123,11 @@ class BackgroundFilingsScanner:
     # FILE DOWNLOADS
     # ========================================================================
     def _download_files_parallel(self, all_blobs_by_company: Dict[str, List]):
-        """Download files for ALL available years discovered from blob paths."""
+        """Download files for the target years (default: last 5) discovered from blob paths."""
         try:
             self._timing.start('phase2_file_downloads')
 
-            # Discover all available years from blob paths; falls back to last N years
+            # Target years = last N (SCANNER_YEARS, default 5); SCANNER_ALL_YEARS=1 = full history
             prefetch_years = _discover_years_from_blobs(all_blobs_by_company)
 
             # Collect files to download
