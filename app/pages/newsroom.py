@@ -1954,8 +1954,19 @@ def render_page():
                     st.markdown("".join(_left_html_parts), unsafe_allow_html=True)
                     _remaining = len(articles) - len(_left_articles)
                     if _remaining > 0:
-                        if st.button(f"⬇  Load {min(_NEWS_BATCH, _remaining)} more  ·  {_remaining:,} remaining",
-                                     key="news_load_more", width='stretch'):
+                        # Small red "Load more" link (not a full-width button).
+                        st.markdown(
+                            "<style>"
+                            "[class*='st-key-news_load_more'] button{background:transparent!important;"
+                            "border:none!important;box-shadow:none!important;color:#C8102E!important;"
+                            "font-size:13px!important;font-weight:600!important;padding:2px 4px!important;"
+                            "min-height:0!important;height:auto!important;width:auto!important;}"
+                            "[class*='st-key-news_load_more'] button:hover{color:#8f0b1f!important;"
+                            "text-decoration:underline!important;background:transparent!important;}"
+                            "</style>",
+                            unsafe_allow_html=True,
+                        )
+                        if st.button("⬇ Load more", key="news_load_more"):
                             st.session_state['news_left_shown'] = _shown + _NEWS_BATCH
                             st.rerun()
 

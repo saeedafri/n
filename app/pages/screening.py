@@ -4809,16 +4809,22 @@ def _render_keydevs_results():
             hidden_columns=_kd_hidden or None,
             enable_selection=True,
         )
-        _render_save_as_watchlist_panel(_kd_resp)
-
-        # Load-older pager: fetch the next page strictly older than the cursor
-        # (keyset seek — no OFFSET scan). Accumulates in session; RAM grows by one
-        # page per click, and every historical event stays reachable.
+        # Load-more link — small red text (not a full-width button), placed ABOVE
+        # the "Save as watchlist" panel. Keyset seek (no OFFSET scan); accumulates
+        # in session, one page per click, every historical event stays reachable.
         if _kd_cursor is not None and _shown < _kd_total:
-            _remaining = _kd_total - _shown
-            _n = min(_KD_PAGE, _remaining)
-            if st.button(f"⬇  Load {_n:,} older  ·  {_remaining:,} remaining",
-                         key="kd_load_older", width="stretch"):
+            st.markdown(
+                "<style>"
+                "[class*='st-key-kd_load_older'] button{background:transparent!important;"
+                "border:none!important;box-shadow:none!important;color:#C8102E!important;"
+                "font-size:13px!important;font-weight:600!important;padding:2px 4px!important;"
+                "min-height:0!important;height:auto!important;width:auto!important;}"
+                "[class*='st-key-kd_load_older'] button:hover{color:#8f0b1f!important;"
+                "text-decoration:underline!important;background:transparent!important;}"
+                "</style>",
+                unsafe_allow_html=True,
+            )
+            if st.button("⬇ Load more events", key="kd_load_older"):
                 _df_next, _cur_next = get_keydevs_events_for_tickers(
                     _tickers, _cats, days=_window.get("days"),
                     start_date=_window.get("start_date"), end_date=_window.get("end_date"),
@@ -4829,6 +4835,8 @@ def _render_keydevs_results():
                         [events_df, _df_next], ignore_index=True)
                 st.session_state["kd_cursor"] = _cur_next
                 st.rerun()
+
+        _render_save_as_watchlist_panel(_kd_resp)
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_keydevs_results", operation="render_keydevs_results")
         st.error("Something went wrong. Please try again.")
@@ -5715,8 +5723,20 @@ def _render_filterable_results_grid(
         sortable=True,
         filter="agTextColumnFilter",
         resizable=True,
-        floatingFilter=False,
-        menuTabs=["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
+        # FLOATING filter row under each header: a small always-visible input you
+        # type into to filter that column live — filter by ANY column, no popup.
+        # The old popup menu (floatingFilter=False + filterMenuTab) got stuck open
+        # inside the grid iframe and could not be closed after typing (e.g. Costco).
+        floatingFilter=True,
+        suppressMenu=True,            # remove the hamburger → no stuck popup (older AG Grid)
+        suppressHeaderMenuButton=True,  # same, AG Grid v31+
+        menuTabs=[],
+        # single "contains" condition — no AND/OR two-condition builder to leave open.
+        filterParams={
+            "filterOptions": ["contains", "startsWith", "equals", "notContains"],
+            "maxNumConditions": 1,
+            "buttons": ["clear"],
+        },
         # Hover ANY cell to read its full (untruncated) value — e.g. the long
         # Summary column. Native browser tooltip (enableBrowserTooltips below).
         tooltipValueGetter=JsCode("function(p){return p.value;}"),
