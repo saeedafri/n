@@ -3930,6 +3930,12 @@ def get_keydevs_events_for_tickers(
         if _ld is not None and _last.get("event_id") is not None:
             next_cursor = (_ld.isoformat(), int(_last["event_id"]))
 
+    return pd.DataFrame(_keydevs_records_from_rows(rows)), next_cursor
+
+
+def _keydevs_records_from_rows(rows: list) -> list:
+    """Map raw coreiq_company_events rows → the 7 display columns. Shared by the
+    paginated fetch and the full-export fetch so both stay identical."""
     records = []
     for r in rows:
         ev_date = r.get("event_date")
@@ -3958,8 +3964,50 @@ def get_keydevs_events_for_tickers(
             "Key Development Sources": source_display,
             "Source Reference": source_ref,
         })
+    return records
 
-    return pd.DataFrame(records), next_cursor
+
+def fetch_all_keydevs_events(
+    tickers: tuple,
+    categories: tuple,
+    days: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    cap: int = 200000,
+) -> pd.DataFrame:
+    """Full (unpaginated) fetch of ALL matching key-dev events for the Excel export,
+    up to ``cap`` rows. Deliberately NOT @st.cache_data — a 100k+ row frame must be
+    freed right after the workbook is built, not held in the cache for 5 min."""
+    if not tickers or not categories:
+        return pd.DataFrame()
+    ticker_sql = _build_ticker_in_list(tickers)
+    cat_sql = ", ".join(f"'{c}'" for c in categories)
+    date_clause = _build_keydev_date_clause({
+        "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
+        "start_date": start_date,
+        "end_date": end_date,
+        "days": days,
+    })
+    query = f"""
+        SELECT
+            e.event_date, e.event_subtype, e.event_category, e.ticker,
+            c.name_coresight AS company_name, c.exchange_acronym,
+            e.headline, e.situation, e.source, e.source_ref, e.source_detail,
+            c.primary_industry_coresight AS industry
+        FROM coreiq_company_events e
+        LEFT JOIN coreiq_companies c ON e.ticker = c.ticker
+        WHERE e.ticker IN ({ticker_sql})
+          AND e.event_category IN ({cat_sql})
+          {date_clause}
+        ORDER BY e.event_date DESC, e.event_id DESC
+        LIMIT {int(cap)}
+    """
+    try:
+        rows = db_manager.execute_query_readonly(query)
+    except Exception as exc:
+        log_error(f"[SCREENING] fetch_all_keydevs_events failed: {exc}")
+        return pd.DataFrame()
+    return pd.DataFrame(_keydevs_records_from_rows(rows or []))
 
 
 # =============================================================================

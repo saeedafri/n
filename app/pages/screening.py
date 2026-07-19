@@ -143,6 +143,7 @@ from data.screening_service import (
     filter_universe_to_members,
     get_keydevs_events_for_tickers,
     get_keydevs_events_count,
+    fetch_all_keydevs_events,
     keydevs_period_display_label,
     resolve_keydevs_event_window,
 )
@@ -4742,21 +4743,19 @@ def _render_keydevs_results():
             if _kd_total > _shown:
                 _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
                              f"· showing newest {_shown:,}</span>")
+            _hdr_txt += (" <span style='color:#9ca3af;font-weight:400;font-size:12px'>"
+                         "· double-click any cell to copy its full text</span>")
             st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
         with _dl_col:
-            _xl_bytes = _build_screening_excel(
-                events_df, len(criteria),
-                title="Coresight Key Developments",
-                subtitle_prefix=f"{len(events_df)} events",
+            # Excel = ALL matching events. Built in a BACKGROUND thread (never blocks
+            # the page or greys the grid) inside a self-refreshing st.fragment, and
+            # served with the original branded red Excel button. See
+            # _kd_excel_download_area below.
+            from datetime import datetime as _kd_dt
+            _kd_excel_download_area(
+                str(_kd_sig), _tickers, _cats, _window, len(criteria),
+                _kd_total, 200000, _kd_dt.now().strftime("%Y%m%d_%H%M"),
             )
-            if _xl_bytes:
-                from datetime import datetime
-                _ts = datetime.now().strftime("%Y%m%d_%H%M")
-                _render_excel_js_download(
-                    _xl_bytes,
-                    f"KeyDev_Screening_{_ts}.xlsx",
-                    label="Download Excel",
-                )
 
         # Make relative internal URLs absolute so LinkColumn works in any environment
         if "Source Reference" in events_df.columns:
@@ -4954,6 +4953,162 @@ function dl(){{
         _sthtml(btn_html, height=52, scrolling=False)
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_excel_js_download", operation="render_excel_download_button")
+
+
+def _build_keydevs_excel_fast(
+    df: pd.DataFrame,
+    criteria_count: int,
+    title: str = "Coresight Key Developments",
+) -> bytes:
+    """Fast, low-RAM Excel for the FULL key-dev export (can be 100k+ rows).
+
+    Uses openpyxl write_only (streaming) mode + itertuples, and skips the
+    per-cell borders/fills of _build_screening_excel — those make the styled
+    builder minutes-slow and RAM-heavy at scale. Branded title + bold header +
+    plain streamed data rows keeps a 140k-row export to a few seconds.
+    """
+    try:
+        import io
+        from datetime import datetime
+        from openpyxl import Workbook
+        from openpyxl.cell import WriteOnlyCell
+        from openpyxl.styles import Font, PatternFill
+
+        wb = Workbook(write_only=True)
+        ws = wb.create_sheet("Key Developments")
+        cols = list(df.columns)
+
+        t = WriteOnlyCell(ws, value=title)
+        t.font = Font(name="Inter", size=14, bold=True, color="D62E2F")
+        ws.append([t])
+        now = datetime.now().strftime("%B %d, %Y %I:%M %p")
+        sub = WriteOnlyCell(
+            ws, value=f"{len(df):,} events  |  {criteria_count} criteria  |  Generated {now}")
+        sub.font = Font(name="Inter", size=10, color="6B6B6B")
+        ws.append([sub])
+        ws.append([])
+
+        hdr = []
+        for c in cols:
+            hc = WriteOnlyCell(ws, value=str(c))
+            hc.font = Font(name="Inter", size=10, bold=True, color="2D2A29")
+            hc.fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
+            hdr.append(hc)
+        ws.append(hdr)
+
+        for row in df.itertuples(index=False, name=None):
+            ws.append([
+                "" if (v is None or (isinstance(v, float) and pd.isna(v))) else v
+                for v in row
+            ])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        data = buf.getvalue()
+        buf.close()
+        return data
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_build_keydevs_excel_fast", operation="build_excel_fast")
+        return b""
+
+
+# ── Full-export Excel: background build + non-blocking self-refreshing fragment ──
+import threading as _kd_thr
+_KD_XL_JOBS: dict = {}
+_KD_XL_LOCK = _kd_thr.Lock()
+
+
+def _kd_excel_job(sig, tickers, cats, window, criteria_count, cap):
+    """Background worker: fetch ALL matching events + build the workbook, OFF the
+    Streamlit thread so the page/grid never block. Result lands in _KD_XL_JOBS[sig].
+    Logs fetch_ms + build_ms so the real download time is measurable in the logs."""
+    import time as _t
+    try:
+        _t0 = _t.perf_counter()
+        _df = fetch_all_keydevs_events(
+            tickers, cats, days=window.get("days"),
+            start_date=window.get("start_date"), end_date=window.get("end_date"), cap=cap)
+        _fetch_ms = (_t.perf_counter() - _t0) * 1000.0
+        _t1 = _t.perf_counter()
+        _data = _build_keydevs_excel_fast(_df, criteria_count, title="Coresight Key Developments")
+        _build_ms = (_t.perf_counter() - _t1) * 1000.0
+        _n = len(_df)
+        del _df
+        with _KD_XL_LOCK:
+            _KD_XL_JOBS[sig] = {"status": "ready", "bytes": _data, "count": _n,
+                                "fetch_ms": _fetch_ms, "build_ms": _build_ms}
+        try:
+            log_timing("KEYDEV_EXCEL_BUILD", _fetch_ms + _build_ms,
+                       f"events={_n} fetch_ms={_fetch_ms:.0f} build_ms={_build_ms:.0f} "
+                       f"bytes={len(_data)}", level="WARNING")
+        except Exception:
+            pass
+        try:
+            import ctypes as _c
+            _c.CDLL("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+    except Exception as _e:
+        with _KD_XL_LOCK:
+            _KD_XL_JOBS[sig] = {"status": "error", "error": str(_e)[:200]}
+        try:
+            log_structured_error(_e, page="screening", component="_kd_excel_job", operation="build_excel")
+        except Exception:
+            pass
+
+
+_KD_XL_BTN_CSS = (
+    "<style>"
+    "[class*='st-key-kd_xl_start'] button,[class*='st-key-kd_xl_ready'] button{"
+    "background:transparent!important;border:1px solid #D62E2F!important;color:#D62E2F!important;"
+    "border-radius:4px!important;font-weight:600!important;box-shadow:none!important;}"
+    "[class*='st-key-kd_xl_start'] button:hover,[class*='st-key-kd_xl_ready'] button:hover{"
+    "background:#D62E2F!important;color:#fff!important;}"
+    "@keyframes kdspin{to{transform:rotate(360deg);}}"
+    "</style>"
+)
+
+
+@st.fragment(run_every=2)
+def _kd_excel_download_area(sig, tickers, cats, window, criteria_count, total, cap, ts):
+    """Excel download for ALL events. Only THIS small area reruns on the 2s tick —
+    the results grid + cards are never re-rendered or greyed. The build runs in a
+    background thread; the button shows Download → Preparing… → Download (ready)."""
+    with _KD_XL_LOCK:
+        job = _KD_XL_JOBS.get(sig)
+    st.markdown(_KD_XL_BTN_CSS, unsafe_allow_html=True)
+    _n = min(total, cap)
+    _fname = f"KeyDev_Screening_{ts}.xlsx"
+    _mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    if job is None:
+        if st.button(":material/table_chart: Excel", key="kd_xl_start", width="stretch",
+                     help=f"Download all {_n:,} matching events as Excel"):
+            with _KD_XL_LOCK:
+                _KD_XL_JOBS.clear()               # keep only the current export in RAM
+                _KD_XL_JOBS[sig] = {"status": "building"}
+            _kd_thr.Thread(target=_kd_excel_job,
+                           args=(sig, tickers, cats, window, criteria_count, cap),
+                           daemon=True).start()
+            st.rerun(scope="fragment")
+    elif job.get("status") == "building":
+        st.markdown(
+            "<div style='display:flex;align-items:center;justify-content:flex-end;gap:8px;"
+            "height:38px;color:#D62E2F;font-size:13px;font-weight:600;'>"
+            "<span style='width:14px;height:14px;border:2px solid #f0c9ca;border-top-color:#D62E2F;"
+            "border-radius:50%;display:inline-block;animation:kdspin .8s linear infinite;'></span>"
+            f"Preparing Excel · {_n:,} events…</div>",
+            unsafe_allow_html=True,
+        )
+    elif job.get("status") == "ready":
+        st.download_button(":material/table_chart: Excel", data=job.get("bytes", b""),
+                           file_name=_fname, mime=_mime, key="kd_xl_ready", width="stretch",
+                           help=f"Download all {job.get('count', 0):,} events")
+    else:  # error
+        if st.button("↻ Excel — retry", key="kd_xl_start", width="stretch"):
+            with _KD_XL_LOCK:
+                _KD_XL_JOBS.pop(sig, None)
+            st.rerun(scope="fragment")
 
 
 def _build_screening_excel(
@@ -5723,19 +5878,18 @@ def _render_filterable_results_grid(
         sortable=True,
         filter="agTextColumnFilter",
         resizable=True,
-        # FLOATING filter row under each header: a small always-visible input you
-        # type into to filter that column live — filter by ANY column, no popup.
-        # The old popup menu (floatingFilter=False + filterMenuTab) got stuck open
-        # inside the grid iframe and could not be closed after typing (e.g. Costco).
-        floatingFilter=True,
-        suppressMenu=True,            # remove the hamburger → no stuck popup (older AG Grid)
-        suppressHeaderMenuButton=True,  # same, AG Grid v31+
-        menuTabs=[],
-        # single "contains" condition — no AND/OR two-condition builder to leave open.
+        # NO floating filter row — filtering stays in the per-column header menu
+        # (click the funnel on any column). The only real bug was the popup
+        # wouldn't close: it defaulted to a TWO-condition (AND/OR) builder, so the
+        # second empty condition kept it open. maxNumConditions=1 makes it a single
+        # "contains" input with a Clear button that closes on click-away.
+        floatingFilter=False,
+        menuTabs=["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
         filterParams={
             "filterOptions": ["contains", "startsWith", "equals", "notContains"],
             "maxNumConditions": 1,
             "buttons": ["clear"],
+            "closeOnApply": True,
         },
         # Hover ANY cell to read its full (untruncated) value — e.g. the long
         # Summary column. Native browser tooltip (enableBrowserTooltips below).
@@ -5798,6 +5952,23 @@ def _render_filterable_results_grid(
     grid_options["tooltipShowDelay"] = 200
     grid_options["enableCellTextSelection"] = True
     grid_options["ensureDomOrder"] = True
+    # Double-click ANY cell → copy its FULL (untruncated) value to the clipboard,
+    # with a brief toast. Deterministic across AG Grid versions and independent of
+    # the ellipsis truncation, so an analyst can grab a whole headline / summary /
+    # any column — not just the visible part. (Drag-select above still works too.)
+    grid_options["onCellDoubleClicked"] = JsCode(
+        "function(e){try{"
+        "var v=(e&&e.value!=null)?String(e.value):'';"
+        "if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(v);}"
+        "else{var ta=document.createElement('textarea');ta.value=v;document.body.appendChild(ta);"
+        "ta.select();document.execCommand('copy');document.body.removeChild(ta);}"
+        "var t=document.createElement('div');t.textContent='Copied';"
+        "t.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);"
+        "background:#2D2A29;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;"
+        "z-index:99999;font-family:Inter,Arial,sans-serif;';"
+        "document.body.appendChild(t);setTimeout(function(){t.remove();},1100);"
+        "}catch(err){}}"
+    )
     _apply_grid_column_overrides(
         grid_options,
         link_columns=list(link_cols),
