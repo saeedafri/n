@@ -1664,6 +1664,14 @@ import threading as _threading
 _segment_cache_build_lock  = _threading.Lock()
 _segment_cache_build_state = {"running": False, "progress": 0, "total": 0, "last_error": ""}
 
+# Cooldown for the user-request lazy rebuild (19-Jul-2026 crash-loop fix). The
+# segment cache is normally populated by the off-hours auto-refresh scheduler; a
+# user's screening click should NOT keep kicking off the multi-minute v5 rebuild.
+# When the cache is empty we degrade to "unavailable" (N/A) and start at most ONE
+# background rebuild per this window, letting the scheduler own the real refresh.
+_LAZY_REBUILD_COOLDOWN_SEC = 1800  # 30 min
+_last_lazy_rebuild_ts = 0.0
+
 
 def get_segment_cache_build_state() -> dict:
     """Return a snapshot of the background cache-build state."""
@@ -1722,7 +1730,7 @@ def _segment_cache_universe() -> List[str]:
     raise RuntimeError(SEGMENT_CACHE_UNAVAILABLE_MESSAGE)
 
 
-def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict[str, int]:
+def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 12) -> Dict[str, int]:
     """Rebuild the screening segment values cache from the SAME classification
     logic the market-data Segments tab uses.
 
@@ -1751,6 +1759,9 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
 
     entries: List[tuple] = []  # (ticker, segment_type, metric_key, member, year, value_mm)
     processed = 0
+    skipped: List[str] = []
+    import time as _seg_time
+    from sqlalchemy import text as _sql_text
     for start in range(0, total_t, ticker_chunk):
         chunk = tickers[start:start + ticker_chunk]
         params = dict(base_params)
@@ -1758,14 +1769,47 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
         for i, t in enumerate(chunk):
             params[f"ct{i}"] = t
             qmarks.append(f":ct{i}")
+        # GUARDRAIL (19-Jul-2026 crash-loop fix). Without a
+        # (ticker, is_dimensioned, doc_type) index this chunk scan of the 14.4M-row
+        # v5 table ran 60-121s each and, run ~9x back-to-back, starved the web
+        # process until Azure restarted the container (503 crash loop). Defenses:
+        #   • MAX_EXECUTION_TIME(20000) — hard 20s server-side ceiling per chunk.
+        #   • small ticker_chunk (12) — small result sets → short GIL-held deserialize.
+        #   • sleep(0.4) between chunks — yields CPU/GIL so interactive requests and
+        #     the heartbeat thread are never starved by a long back-to-back run.
+        #   • retry-then-abort — see the fetch below.
+        # Add the index (see spec) to make every chunk sub-second; then nothing skips.
         sql = f"""
-            SELECT ticker, {_SEGMENT_CACHE_FETCH_COLS}
+            SELECT /*+ MAX_EXECUTION_TIME(20000) */ ticker, {_SEGMENT_CACHE_FETCH_COLS}
             FROM coreiq_filing_metrics_v5
             WHERE is_dimensioned = 1 AND doc_type = '10-K'
               AND numeric_value IS NOT NULL
               AND ticker IN ({", ".join(qmarks)}) AND ({clause})
         """
-        rows = db_manager.execute_query_readonly(sql, params) or []
+        # Fetch on a RAISING connection with retry. execute_query_readonly() swallows
+        # errors and returns [] — over a flaky link a failed chunk would then look like
+        # "no data" and silently drop those tickers from this whole-table rebuild
+        # (that corrupted the cache once, 19-Jul). The raw read engine raises, so a
+        # transient failure is retried and a persistent one is recorded → aborts the
+        # publish below (the live cache is kept), never silently shipped partial.
+        rows = None
+        for _attempt in range(3):
+            try:
+                with db_manager._read_engine.connect() as _c:
+                    rows = [dict(m) for m in _c.execute(_sql_text(sql), params).mappings()]
+                break
+            except Exception as _qe:
+                if _attempt < 2:
+                    _seg_time.sleep(1.0)
+                    continue
+                skipped.extend(chunk)
+                log_error(
+                    f"[SCREENING] segment cache: chunk {start // ticker_chunk} "
+                    f"({len(chunk)} tickers) failed after 3 tries — {str(_qe)[:160]}"
+                )
+        if rows is None:
+            _seg_time.sleep(0.4)
+            continue
         by_ticker: Dict[str, List[dict]] = {}
         for r in rows:
             by_ticker.setdefault(r["ticker"], []).append(r)
@@ -1790,6 +1834,37 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 40) -> Dict
                 progress_cb(processed, total_t)
             except Exception:
                 pass
+        # Yield between chunks — the whole point of the crash fix.
+        _seg_time.sleep(0.4)
+
+    if skipped:
+        # ABORT before the whole-table swap. The zero-downtime publish REPLACES the
+        # live cache, so publishing a build that skipped chunks would drop those
+        # tickers' existing (good) segment data. Raise instead: callers catch it,
+        # leave the live cache untouched, and last_built_max_id is not advanced, so
+        # it simply retries on the next poll. Once the v5 (ticker,is_dimensioned,
+        # doc_type) index lands, no chunk times out and the build completes normally.
+        raise RuntimeError(
+            f"segment cache build aborted: {len(skipped)} tickers timed out "
+            f"(add the v5 (ticker,is_dimensioned,doc_type) index) — "
+            f"first few: {', '.join(skipped[:10])}"
+        )
+
+    # Completeness guard (19-Jul-2026). Never PUBLISH a build that covers far fewer
+    # tickers than the live cache — that signals a partial/failed run (e.g. silent
+    # empty chunks from a swallowed read error), not a genuine shrink. Abort and keep
+    # the live cache rather than swapping in a regression. (A real drop that large
+    # would need a data change, which the next run picks up once the count recovers.)
+    new_tickers = len({e[0] for e in entries})
+    try:
+        _cur_tickers = int((get_segment_values_cache_status() or {}).get("distinct_tickers", 0) or 0)
+    except Exception:
+        _cur_tickers = 0
+    if _cur_tickers >= 30 and new_tickers < 0.7 * _cur_tickers:
+        raise RuntimeError(
+            f"segment cache build aborted: new build covers {new_tickers} tickers "
+            f"with data vs {_cur_tickers} in the live cache — looks partial, not publishing"
+        )
 
     # Zero-downtime publish (18-Jul-2026): build the full fresh set into STAGING
     # tables, then atomically RENAME them into place. Once this rebuild became
@@ -2980,11 +3055,17 @@ def apply_segment_statement_criterion(
             selected_segments=query_segments,
         )
     else:
-        # Fail fast — no v5 live-SQL fallback and no silent N/A degrade.
+        # Cache empty → degrade to "unavailable" (caller shows N/A). Kick off a
+        # background rebuild at most once per cooldown from the user path — the
+        # scheduler owns the real refresh; a user click must never repeatedly start
+        # the multi-minute v5 rebuild (that was the crash-loop amplifier, 19-Jul).
         try:
             overall = get_segment_values_cache_status()
             if int(overall.get("total_rows", 0) or 0) == 0:
-                rebuild_segment_values_cache_async()  # no-op if already running
+                global _last_lazy_rebuild_ts
+                if time.time() - _last_lazy_rebuild_ts > _LAZY_REBUILD_COOLDOWN_SEC:
+                    _last_lazy_rebuild_ts = time.time()
+                    rebuild_segment_values_cache_async()  # no-op if already running
         except Exception as _bx:
             log_error(f"[SCREENING] auto segment cache rebuild check failed: {_bx}")
         log_timing(

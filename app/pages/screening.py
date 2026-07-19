@@ -4737,25 +4737,30 @@ def _render_keydevs_results():
 
         # Header row with Excel download — honest total, newest-first.
         _shown = len(events_df)
-        _hdr_col, _dl_col = st.columns([8, 2])
+        _hdr_col, _dl_col = st.columns([9, 1.5])
         with _hdr_col:
             _hdr_txt = f"<strong>{_kd_total:,}</strong> key development events found"
             if _kd_total > _shown:
                 _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
                              f"· showing newest {_shown:,}</span>")
-            _hdr_txt += (" <span style='color:#9ca3af;font-weight:400;font-size:12px'>"
-                         "· double-click any cell to copy its full text</span>")
             st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
         with _dl_col:
-            # Excel = ALL matching events. Built in a BACKGROUND thread (never blocks
-            # the page or greys the grid) inside a self-refreshing st.fragment, and
-            # served with the original branded red Excel button. See
-            # _kd_excel_download_area below.
+            # Branded, single-click Excel of the currently-shown events. Deliberately
+            # SIMPLE + synchronous: NO st.fragment / run_every / background thread.
+            # A run_every=2 fragment here fired a rerun every 2s forever, which over a
+            # high-latency link piled up reruns until the app stopped responding and
+            # Azure crash-looped the STG container (19-Jul). Never re-add run_every on
+            # the screening results path. The shown-page payload is small, so a plain
+            # JS-blob download button is instant + stable.
             from datetime import datetime as _kd_dt
-            _kd_excel_download_area(
-                str(_kd_sig), _tickers, _cats, _window, len(criteria),
-                _kd_total, 200000, _kd_dt.now().strftime("%Y%m%d_%H%M"),
-            )
+            _xl_bytes = _build_keydevs_excel_fast(
+                events_df, len(criteria), title="Coresight Key Developments")
+            if _xl_bytes:
+                _render_excel_js_download(
+                    _xl_bytes,
+                    f"KeyDev_Screening_{_kd_dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    label="Excel",
+                )
 
         # Make relative internal URLs absolute so LinkColumn works in any environment
         if "Source Reference" in events_df.columns:
@@ -4907,21 +4912,22 @@ body{{
   display:flex;justify-content:flex-end;align-items:center;
   height:52px;background:transparent;
   font-family:'Inter','Roboto',Helvetica,Arial,sans-serif;
-  padding:0 20px;
+  padding:0 2px;
 }}
 button{{
   background:transparent;
   border:1px solid #D62E2F;
   color:#D62E2F;
   border-radius:4px;
-  padding:7px 12px;
+  padding:6px 10px;
   font-size:13px;
   font-weight:500;
   cursor:pointer;
   white-space:nowrap;
   transition:background 0.15s,color 0.15s;
   letter-spacing:0.01em;
-  display:flex;align-items:center;gap:6px;
+  display:inline-flex;align-items:center;gap:5px;
+  width:auto;
 }}
 button:hover{{background:#D62E2F;color:#fff;}}
 button:active{{opacity:0.85;}}
@@ -5012,103 +5018,12 @@ def _build_keydevs_excel_fast(
         return b""
 
 
-# ── Full-export Excel: background build + non-blocking self-refreshing fragment ──
-import threading as _kd_thr
-_KD_XL_JOBS: dict = {}
-_KD_XL_LOCK = _kd_thr.Lock()
-
-
-def _kd_excel_job(sig, tickers, cats, window, criteria_count, cap):
-    """Background worker: fetch ALL matching events + build the workbook, OFF the
-    Streamlit thread so the page/grid never block. Result lands in _KD_XL_JOBS[sig].
-    Logs fetch_ms + build_ms so the real download time is measurable in the logs."""
-    import time as _t
-    try:
-        _t0 = _t.perf_counter()
-        _df = fetch_all_keydevs_events(
-            tickers, cats, days=window.get("days"),
-            start_date=window.get("start_date"), end_date=window.get("end_date"), cap=cap)
-        _fetch_ms = (_t.perf_counter() - _t0) * 1000.0
-        _t1 = _t.perf_counter()
-        _data = _build_keydevs_excel_fast(_df, criteria_count, title="Coresight Key Developments")
-        _build_ms = (_t.perf_counter() - _t1) * 1000.0
-        _n = len(_df)
-        del _df
-        with _KD_XL_LOCK:
-            _KD_XL_JOBS[sig] = {"status": "ready", "bytes": _data, "count": _n,
-                                "fetch_ms": _fetch_ms, "build_ms": _build_ms}
-        try:
-            log_timing("KEYDEV_EXCEL_BUILD", _fetch_ms + _build_ms,
-                       f"events={_n} fetch_ms={_fetch_ms:.0f} build_ms={_build_ms:.0f} "
-                       f"bytes={len(_data)}", level="WARNING")
-        except Exception:
-            pass
-        try:
-            import ctypes as _c
-            _c.CDLL("libc.so.6").malloc_trim(0)
-        except Exception:
-            pass
-    except Exception as _e:
-        with _KD_XL_LOCK:
-            _KD_XL_JOBS[sig] = {"status": "error", "error": str(_e)[:200]}
-        try:
-            log_structured_error(_e, page="screening", component="_kd_excel_job", operation="build_excel")
-        except Exception:
-            pass
-
-
-_KD_XL_BTN_CSS = (
-    "<style>"
-    "[class*='st-key-kd_xl_start'] button,[class*='st-key-kd_xl_ready'] button{"
-    "background:transparent!important;border:1px solid #D62E2F!important;color:#D62E2F!important;"
-    "border-radius:4px!important;font-weight:600!important;box-shadow:none!important;}"
-    "[class*='st-key-kd_xl_start'] button:hover,[class*='st-key-kd_xl_ready'] button:hover{"
-    "background:#D62E2F!important;color:#fff!important;}"
-    "@keyframes kdspin{to{transform:rotate(360deg);}}"
-    "</style>"
-)
-
-
-@st.fragment(run_every=2)
-def _kd_excel_download_area(sig, tickers, cats, window, criteria_count, total, cap, ts):
-    """Excel download for ALL events. Only THIS small area reruns on the 2s tick —
-    the results grid + cards are never re-rendered or greyed. The build runs in a
-    background thread; the button shows Download → Preparing… → Download (ready)."""
-    with _KD_XL_LOCK:
-        job = _KD_XL_JOBS.get(sig)
-    st.markdown(_KD_XL_BTN_CSS, unsafe_allow_html=True)
-    _n = min(total, cap)
-    _fname = f"KeyDev_Screening_{ts}.xlsx"
-    _mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-    if job is None:
-        if st.button(":material/table_chart: Excel", key="kd_xl_start", width="stretch",
-                     help=f"Download all {_n:,} matching events as Excel"):
-            with _KD_XL_LOCK:
-                _KD_XL_JOBS.clear()               # keep only the current export in RAM
-                _KD_XL_JOBS[sig] = {"status": "building"}
-            _kd_thr.Thread(target=_kd_excel_job,
-                           args=(sig, tickers, cats, window, criteria_count, cap),
-                           daemon=True).start()
-            st.rerun(scope="fragment")
-    elif job.get("status") == "building":
-        st.markdown(
-            "<div style='display:flex;align-items:center;justify-content:flex-end;gap:8px;"
-            "height:38px;color:#D62E2F;font-size:13px;font-weight:600;'>"
-            "<span style='width:14px;height:14px;border:2px solid #f0c9ca;border-top-color:#D62E2F;"
-            "border-radius:50%;display:inline-block;animation:kdspin .8s linear infinite;'></span>"
-            f"Preparing Excel · {_n:,} events…</div>",
-            unsafe_allow_html=True,
-        )
-    elif job.get("status") == "ready":
-        st.download_button(":material/table_chart: Excel", data=job.get("bytes", b""),
-                           file_name=_fname, mime=_mime, key="kd_xl_ready", width="stretch",
-                           help=f"Download all {job.get('count', 0):,} events")
-    else:  # error
-        if st.button("↻ Excel — retry", key="kd_xl_start", width="stretch"):
-            with _KD_XL_LOCK:
-                _KD_XL_JOBS.pop(sig, None)
-            st.rerun(scope="fragment")
+# NOTE (19-Jul): the background-thread + `@st.fragment(run_every=2)` full-export
+# widget that used to live here was REMOVED. run_every=2 fired a client rerun every
+# 2s on the screening results page; over a high-latency link those reruns piled up
+# until the app stopped responding and Azure crash-looped the STG container. The
+# Excel button is now a plain synchronous branded download of the shown events (see
+# the `_dl_col` block in _render_keydevs_results). Do NOT reintroduce run_every here.
 
 
 def _build_screening_excel(
