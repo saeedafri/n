@@ -124,3 +124,37 @@ fires → no heavy scans → stable for 36+ min after 02:13 PM.
 
 **Recommended:** B (real fix) + A (guardrail so it can never freeze the app again) + C/D
 (never run the heavy build on a user request during business hours).
+
+---
+
+## ROUND 3 — index created + measured, build hardened, cache restored (19-Jul-2026)
+
+**Index (B) — CREATED ON STG.** `idx_v5_ticker_dim_doctype (ticker, is_dimensioned, doc_type)`
+on `coreiq_filing_metrics_v5` (14.4M rows / 22.8 GB; build took ~13 min server-side, online
+`ALGORITHM=INPLACE, LOCK=NONE`). Measured with `EXPLAIN ANALYZE` on a 40-ticker chunk (the
+size that ran 60–121 s in the crash logs):
+
+| | rows scanned | server-side time |
+|---|---|---|
+| BEFORE (old `idx_v2_ticker_doctype`) | 354,744 | **50,140 ms** |
+| AFTER (new index) | 163,440 | **1,627 ms** |
+
+→ **~31× faster.** `is_dimensioned` is now part of the index condition instead of a post-filter,
+so only dimensioned 10-K rows are read. **PROD still needs the same index** (hand the data team
+`CREATE INDEX idx_v5_ticker_dim_doctype ON coreiq_filing_metrics_v5 (ticker, is_dimensioned, doc_type);`).
+
+**Guardrail (A) shipped** in `build_segment_values_cache`: `ticker_chunk` 40→12,
+`MAX_EXECUTION_TIME(20000)` per chunk, `sleep(0.4)` yield between chunks.
+
+**Cache-corruption incident + hardening.** Running the *full* build as an end-to-end test over a
+flaky dev VPN silently dropped ~235 tickers: `db_manager.execute_query_readonly()` **swallows
+exceptions and returns `[]`** (database.py:54-56), so a failed chunk looked like "no data," and
+the zero-downtime swap published a partial **106-ticker** cache (COST/HD/TGT missing). Fixes:
+1. Chunk fetch now runs on the **raising raw read engine with 3× retry**; a persistent failure
+   is recorded and **aborts the publish** (live cache kept) instead of silently shipping partial.
+2. **Completeness guard**: abort the swap if the new build covers <70% of the live cache's tickers.
+Cache then rebuilt clean and verified: **47,412 rows / 282 tickers** (byte-identical to pre-incident;
+COST shows Non-Foods $71.2B, US geo $200B; member cache 2,297 business + 262 geo).
+
+**Deploy set:** `app/pages/screening.py` (run_every removal + Excel button + copy-line) and
+`app/data/screening_service.py` (guardrail + retry/completeness + lazy-trigger cooldown).
