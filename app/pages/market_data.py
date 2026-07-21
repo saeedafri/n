@@ -1048,7 +1048,16 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
 
         # ── Store Counts Section (hidden when Stores by Country covers it) ──
         if store_counts and not _hide_sc_section:
-            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">Store Count (Worldwide)</td>')
+            # No per-country store breakdown for this company → name the
+            # geographies it reports revenue for on the Segments tab instead of
+            # a bare "Worldwide" (21-Jul-2026, per business). This is a disk
+            # read; the 5-14s segment build only ever runs in the background.
+            _t_geo = _time.perf_counter()
+            from data.repository import store_count_geo_label
+            _sc_geo = store_count_geo_label(ticker, bool(sbc_years and sbc_countries))
+            _rt_log("RATINGS_geo_label", (_time.perf_counter() - _t_geo) * 1000,
+                    details=f"ticker={ticker} label={_sc_geo!r}")
+            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">Store Count ({html_escape(_sc_geo)})</td>')
             for _ in years:
                 _parts.append('<td class="data-cell"></td>')
             _parts.append('</tr>')
@@ -4384,7 +4393,13 @@ def render_page():
                         (yr in _sbc_tot) for sc in _rat_data["store_counts"]
                         for yr, v in sc["values"].items() if v is not None)
                     if _rat_data["store_counts"] and not _hide_sc:
-                        _rat_rows.append({"label": "Store Count (Worldwide)", "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
+                        # Same geography parenthetical as the UI header.
+                        from data.repository import store_count_geo_label
+                        _xl_sbc = _rat_data.get("stores_by_country", {}) or {}
+                        _xl_geo = store_count_geo_label(
+                            selected_ticker,
+                            bool(_xl_sbc.get("years") and _xl_sbc.get("countries")))
+                        _rat_rows.append({"label": f"Store Count ({_xl_geo})", "values": [None] * len(_rat_years), "is_bold": True, "indent": 0, "is_percent": False, "is_text": True, "has_separator": True, "is_estimated": [False] * len(_rat_years)})
                         for sc in _rat_data["store_counts"]:
                             _vals = [int(sc["values"].get(yr)) if sc["values"].get(yr) is not None else None for yr in _rat_years]
                             _rat_rows.append({"label": sc["store_type"].title(), "values": _vals, "is_bold": False, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})

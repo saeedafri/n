@@ -565,6 +565,15 @@ def _background_warmup_thread():
                             RatingsDataRepository.get_square_footage_data(
                                 _tkr, 2000, _sweep_date.today().year)
                             SegmentDataRepository._fye_month(_tkr)  # header dates
+                            # Geographies for the "Store Count (...)" header.
+                            # Built here (5-14s each) so no render ever pays it.
+                            from data.repository import (
+                                _build_geo_segment_members, _geo_members_cache_path,
+                                _write_cache_atomic)
+                            _write_cache_atomic(
+                                _geo_members_cache_path(_tkr),
+                                {"cached_at": time.time(),
+                                 "members": _build_geo_segment_members(_tkr)})
                             _warmed += 1
                         except Exception:
                             pass

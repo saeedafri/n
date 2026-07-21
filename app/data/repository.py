@@ -11262,6 +11262,148 @@ def _write_cache_atomic(path, payload) -> None:
     tmp.replace(path)
 
 
+# ── Geographic footprint for the Store Count header (21-Jul-2026, per business) ──
+# A company that discloses only a WORLDWIDE store count (no per-country store
+# breakdown) still tells us where it operates: the geographies it reports
+# revenue for on the Segments tab. The Additional Data header borrows them, so
+# "Store Count (Worldwide)" becomes "Store Count (United States, Canada, ...)".
+#
+# Why disk-cached and built in the background: the member list comes from the
+# same classified tables the Segments tab renders, and building those costs
+# 5-14s COLD against STG (measured 21-Jul-2026: NKE 14.1s, KR 12.1s, TGT 6.9s,
+# LULU 4.3s) — never acceptable inside a render. The list itself is a handful
+# of short strings that only change when a new 10-K lands, so it caches on disk
+# exactly like the EDGAR caches and refreshes off-thread.
+_GEO_MEMBERS_DIRNAME = "geo_segment_members"
+_geo_members_lock = _ratings_threading.Lock()
+_geo_members_inflight: set = set()
+
+
+def _geo_members_cache_path(ticker: str):
+    return edgar_cache_dir() / _GEO_MEMBERS_DIRNAME / f"{ticker.upper()}.json"
+
+
+def _build_geo_segment_members(ticker: str) -> List[str]:
+    """Ordered geographic segment members for a ticker. SLOW — never call in a render.
+
+    Mirrors the Segments tab: members come from the very same classified
+    ``geo_segments`` that tab renders, so the header can never name a geography
+    the Segments tab does not show. Only the **Revenues** metric is used — that
+    is the commercial footprint. Assets is deliberately excluded because
+    asset-location countries are distribution hubs rather than markets (NKE
+    files Belgium there, which would read as a Nike retail market).
+
+    Members are ordered by largest reported revenue so the biggest market reads
+    first, and de-duplicated case-insensitively because filings drift between
+    spellings of one member ("Rest of World" / "Rest of world" — LULU).
+    """
+    from datetime import date as _d
+    res = SegmentDataRepository._build_segment_tables_from_db(
+        ticker, _d(1990, 1, 1), _d(2100, 12, 31))
+    if not res:
+        # Same tiering as get_segment_data: tickers with no DB segment rows
+        # (SKX, TSCO) render the Segments tab from edgartools, so mirror that.
+        try:
+            res = SegmentDataRepository._fetch_from_edgartools(ticker)
+        except Exception:
+            res = None
+    if not res:
+        return []
+    revenues = (res.get("geo_segments") or {}).get("Revenues") or {}
+    if not revenues:
+        return []
+
+    def _largest_revenue(member: str) -> float:
+        values = [v for v in (revenues.get(member) or {}).values() if v is not None]
+        return max(values) if values else 0.0
+
+    seen: set = set()
+    members: List[str] = []
+    for member in sorted(revenues, key=_largest_revenue, reverse=True):
+        label = str(member).strip()
+        key = label.lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        members.append(label)
+    return members
+
+
+def _schedule_geo_members_refresh(ticker: str) -> None:
+    """Rebuild one ticker's geo members off the render thread, one at a time."""
+    key = ticker.upper()
+    with _geo_members_lock:
+        if key in _geo_members_inflight:
+            return
+        _geo_members_inflight.add(key)
+
+    def _worker():
+        from utils.server_logger import log_timing
+        started = time.perf_counter()
+        try:
+            members = _build_geo_segment_members(key)
+            _write_cache_atomic(
+                _geo_members_cache_path(key),
+                {"cached_at": time.time(), "members": members},
+            )
+            log_timing("GEO_MEMBERS_build", (time.perf_counter() - started) * 1000,
+                       details=f"ticker={key} members={len(members)}")
+        except Exception as exc:
+            log_structured_error(exc, page="repository", component="geo_segment_members",
+                                 operation="build_geo_members", context=f"ticker={key}")
+        finally:
+            with _geo_members_lock:
+                _geo_members_inflight.discard(key)
+
+    try:
+        _get_edgar_executor().submit(_worker)
+    except Exception:
+        with _geo_members_lock:
+            _geo_members_inflight.discard(key)
+
+
+def geo_segment_members(ticker: str) -> List[str]:
+    """Geographic segment members for ``ticker`` — a disk read, safe in a render.
+
+    A miss or a stale file NEVER blocks: it schedules one background rebuild and
+    returns whatever is on disk (possibly empty), so the header falls back to
+    "Worldwide" for that single render and self-heals on the next one.
+    """
+    path = _geo_members_cache_path(ticker)
+    members: List[str] = []
+    fresh = False
+    try:
+        if path.exists():
+            payload = json.loads(path.read_text())
+            members = [str(m) for m in (payload.get("members") or [])]
+            fresh = (time.time() - float(payload.get("cached_at", 0))) < _edgar_disk_ttl_seconds()
+    except Exception:
+        members, fresh = [], False
+    if not fresh:
+        _schedule_geo_members_refresh(ticker)
+    return members
+
+
+# Fallback parenthetical when we cannot name the geographies. "if Applicable"
+# is deliberate: the worldwide total is only meaningful for companies that
+# actually operate in more than one country.
+STORE_COUNT_WORLDWIDE_LABEL = "Worldwide, if Applicable"
+
+
+def store_count_geo_label(ticker: str, has_country_rows: bool) -> str:
+    """Parenthetical for the "Store Count (...)" header.
+
+    Falls back to STORE_COUNT_WORLDWIDE_LABEL when the company already shows a
+    per-country store breakdown (that section names the countries itself), when
+    it reports no geographic segments at all, or when the member list has not
+    been built yet.
+    """
+    if has_country_rows:
+        return STORE_COUNT_WORLDWIDE_LABEL
+    members = geo_segment_members(ticker)
+    return ", ".join(members) if members else STORE_COUNT_WORLDWIDE_LABEL
+
+
 # ── Continent grouping for Stores by Country (16-Jul-2026, per business) ────
 # A single-continent footprint is labeled by its continent instead of
 # "Worldwide"; multi-continent footprints get per-continent subtotals before
