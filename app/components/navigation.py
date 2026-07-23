@@ -14,6 +14,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from components.styles import COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS
+from utils.brand_assets import (
+    CDN_LOGO_URL, CDN_LOGO_FOOTER_URL,
+    CORESIGHT_LOGO_URI, CORESIGHT_LOGO_FOOTER_URI,
+)
 import streamlit as st
 
 # Import auth functions
@@ -154,8 +158,7 @@ def _inject_transition_js() -> None:
     ov = doc.createElement('div'); ov.id='cs-ov';
     ov.innerHTML =
       '<div class="cs-c">' +
-        '<img src="https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net' +
-             '/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight" ' +
+        '<img src="https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight" ' +
              'referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">' +
         '<div class="cs-r"></div><div class="cs-t" id="cs-ov-txt">Loading</div>' +
         '<div class="cs-s"></div>' +
@@ -168,7 +171,7 @@ def _inject_transition_js() -> None:
   /* Per-destination label so the card reads e.g. "Loading Earnings Calls" —
      mirrors boot_overlay.py so a boot/nav/page handoff shows the same text. */
   var LBL = {'/market_data':'Loading Market Data','/earnings_calls':'Loading Earnings Calls',
-    '/earnings_calendar':'Loading Calendar','/screening':'Loading Screening',
+    '/calendar':'Loading Calendar','/screening':'Loading Screening',
     '/newsroom':'Loading News','/home':'Loading Home','/company_filings':'Loading Filings',
     '/forecasting':'Loading Forecasting','/live_earnings_transcript':'Loading Transcript',
     '/access_management':'Loading Access','/logs':'Loading Logs',
@@ -291,6 +294,9 @@ def _inject_transition_js() -> None:
   }, 60);
 })();
 """
+    # Serve the Coresight logo locally (inlined) instead of the external WordPress
+    # CDN — removes a slow cross-origin fetch from the in-app loading overlay.
+    driver_src = driver_src.replace(CDN_LOGO_URL, CORESIGHT_LOGO_URI)
     script_html = (
         "<script>(function(){"
         "var pd=window.parent.document, pw=window.parent;"
@@ -372,7 +378,7 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
         nav_tracker.record_nav_click(_prev_nav, current_page)
         nav_tracker.record_page_start(current_page)
 
-    _ec_href = f"/earnings_calendar?ticker={actual_ticker}"
+    _ec_href = f"/calendar?ticker={actual_ticker}"
     log_timing(
         "NAV_LINK_EARNINGS_CALENDAR",
         0,
@@ -537,7 +543,7 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
         <nav class="coresight-header-nav">
           <a href="/market_data?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_market_data else '""') + '''>Market Data Dashboard</a>
           <a href="/earnings_calls?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_earnings_calls else '""') + '''>Earnings Calls</a>
-          <a href="/earnings_calendar?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_earnings_calendar else '""') + '''>Calendar</a>
+          <a href="/calendar?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_earnings_calendar else '""') + '''>Calendar</a>
           <a href="/screening?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_screening else '""') + '''>Screening</a>
           <a href="/newsroom?ticker=''' + actual_ticker + '''" target="_self" class=''' + ('"active"' if is_newsroom else '""') + '''>News</a>
         </nav>
@@ -557,6 +563,8 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
       </div>
 
     </div>'''
+    # Local inlined logo (no external WordPress CDN round-trip on the top bar).
+    header_html = header_html.replace(CDN_LOGO_URL, CORESIGHT_LOGO_URI)
 
     # STEP 4: Render header HTML.
     # st.html() with unsafe_allow_javascript=True renders with full HTML support
@@ -584,7 +592,7 @@ def render_header(full_width: bool = True, current_page: str = "market_data",tic
     _NAV_TARGETS = [
         ("market_data",       "pages/market_data.py"),
         ("earnings_calls",    "pages/earnings_calls.py"),
-        ("earnings_calendar", "pages/earnings_calendar.py"),
+        ("earnings_calendar", "pages/calendar.py"),
         ("screening",         "pages/screening.py"),
         ("newsroom",          "pages/newsroom.py"),
     ]
@@ -880,6 +888,8 @@ def render_coresight_footer(full_width: bool = True, stick_to_bottom: bool = Tru
     </div>
   </div>
 </div>'''
+    # Local inlined footer logo (no external WordPress CDN round-trip).
+    footer_html = footer_html.replace(CDN_LOGO_FOOTER_URL, CORESIGHT_LOGO_FOOTER_URI)
 
     # STEP 2: Render footer HTML via st.html() (supports SVGs properly).
     try:

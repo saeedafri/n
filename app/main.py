@@ -195,7 +195,7 @@ _PAGES_CONFIG = [
     ("pages/newsroom.py", "Newsroom", "newsroom", False),
     ("pages/earnings_calls.py", "Earnings Calls", "earnings_calls", False),
     ("pages/live_earnings_transcript.py", "Live Transcript", "live_earnings_transcript", False),
-    ("pages/earnings_calendar.py", "Calendar", "earnings_calendar", False),
+    ("pages/calendar.py", "Calendar", "calendar", False),
     ("pages/screening.py", "Screening", "screening", False),
     ("pages/company_filings.py", "Company Filings", "company_filings", False),
     ("pages/company_filings_add_files.py", "Add Files", "company_filings_add_files", False),

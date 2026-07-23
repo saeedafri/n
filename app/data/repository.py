@@ -8324,7 +8324,7 @@ class EarningsCalendarRepository:
         return _final
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: earnings dates change ~daily; avoids 5-min re-cold (warmed on boot)
     def get_calendar_events_full() -> List[Dict[str, Any]]:
         """Full deduped calendar set — ALL companies, ALL dates — disk-materialized.
 
@@ -8365,7 +8365,7 @@ class EarningsCalendarRepository:
         return _df.to_dict("records")
 
     @staticmethod
-    @st.cache_data(ttl=3600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: FYE map changes rarely; avoids hourly re-cold (warmed on boot)
     def _get_fiscal_year_end_map() -> Dict[str, str]:
         """
         Return {ticker: fiscal_year_end_month_name} from AV and YF overviews.
@@ -8493,7 +8493,7 @@ class EarningsCalendarRepository:
         return {**_runtime, **cls._MA_OVERRIDES_CACHE}
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: M&A completions change ~daily; avoids 5-min re-cold (warmed on boot)
     @_log_query_time
     def get_ma_completion_events() -> List[Dict[str, Any]]:
         """Return COMPLETED M&A events for calendar overlay (additive to earnings).
@@ -8616,7 +8616,7 @@ class EarningsCalendarRepository:
         return events
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: IPO feed changes ~daily; avoids 10-min re-cold (warmed on boot)
     @_log_query_time
     def get_ipo_events() -> List[Dict[str, Any]]:
         """Return IPO (first-listing) dates for companies on the calendar (additive).
@@ -8768,7 +8768,7 @@ class EarningsCalendarRepository:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: delisting feed changes ~daily; avoids 10-min re-cold (warmed on boot)
     @_log_query_time
     def get_delisted_events() -> List[Dict[str, Any]]:
         """Return DELISTED (went public → private) dates as a calendar overlay.
@@ -8849,7 +8849,7 @@ class EarningsCalendarRepository:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: ticker list changes slowly; avoids 10-min re-cold (warmed on boot)
     @_log_query_time
     def get_available_tickers() -> List[Dict[str, str]]:
         """Return distinct tickers + company names from both calendar tables.

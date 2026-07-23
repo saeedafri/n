@@ -263,6 +263,57 @@ too noisy in practice, the cap is a one-line change in `store_count_geo_label`.
 
 ---
 
+## 6b. Collapsible header — first two + "read more" (22-Jul-2026)
+
+Long geography lists (WMT 8, LULU 10) cluttered the header and wrapped to three
+lines. Per business: **show the first two geographies, then a "read more" that
+expands the rest in place; "show less" collapses again.**
+
+Rendering rule in `_store_count_header_cell(members)` (`app/pages/market_data.py`):
+
+| members | header |
+|---|---|
+| 0 | `Store Count (Worldwide, if Applicable)` — plain |
+| 1–2 | `Store Count (United States, Non-US)` — plain, no link |
+| 3+ | `Store Count (United States, Walmart International …) +N more` → click → full list + `show less` |
+
+**Pure CSS, no JavaScript.** The header is injected by Streamlit via `innerHTML`,
+where `<script>` never runs, so the disclosure is a native `<details>/<summary>`
+toggled entirely by CSS (`.sc-geo[open]` swaps which spans show). The first two
+names, the `…`, the hidden remainder, and both link labels all live inside the
+`<summary>` so everything expands **inline, in place** — no reflow to a new block,
+no layout jump. The `+N more` / `show less` link is the brand red (`#D62E2F`),
+underlined, and the whole summary is `cursor:pointer`. The default disclosure
+triangle is suppressed (`list-style:none` + `::-webkit-details-marker` +
+`::marker`).
+
+Excel export is unchanged — it still writes the **full** comma-joined list
+(`store_count_geo_label`), since a spreadsheet cell has no interactive disclosure.
+
+### Verified in the real UI (headless Chromium, both repos)
+
+Computed `display` asserted before/after click, not just eyeballed:
+
+```
+[collapsed]   open=False  rest=none   +N more=inline  show less=none
+              "Store Count (United States, Walmart International …)+6 more"
+[expanded]    open=True   rest=inline +N more=none    show less=inline
+              "Store Count (United States, Walmart International, Non-US, Mexico and
+               Central America, United Kingdom, Other, China, Canada)show less"
+[recollapsed] open=False  rest=none   +N more=inline  show less=none
+```
+
+- HD (2) → plain `Store Count (United States, Non-US)`, no link ✅
+- TGT (0) → plain `Store Count (Worldwide, if Applicable)` ✅
+- LULU (10) → `… +8 more`, expands to the full list, `show less` collapses ✅
+- Screenshots: `exp_WMT_collapsed.png`, `exp_WMT_expanded.png`.
+
+Known cosmetic caveat carried over from §6: a member that itself contains commas
+("Hong Kong SAR, Taiwan, and Macau SAR") reads ambiguously in the comma-joined
+list. The widget handles it without breaking; only the reading is ambiguous.
+
+---
+
 ## 7. Rollout
 
 Files to deploy:

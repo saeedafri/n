@@ -2928,6 +2928,17 @@ def render_page() -> None:
 
         render_header(current_page="earnings_calendar")
 
+        # =======================================================================
+        # PAGE TITLE — same two-line branded header as earnings_calls / newsroom /
+        # screening ("CORESIGHT MARKET DATA" in red + page name in black).
+        # =======================================================================
+        st.markdown("""
+        <div style="margin: 24px 0 8px 0;">
+            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET DATA</div>
+            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 28px; color: #323232;">Calendar</div>
+        </div>
+        """, unsafe_allow_html=True)
+
         # STICKY branded loader — stays up until the streamlit_calendar iframe actually
         # paints (it renders client-side well after Python returns), so the user never
         # sees the filter bar over an empty calendar area. JS self-removes; the legacy

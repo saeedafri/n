@@ -1407,7 +1407,19 @@ if IS_OIDC_ENV:
 def load_html_component(filename: str) -> str:
     try:
         with open(APP_DIR / "components" / filename, "r", encoding="utf-8") as f:
-            return f.read()
+            html = f.read()
+        # Serve the Coresight logo locally (inlined) instead of the external WordPress
+        # CDN so login/logout headers don't pay a slow cross-origin fetch.
+        try:
+            from utils.brand_assets import (
+                CDN_LOGO_URL, CDN_LOGO_FOOTER_URL,
+                CORESIGHT_LOGO_URI, CORESIGHT_LOGO_FOOTER_URI,
+            )
+            html = html.replace(CDN_LOGO_FOOTER_URL, CORESIGHT_LOGO_FOOTER_URI)
+            html = html.replace(CDN_LOGO_URL, CORESIGHT_LOGO_URI)
+        except Exception:
+            pass
+        return html
     except Exception:
         return ""
 

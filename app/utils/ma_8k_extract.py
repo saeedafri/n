@@ -13,7 +13,7 @@ calendar renders "—" instead of misinformation.
 import re
 from typing import Any, Dict, Optional
 
-# ── shared name validation (also used by pages/earnings_calendar.py) ─────────
+# ── shared name validation (also used by pages/calendar.py) ─────────
 
 MA_NAME_BOILERPLATE = (
     "item 1.01", "item 2.01", "item 9.01", "current report", "form 8-k",

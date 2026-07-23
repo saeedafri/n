@@ -336,7 +336,33 @@ def _background_warmup_thread():
         time.sleep(0.5)  # Minimal delay to let pg.run() start (engines are initialized)
         from datetime import date, timedelta
 
-        # ── Track -1: Earnings calls company lists (FIRST — ~23s cold without warmup) ──
+        # ── Track 0: Calendar warmup (RUNS FIRST — it's the slowest page and the
+        # most latency-sensitive for clients). Warm BEFORE the earnings-calls
+        # company lists below so a user who opens /calendar right after a deploy
+        # is a cache HIT, not a ~25s cold DB fan-out (get_available_tickers +
+        # get_ma_completion_events are the cold long-poles). Sequential to avoid a
+        # cold-connection-pool storm against Azure MySQL.
+        try:
+            from data.repository import EarningsCalendarRepository
+
+            for _warm_fn, _warm_args in (
+                (EarningsCalendarRepository.get_available_tickers, ()),
+                (EarningsCalendarRepository._get_fiscal_year_end_map, ()),
+                # Warm the FULL deduped set (disk-materialized) — the calendar page
+                # now counts this for its badge and windows it in Python for render,
+                # so warming it means both the first load AND every month/year
+                # navigation are cache hits (no ~3.6s dedup SQL).
+                (EarningsCalendarRepository.get_calendar_events_full, ()),
+                (EarningsCalendarRepository.get_ma_completion_events, ()),
+            ):
+                try:
+                    _warm_fn(*_warm_args)
+                except Exception:
+                    pass
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Earnings calendar warmup error: {e}")
+
+        # ── Track -1: Earnings calls company lists (~23s cold without warmup) ──
         try:
             from data.repository import EarningsCallRepository
             from concurrent.futures import ThreadPoolExecutor as _ETP
@@ -363,29 +389,6 @@ def _background_warmup_thread():
 
         _warm_date_to   = date.today()
         _warm_date_from = _warm_date_to - timedelta(days=7)
-
-        # ── Track 0: Calendar warmup (FIRST — it's the slowest page) ──
-        # Warm tickers, FYE map, the full deduped event set, and M&A completions.
-        # Sequential to avoid thundering herd with the page's own parallel fetch.
-        try:
-            from data.repository import EarningsCalendarRepository
-
-            for _warm_fn, _warm_args in (
-                (EarningsCalendarRepository.get_available_tickers, ()),
-                (EarningsCalendarRepository._get_fiscal_year_end_map, ()),
-                # Warm the FULL deduped set (disk-materialized) — the calendar page
-                # now counts this for its badge and windows it in Python for render,
-                # so warming it means both the first load AND every month/year
-                # navigation are cache hits (no ~3.6s dedup SQL).
-                (EarningsCalendarRepository.get_calendar_events_full, ()),
-                (EarningsCalendarRepository.get_ma_completion_events, ()),
-            ):
-                try:
-                    _warm_fn(*_warm_args)
-                except Exception:
-                    pass
-        except Exception as e:
-            log_error(f"[CACHE_WARM_BG] Earnings calendar warmup error: {e}")
 
         # ── Track 1: populate @st.cache_data for static dropdowns (SEQUENTIAL) ──
         # Sequential to avoid connection storms on Azure MySQL cold start.

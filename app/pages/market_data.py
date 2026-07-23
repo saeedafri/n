@@ -871,6 +871,58 @@ def _clear_md_tab_loader():
             pass
 
 
+# CSS for the collapsible geography list in the Store Count header. Emitted once
+# with the cell (a lone <style> in st.markdown is harmless and idempotent).
+_STORE_COUNT_GEO_CSS = (
+    "<style>"
+    ".sc-geo{display:inline}"
+    ".sc-geo>summary{display:inline;list-style:none;cursor:pointer}"
+    ".sc-geo>summary::-webkit-details-marker{display:none}"
+    ".sc-geo>summary::marker{content:''}"
+    ".sc-geo>summary:focus{outline:none}"
+    ".sc-geo .sc-geo-rest{display:none}"
+    ".sc-geo[open] .sc-geo-rest{display:inline}"
+    ".sc-geo[open] .sc-geo-ell{display:none}"
+    ".sc-geo .sc-geo-less{display:none}"
+    ".sc-geo[open] .sc-geo-less{display:inline}"
+    ".sc-geo[open] .sc-geo-more{display:none}"
+    ".sc-geo-link{color:#D62E2F;font-weight:600;font-size:12px;"
+    "text-decoration:underline;text-underline-offset:2px;cursor:pointer;"
+    "white-space:nowrap;margin-left:5px}"
+    ".sc-geo-link:hover{color:#A81F20}"
+    "</style>"
+)
+
+
+def _store_count_header_cell(members: list) -> str:
+    """HTML for the 'Store Count (...)' header cell.
+
+    0 geographies → the "Worldwide, if Applicable" fallback. 1-2 → shown inline.
+    A longer list shows the first two, then a "read more" that expands the rest
+    IN PLACE. It is a pure-CSS <details> disclosure — no JavaScript — because
+    Streamlit injects this markup via innerHTML, where <script> never executes.
+    """
+    from html import escape as _esc
+    from data.repository import STORE_COUNT_WORLDWIDE_LABEL
+    if not members:
+        return f'Store Count ({_esc(STORE_COUNT_WORLDWIDE_LABEL)})'
+    if len(members) <= 2:
+        return 'Store Count (' + ', '.join(_esc(m) for m in members) + ')'
+    head = ', '.join(_esc(m) for m in members[:2])
+    rest = ', '.join(_esc(m) for m in members[2:])
+    n_more = len(members) - 2
+    return (
+        _STORE_COUNT_GEO_CSS +
+        '<details class="sc-geo"><summary>'
+        f'Store Count ({head}'
+        '<span class="sc-geo-ell"> …</span>'
+        f'<span class="sc-geo-rest">, {rest}</span>)'
+        f'<span class="sc-geo-link sc-geo-more">+{n_more} more</span>'
+        '<span class="sc-geo-link sc-geo-less">show less</span>'
+        '</summary></details>'
+    )
+
+
 def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_ascending: bool = True):
     """Render credit ratings + store counts table with same structure as segment data.
 
@@ -1053,11 +1105,11 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             # a bare "Worldwide" (21-Jul-2026, per business). This is a disk
             # read; the 5-14s segment build only ever runs in the background.
             _t_geo = _time.perf_counter()
-            from data.repository import store_count_geo_label
-            _sc_geo = store_count_geo_label(ticker, bool(sbc_years and sbc_countries))
+            from data.repository import geo_segment_members
+            _sc_members = [] if (sbc_years and sbc_countries) else geo_segment_members(ticker)
             _rt_log("RATINGS_geo_label", (_time.perf_counter() - _t_geo) * 1000,
-                    details=f"ticker={ticker} label={_sc_geo!r}")
-            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">Store Count ({html_escape(_sc_geo)})</td>')
+                    details=f"ticker={ticker} n={len(_sc_members)}")
+            _parts.append(f'<tr class="row-bold row-grey-separator"><td class="indent-0" style="font-weight:700;">{_store_count_header_cell(_sc_members)}</td>')
             for _ in years:
                 _parts.append('<td class="data-cell"></td>')
             _parts.append('</tr>')

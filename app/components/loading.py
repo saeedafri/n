@@ -402,10 +402,10 @@ def show_red_spinner(text: str = "Loading..."):
         return st.spinner(text)
 
 
-# Coresight logo — same asset as the boot splash (core/boot_overlay.py), proven to
-# load behind the STG proxy. onerror hides it so the card still shows spinner+label.
-_CS_LOGO_URL = ("https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net"
-                "/wp-content/uploads/2023/12/coresight-logo-1.png")
+# Coresight logo — inlined locally (utils.brand_assets) instead of the external
+# WordPress CDN, which added a slow cross-origin fetch on this loader (shown for the
+# WHOLE cold load). onerror hides it so the card still shows spinner+label.
+from utils.brand_assets import CORESIGHT_LOGO_URI as _CS_LOGO_URL
 
 _BRANDED_LOADER_CSS = """
 <style>

@@ -26,7 +26,7 @@ import pathlib
 
 # Bump this token if the injected markup below changes, so an already-patched
 # (stale) index.html is re-patched instead of skipped.
-_MARKER = "cs-boot-overlay-v5"
+_MARKER = "cs-boot-overlay-v6"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stale-chunk auto-recovery. After a redeploy, Streamlit's hashed JS chunk names
@@ -43,7 +43,7 @@ _MARKER = "cs-boot-overlay-v5"
 # nav/full-reload path.
 # ─────────────────────────────────────────────────────────────────────────────
 _HEAD_JS = """
-<script id="cs-chunk-recover" data-cs="cs-boot-overlay-v5">
+<script id="cs-chunk-recover" data-cs="cs-boot-overlay-v6">
 (function(){
   var K='__cs_chunk_reload_ts';
   function isChunkErr(m){
@@ -72,7 +72,7 @@ _HEAD_JS = """
 """
 
 _HEAD_CSS = """
-<style id="cs-boot-style" data-cs="cs-boot-overlay-v5">
+<style id="cs-boot-style" data-cs="cs-boot-overlay-v6">
 /* Streamlit's grey skeleton placeholders — never show them, on any page. */
 [data-testid="stSkeleton"],[data-testid="stAppSkeleton"]{display:none!important;}
 /* Branded boot overlay: visible from first paint until real content renders.
@@ -108,7 +108,7 @@ body:has(#cs-boot-overlay:not(.cs-hide)) .cs-page-subspinner{display:none!import
 """
 
 _BODY_HTML = """
-<div id="cs-boot-overlay" data-cs="cs-boot-overlay-v5">
+<div id="cs-boot-overlay" data-cs="cs-boot-overlay-v6">
   <div class="cs-card">
     <img src="https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net/wp-content/uploads/2023/12/coresight-logo-1.png" alt="Coresight" referrerpolicy="no-referrer">
     <div class="cs-ring"></div>
@@ -116,7 +116,7 @@ _BODY_HTML = """
     <div class="cs-sh"></div>
   </div>
 </div>
-<script data-cs="cs-boot-overlay-v4">
+<script data-cs="cs-boot-overlay-v6">
 (function(){
   var ov=document.getElementById('cs-boot-overlay');
   if(!ov)return;
@@ -130,7 +130,7 @@ _BODY_HTML = """
   try{
     var P=(window.location.pathname||''), Q=(window.location.search||'');
     var M={'/market_data':'Loading Market Data','/earnings_calls':'Loading Earnings Calls',
-      '/earnings_calendar':'Loading Calendar','/screening':'Loading Screening',
+      '/calendar':'Loading Calendar','/screening':'Loading Screening',
       '/newsroom':'Loading News','/home':'Loading Home','/company_filings':'Loading Filings',
       '/company_filings_add_files':'Loading Filings','/forecasting':'Loading Forecasting',
       '/live_earnings_transcript':'Loading Transcript','/logout_bridge':'Signing out',
@@ -172,6 +172,16 @@ _BODY_HTML = """
 })();
 </script>
 """
+
+# Serve the Coresight logo locally (inlined data-URI) instead of the external
+# WordPress CDN — the boot splash is the very first paint, so a slow cross-origin
+# logo fetch there stalls the branded first impression. Best-effort: on any import
+# problem, keep the original CDN URL already baked into _BODY_HTML.
+try:
+    from utils.brand_assets import CDN_LOGO_URL as _CDN, CORESIGHT_LOGO_URI as _URI
+    _BODY_HTML = _BODY_HTML.replace(_CDN, _URI)
+except Exception:
+    pass
 
 
 def patch_streamlit_index_html() -> bool:
