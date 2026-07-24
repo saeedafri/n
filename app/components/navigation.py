@@ -181,6 +181,12 @@ def _inject_transition_js() -> None:
   function mainEl(){ return doc.querySelector('[data-testid="stMain"]'); }
   function mainLen(){ var m = mainEl(); return m ? (m.innerText||'').length : 0; }
   function pageLoaderUp(){ return !!doc.querySelector('.cs-al-ov,#cs-sticky-loader'); }
+  /* The Coresight footer (render_coresight_footer → st.html) is rendered LAST in
+     every page's main(), into the parent DOM. Its presence is a reliable, page-
+     agnostic "this page finished rendering" beacon — unlike the mainLen()>800
+     heuristic, which never fires for compact pages like screening (~773 chars),
+     leaving the overlay stuck until the 15s safety timeout on every visit. */
+  function footerUp(){ return !!doc.querySelector('.coresight-footer-exact'); }
   /* Which nav page the CURRENT header marks active. On the source page this is the
      source route; it flips to the destination only once the NEW page's header has
      rendered — our reliable "the destination is actually on screen now" signal. */
@@ -215,8 +221,11 @@ def _inject_transition_js() -> None:
          is present. We deliberately do NOT hide on "new header rendered" alone —
          pages without their own loader (e.g. newsroom) would then flash an empty
          body between overlay-gone and content-painted. */
+      /* Destination fully rendered when: its own loader took over, OR the
+         destination header is active AND its footer has painted (reliable for
+         compact pages), OR — legacy fallback — enough body text is present. */
       var destReady = onDest && !sourceStillShown &&
-                      (pageLoaderUp() || mainLen() > 800);
+                      (pageLoaderUp() || (act === tp && footerUp()) || mainLen() > 800);
       if (destReady || ticks >= 150){ win.__csHide(); }   /* 15s hard safety */
     }, 100);
     clearTimeout(win.__csSt);

@@ -609,9 +609,18 @@ def _start_edit_criterion(idx: int):
         st.error("Something went wrong. Please try again.")
 
 
+# These DDLs are idempotent (CREATE TABLE IF NOT EXISTS) and identical for every
+# user, so bootstrapping is a PROCESS-level concern, not a per-session one. Gating
+# on st.session_state made every NEW browser session pay ~5 table round-trips on
+# its first screening landing (painful over a high-latency link / VPN). A module
+# global runs it once per server process instead.
+_DB_TABLES_READY = False
+
+
 def _ensure_db_tables():
-    """Bootstrap saved-criteria, watchlist, and portal-users tables once per server run."""
-    if not st.session_state.get("scr_db_tables_ready"):
+    """Bootstrap saved-criteria, watchlist, and portal-users tables once per server process."""
+    global _DB_TABLES_READY
+    if not _DB_TABLES_READY:
         try:
             svc_ensure_criteria_tables()
             wl_ensure_tables()
@@ -628,6 +637,7 @@ def _ensure_db_tables():
             # Only runs if the cache is empty (first startup or after a rebuild).
             if not read_segment_member_options_cache("business"):
                 populate_segment_member_cache_from_presets()
+            _DB_TABLES_READY = True
             st.session_state.scr_db_tables_ready = True
         except Exception as exc:
             log_structured_error(exc, page="screening", component="_ensure_db_tables",
