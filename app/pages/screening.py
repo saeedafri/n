@@ -4710,6 +4710,7 @@ def _render_keydevs_results():
         # old LIMIT 2000 that silently truncated "All History" to the newest ~17 days.
         # Only _KD_PAGE rows live in memory per page; the honest total is shown up front.
         _KD_PAGE = 500
+        _KD_EXPORT_CAP = 50000   # bounds RAM/time on very broad "All History" queries
         _kd_sig = (_tickers, _cats, _window.get("days"),
                    _window.get("start_date"), _window.get("end_date"))
         if st.session_state.get("kd_sig") != _kd_sig:
@@ -4726,6 +4727,23 @@ def _render_keydevs_results():
             )
             st.session_state["kd_df"] = _df0
             st.session_state["kd_cursor"] = _cur0
+            # Build the FULL export ONCE per query (not per rerun) so the single Excel
+            # button below downloads ALL matching events, not just this 500-row page.
+            # The grid stays paginated (500) for speed; only the workbook holds the lot.
+            try:
+                _xl_df, _ = get_keydevs_events_for_tickers(
+                    _tickers, _cats, days=_window.get("days"),
+                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                    limit=_KD_EXPORT_CAP,
+                )
+                st.session_state["kd_xl"] = (
+                    _build_keydevs_excel_fast(_xl_df, len(criteria),
+                                              title="Coresight Key Developments")
+                    if _xl_df is not None and not _xl_df.empty else b"")
+            except Exception as _xl_exc:
+                log_structured_error(_xl_exc, page="screening", component="keydevs_full_export",
+                                     operation="build_full_excel")
+                st.session_state["kd_xl"] = b""
 
         events_df = st.session_state.get("kd_df", pd.DataFrame())
         _kd_total = int(st.session_state.get("kd_total", len(events_df)))
@@ -4745,16 +4763,13 @@ def _render_keydevs_results():
                              f"· showing newest {_shown:,}</span>")
             st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
         with _dl_col:
-            # Branded, single-click Excel of the currently-shown events. Deliberately
-            # SIMPLE + synchronous: NO st.fragment / run_every / background thread.
-            # A run_every=2 fragment here fired a rerun every 2s forever, which over a
-            # high-latency link piled up reruns until the app stopped responding and
-            # Azure crash-looped the STG container (19-Jul). Never re-add run_every on
-            # the screening results path. The shown-page payload is small, so a plain
-            # JS-blob download button is instant + stable.
+            # ONE branded Excel button, same place as always. It now carries the FULL
+            # matching set (not just the shown 500) — the workbook is built ONCE per
+            # query in the `kd_sig` block above and cached in session_state, so ordinary
+            # reruns never rebuild it. Deliberately SIMPLE + synchronous: NO st.fragment
+            # / run_every / background thread (run_every=2 here crash-looped STG 19-Jul).
             from datetime import datetime as _kd_dt
-            _xl_bytes = _build_keydevs_excel_fast(
-                events_df, len(criteria), title="Coresight Key Developments")
+            _xl_bytes = st.session_state.get("kd_xl") or b""
             if _xl_bytes:
                 _render_excel_js_download(
                     _xl_bytes,

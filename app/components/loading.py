@@ -538,7 +538,14 @@ _STICKY_REMOVER_JS = """
     function hide(){ if(done) return; done=true;
       clearInterval(iv);
       ov.style.transition='opacity .3s ease'; ov.style.opacity='0';
-      setTimeout(function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }, 320);
+      // HIDE, do NOT removeChild. This overlay is rendered via st.markdown, so it
+      // lives INSIDE Streamlit's React tree. Calling removeChild() here deletes a
+      // node React still tracks; on the next rerun React's own removeChild throws
+      // "NotFoundError: The node to be removed is not a child of this node"
+      // (seen on the screening results page). Hiding it (opacity/visibility;
+      // already pointer-events:none) is visually identical and React-safe — React
+      // stays the sole owner of the node and unmounts it normally.
+      setTimeout(function(){ if(ov){ ov.style.visibility='hidden'; ov.style.pointerEvents='none'; } }, 320);
     }
     var iv = setInterval(function(){ if(ready()) hide(); }, 150);
     // hard cap: never trap the user behind the overlay (also covers the rare
@@ -546,7 +553,7 @@ _STICKY_REMOVER_JS = """
     setTimeout(hide, 20000);
   }catch(e){
     try{ var o=window.parent.document.getElementById('cs-sticky-loader');
-         if(o&&o.parentNode) o.parentNode.removeChild(o);}catch(_){}
+         if(o){ o.style.opacity='0'; o.style.visibility='hidden'; o.style.pointerEvents='none'; }}catch(_){}
   }
 })();
 </script>

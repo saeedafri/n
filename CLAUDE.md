@@ -281,6 +281,78 @@ Data from Alpha Vantage and Yahoo Finance is pre-ingested into DB — not called
 
 ---
 
+## Syncing Testing-1 → Testing-2 (the backup env) — USE THIS METHOD
+
+Two testing envs, both dev-only (no clients). Folder names are NOT literal.
+
+| | Path | Role |
+|---|---|---|
+| **Testing 1** | `/Users/mohdsaeedafri/All-Code-Base/market-data-stg` | Source of truth for changes |
+| **Testing 2** | `/Users/mohdsaeedafri/All-Code-Base/market-prod` (git branch `pro-deploy`) | Backup env — mirrors a live container |
+
+Testing 2 is updated **directly in its container via a web command box** (`/logs` page),
+**never** via git push.
+
+### THE METHOD — base64 full-file push + sha256 verify
+
+This is the proven approach. Do not re-litigate it; `patch` and blanket `sed` both fail here.
+
+1. **Find the container app root first** — it is `/tmp/<oryx-hash>` (e.g. `/tmp/8dee8ef12bf86ae`),
+   NOT `/home/site/wwwroot` (that only holds `output.tar.zst`):
+   ```bash
+   for p in $(pgrep -f streamlit); do readlink /proc/$p/cwd; done
+   ```
+   **NEVER `find /`** — it scans the 500 GB `/home` share and times out at 120 s.
+2. **Build the target file locally first** in `market-prod`, then generate commands from it.
+3. **One command per file**, ending with its own verify:
+   ```bash
+   cd /tmp/<hash> && echo '<base64>' | base64 -d > <path> && echo "<sha256>  <path>" | sha256sum -c
+   ```
+   For big files, chunk it:
+   ```bash
+   cd /tmp/<hash> && echo -n '<part1>' >  /tmp/_s_<name>.b64 && echo PART_1_OK   # part 1 uses >
+   echo -n '<part2>' >> /tmp/_s_<name>.b64 && echo PART_2_OK                     # rest use >>
+   cd /tmp/<hash> && base64 -d < /tmp/_s_<name>.b64 > <path> && rm -f /tmp/_s_<name>.b64 \
+     && echo "<sha256>  <path>" | sha256sum -c                                   # finalize
+   ```
+4. **Always prefix with `cd /tmp/<hash> &&`** — if pasted into a Mac terminal by mistake the
+   `cd` fails and `&&` short-circuits, so nothing is written. This is the safety net.
+5. **Deliver via clipboard, NEVER paste base64 into chat** — model generation corrupts long
+   base64 (a Cyrillic char appeared mid-blob once). Write each command to a file, then:
+   `cat /tmp/sync-cmds/NN_name.cmd | pbcopy` → user pastes into the container box.
+6. **Simulate every command locally before handing it over** (decode into a temp dir, compare
+   sha256). Never hand over an unverified command.
+7. Finish with one all-files check: `printf '%s\n' "<sha>  <path>" … | sha256sum -c`.
+
+### Hard constraints (learned the hard way)
+
+- **`MAX_ARG_STRLEN` = 128 KB per argument.** 113 KB paste works; 150 KB fails with
+  `[Errno 7] Argument list too long`. **Use chunks ≤ 110 KB.**
+- Container `/bin/sh` is **dash**; its `echo -n` behaves correctly.
+- **`/tmp` is wiped on restart/redeploy** and the hash dir changes → all edits lost.
+  The user accepts this; **do not restart the app**. Browser reload is enough.
+- `patch` heredocs are unreliable in the web box (context-line whitespace gets mangled).
+- **`sed` only works for pure value substitutions**, and often needs line anchors. A blanket
+  sed on `company_filings.py` would corrupt 3 caches (4 × `ttl=600`, only 2 should change).
+  `repository.py` cannot use sed at all (mixed 21600/3600 targets + a multi-line insert).
+- If `finalize` says *"No such file"*, it **already succeeded** and cleaned its temp —
+  check the file size instead of redoing it.
+
+### NEVER push these to Testing 2
+
+- **Auth-disabling local-test edits.** Testing 1 routinely has `require_auth(...)` commented
+  out and a `LOCAL_TEST_USER_EMAIL` bypass in `auth_manager.py`. **Always sync from testing-1's
+  COMMITTED state (`git show HEAD:<file>`), not its working tree**, and verify `require_auth`
+  is still `ACTIVE` in the pushed file.
+- **The calendar rename.** Testing 2 keeps `pages/earnings_calendar.py` and the
+  `/earnings_calendar` URL. Skip `main.py`, `pages/calendar.py`, `utils/ma_8k_extract.py`.
+  For files carrying both wanted and rename changes (`components/navigation.py`,
+  `core/boot_overlay.py`, and the calendar page itself), take testing-1's content and globally
+  revert `/calendar` → `/earnings_calendar` (safe: `/earnings_calendar` never contains the
+  substring `/calendar`).
+
+---
+
 ## Core Module Reference
 
 | Module | Key exports |
