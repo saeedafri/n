@@ -1722,9 +1722,13 @@ def render_page():
         "company_profile": "Loading Company Profile", "key_stats": "Loading Key Stats",
         "income_statement": "Loading Income Statement", "balance_sheet": "Loading Balance Sheet",
         "cash_flow": "Loading Cash Flow", "ratios": "Loading Ratios",
-        "segment_data": "Loading Segment Data", "ratings": "Loading Ratings",
+        "segment_data": "Loading Segment Data",
+        # The tab whose key is "ratings" is labelled "Additional Data" in the tab bar
+        # (components/toolbar.py), so the loader must say the same thing the user
+        # clicked. There is no "additional_data" tab key — that entry was dead and
+        # never matched a query param.
+        "ratings": "Loading Additional Data",
         "estimates": "Loading Estimates", "forecasting": "Loading Forecasting",
-        "additional_data": "Loading Additional Data",
     }
     _md_tab_qp = (st.query_params.get("tab") or "").strip().lower()
     _tab_loading_hint = render_page_loader(

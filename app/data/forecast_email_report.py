@@ -27,7 +27,9 @@ from core.database import db_manager
 from utils.server_logger import log_structured_error
 
 # Brand-ish palette (Coresight red accent + neutral grays).
-_ACCENT = (200, 16, 46)        # #C8102E — best model / primary line
+_ACCENT = (200, 16, 46)        # #C8102E — ensemble (final output) / primary line
+_ACTUAL = (37, 55, 90)         # #25375A — historical actuals line (deep slate-blue)
+_BEST_LINE = (120, 120, 120)   # best individual model — light reference line
 _BASELINE = (90, 90, 90)       # baseline scenario line
 _BAND = (200, 16, 46, 38)      # scenario band fill (RGBA, translucent)
 _GRID = (228, 228, 228)
@@ -71,6 +73,49 @@ def _fmt_mm(v: Optional[float]) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Data
 # ─────────────────────────────────────────────────────────────────────────────
+def fetch_actuals(ticker: str, period_type: str = "annual") -> Optional[List[Tuple[int, float]]]:
+    """Historical actual revenue as [(fiscal_year, value_millions)], reported currency.
+
+    Reuses the exact ingest path the forecaster feeds on
+    (``RevenueForecastService._fetch_actual_rows`` → ``_normalize_actual_rows``) so the
+    units line up with the stored ``value_millions`` forecasts. Annual only for now —
+    quarterly returns None so the quarterly chart renders exactly as before.
+    Imports are lazy to avoid any import cycle; any failure returns None (email never lost).
+    """
+    if period_type == "quarterly":
+        return None
+    try:
+        from data.source_router import get_company_source
+        from data.revenue_forecast_service import (
+            RevenueForecastService, _source_table, _yf_reported_currency,
+        )
+        source = get_company_source(ticker)
+        if source not in ("SEC", "YFinance"):
+            return None
+        raw = RevenueForecastService._fetch_actual_rows(ticker, source)
+        if not raw:
+            return None
+        raw_dicts = [dict(r) for r in raw]
+        if source == "SEC":
+            reported = raw_dicts[0].get("reported_currency") or "USD"
+        else:
+            base = ticker.split(".")[0] if "." in ticker else ticker
+            reported = _yf_reported_currency(base) or "USD"
+        rows = RevenueForecastService._normalize_actual_rows(
+            raw_rows=raw_dicts, source=source, source_table=_source_table(source),
+            reported_currency=reported, display_currency=reported,
+        )
+        out = [(int(r["fiscal_year"]), float(r["total_revenue_billions"]) * 1000.0)
+               for r in rows
+               if r.get("fiscal_year") is not None and r.get("total_revenue_billions") is not None]
+        out.sort()
+        return out or None
+    except Exception as exc:
+        log_structured_error(exc, page="forecast_email_report",
+                             component="fetch_actuals", operation="SELECT")
+        return None
+
+
 def fetch_ticker_detail(ticker: str, period_type: str = "annual") -> Optional[Dict[str, Any]]:
     """Pull the stored forecast detail for one ticker. Returns None if nothing stored."""
     table = _QUARTERLY_TABLE if period_type == "quarterly" else _ANNUAL_TABLE
@@ -100,6 +145,14 @@ def fetch_ticker_detail(ticker: str, period_type: str = "annual") -> Optional[Di
             f"ORDER BY fiscal_year",
             {"t": ticker, "m": metric},
         )
+        # Ensemble is the team's final output — surface its full per-year series
+        # (already stored with model_key='ensemble') alongside the best model.
+        ensemble = db_manager.execute_query_readonly(
+            f"SELECT fiscal_year, value_millions FROM {table} "
+            f"WHERE ticker = :t AND metric = :m AND model_key = 'ensemble' "
+            f"ORDER BY fiscal_year",
+            {"t": ticker, "m": metric},
+        )
         return {
             "ticker": ticker,
             "metric": metric,
@@ -111,6 +164,9 @@ def fetch_ticker_detail(ticker: str, period_type: str = "annual") -> Optional[Di
             "computed_at": best[0].get("computed_at"),
             "series": [(int(r["fiscal_year"]), float(r["value_millions"]))
                        for r in best if r.get("value_millions") is not None],
+            "ensemble_series": [(int(r["fiscal_year"]), float(r["value_millions"]))
+                                for r in (ensemble or []) if r.get("value_millions") is not None],
+            "actuals": fetch_actuals(ticker, period_type),
             "models": models or [],
             "scenarios": scenarios or [],
         }
@@ -154,35 +210,51 @@ def _scenario_bands(scenarios: List[Dict[str, Any]]) -> Dict[str, List[Tuple[int
 
 
 def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
-    """Forecast trajectory line with a scenario (optimistic↔pessimistic) band."""
+    """Historical actuals → ensemble forecast (the final output), with the best
+    individual model as a light reference and the scenario band around the forecast.
+
+    X-axis is one continuous timeline: historical fiscal years then forecast years.
+    Forecast lines anchor to the last actual point so history and forecast connect.
+    Degrades gracefully — if actuals are missing it draws forecast-only (old behaviour).
+    """
     from PIL import Image, ImageDraw
-    series = detail.get("series") or []
-    if len(series) < 2:
+    actuals = detail.get("actuals") or []            # [(fy, v)] historical
+    ens     = detail.get("ensemble_series") or []    # [(fy, v)] ensemble forecast
+    best    = detail.get("series") or []             # [(fy, v)] best individual model
+    if not ens and not best:
         return None
-    ss = 2  # supersample for crisp downscale
-    W, H = 900 * ss, 340 * ss
-    ml, mr, mt, mb = 92 * ss, 60 * ss, 44 * ss, 52 * ss
-    img = Image.new("RGB", (W, H), "white")
-    d = ImageDraw.Draw(img, "RGBA")
-    f_title, f_lab, f_val = _font(20 * ss), _font(15 * ss), _font(14 * ss)
 
     bands = _scenario_bands(detail.get("scenarios") or [])
-    years = [y for y, _ in series]
-    opt = dict(bands.get("scenario_optimistic") or [])
-    pes = dict(bands.get("scenario_pessimistic") or [])
+    opt  = dict(bands.get("scenario_optimistic") or [])
+    pes  = dict(bands.get("scenario_pessimistic") or [])
     base = dict(bands.get("scenario_baseline") or [])
 
-    all_vals = [v for _, v in series] + list(opt.values()) + list(pes.values()) + list(base.values())
+    fc_years = sorted({y for y, _ in ens} | {y for y, _ in best})
+    act_years = [y for y, _ in actuals]
+    all_years = sorted(set(act_years) | set(fc_years))
+    if len(all_years) < 2:
+        return None
+    idx = {y: i for i, y in enumerate(all_years)}
+
+    ss = 2  # supersample for crisp downscale
+    W, H = 900 * ss, 360 * ss
+    ml, mr, mt, mb = 92 * ss, 60 * ss, 64 * ss, 52 * ss
+    img = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(img, "RGBA")
+    f_title, f_lab, f_val = _font(20 * ss), _font(14 * ss), _font(13 * ss)
+
+    all_vals = ([v for _, v in actuals] + [v for _, v in ens] + [v for _, v in best]
+                + list(opt.values()) + list(pes.values()) + list(base.values()))
     vmin, vmax = min(all_vals), max(all_vals)
-    pad = (vmax - vmin) * 0.15 or vmax * 0.1 or 1.0
+    pad = (vmax - vmin) * 0.15 or (vmax * 0.1) or 1.0
     vmin, vmax = vmin - pad, vmax + pad
     x0, x1, y0, y1 = ml, W - mr, mt, H - mb
 
-    def px(i): return x0 + (x1 - x0) * (i / (len(years) - 1))
+    def px(y): return x0 + (x1 - x0) * (idx[y] / (len(all_years) - 1))
     def py(v): return y1 - (y1 - y0) * ((v - vmin) / (vmax - vmin))
 
-    # title
-    d.text((ml, 12 * ss), f"{detail['ticker']} — revenue forecast ($M)", font=f_title, fill=_TEXT)
+    d.text((ml, 12 * ss), f"{detail['ticker']} — actuals + ensemble forecast ($M)",
+           font=f_title, fill=_TEXT)
 
     # y gridlines + labels
     for g in range(5):
@@ -190,38 +262,73 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
         gy = py(gv)
         d.line([(x0, gy), (x1, gy)], fill=_GRID, width=1 * ss)
         d.text((10 * ss, gy - 8 * ss), f"{gv:,.0f}", font=f_val, fill=_MUTED)
-    # x labels (centered under each point so the last one never clips)
-    for i, y in enumerate(years):
+    # x labels (thin out if the history is long so labels never overlap)
+    step = 1 if len(all_years) <= 9 else 2
+    for i, y in enumerate(all_years):
+        if i % step and i != len(all_years) - 1:
+            continue
         lab = f"FY{y}"
         w = d.textlength(lab, font=f_lab)
-        d.text((px(i) - w / 2, y1 + 10 * ss), lab, font=f_lab, fill=_TEXT)
+        d.text((px(y) - w / 2, y1 + 10 * ss), lab, font=f_lab, fill=_TEXT)
 
-    # scenario band (optimistic top ↔ pessimistic bottom)
-    if opt and pes and all(y in opt and y in pes for y in years):
-        top = [(px(i), py(opt[y])) for i, y in enumerate(years)]
-        bot = [(px(i), py(pes[y])) for i, y in enumerate(years)]
+    # faint divider between last actual and first forecast year
+    if actuals and fc_years:
+        bx = (px(act_years[-1]) + px(fc_years[0])) / 2
+        for yy in range(int(y0), int(y1), 8 * ss):
+            d.line([(bx, yy), (bx, yy + 4 * ss)], fill=(180, 180, 180), width=1 * ss)
+
+    # scenario band (optimistic top ↔ pessimistic bottom) over forecast years
+    if opt and pes and all(y in opt and y in pes for y in fc_years):
+        top = [(px(y), py(opt[y])) for y in fc_years]
+        bot = [(px(y), py(pes[y])) for y in fc_years]
+        if actuals:  # anchor the band to the last actual so it starts at history
+            ay = act_years[-1]; av = dict(actuals)[ay]
+            top = [(px(ay), py(av))] + top
+            bot = [(px(ay), py(av))] + bot
         d.polygon(top + bot[::-1], fill=_BAND)
-        # baseline dashed-ish line
-        if base and all(y in base for y in years):
-            bpts = [(px(i), py(base[y])) for i, y in enumerate(years)]
-            for a, b in zip(bpts, bpts[1:]):
-                d.line([a, b], fill=_BASELINE, width=2 * ss)
 
-    # best-model line + markers + labels
-    pts = [(px(i), py(v)) for i, (_, v) in enumerate(series)]
-    for a, b in zip(pts, pts[1:]):
+    anchor = (px(act_years[-1]), py(dict(actuals)[act_years[-1]])) if actuals else None
+
+    # historical actuals — solid slate line + markers
+    apts = [(px(y), py(v)) for y, v in actuals]
+    for a, b in zip(apts, apts[1:]):
+        d.line([a, b], fill=_ACTUAL, width=3 * ss)
+    for cx, cy in apts:
+        r = 4 * ss
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=_ACTUAL)
+    if apts:  # label the last actual so the handoff value is explicit
+        lx, lv = act_years[-1], dict(actuals)[act_years[-1]]
+        d.text((px(lx) - 20 * ss, py(lv) + 8 * ss), f"{lv:,.0f}", font=f_val, fill=_ACTUAL)
+
+    # best individual model — light thin reference line (anchored to last actual)
+    bpts = ([anchor] if anchor else []) + [(px(y), py(v)) for y, v in best]
+    for a, b in zip(bpts, bpts[1:]):
+        d.line([a, b], fill=_BEST_LINE, width=2 * ss)
+
+    # ensemble forecast — the highlighted final output (anchored to last actual)
+    epts_data = [(px(y), py(v), v) for y, v in ens]
+    epts = ([anchor] if anchor else []) + [(x, y) for x, y, _ in epts_data]
+    for a, b in zip(epts, epts[1:]):
         d.line([a, b], fill=_ACCENT, width=3 * ss)
-    for (cx, cy), (_, v) in zip(pts, series):
+    for cx, cy, v in epts_data:
         r = 5 * ss
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=_ACCENT)
-        d.text((cx - 22 * ss, cy - 26 * ss), f"{v:,.0f}", font=f_val, fill=_ACCENT)
+        d.text((cx - 20 * ss, cy - 26 * ss), f"{v:,.0f}", font=f_val, fill=_ACCENT)
 
-    # legend
-    lx, ly = x1 - 250 * ss, 16 * ss
-    d.line([(lx, ly + 8 * ss), (lx + 26 * ss, ly + 8 * ss)], fill=_ACCENT, width=3 * ss)
-    d.text((lx + 32 * ss, ly), f"Best: {_label(detail['best_model'])}", font=f_val, fill=_TEXT)
-    d.rectangle([lx, ly + 22 * ss, lx + 26 * ss, ly + 34 * ss], fill=_BAND)
-    d.text((lx + 32 * ss, ly + 22 * ss), "Scenario range", font=f_val, fill=_MUTED)
+    # legend — one row under the title so long model names never collide
+    ly = 34 * ss
+
+    def _key(x, color, text, swatch=False, width=3):
+        if swatch:
+            d.rectangle([x, ly + 2 * ss, x + 24 * ss, ly + 14 * ss], fill=_BAND)
+        else:
+            d.line([(x, ly + 8 * ss), (x + 24 * ss, ly + 8 * ss)], fill=color, width=width * ss)
+        d.text((x + 30 * ss, ly), text, font=f_val, fill=_TEXT)
+
+    _key(ml, _ACTUAL, "Actual")
+    _key(ml + 120 * ss, _ACCENT, "Ensemble (final)")
+    _key(ml + 270 * ss, _BEST_LINE, "Best model", width=2)
+    _key(ml + 390 * ss, None, "Scenario range", swatch=True)
 
     img = img.resize((W // ss, H // ss), Image.LANCZOS)
     buf = io.BytesIO(); img.save(buf, "PNG"); return buf.getvalue()
@@ -279,16 +386,111 @@ def render_charts(detail: Dict[str, Any]) -> List[Tuple[str, bytes]]:
 # ─────────────────────────────────────────────────────────────────────────────
 _TD = 'style="padding:6px 10px;border:1px solid #e2e2e2;"'
 _TH = 'style="padding:7px 10px;border:1px solid #e2e2e2;text-align:left;background:#f6f6f6;font-weight:600;"'
+# Emphasis cell for the ensemble (final-output) values.
+_TD_ENS = 'style="padding:6px 10px;border:1px solid #e2e2e2;background:#fdeef0;color:#C8102E;font-weight:700;"'
 
 
 def _forecast_table(detail: Dict[str, Any]) -> str:
-    head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Forecast</th>'
-            f'<th {_TH}>Model</th><th {_TH}>Periods Ahead</th></tr>')
+    """Ensemble forecast (final output) as the headline, best individual model alongside."""
+    best = dict(detail.get("series") or [])
+    ens  = dict(detail.get("ensemble_series") or [])
+    model_lab = _label(detail.get("best_model", ""))
+    if not ens:
+        # Fallback: no ensemble stored — keep the original best-only layout.
+        head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Forecast</th>'
+                f'<th {_TH}>Model</th><th {_TH}>Periods Ahead</th></tr>')
+        body = "".join(
+            f'<tr><td {_TD}>FY{fy}</td><td {_TD}><strong>{_fmt_mm(v)}</strong></td>'
+            f'<td {_TD}>{model_lab}</td><td {_TD}>{i}</td></tr>'
+            for i, (fy, v) in enumerate(detail.get("series") or [], start=1)
+        )
+        return f'<table style="border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 14px;">{head}{body}</table>'
+
+    years = sorted(set(best) | set(ens))
+    head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Ensemble Forecast</th>'
+            f'<th {_TH}>Best-Model Forecast</th><th {_TH}>Best Model</th>'
+            f'<th {_TH}>Periods Ahead</th></tr>')
     body = ""
-    for i, (fy, v) in enumerate(detail.get("series") or [], start=1):
-        body += (f'<tr><td {_TD}>FY{fy}</td><td {_TD}><strong>{_fmt_mm(v)}</strong></td>'
-                 f'<td {_TD}>{_label(detail["best_model"])}</td><td {_TD}>{i}</td></tr>')
-    return f'<table style="border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 14px;">{head}{body}</table>'
+    for i, fy in enumerate(years, start=1):
+        body += (f'<tr><td {_TD}>FY{fy}</td>'
+                 f'<td {_TD_ENS}>{_fmt_mm(ens.get(fy))}</td>'
+                 f'<td {_TD}>{_fmt_mm(best.get(fy))}</td>'
+                 f'<td {_TD}>{model_lab}</td><td {_TD}>{i}</td></tr>')
+    caption = ('<div style="font-size:11px;color:#888;margin:2px 0 4px;">'
+               'Ensemble = final output (mean of the top-performing models).</div>')
+    return (caption + f'<table style="border-collapse:collapse;width:100%;font-size:13px;'
+            f'margin:2px 0 14px;">{head}{body}</table>')
+
+
+def _growth_pct(current: Optional[float], previous: Optional[float]) -> Optional[float]:
+    if current is None or previous in (None, 0):
+        return None
+    return (current - previous) / abs(previous) * 100.0
+
+
+def _yoy_cell(pct: Optional[float], top: str = "") -> str:
+    base = f"padding:6px 10px;border:1px solid #e2e2e2;white-space:nowrap;{top}"
+    if pct is None:
+        return f'<td style="{base}color:#999;">—</td>'
+    arrow = "▲" if pct >= 0 else "▼"
+    color = "#1E8449" if pct >= 0 else "#C0392B"
+    return f'<td style="{base}color:{color};font-weight:600;">{arrow} {abs(pct):.1f}%</td>'
+
+
+def _revenue_table(detail: Dict[str, Any]) -> str:
+    """Full reported history and the forecast in one continuous, reviewable table.
+
+    Historical actual years first, then forecast years, with a YoY column computed on
+    the effective series (actual while reported, ensemble once forecast) — which is what
+    makes the trend validatable at a glance.
+    """
+    actuals = detail.get("actuals") or []
+    best = dict(detail.get("series") or [])
+    ens  = dict(detail.get("ensemble_series") or [])
+    if not actuals and not ens:
+        return _forecast_table(detail)          # legacy fallback
+
+    act = dict(actuals)
+    fc_years = sorted(set(best) | set(ens))
+    years = [y for y, _ in actuals] + [y for y in fc_years if y not in act]
+    first_fc = fc_years[0] if fc_years else None
+
+    head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Type</th>'
+            f'<th {_TH}>Actual Revenue</th><th {_TH}>Ensemble Forecast</th>'
+            f'<th {_TH}>Best-Model Forecast</th><th {_TH}>YoY</th></tr>')
+
+    body, prev = "", None
+    for y in years:
+        is_fc = y not in act
+        current = ens.get(y) if is_fc else act.get(y)
+        yoy = _growth_pct(current, prev)
+        prev = current
+        top = "border-top:2px solid #C8102E;" if (actuals and y == first_fc) else ""
+        td = f'style="padding:6px 10px;border:1px solid #e2e2e2;{top}"'
+        ens_td = ('style="padding:6px 10px;border:1px solid #e2e2e2;background:#fdeef0;'
+                  f'color:#C8102E;font-weight:700;{top}"')
+        if is_fc:
+            badge = ('<span style="background:#fdeef0;color:#C8102E;padding:1px 7px;'
+                     'border-radius:3px;font-size:11px;font-weight:600;">Forecast</span>')
+            cells = (f'<td {td}>—</td><td {ens_td}>{_fmt_mm(ens.get(y))}</td>'
+                     f'<td {td}>{_fmt_mm(best.get(y))}</td>')
+            rowbg = ' style="background:#fffbfb;"'
+        else:
+            badge = ('<span style="background:#eef2f7;color:#25375A;padding:1px 7px;'
+                     'border-radius:3px;font-size:11px;font-weight:600;">Actual</span>')
+            cells = (f'<td {td}><strong>{_fmt_mm(act.get(y))}</strong></td>'
+                     f'<td {td}>—</td><td {td}>—</td>')
+            rowbg = ""
+        body += (f'<tr{rowbg}><td {td}><strong>FY{y}</strong></td><td {td}>{badge}</td>'
+                 f'{cells}{_yoy_cell(yoy, top)}</tr>')
+
+    n_hist = len(actuals)
+    caption = ('<div style="font-size:11px;color:#888;margin:2px 0 5px;">'
+               f'{n_hist} historical actual year{"" if n_hist == 1 else "s"} from reported '
+               'financials, then the forecast · Ensemble = final output (mean of the '
+               'top-performing models) · YoY compares each year to the row above.</div>')
+    return (caption + '<table style="border-collapse:collapse;width:100%;font-size:13px;'
+            f'margin:2px 0 16px;">{head}{body}</table>')
 
 
 def _model_table(detail: Dict[str, Any]) -> str:
@@ -327,22 +529,31 @@ def build_report_html(
     # Summary table
     srows = ""
     for det in details:
+        _ens = det.get("ensemble_series") or []
+        _ens_next = _fmt_mm(_ens[0][1]) if _ens else "—"
+        _acts = det.get("actuals") or []
+        _last_actual = f"{_fmt_mm(_acts[-1][1])} · " if _acts else ""
         srows += (
             f'<tr><td {_TD}><strong>{det["ticker"]}</strong></td>'
             f'<td {_TD}>{det.get("company_name","")}</td>'
             f'<td {_TD}>{det.get("exchange","")}</td>'
+            f'<td {_TD_ENS}>{_ens_next}</td>'
             f'<td {_TD}>{_label(det.get("best_model",""))}</td>'
             f'<td {_TD}>{"—" if det.get("best_mape") is None else f"{float(det["best_mape"]):.1f}%"}</td>'
-            f'<td {_TD}>{_fmt_date(det.get("last_actual_date"))}</td></tr>'
+            f'<td {_TD}>{_last_actual}{_fmt_date(det.get("last_actual_date"))}</td></tr>'
         )
     summary = (
         f'<table style="border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 20px;">'
         f'<tr><th {_TH}>Ticker</th><th {_TH}>Company</th><th {_TH}>Exchange</th>'
+        f'<th {_TH}>Ensemble (next yr)</th>'
         f'<th {_TH}>Best Model</th><th {_TH}>MAPE</th><th {_TH}>Last Actual</th></tr>{srows}</table>'
     )
 
     sections = ""
     for det in details:
+        _ens = det.get("ensemble_series") or []
+        _ens_meta = (f' &nbsp;·&nbsp; Ensemble (FY{_ens[0][0]}): '
+                     f'<strong style="color:#C8102E;">{_fmt_mm(_ens[0][1])}</strong>') if _ens else ""
         tk = det["ticker"].replace(".", "_")
         traj = chart_src.get(f"traj_{tk}")
         mape = chart_src.get(f"mape_{tk}")
@@ -358,8 +569,10 @@ def build_report_html(
             f'({det.get("exchange","")})</span></div>'
             f'<div style="font-size:12px;color:#888;margin:2px 0 10px;">Metric: {det.get("metric","")} · '
             f'Best model: <strong>{_label(det.get("best_model",""))}</strong> · '
-            f'Backtest MAPE: {"—" if det.get("best_mape") is None else f"{float(det["best_mape"]):.1f}%"}</div>'
-            f'<div style="font-size:13px;font-weight:600;color:#444;margin:8px 0 2px;">Forecast</div>{_forecast_table(det)}'
+            f'Backtest MAPE: {"—" if det.get("best_mape") is None else f"{float(det["best_mape"]):.1f}%"}'
+            f'{_ens_meta}</div>'
+            f'<div style="font-size:13px;font-weight:600;color:#444;margin:8px 0 2px;">'
+            f'Revenue — historical actuals &amp; forecast</div>{_revenue_table(det)}'
             f'<div style="font-size:13px;font-weight:600;color:#444;margin:8px 0 2px;">Model backtest comparison</div>{_model_table(det)}'
             f'{charts}</div>'
         )

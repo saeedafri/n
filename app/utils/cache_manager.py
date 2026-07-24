@@ -443,6 +443,62 @@ def _background_warmup_thread():
         except Exception as e:
             log_error(f"[CACHE_WARM_BG] Market data warmup error: {e}")
 
+        # ── Track 1d: Newsroom DEFAULT window articles ─────────────────────────
+        # Track 1 above warms only the newsroom DROPDOWNS (sectors / sector map /
+        # date range). The articles themselves — the page's real cost — were never
+        # warmed, so the first visitor after every deploy paid the full cold fetch
+        # (STG 24-Jul: get_articles ~3.4s + get_yf_articles ~2.9s & ~3.8s, and the
+        # nav overlay sat at its 15s cap while they ran).
+        #
+        # newsroom's first load uses date_from = today-7, date_to = today and
+        # fetches via _fetch_chunked(..., sector=None, ticker=None,
+        # sort_ascending=False, av_limit=1000, yf_limit=2000), which splits the
+        # range into FULL ISO-WEEK (Mon–Sun) chunks precisely so the @st.cache_data
+        # key per chunk is stable. Warming those exact chunk args therefore
+        # populates the very entries the first visitor asks for.
+        #
+        # newsroom.py cannot be imported here (it calls main() at import time), so
+        # the week boundaries are recomputed. If that logic ever drifts the warm
+        # simply misses — a wasted background query, never a broken page.
+        try:
+            from datetime import date as _d, timedelta as _td
+            from data.repository import NewsRepository
+            from utils.server_logger import log_warning
+
+            _nr_to = _d.today()
+            _nr_from = _nr_to - _td(days=7)
+            # Full ISO weeks covering [_nr_from, _nr_to], newest-first.
+            _last_monday = _nr_to - _td(days=_nr_to.weekday())
+            _first_monday = _nr_from - _td(days=_nr_from.weekday())
+            _week_starts, _cur = [], _last_monday
+            while _cur >= _first_monday:
+                _week_starts.append(_cur)
+                _cur -= _td(days=7)
+
+            for _wk_start in _week_starts:
+                _wk_end = _wk_start + _td(days=6)
+                try:
+                    NewsRepository.get_articles(
+                        date_from=_wk_start, date_to=_wk_end,
+                        sector=None, company_ticker=None,
+                        keyword=None, limit=1000, offset=0,
+                        sort_ascending=False,
+                    )
+                except Exception:
+                    pass
+                try:
+                    NewsRepository.get_yf_articles(
+                        date_from=_wk_start, date_to=_wk_end,
+                        company_ticker=None, keyword=None,
+                        limit=2000, sort_ascending=False,
+                        sector=None,
+                    )
+                except Exception:
+                    pass
+            log_warning(f"[CACHE_WARM_BG] Newsroom articles warmed for {len(_week_starts)} ISO week(s)")
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Newsroom articles warmup error: {e}")
+
         # ── Track 2: raw DB buffer-pool warmup for AV + YF (PARALLEL) ─────────
         # Does NOT call @st.cache_data decorated functions — no lock contention.
         # Warms covering-index pages so first user query is fast.
