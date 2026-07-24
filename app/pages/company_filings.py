@@ -749,7 +749,7 @@ ANNUAL_DOC_TYPES = {"10-K", "DEF 14A", "DEF14A", "DEFA14A", "S-1", "Annual Repor
 # NON-SEC document types (exact folder names stored in DB)
 NON_SEC_DOC_TYPES = {"annual-report", "interim-report-Q1", "interim-report-Q2", "interim-report-Q3", "interim-report-Q4", "interim-report-Q5", "half-yearly"}
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _is_non_sec_company(ticker: str) -> bool:
     """
     Check if a company is NON-SEC by looking for NON-SEC doc types in the database.
@@ -1481,7 +1481,7 @@ def _ensure_local_blob(blob_name: str) -> Optional[str]:
 # Module-level cache for company names - lazy loaded
 _COMPANY_NAMES_CACHE = None
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _load_company_names_from_db():
     """Load ticker→company_name map from coreiq_companies (indexed master table).
 
@@ -1741,7 +1741,7 @@ class FilingDocument:
 # ── DB-based company/year/doctype lists (replaces folder scan) ────────────────
 from data.repository import FilingMetricRepository
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _load_companies_from_db():
     """Get (ticker, display_label) for the company dropdown.
 
@@ -1855,7 +1855,7 @@ def _load_companies_from_db():
         fallback.sort(key=lambda x: x[1].lower())
         return fallback
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _get_available_years_from_db(ticker: str):
     """Get available fiscal years for a ticker — derived from prefetch cache."""
     _func_start = _perf_time.time()
@@ -1872,7 +1872,7 @@ _TRANSCRIPT_DOC_TYPES = frozenset({
     'transcript-Q3', 'transcript-Q4', 'transcript-unknown',
 })
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _get_available_doc_types_from_db(ticker: str):
     """Get available doc types for a ticker — derived from prefetch cache."""
     _func_start = _perf_time.time()
@@ -1884,7 +1884,7 @@ def _get_available_doc_types_from_db(ticker: str):
     return [dt for dt in DOCUMENT_TYPES if dt not in _TRANSCRIPT_DOC_TYPES]
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _prefetch_ticker_filter_data(ticker: str):
     """Prefetch all doc_type + storage_year combos for a ticker in ONE DB query.
 
@@ -2094,7 +2094,7 @@ def get_companies() -> List[Tuple[str, str]]:
     return _COMPANIES_CACHE
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _load_companies_cached() -> List[Tuple[str, str]]:
     """Cached wrapper for loading companies - only runs once every 5 minutes."""
     _start = _perf_time.time()

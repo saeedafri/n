@@ -162,6 +162,24 @@ preconnect (navigation.py) + `display=swap` (market_data.py).
 - Server warm render **43 ms** (was 24.9 s cold); cold window now shorter (calendar-first warmup)
   and eliminated between deploys (6h TTL).
 
+## STG "blank / spinner-gone / hung calendar" — hang fix (2026-07-24)
+Symptom (STG, incognito): header + "Calendar" render, then a blank body with NO spinner — hung.
+
+Root cause: the on-load parallel fetch (`calendar.py` render_page) read every future with
+**unbounded `.result()`** inside a `with ThreadPoolExecutor(...)` block. Two hang vectors:
+1. A cold/slow/hung `get_available_tickers` (or any fetch) blocks `.result()` **forever**.
+2. `with` exit calls `shutdown(wait=True)`, which also **joins the fire-and-forget
+   `_warm_candidate_company`** task — so even after all reads, a slow warm task blocks exit.
+Either way the render never completes, so the sticky loader hits its 20s hard-cap and hides →
+blank, spinner-gone, hung. (Pre-existing in deployed code; exposed by cold caches post-deploy.)
+
+Fix: manual executor with an **18s shared wall-clock deadline** on every `.result()` (missed
+fetch → its empty default) and **`shutdown(wait=False)`** so the warm task never blocks. If a
+core fetch (tickers/date-range) misses the deadline, clear the loader and show
+"Calendar is taking longer than usual to load. Please refresh." (logged `EC_PAGE_FETCH_INCOMPLETE`)
+instead of hanging. Verified locally: calendar paints normally (114 events), no hang, no errors.
+Combined with the TTL(6h)+warmup fixes above, cold loads are rare AND can no longer hang.
+
 ## Verification plan
 - Re-run the cold-load recorder after each fix; compare `EC_PAGE_PARALLEL_TOTAL` and
   `sticky_removed`/`iframe_painted` marks.

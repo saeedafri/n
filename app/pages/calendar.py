@@ -3123,7 +3123,23 @@ def render_page() -> None:
 
         _t_parallel = _time.perf_counter()
         # Single loading UX: custom `_ecal_loading_hint` above (don't stack `st.spinner` with same message).
-        with ThreadPoolExecutor(max_workers=9) as _ec_exec:
+        # BOUNDED: every .result() shares an 18s wall-clock deadline and the
+        # executor is shut down WITHOUT waiting. Previously these were unbounded
+        # `.result()` calls inside a `with ThreadPoolExecutor` (which also joined
+        # the fire-and-forget `_warm_candidate_company` on exit) — so a cold/slow/
+        # hung ticker query on STG blocked the whole render past the sticky
+        # loader's 20s cap, leaving a blank, spinner-gone, HUNG calendar. Now a
+        # missed fetch falls back to its empty default and the page still renders
+        # (or shows a refresh hint) instead of hanging forever.
+        import time as _ec_tmod
+        _fetch_deadline = _ec_tmod.monotonic() + 18.0
+        def _ec_result(_fut, _default):
+            try:
+                return _fut.result(timeout=max(0.1, _fetch_deadline - _ec_tmod.monotonic()))
+            except Exception:
+                return _default
+        _ec_exec = ThreadPoolExecutor(max_workers=9)
+        try:
             _ticker_future = _ec_exec.submit(_fetch_tickers)
             _dr_future = _ec_exec.submit(_fetch_date_range)
             _events_future = _ec_exec.submit(_fetch_all_events)
@@ -3133,32 +3149,40 @@ def render_page() -> None:
             _prefs_future = _ec_exec.submit(_fetch_alert_prefs_raw)
             _wl_future = _ec_exec.submit(_fetch_toolbar_watchlists)
             _ec_exec.submit(_warm_candidate_company)
-            _te = _time.perf_counter(); all_tickers_meta = _ticker_future.result()
+            _te = _time.perf_counter(); all_tickers_meta = _ec_result(_ticker_future, [])
             log_timing("EC_PAGE_FETCH_TICKERS", (_time.perf_counter() - _te) * 1000, level="WARNING")
-            _te = _time.perf_counter(); (min_date, max_date) = _dr_future.result()
+            _te = _time.perf_counter(); (min_date, max_date) = _ec_result(_dr_future, (None, None))
             log_timing("EC_PAGE_FETCH_DATE_RANGE", (_time.perf_counter() - _te) * 1000, level="WARNING")
-            _te = _time.perf_counter(); _prefetched_events = _events_future.result()
+            _te = _time.perf_counter(); _prefetched_events = _ec_result(_events_future, [])
             log_timing("EC_PAGE_FETCH_ALL_EVENTS", (_time.perf_counter() - _te) * 1000,
                        details=f"events={len(_prefetched_events) if _prefetched_events else 0}", level="WARNING")
-            _te = _time.perf_counter(); _prefetched_ma_events = _ma_future.result()
+            _te = _time.perf_counter(); _prefetched_ma_events = _ec_result(_ma_future, [])
             log_timing("EC_PAGE_FETCH_ALL_MA", (_time.perf_counter() - _te) * 1000,
                        details=f"ma_events={len(_prefetched_ma_events) if _prefetched_ma_events else 0}", level="WARNING")
-            _te = _time.perf_counter(); _prefetched_ipo_events = _ipo_future.result()
+            _te = _time.perf_counter(); _prefetched_ipo_events = _ec_result(_ipo_future, [])
             log_timing("EC_PAGE_FETCH_ALL_IPO", (_time.perf_counter() - _te) * 1000,
                        details=f"ipo_events={len(_prefetched_ipo_events) if _prefetched_ipo_events else 0}", level="WARNING")
-            _te = _time.perf_counter(); _prefetched_delisted_events = _delisted_future.result()
+            _te = _time.perf_counter(); _prefetched_delisted_events = _ec_result(_delisted_future, [])
             log_timing("EC_PAGE_FETCH_ALL_DELISTED", (_time.perf_counter() - _te) * 1000,
                        details=f"delisted_events={len(_prefetched_delisted_events) if _prefetched_delisted_events else 0}", level="WARNING")
-            _te = _time.perf_counter(); _prefetched_alert_prefs = _prefs_future.result()
+            _te = _time.perf_counter(); _prefetched_alert_prefs = _ec_result(_prefs_future, None)
             log_timing("EC_PAGE_FETCH_ALERT_PREFS", (_time.perf_counter() - _te) * 1000, level="WARNING")
-            _te = _time.perf_counter(); _prefetched_watchlists = _wl_future.result()
+            _te = _time.perf_counter(); _prefetched_watchlists = _ec_result(_wl_future, [])
             log_timing("EC_PAGE_FETCH_WATCHLISTS", (_time.perf_counter() - _te) * 1000,
                        details=f"n={len(_prefetched_watchlists or [])}", level="WARNING")
+        finally:
+            _ec_exec.shutdown(wait=False)  # never block on the fire-and-forget warm task
         log_timing("EC_PAGE_PARALLEL_TOTAL", (_time.perf_counter() - _t_parallel) * 1000, level="WARNING")
 
         if not all_tickers_meta or not max_date:
+            # Reached when a core fetch (tickers / date range) missed the 18s
+            # deadline — a transient cold-cache/DB slowness, not truly-empty data
+            # (the calendar always has data). Clear the loader and prompt a refresh
+            # instead of hanging behind a spinner or claiming "no data".
             _ecal_loading_hint.empty()
-            st.error("No earnings calendar data found.")
+            st.warning("Calendar is taking longer than usual to load. Please refresh the page.")
+            log_timing("EC_PAGE_FETCH_INCOMPLETE", 0,
+                       details=f"tickers={len(all_tickers_meta or [])} max_date={max_date}", level="WARNING")
             return
 
         del min_date  # unused — year range dropdowns removed; FullCalendar arrows handle navigation

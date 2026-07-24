@@ -256,7 +256,7 @@ def get_indent_level(label: str) -> int:
         return 0
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _get_company_reported_currency(ticker: str) -> str:
     """Get the company's reported currency (not trading currency).
 
@@ -313,7 +313,7 @@ def has_balance_sheet_grey_separator(label: str) -> bool:
         return False
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def get_available_period_types(ticker: str, tab: str) -> list:
     """Get available period types (Annual/Quarterly) for a company based on data availability.
 
@@ -976,6 +976,14 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             years = merged if sort_ascending else list(reversed(merged))
 
         _rat_inc_key = f"_ratings_incomplete_{ticker}"
+        # Sticky per-ticker settle flag. Once a ticker's ratings render has either
+        # completed OR exhausted its bounded poll budget, we set this so later
+        # incidental reruns (sort toggle, any widget) NEVER re-arm the 1.5s poll.
+        # This is the root fix for the rerun storm: previously the "give up" path
+        # popped the retry counter, so the very next rerun saw count=0 and re-armed
+        # polling for the perpetually-pending square_footage fetch — forever.
+        _settled_key = f"_ratings_settled_{ticker}"
+        _settled = st.session_state.get(_settled_key, False)
         if not years or (not credit_ratings and not store_counts and not sbc_countries and not sqft_metrics):
             # Data may still be warming in the background (bounded fetch waits).
             # Poll a bounded number of times via the CALLER's st.fragment timer —
@@ -983,9 +991,19 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
             # runs sequentially on one thread, so sleeping here froze tab clicks for
             # the whole session; STG "Additional Data → any tab is dead"). The
             # fragment re-runs this subtree without blocking the thread.
+            # square_footage is the slowest EDGAR fetch AND is meaningless on its
+            # own (no store counts to attach it to). If it is the ONLY thing still
+            # pending — store_totals / stores_by_country already came back empty —
+            # this company simply has no store data (a non-retailer like ADBE):
+            # show "no data" INSTANTLY and never poll. Poll only while a CORE fetch
+            # (db rows / credit ratings / store totals / stores-by-country) that
+            # could still yield data is genuinely warming.
+            _pending_now = data.get("_pending_fetches") or []
+            _core_pending = [p for p in _pending_now
+                             if p in ("db_rows", "credit_ratings", "store_totals", "stores_by_country")]
             _retry_key = f"_ratings_retry_{ticker}"
             _n_retry = st.session_state.get(_retry_key, 0)
-            if _n_retry < 4:
+            if _core_pending and _n_retry < 4 and not _settled:
                 st.session_state[_retry_key] = _n_retry + 1
                 st.session_state[_rat_inc_key] = True   # keep the fragment polling
                 st.markdown(
@@ -998,6 +1016,7 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                     unsafe_allow_html=True)
                 return
             st.session_state.pop(_retry_key, None)
+            st.session_state[_settled_key] = True       # sticky: never re-arm the poll
             st.session_state[_rat_inc_key] = False      # give up → stop polling
             st.info("No extracted data available. Check official filings.")
             return
@@ -1015,23 +1034,40 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
         # credit-ratings extraction runs 30-60s — retrying for it burned ~15s
         # of spinner per view for nothing (STG log 16-Jul:
         # pending=credit_ratings retry=2 ×14). CR fills in on later reruns.
-        _retry_worthy = [p for p in _pending if p != "credit_ratings"]
+        # square_footage is retry-worthy ONLY when the company actually has store
+        # data to attach it to. A company with credit ratings but no stores (e.g.
+        # ADBE/Adobe) must NOT spin/poll for a square-footage figure that will
+        # never arrive — show its ratings instantly and settle.
+        _has_store_data = bool(store_counts or sbc_countries)
+        _retry_worthy = [
+            p for p in _pending
+            if p != "credit_ratings"
+            and not (p == "square_footage" and not _has_store_data)
+        ]
         _pending_key = f"_ratings_pending_retry_{ticker}"
-        if _pending:
+        if _pending and not _settled:
             _n_pending = st.session_state.get(_pending_key, 0)
             _rt_log("RATINGS_partial_payload", 0,
                     details=f"ticker={ticker} pending={','.join(_pending)} retry={_n_pending} retry_worthy={bool(_retry_worthy)}")
             if _retry_worthy and _n_pending < 4:
-                # Keep polling via the caller's fragment timer (no thread sleep) and
-                # render the partial table below meanwhile — self-heals to the full
-                # payload without ever blocking tab clicks.
+                # A store-shaping fetch is still warming — the partial table renders
+                # below and the caller's fragment re-polls to self-heal to the full
+                # payload (store counts + geographic breakdown) WITHOUT a manual
+                # refresh. Bounded so it can never loop.
                 st.session_state[_pending_key] = _n_pending + 1
                 st.session_state[_rat_inc_key] = True
             else:
+                # Budget exhausted (or only credit_ratings left) → settle for good:
+                # stop polling and never re-arm on later incidental reruns.
                 st.session_state.pop(_pending_key, None)
+                st.session_state[_settled_key] = True
                 st.session_state[_rat_inc_key] = False
         else:
+            # Complete (or already settled). Mark settled so later reruns never
+            # re-arm the 1.5s poll (root fix for the rerun storm). A manual refresh
+            # still re-renders and picks up freshly-cached late fetches.
             st.session_state.pop(_pending_key, None)
+            st.session_state[_settled_key] = True
             st.session_state[_rat_inc_key] = False
 
         # When the country breakdown covers every year the worldwide series has,

@@ -29,7 +29,7 @@ hide_sidebar()
 # Do NOT re-add a synchronous scanner/audit/purge call here.
 # =============================================================================
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=21600)
 def _load_companies():
     """Fetch companies from database, returns list of (ticker, name) tuples."""
     try:

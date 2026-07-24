@@ -295,7 +295,7 @@ class CompanyRepository:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_company_by_ticker(ticker: str) -> Optional[Company]:
         """Get single company by ticker (cached 10 min)."""
@@ -312,7 +312,7 @@ class CompanyRepository:
         )
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_companies() -> List[Dict[str, str]]:
         """Get all companies from cached map.
@@ -520,7 +520,7 @@ class CompanyRepository:
 # CACHED FISCAL YEAR END LOOKUP - Avoids repeated DB calls
 # =============================================================================
 
-@st.cache_data(ttl=1800, show_spinner=False)  # 30 min cache
+@st.cache_data(ttl=21600, show_spinner=False)  # 30 min cache
 def _get_fiscal_year_end_cached(ticker: str) -> Optional[str]:
     """Get fiscal_year_end for a ticker (cached 30 min) - ZERO LAG optimization.
 
@@ -616,7 +616,7 @@ class IncomeStatementRepository:
 
     # ── Cached single-query: fetches ALL rows for a ticker in one go ──
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_all_annual_rows(ticker: str, period_type: str = "annual") -> List[Dict[str, Any]]:
         """Fetch all income statement rows for a ticker (cached 5 min).
 
@@ -2190,7 +2190,7 @@ class CompanyOverviewRepository:
     """Repository for AV and YF company overview tables."""
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_company_overview(ticker: str) -> Optional[CompanyOverview]:
         """
@@ -2387,7 +2387,7 @@ class EarningsCallRepository:
     """Repository for coreiq_av_earnings_call_transcripts table."""
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_companies_with_earnings() -> List[Dict[str, str]]:
         """Get only companies that have earnings call transcripts (cached 10 min).
@@ -2617,7 +2617,7 @@ class EarningsCallRepository:
         )
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_available_years(ticker: str) -> List[int]:
         """Get distinct years that have transcripts for a given company (cached 10 min).
@@ -2647,7 +2647,7 @@ class EarningsCallRepository:
         return years
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_available_quarters(ticker: str, year) -> List[str]:
         """Get distinct quarters that have transcripts for a company+year (cached 10 min).
@@ -2680,7 +2680,7 @@ class EarningsCallRepository:
         return quarters
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_years_and_quarters(ticker: str) -> Dict[int, List[str]]:
         """Get all year→quarters combos for a ticker in ONE query (saves 1 round-trip).
@@ -2713,7 +2713,7 @@ class EarningsCallRepository:
         return mapping
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_all_available_years() -> List[int]:
         """Get all distinct years that have transcripts across all companies (cached 10 min)."""
@@ -3107,7 +3107,7 @@ class EarningsCallRepository:
     _TRANSCRIPT_DOC_TYPES = ('transcript-Q1', 'transcript-Q2', 'transcript-Q3', 'transcript-Q4')
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_non_sec_transcript_companies() -> List[Dict[str, str]]:
         """Get companies that have transcript PDFs in coreiq_filing_metrics_v5 (cached 10 min).
 
@@ -3167,7 +3167,7 @@ class EarningsCallRepository:
         return companies
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_non_sec_transcript_years_and_quarters(ticker: str) -> Dict[int, List[str]]:
         """Get all year->quarters for NON-SEC transcripts in ONE query.
 
@@ -3254,7 +3254,7 @@ class BalanceSheetRepository:
 
     # ── Cached single-query: fetches ALL rows for a ticker in one go ──
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_all_annual_rows(ticker: str, period_type: str = "annual") -> List[Dict[str, Any]]:
         """Fetch all balance sheet rows for a ticker (cached 5 min).
 
@@ -3678,7 +3678,7 @@ class CashFlowRepository:
 
     # ── Cached single-query: fetches ALL rows for a ticker in one go ──
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_all_annual_rows(ticker: str, period_type: str = "annual") -> List[Dict[str, Any]]:
         """Fetch all cash flow rows for a ticker (cached 5 min).
 
@@ -4053,7 +4053,7 @@ class KeyStatsRepository:
         return sorted([r['fiscal_date_ending'] for r in rows if r.get('fiscal_date_ending')])
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_key_stats_data(
         ticker: str,
@@ -4836,7 +4836,7 @@ class AnalystEstimatesRepository:
     and YF (coreiq_yf_financials_earnings_estimates)."""
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_date_range(ticker: str, period_type: str = "annual") -> Tuple[Optional[date], Optional[date]]:
         """Min/max estimate_date for AV companies; (None, None) for YF."""
         from data.source_router import get_company_source
@@ -4858,7 +4858,7 @@ class AnalystEstimatesRepository:
         return None, None
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_available_dates(ticker: str, period_type: str = "annual") -> List[date]:
         """Distinct estimate_dates for AV; [] for YF."""
         from data.source_router import get_company_source
@@ -4881,7 +4881,7 @@ class AnalystEstimatesRepository:
         return dates
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_estimates_data(ticker: str, start_date, end_date, period_type: str = "annual") -> Dict[str, Any]:
         """Return structured estimates for the Estimates tab.
 
@@ -5211,7 +5211,7 @@ class ModelForecastsRepository:
         return ticker
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5223,7 +5223,7 @@ class ModelForecastsRepository:
         return None, None
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_available_dates(ticker: str) -> List[date]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5233,7 +5233,7 @@ class ModelForecastsRepository:
         return [date(int(r["fiscal_year"]), 1, 1) for r in rows]
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_forecasts_data(ticker: str, start_year: Optional[int] = None, end_year: Optional[int] = None) -> Dict[str, Any]:
         """Return forecast data; sections has one section (Revenue Forecast) with one row per model."""
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
@@ -5364,7 +5364,7 @@ class ModelForecastsRepository:
     _QUARTERLY_MODEL_LABELS = {**_MODEL_LABELS, "seasonal_naive": "Seasonal Naive"}
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_quarterly_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5378,7 +5378,7 @@ class ModelForecastsRepository:
         return None, None
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_quarterly_available_dates(ticker: str) -> List[date]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5395,7 +5395,7 @@ class ModelForecastsRepository:
         return out
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_quarterly_forecasts_data(ticker: str, max_quarters: int = 8) -> Dict[str, Any]:
         """Quarterly forecast data; sections has Revenue Forecast + Scenario Analysis,
         one row per model, columns = the nearest `max_quarters` quarters."""
@@ -5504,7 +5504,7 @@ class RatiosRepository:
     """
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_date_range(ticker: str, period_type: str = "annual") -> Tuple[Optional[date], Optional[date]]:
         """Get min and max fiscal dates from cached income rows."""
         rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, period_type)
@@ -5516,14 +5516,14 @@ class RatiosRepository:
         return min(dates), max(dates)
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_available_dates(ticker: str, period_type: str = "annual") -> List[date]:
         """Get all fiscal dates from cached income rows."""
         rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, period_type)
         return sorted([r['fiscal_date_ending'] for r in rows if r.get('fiscal_date_ending')])
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_ratios_data(
         ticker: str,
@@ -5890,7 +5890,7 @@ class ForexRepository:
     """Repository for currency conversion rates from coreiq_av_forex_daily table."""
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_conversion_rate(from_currency: str, to_currency: str, as_of_date: Optional[date] = None) -> float:
         """
@@ -5946,7 +5946,7 @@ class ForexRepository:
         return 1.0
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_to_currencies(from_currency: str) -> List[str]:
         """Currencies that from_currency can be directly converted TO (no reverse/bridge).
@@ -5963,7 +5963,7 @@ class ForexRepository:
         return [from_currency] + others
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_from_currencies(to_currency: str) -> List[str]:
         """Currencies that can be directly converted TO to_currency (no reverse/bridge).
@@ -5980,7 +5980,7 @@ class ForexRepository:
         return [to_currency] + others
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_conversion_rates_bulk(
         from_currency: str,
@@ -6053,7 +6053,7 @@ class StockQuoteRepository:
     """Repository for Stock Quote table — fetches latest price data + company overview."""
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_latest_quote(ticker: str) -> Optional[Dict[str, Any]]:
         """
@@ -6171,7 +6171,7 @@ class StockQuoteRepository:
         }
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_price_history(ticker: str, days: int = 365) -> List[Dict[str, Any]]:
         """
@@ -6271,7 +6271,7 @@ class StockQuoteRepository:
         return history
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_shares_with_price(ticker: str) -> Dict[str, Any]:
         """
@@ -6355,7 +6355,7 @@ class StockQuoteRepository:
         return {"is_sec": is_sec, "rows": rows}
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_overview_data(ticker: str) -> Optional[Dict[str, Any]]:
         """
@@ -6531,7 +6531,7 @@ class StockQuoteRepository:
         }
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_market_cap_chart_data(ticker: str, months: int = 12) -> List[Dict[str, Any]]:
         """
@@ -6769,7 +6769,7 @@ class StockQuoteRepository:
         return chart_data
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_stock_price_chart_data(ticker: str, months: int = 12) -> List[Dict[str, Any]]:
         """
@@ -7056,7 +7056,7 @@ class FilingMetricRepository:
         ]
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_header_metadata(
         ticker: str,
         effective_year: int,
@@ -7319,7 +7319,7 @@ class FilingMetricRepository:
     }
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _prefetch_filing_metrics(ticker: str, report_fiscal_year: int, doc_type: str) -> List[Dict[str, Any]]:
         """
         Fetch ALL numeric, non-TextBlock rows for one filing into memory (cached 5 min).
@@ -7918,7 +7918,7 @@ class EarningsCalendarRepository:
         return lookup.get((t_key, src))
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_calendar_events(
         tickers: Optional[tuple] = None,
         start_date: Optional[date] = None,
@@ -8899,7 +8899,7 @@ class EarningsCalendarRepository:
         return result
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_date_range() -> tuple:
         """Return (min_date, max_date) of earnings_date across both calendar tables."""
@@ -9321,7 +9321,7 @@ class EarningsCalendarRepository:
         return d.date() if isinstance(d, datetime) else d
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fiscal_numbering_convention(ticker: str, fye_month: int) -> Optional[str]:
         """Return 'start' or 'end': whether AV numbers this company's fiscal year by the calendar
         year it STARTS in (e.g. TGT) or ENDS in (e.g. WMT). Two companies can share a fiscal-year-end
@@ -9382,7 +9382,7 @@ class EarningsCalendarRepository:
         return None
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_earnings_event_dates(
         ticker: str,
@@ -9480,7 +9480,7 @@ class EarningsCalendarRepository:
         return ev["report_date"] if ev else None
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_earnings_display_period(
         ticker: str,
@@ -9577,7 +9577,7 @@ class EarningsCalendarRepository:
         }
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
     def get_transcript_for_calendar_event(ticker: str, earnings_date) -> Optional[Dict[str, Any]]:
         """Return the raw transcript year/q that maps to a calendar earnings date.
@@ -10055,7 +10055,7 @@ class SegmentDataRepository:
         return dim_rows + ndim_rows
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_all_db_rows(ticker: str) -> List[Dict[str, Any]]:
         """Fetch ALL dimensioned + consolidated rows for a ticker.
 
@@ -10146,7 +10146,7 @@ class SegmentDataRepository:
         return all_rows
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_all_db_rows_quarterly(ticker: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         """Fetch all 3-month dimensioned rows from 10-Q filings for a date range."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10749,7 +10749,7 @@ class SegmentDataRepository:
     # ── edgartools fallback ────────────────────────────────────────────────
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_from_edgartools(ticker: str) -> Dict[str, Any]:
         """Fall back to edgartools when DB has no segment data.
 
@@ -11868,7 +11868,7 @@ class RatingsDataRepository:
         return result
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: 10-K geographic breakdown (quarterly); keeps the boot warmup warm all day (was ttl=600)
     def _edgartools_stores_by_country(ticker: str) -> Dict[str, Any]:
         """Fetch stores-by-country data from edgartools XBRL for up to 6 recent 10-Ks.
 
@@ -12049,7 +12049,7 @@ class RatingsDataRepository:
             return {}
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: from 10-K XBRL (quarterly data); ttl=600 re-cold every 10min defeated the boot warmup → slow ratings tab all day
     def _edgartools_store_totals(ticker: str) -> Dict[str, Any]:
         """Fetch WORLDWIDE store-count totals per fiscal year from XBRL (SEC EDGAR).
 
@@ -12394,7 +12394,7 @@ class RatingsDataRepository:
     """
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_sqft_from_db(ticker: str) -> List[Dict[str, Any]]:
         """Fetch square footage XBRL facts from coreiq_filing_metrics_v5."""
         raw = db_manager.execute_query_readonly(
@@ -12421,7 +12421,7 @@ class RatingsDataRepository:
         return results
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def _fetch_sqft_from_edgartools(ticker: str) -> List[Dict[str, Any]]:
         """Fetch square footage data from SEC EDGAR via edgartools as fallback.
 
@@ -12502,7 +12502,7 @@ class RatingsDataRepository:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)  # 6h: 10-K square footage (quarterly); keeps the boot warmup warm all day (was ttl=600)
     def get_square_footage_data(ticker: str, start_year: int, end_year: int) -> Dict[str, Any]:
         """Get square footage / property area data organized by metric and year.
 
@@ -12675,7 +12675,26 @@ class RatingsDataRepository:
         fetch keeps running in the background for the next call.
         """
         rows = RatingsDataRepository._fetch_all_rows(ticker)
-        years = set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year'))
+        # Only count a fiscal year if its row carries data the tab will ACTUALLY
+        # render — mirror render_ratings_data's own filters. Otherwise junk rows
+        # define the date range: FLWS's lone fy2016 store_count value='0' (fails
+        # the source-sentence check, renders nothing) collapsed the range to
+        # Dec-2016→Dec-2016 and showed misleading date dropdowns above a "No
+        # extracted data" message. store_count → must pass the source check;
+        # credit_rating → must carry a non-empty rating value.
+        def _year_has_data(r) -> bool:
+            if not r.get('report_fiscal_year'):
+                return False
+            if r.get('source') == 'store_count':
+                # A store count of 0 is not real store data (FLWS's lone fy2016
+                # value='0' row). Require a positive count — matches what the tab
+                # renders (numeric_value drives the store rows).
+                nv = r.get('numeric_value')
+                return nv is not None and nv > 0
+            # credit_rating → must carry a non-empty rating value.
+            v = r.get('value')
+            return v is not None and str(v).strip() != ''
+        years = set(r['report_fiscal_year'] for r in rows if _year_has_data(r))
         from concurrent.futures import ThreadPoolExecutor as _TPE
         _pool = _TPE(max_workers=1)
         try:
@@ -13265,7 +13284,7 @@ class ExecutiveCompensationRepository:
     # ── SEC company: latest year only (Company Profile tab) ──────────────────
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_sec_latest_compensation(ticker: str) -> List[Dict[str, Any]]:
         """Return all executives for the latest compensation_year for a SEC ticker.
 
@@ -13321,7 +13340,7 @@ class ExecutiveCompensationRepository:
     # ── YF company: officers from payload_json (Company Profile tab) ─────────
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_yf_latest_compensation(ticker: str) -> List[Dict[str, Any]]:
         """Return companyOfficers from the YF payload for a NON-SEC ticker.
 
@@ -13375,7 +13394,7 @@ class ExecutiveCompensationRepository:
     # ── ALL-YEARS data for SEC tickers (People Screening tab) ────────────────
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_sec_all_compensation(tickers: Tuple[str, ...]) -> List[Dict[str, Any]]:
         """Return ALL historical compensation rows for a set of SEC tickers.
 
@@ -13435,7 +13454,7 @@ class ExecutiveCompensationRepository:
     # ── YF compensation for bulk tickers (People Screening tab) ─────────────
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=21600, show_spinner=False)
     def get_yf_all_compensation(tickers: Tuple[str, ...]) -> List[Dict[str, Any]]:
         """Return companyOfficers for all YF tickers in bulk.
 

@@ -79,7 +79,7 @@ def _sort_filing_units_desc(filing_units: List[str]) -> List[str]:
     return sorted(filing_units, key=_parse_filing_number, reverse=True)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _get_filing_units_from_db(ticker: str, year: str, doc_type: str) -> Optional[List[str]]:
     """
     Get distinct filing units from database for a ticker/year/doc_type combination.

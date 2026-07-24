@@ -647,7 +647,7 @@ def get_earnings_css() -> str:
 # =============================================================================
 # TRANSCRIPT PARSING# =============================================================================
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def parse_transcript(transcript_text: str, cache_version: int = 3) -> List[Dict]:
     """
     Parse transcript text into speaker segments.
@@ -1417,7 +1417,7 @@ def _render_ec_pdf_viewer(pdf_path: str, highlight_keyword: str = "", target_pag
     components.html(html, height=820, scrolling=False)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _extract_pdf_text_by_page(pdf_path: str) -> list:
     """
     Extract text from a PDF grouped by page using PyMuPDF.

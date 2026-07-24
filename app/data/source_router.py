@@ -5,7 +5,7 @@ from core.database import db_manager
 from utils.server_logger import log_structured_error, log_error
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def get_company_source(ticker: str) -> Optional[Literal['SEC', 'YFinance']]:
     """
     Detect data source for a ticker.
