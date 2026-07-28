@@ -84,6 +84,143 @@ if HAS_AGGRID:
     }}
     """)
 
+# Excel-style distinct-values column filter (AG Grid Community custom filter).
+# Lives inside the existing column-menu funnel: search box + "(Select All)" +
+# a scrollable checkbox list of the column's distinct values. Auto-applies on
+# toggle (no Apply button), 100% client-side. Registered once as every grid's
+# default_column filter so all screening grids inherit it.
+# NOTE: JsCode strips JS comments and collapses whitespace — keep this comment-free.
+_DISTINCT_VALUES_FILTER = None
+if HAS_AGGRID:
+    _DISTINCT_VALUES_FILTER = JsCode("""
+    class DistinctValuesFilter {
+      init(params) {
+        this.params = params;
+        this.field = (params.colDef && params.colDef.field)
+          ? params.colDef.field
+          : params.column.getColId();
+        this.selected = null;
+        this.eGui = document.createElement('div');
+        this.eGui.style.cssText = 'font-family:Inter,Arial,sans-serif;font-size:13px;min-width:230px;max-width:340px;padding:8px;';
+        var search = document.createElement('input');
+        search.type = 'text';
+        search.placeholder = 'Search';
+        search.style.cssText = 'width:100%;box-sizing:border-box;padding:5px 8px;margin-bottom:6px;border:1px solid #d0d0d0;border-radius:4px;font-size:13px;';
+        this.search = search;
+        var selAllWrap = document.createElement('label');
+        selAllWrap.style.cssText = 'display:flex;align-items:center;gap:7px;padding:4px 2px;font-weight:600;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:4px;';
+        var selAll = document.createElement('input');
+        selAll.type = 'checkbox';
+        selAll.checked = true;
+        this.selAll = selAll;
+        var selAllTxt = document.createElement('span');
+        selAllTxt.textContent = '(Select All)';
+        selAllWrap.appendChild(selAll);
+        selAllWrap.appendChild(selAllTxt);
+        var list = document.createElement('div');
+        list.style.cssText = 'max-height:230px;overflow-y:auto;';
+        this.list = list;
+        this.eGui.appendChild(search);
+        this.eGui.appendChild(selAllWrap);
+        this.eGui.appendChild(list);
+        this.values = [];
+        this.buildValues();
+        this.render('');
+        var self = this;
+        search.addEventListener('input', function() { self.render(search.value); });
+        selAll.addEventListener('change', function() { self.onSelectAll(selAll.checked); });
+      }
+      buildValues() {
+        var self = this;
+        var seen = {};
+        var order = [];
+        var api = this.params.api;
+        if (api && api.forEachLeafNode) {
+          api.forEachLeafNode(function(node) {
+            var v = (node && node.data) ? node.data[self.field] : '';
+            v = (v === null || v === undefined) ? '' : String(v);
+            if (!seen[v]) { seen[v] = true; order.push(v); }
+          });
+        }
+        order.sort(function(a, b) {
+          return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
+        this.values = order;
+        this.selected = null;
+      }
+      render(term) {
+        var self = this;
+        var t = (term || '').toLowerCase();
+        this.list.innerHTML = '';
+        var cur = this.currentSet();
+        this.values.forEach(function(v) {
+          if (t && v.toLowerCase().indexOf(t) === -1) { return; }
+          var row = document.createElement('label');
+          row.style.cssText = 'display:flex;align-items:center;gap:7px;padding:3px 2px;cursor:pointer;';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = cur[v] === true;
+          cb.addEventListener('change', function() { self.onToggle(v, cb.checked); });
+          var span = document.createElement('span');
+          span.textContent = (v === '') ? '(Blanks)' : v;
+          span.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          row.appendChild(cb);
+          row.appendChild(span);
+          self.list.appendChild(row);
+        });
+      }
+      currentSet() {
+        var m = {};
+        if (this.selected === null) {
+          this.values.forEach(function(v) { m[v] = true; });
+        } else {
+          var s = this.selected;
+          for (var i = 0; i < s.length; i++) { m[s[i]] = true; }
+        }
+        return m;
+      }
+      onToggle(v, on) {
+        var m = this.currentSet();
+        if (on) { m[v] = true; } else { delete m[v]; }
+        this.selected = Object.keys(m);
+        this.syncSelAll();
+        this.params.filterChangedCallback();
+      }
+      onSelectAll(on) {
+        this.selected = on ? null : [];
+        this.render(this.search.value);
+        this.params.filterChangedCallback();
+      }
+      selectedCount() {
+        return (this.selected === null) ? this.values.length : this.selected.length;
+      }
+      syncSelAll() {
+        var n = this.selectedCount();
+        this.selAll.checked = (n === this.values.length);
+        this.selAll.indeterminate = (n > 0 && n < this.values.length);
+      }
+      isFilterActive() {
+        return (this.selected !== null) && (this.selected.length < this.values.length);
+      }
+      doesFilterPass(p) {
+        if (!this.isFilterActive()) { return true; }
+        var v = (p.data) ? p.data[this.field] : '';
+        v = (v === null || v === undefined) ? '' : String(v);
+        return this.currentSet()[v] === true;
+      }
+      getModel() {
+        if (!this.isFilterActive()) { return null; }
+        return { values: this.selected.slice() };
+      }
+      setModel(m) {
+        this.selected = (m && m.values) ? m.values.slice() : null;
+        if (this.list) { this.render(this.search ? this.search.value : ''); this.syncSelAll(); }
+      }
+      getGui() { return this.eGui; }
+      afterGuiAttached() { if (this.search) { this.search.focus(); } }
+    }
+    """)
+
 CORESIGHT_LOGO_URL = (
     "https://production-wordpress-cdn-dpa0g9bzd7b3h7gy.z03.azurefd.net"
     "/wp-content/uploads/2023/12/coresight-logo-1.png"
@@ -4720,7 +4857,6 @@ def _render_keydevs_results():
         # old LIMIT 2000 that silently truncated "All History" to the newest ~17 days.
         # Only _KD_PAGE rows live in memory per page; the honest total is shown up front.
         _KD_PAGE = 500
-        _KD_EXPORT_CAP = 50000   # bounds RAM/time on very broad "All History" queries
         _kd_sig = (_tickers, _cats, _window.get("days"),
                    _window.get("start_date"), _window.get("end_date"))
         if st.session_state.get("kd_sig") != _kd_sig:
@@ -4738,18 +4874,46 @@ def _render_keydevs_results():
             st.session_state["kd_df"] = _df0
             st.session_state["kd_cursor"] = _cur0
             # Build the FULL export ONCE per query (not per rerun) so the single Excel
-            # button below downloads ALL matching events, not just this 500-row page.
-            # The grid stays paginated (500) for speed; only the workbook holds the lot.
+            # button below downloads EVERY matching event — no cap. The grid stays
+            # paginated (500) for speed; only the workbook holds the entire set.
+            #
+            # The full set is assembled with the SAME keyset pagination the grid uses
+            # (many fast, index-served seeks) — NOT one giant `LIMIT = total` query.
+            # A single 100k+ row statement exceeds the 120s read_timeout on the
+            # read-only connection and comes back EMPTY (the full 378-company universe
+            # over all history is ~145k events), which is exactly the "download only
+            # gives some records" bug. Each 10k-row page stays well under the timeout,
+            # so the workbook always holds the complete set. Newest-first, in order.
+            # Built behind the sticky loader and cached, so ordinary reruns never rebuild.
             try:
-                _xl_df, _ = get_keydevs_events_for_tickers(
-                    _tickers, _cats, days=_window.get("days"),
-                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                    limit=_KD_EXPORT_CAP,
+                _XL_PAGE = 10000
+                _XL_RUNAWAY = 500000   # safety backstop far above any real dataset
+                _xl_frames: list = []
+                _xl_cur = None
+                _xl_rows = 0
+                while True:
+                    _pg, _xl_cur = get_keydevs_events_for_tickers(
+                        _tickers, _cats, days=_window.get("days"),
+                        start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                        limit=_XL_PAGE,
+                        before_date=(_xl_cur[0] if _xl_cur else None),
+                        before_id=(_xl_cur[1] if _xl_cur else None),
+                    )
+                    if _pg is None or _pg.empty:
+                        break
+                    _xl_frames.append(_pg)
+                    _xl_rows += len(_pg)
+                    if _xl_cur is None or _xl_rows >= _XL_RUNAWAY:
+                        if _xl_rows >= _XL_RUNAWAY:
+                            log_warning(f"[KEYDEVS_EXPORT] runaway guard hit at {_xl_rows} rows")
+                        break
+                _xl_df = (
+                    pd.concat(_xl_frames, ignore_index=True) if _xl_frames else pd.DataFrame()
                 )
                 st.session_state["kd_xl"] = (
                     _build_keydevs_excel_fast(_xl_df, len(criteria),
                                               title="Coresight Key Developments")
-                    if _xl_df is not None and not _xl_df.empty else b"")
+                    if not _xl_df.empty else b"")
             except Exception as _xl_exc:
                 log_structured_error(_xl_exc, page="screening", component="keydevs_full_export",
                                      operation="build_full_excel")
@@ -5813,24 +5977,25 @@ def _render_filterable_results_grid(
     pin_col = _resolve_grid_pin_column(display_df, pinned_column)
     link_cols = set(link_columns or [])
 
+    # Excel-style distinct-values filter (custom AG Grid Community component) when
+    # available; falls back to the built-in text "contains" filter if JsCode is not.
+    _grid_filter = _DISTINCT_VALUES_FILTER if _DISTINCT_VALUES_FILTER is not None else "agTextColumnFilter"
+
     gb = GridOptionsBuilder.from_dataframe(display_df)
     gb.configure_default_column(
         sortable=True,
-        filter="agTextColumnFilter",
+        # Distinct-values dropdown (search + "(Select All)" + per-value checkboxes)
+        # in the per-column header funnel — Excel-like. Auto-applies on toggle,
+        # client-side. The search box subsumes the old "contains" behavior.
+        filter=_grid_filter,
         resizable=True,
-        # NO floating filter row — filtering stays in the per-column header menu
-        # (click the funnel on any column). The only real bug was the popup
-        # wouldn't close: it defaulted to a TWO-condition (AND/OR) builder, so the
-        # second empty condition kept it open. maxNumConditions=1 makes it a single
-        # "contains" input with a Clear button that closes on click-away.
+        # NO floating filter row — filtering stays behind the per-column header
+        # funnel (the community filter button, provided by ColumnFilterModule).
         floatingFilter=False,
-        menuTabs=["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
-        filterParams={
-            "filterOptions": ["contains", "startsWith", "equals", "notContains"],
-            "maxNumConditions": 1,
-            "buttons": ["clear"],
-            "closeOnApply": True,
-        },
+        # NOTE: do NOT set `menuTabs` here. On AG Grid v34 Community (streamlit-aggrid
+        # 1.2.1) `menuTabs` requires the enterprise ColumnMenuModule, so it is ignored
+        # and logs error #200 ~4x per grid render. The funnel filter button and
+        # header-click ASC/DESC sort are both community features and work without it.
         # Hover ANY cell to read its full (untruncated) value — e.g. the long
         # Summary column. Native browser tooltip (enableBrowserTooltips below).
         tooltipValueGetter=JsCode("function(p){return p.value;}"),
@@ -5838,7 +6003,7 @@ def _render_filterable_results_grid(
     if pin_col:
         gb.configure_column(
             pin_col,
-            filter="agTextColumnFilter",
+            filter=_grid_filter,
             sortable=True,
             resizable=True,
             pinned="left",
@@ -5855,7 +6020,7 @@ def _render_filterable_results_grid(
         if link_col in display_df.columns and _GRID_LINK_RENDERER is not None:
             gb.configure_column(
                 link_col,
-                filter="agTextColumnFilter",
+                filter=_grid_filter,
                 sortable=True,
                 resizable=True,
                 cellRenderer=_GRID_LINK_RENDERER,
@@ -5931,6 +6096,24 @@ def _render_filterable_results_grid(
         "function(p){var a=p.api;"
         "if(a&&a.autoSizeAllColumns){a.autoSizeAllColumns(false);}"
         "else if(p.columnApi&&p.columnApi.autoSizeAllColumns){p.columnApi.autoSizeAllColumns(false);}}"
+    )
+    # Close the column-filter popup on a click ANYWHERE outside the grid, not just
+    # inside the table. The grid lives in its own iframe; AG Grid already closes the
+    # popup on clicks within the iframe, but clicks elsewhere on the Streamlit page
+    # happen in the PARENT document and never reach the iframe, so the popup would
+    # stay open. onGridReady wires a capture-phase mousedown listener on the parent
+    # (and top) document — those events fire ONLY for clicks outside this iframe — and
+    # calls the public api.hideColumnFilter(). Wired once per grid iframe.
+    grid_options["onGridReady"] = JsCode(
+        "function(params){try{"
+        "if(window.__ag_outside_close_wired){return;}"
+        "window.__ag_outside_close_wired=true;"
+        "var close=function(){try{if(params.api&&params.api.hideColumnFilter){params.api.hideColumnFilter();}}catch(e){}};"
+        "var docs=[];"
+        "try{if(window.parent&&window.parent!==window){docs.push(window.parent.document);}}catch(e){}"
+        "try{if(window.top&&window.top!==window&&window.top!==window.parent){docs.push(window.top.document);}}catch(e){}"
+        "docs.forEach(function(d){try{d.addEventListener('mousedown',close,true);}catch(e){}});"
+        "}catch(err){}}"
     )
 
     _update_mode = (
