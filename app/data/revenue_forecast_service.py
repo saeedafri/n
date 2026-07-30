@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
+from utils.constants import yahoo_symbol
 
 from core.database import db_manager
 from data.source_router import get_company_source
@@ -331,7 +332,7 @@ class RevenueForecastService:
         if source == 'YFinance' and '.' not in ticker:
             from data.repository import CompanyRepository as _CR
             _exch = (_CR.get_companies_map().get(ticker) or {}).get('exchange_acronym')
-            _forecast_ticker = f"{ticker}.{_exch}" if _exch else ticker
+            _forecast_ticker = yahoo_symbol(ticker, _exch)
         else:
             _forecast_ticker = ticker
 
@@ -771,7 +772,7 @@ class RevenueForecastService:
         if source == 'YFinance' and '.' not in ticker:
             from data.repository import CompanyRepository as _CR
             _exch = (_CR.get_companies_map().get(ticker) or {}).get('exchange_acronym')
-            _forecast_ticker = f"{ticker}.{_exch}" if _exch else ticker
+            _forecast_ticker = yahoo_symbol(ticker, _exch)
         else:
             _forecast_ticker = ticker
 

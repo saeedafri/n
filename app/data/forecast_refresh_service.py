@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import streamlit as st
 
@@ -372,14 +372,7 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
                     WHEN 'Jul' THEN 7  WHEN 'Aug' THEN 8  WHEN 'Sep' THEN 9
                     WHEN 'Oct' THEN 10 WHEN 'Nov' THEN 11 WHEN 'Dec' THEN 12
                     ELSE 0
-                END AS fqe_month_num,
-                CASE LOWER(LEFT(TRIM(ov.fiscal_year_end), 3))
-                    WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
-                    WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
-                    WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
-                    WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
-                    ELSE -1
-                END AS fye_month_num
+                END AS fqe_month_num
             FROM (
                 SELECT ticker, earnings_date, fiscal_quarter_ending, fetched_at_utc, id
                 FROM (
@@ -396,22 +389,6 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
                 ) ranked
                 WHERE rn = 1
             ) lc
-            JOIN (
-                SELECT ticker, fiscal_year_end
-                FROM (
-                    SELECT
-                        ticker, fiscal_year_end,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY ticker
-                            ORDER BY fetched_at_utc DESC
-                        ) AS rn
-                    FROM coreiq_av_company_overview
-                    WHERE ticker IS NOT NULL
-                      AND fiscal_year_end IS NOT NULL
-                      AND fiscal_year_end <> ''
-                ) fye_ranked
-                WHERE rn = 1
-            ) ov ON ov.ticker = lc.ticker
             """,
             {},
         )
@@ -419,18 +396,37 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
         # Group by ticker, collect Q4 rows, apply upcoming-first selection
         ticker_q4_candidates: Dict[str, list] = defaultdict(list)
         today = date.today()
+        # Fiscal year end is resolved in Python from the FULL source chain, not by
+        # an INNER JOIN on coreiq_av_company_overview alone. The join silently
+        # discarded every company whose vendor overview lacked a fiscal_year_end —
+        # 104 companies on STG, 39 of which had a perfectly good annual date in the
+        # calendar. A company with no FYE from ANY source is a real data gap and is
+        # counted in `_dropped_no_fye` below rather than vanishing unexplained.
+        fye_names = _fiscal_year_end_bulk()
+        fye_months = {tk: _fye_name_to_month_num(name) for tk, name in fye_names.items()}
+        _dropped_no_fye: Set[str] = set()
+        _dropped_no_q4: Set[str] = set()
+
         for r in nasdaq_rows:
             tk = (r.get("ticker") or "").strip()
             fqe_m = r.get("fqe_month_num") or 0
-            fye_m = r.get("fye_month_num") or -1
-            # Q4 iff fqe_month == fye_month
+            fye_m = fye_months.get(tk) or 0
+            if not fye_m:
+                _dropped_no_fye.add(tk)
+                continue
+            # The ANNUAL period is the quarter whose end month is the fiscal year
+            # end month. This is what excludes interim, half-year and Q1-Q3 rows:
+            # a half-yearly reporter's H1 row ends mid-year and can never match,
+            # while its full-year row ends on the FYE month and always does.
             if fqe_m != fye_m or fqe_m == 0:
+                _dropped_no_q4.add(tk)
                 continue
             raw_dt = r.get("earnings_date")
             ed = raw_dt.date() if raw_dt and hasattr(raw_dt, "date") else raw_dt
             if ed is None:
                 continue
             raw_fat = r.get("fetched_at_utc")
+            _dropped_no_q4.discard(tk)
             ticker_q4_candidates[tk].append({
                 "date": ed,
                 "fiscal_quarter_ending": (r.get("fiscal_quarter_ending") or ""),
@@ -448,8 +444,17 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
             if chosen:
                 nasdaq_result[tk] = {**chosen, "source": "nasdaq", "fiscal_q": 4}
 
-        log_timing("_annual_q4.nasdaq", (perf_counter() - _t) * 1000,
-                   f"tickers={len(nasdaq_result)}", level="INFO")
+        # Every company that failed a gate is counted and named, so "why is this
+        # one On hold?" is answerable from the log instead of a DB investigation.
+        log_timing(
+            "_annual_q4.nasdaq", (perf_counter() - _t) * 1000,
+            f"resolved={len(nasdaq_result)} "
+            f"dropped_no_fiscal_year_end={len(_dropped_no_fye)} "
+            f"dropped_no_annual_row={len(_dropped_no_q4)} "
+            f"no_fye_sample={sorted(_dropped_no_fye)[:10]} "
+            f"no_annual_sample={sorted(_dropped_no_q4)[:10]}",
+            level="INFO",
+        )
     except Exception as exc:
         log_structured_error(exc, page="forecast_refresh_service",
                              component="_annual_q4_report_dates_bulk", operation="SELECT_NASDAQ")
@@ -569,11 +574,43 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     # annual reporters while still excluding clearly outdated dates.
     _stale_cutoff = date.today() - timedelta(days=460)
     _before_guard = len(result)
+    _stale = {tk: info for tk, info in result.items() if info["date"] < _stale_cutoff}
     result = {tk: info for tk, info in result.items() if info["date"] >= _stale_cutoff}
+
+    # ── Projected annual date — last resort, always flagged ──────────────────
+    # A company whose only annual row predates the cutoff still reports annually;
+    # the calendar simply never received its latest row (STG has an ingestion hole
+    # across Dec/2025–Mar/2026). Companies report in a near-fixed calendar slot, so
+    # rolling the last CONFIRMED annual date forward in whole years lands within
+    # days of the real one.
+    #
+    # Two hard rules, because a fabricated date is worse than no date at all:
+    #   1. The anchor must be recent. 46 of 164 stale companies anchor on rows over
+    #      four years old — AMPL's is dated 2012, years before the company existed.
+    #      Projecting from junk yields junk, so those stay on hold.
+    #   2. The result carries `is_estimated` and `anchor_date` so the UI labels it
+    #      and it can never masquerade as a confirmed calendar date.
+    _MAX_ANCHOR_AGE_DAYS = 920  # ~2.5 years — two missed cycles plus headroom
+    _today = date.today()
+    _projected = 0
+    for tk, info in _stale.items():
+        anchor = info["date"]
+        if (_today - anchor).days > _MAX_ANCHOR_AGE_DAYS:
+            continue
+        nxt = anchor
+        while nxt < _today:
+            try:
+                nxt = nxt.replace(year=nxt.year + 1)
+            except ValueError:  # 29 Feb anchor rolling into a non-leap year
+                nxt = nxt.replace(year=nxt.year + 1, day=28)
+        result[tk] = {**info, "date": nxt, "is_estimated": True, "anchor_date": anchor}
+        _projected += 1
 
     log_timing("_annual_q4.TOTAL", (perf_counter() - _t) * 1000,
                f"nasdaq={len(nasdaq_result)} yf={len(yf_result)} "
-               f"total={len(result)} dropped_stale={_before_guard - len(result)}", level="INFO")
+               f"confirmed={len(result) - _projected} projected={_projected} "
+               f"total={len(result)} "
+               f"stale_anchor_too_old={len(_stale) - _projected}", level="INFO")
     return result
 
 
@@ -770,12 +807,22 @@ def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
 def _fiscal_year_end_bulk() -> Dict[str, Optional[str]]:
     """ticker → fiscal_year_end string (month name), one row per ticker using latest fetch.
 
-    Sources:
-      1. coreiq_av_company_overview — AV/SEC companies; deduped by fetched_at_utc DESC
-         so a stale duplicate overview row cannot override the current FYE.
-      2. coreiq_yf_company_overview payload_json $.info.lastFiscalYearEnd — YF/composite
-         companies (Unix epoch → month name); deduped by ingested_at DESC.
-         Only fills tickers not resolved by AV.
+    Sources, applied in order — each only fills tickers the previous ones missed:
+      1. coreiq_av_company_overview — the vendor-declared FYE; deduped by
+         fetched_at_utc DESC so a stale duplicate overview row cannot override it.
+      2. coreiq_model_forecasts.last_actual_date — the fiscal period end our own
+         engine last modelled. Authoritative and near-universal: it is already what
+         the refresh dialog prints in its "Fiscal Period" column.
+      3. coreiq_av_financials_income_statement.fiscal_date_ending (annual) — the
+         period end of the newest published annual statement.
+      4. coreiq_yf_company_overview payload_json $.info.lastFiscalYearEnd — Unix
+         epoch → month name; deduped by ingested_at DESC.
+
+    Sources 2 and 3 were added 2026-07-30. Source 1 alone resolved 221 tickers on
+    STG while the full chain resolves 401, and the annual reporting date cannot be
+    identified without an FYE — so 39 companies were being shown "On hold" while
+    their announcement date sat in the calendar. See spec
+    docs/superpowers/specs/2026-07-30-reporting-date-resolution-hardening-design.md
     """
     _t0 = perf_counter()
     result: Dict[str, Optional[str]] = {}
@@ -815,7 +862,61 @@ def _fiscal_year_end_bulk() -> Dict[str, Optional[str]]:
                              component="_fiscal_year_end_bulk", operation="SELECT_AV")
         _t1 = perf_counter()
 
-    # ── Source 2: YFinance — latest ingested_at per ticker ───────────────────
+    # ── Source 2: our own modelled fiscal period end ─────────────────────────
+    # coreiq_model_forecasts.last_actual_date is the period end of the newest
+    # actuals the forecast engine consumed. Present for essentially every company
+    # in the refresh dialog (the dialog is built from this table), so it closes
+    # most of the gap left by a sparse AV overview.
+    try:
+        fc_rows = db_manager.execute_query_readonly(
+            """
+            SELECT ticker, MONTH(MAX(last_actual_date)) AS fye_month
+            FROM coreiq_model_forecasts
+            WHERE last_actual_date IS NOT NULL
+            GROUP BY ticker
+            """,
+            {},
+        )
+        fc_added = 0
+        for r in fc_rows or []:
+            tk = (r.get("ticker") or "").strip()
+            month_num = r.get("fye_month")
+            if not tk or tk in result or not month_num:
+                continue
+            result[tk] = calendar.month_name[int(month_num)]
+            fc_added += 1
+        log_timing("_fiscal_year_end_bulk_FORECASTS", (perf_counter() - _t1) * 1000,
+                   f"added={fc_added}", level="INFO")
+    except Exception as exc:
+        log_structured_error(exc, page="forecast_refresh_service",
+                             component="_fiscal_year_end_bulk", operation="SELECT_FORECASTS")
+
+    # ── Source 3: newest published annual income statement ───────────────────
+    try:
+        is_rows = db_manager.execute_query_readonly(
+            """
+            SELECT ticker, MONTH(MAX(fiscal_date_ending)) AS fye_month
+            FROM coreiq_av_financials_income_statement
+            WHERE report_type = 'annual' AND fiscal_date_ending IS NOT NULL
+            GROUP BY ticker
+            """,
+            {},
+        )
+        is_added = 0
+        for r in is_rows or []:
+            tk = (r.get("ticker") or "").strip()
+            month_num = r.get("fye_month")
+            if not tk or tk in result or not month_num:
+                continue
+            result[tk] = calendar.month_name[int(month_num)]
+            is_added += 1
+        log_timing("_fiscal_year_end_bulk_INCOME_STMT", (perf_counter() - _t1) * 1000,
+                   f"added={is_added}", level="INFO")
+    except Exception as exc:
+        log_structured_error(exc, page="forecast_refresh_service",
+                             component="_fiscal_year_end_bulk", operation="SELECT_INCOME_STMT")
+
+    # ── Source 4: YFinance — latest ingested_at per ticker ───────────────────
     # payload_json $.info.lastFiscalYearEnd is a Unix epoch timestamp.
     # Only fills tickers not already resolved by AV (composite / non-US tickers).
     try:
@@ -1082,6 +1183,12 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
         ann_info = annual_map.get(ticker) if "." in ticker else annual_map.get(base)
         ann = ann_info["date"] if ann_info else None
         annual_str = ann.strftime("%b %d, %Y") if ann else "—"
+        # A projected date must never read as a confirmed calendar entry. It is
+        # last-known-annual rolled forward in whole years because the calendar
+        # never received the newer row — accurate to a few days, but an estimate.
+        _is_est = bool(ann_info and ann_info.get("is_estimated"))
+        if _is_est:
+            annual_str = f"~{annual_str} (est.)"
 
         # Fiscal period from coreiq_model_forecasts.last_actual_date.
         # Show month + day only (no year): the column denotes the fiscal-year-END
@@ -1106,6 +1213,11 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
             "annual_reported_on": annual_str,
             "fiscal_period": fiscal_period_str,
             "last_refresh": lr_str,
+            "annual_date_is_estimated": _is_est,
+            "annual_date_anchor": (
+                ann_info.get("anchor_date").strftime("%b %d, %Y")
+                if _is_est and ann_info.get("anchor_date") else ""
+            ),
             # ── debug / validation fields (not rendered in UI by default) ──
             "annual_reporting_quarter": "Q4" if ann_info else "",
             "annual_reporting_source": ann_info.get("source", "") if ann_info else "",

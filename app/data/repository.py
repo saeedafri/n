@@ -17,7 +17,7 @@ import streamlit as st
 
 from core.database import db_manager
 from utils.server_logger import log_error, log_structured_error
-from utils.constants import get_exchange_code
+from utils.constants import get_exchange_code, is_yahoo_suffix, yahoo_symbol
 
 
 # =============================================================================
@@ -339,11 +339,14 @@ class CompanyRepository:
         companies = []
         for row in companies_map.values():
             ticker = row['ticker']
-            # Skip base-ticker duplicate when a composite entry exists in the map.
-            # Composite tickers contain '.'; base duplicates don't.
+            # Skip the base-ticker duplicate ONLY when a composite entry really
+            # exists in the map. Testing `'.' in ticker` is not enough: the dot is
+            # only there because get_companies_map() put it there, so a bad
+            # acronym used to drop the base entry and emit a dead composite.
+            # is_yahoo_suffix() is the same gate that minted the composite.
             exch = row.get('exchange_acronym')
-            if row.get('source') == 'YFinance' and exch and '.' not in ticker:
-                # This is the base entry (e.g. 'ADS') — composite ('ADS.DE') will be emitted separately
+            if is_yahoo_suffix(exch) and '.' not in ticker:
+                # Base entry (e.g. 'ADS') — the composite ('ADS.DE') is emitted separately
                 continue
             if ticker in seen:
                 continue
@@ -394,11 +397,12 @@ class CompanyRepository:
                 continue
             exchange_acronym = row.get('exchange_acronym') or None
             source = row.get('source', '')
-            composite = (
-                f"{ticker}.{exchange_acronym}"
-                if source == 'YFinance' and exchange_acronym
-                else None
-            )
+            # A composite key is minted ONLY for a genuine Yahoo suffix. An
+            # exchange name ('NYSE', 'TSX', 'NasdaqGS') would invent a ticker that
+            # no table and no vendor knows, hiding the company from every
+            # financial view. yahoo_symbol() returns the plain ticker in that case.
+            composite = yahoo_symbol(ticker, exchange_acronym)
+            composite = composite if composite != ticker else None
             base_entry = {
                 'ticker': ticker,
                 'name': row.get('name', ''),
@@ -4714,7 +4718,7 @@ class KeyStatsRepository:
             # If ticker is already composite (has '.') use as-is; otherwise look up exchange_acronym.
             if source == 'YFinance' and '.' not in ticker:
                 _exch = (CompanyRepository.get_companies_map().get(ticker) or {}).get('exchange_acronym')
-                _forecast_ticker = f"{ticker}.{_exch}" if _exch else ticker
+                _forecast_ticker = yahoo_symbol(ticker, _exch)
             else:
                 _forecast_ticker = ticker
 
@@ -4760,7 +4764,7 @@ class KeyStatsRepository:
                 None)
             if source == 'YFinance' and '.' not in ticker:
                 _exch = (CompanyRepository.get_companies_map().get(ticker) or {}).get('exchange_acronym')
-                _forecast_ticker = f"{ticker}.{_exch}" if _exch else ticker
+                _forecast_ticker = yahoo_symbol(ticker, _exch)
             else:
                 _forecast_ticker = ticker
             _fcst_rows = db_manager.execute_query_readonly(
@@ -5271,9 +5275,7 @@ class ModelForecastsRepository:
             return ticker
         _company = CompanyRepository.get_companies_map().get(ticker) or {}
         if _company.get('source') == 'YFinance':
-            _exch = _company.get('exchange_acronym')
-            if _exch:
-                return f"{ticker}.{_exch}"
+            return yahoo_symbol(ticker, _company.get('exchange_acronym'))
         return ticker
 
     @staticmethod

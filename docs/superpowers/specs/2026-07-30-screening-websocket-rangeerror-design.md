@@ -190,6 +190,74 @@ No `4xx`/`5xx` on any `/media/` request in any run; the only console errors anyw
 are the pre-existing `/_stcore/health` + `/_stcore/host-config` 404s (Streamlit's
 frontend probing page-relative paths — unrelated, present before this work).
 
+## 5e. Second reported issue — "the spinner vanishes but the data comes later"
+
+**Report:** on `/screening`, after clicking *Show Results* the spinner appears, then
+disappears, and the grid only arrives much later — the user cannot tell whether
+anything is still happening. Screen recording: `Stg-screening.mov` (grid appears ~9 s
+after the click on STG, with no spinner for most of that gap).
+
+### Root cause — two independent faults
+
+**(i) The loader hid on a blind timer.** `_STICKY_REMOVER_JS` in
+`components/loading.py` ended with `setTimeout(hide, 20000)` — a hard cap meant to
+avoid trapping the user. Traced in the real UI (23 categories / All History):
+
+```
+t+ 2.3s   overlay appears
+t+22.1s   overlay HIDES   <- iframeH=-1, alert=None, header=False: nothing was ready
+t+333.4s  results header appears
+t+334.2s  grid paints
+>>> DEAD AIR: 312.1s
+```
+
+The overlay vanished exactly 20 s after its JS started, while the server was still
+working. Any run slower than 20 s therefore showed a static page with no feedback.
+
+**(ii) 99% of the wait was an export nobody asked for.** The results path built the
+FULL Excel workbook *before* rendering the grid. Measured against STG:
+
+| step | time |
+|---|---|
+| count query | 1,148 ms |
+| first 500-row page (all the grid needs) | 2,823 ms |
+| full-export fetch (152,719 rows) | 323,270 ms |
+| full-export xlsx (101.8 MB) | 12,609 ms |
+| **grid-only path** | **4.0 s** |
+| **what actually ran** | **339.8 s** |
+
+### Fixes
+
+1. **Build the export on click, not on render.** `st.download_button` accepts a
+   *callable* for `data`; Streamlit registers it via `media_file_mgr.add_deferred` and
+   executes it on click **in a worker thread** (`app_session` → `asyncio.to_thread`),
+   so it never blocks the run or other sessions. The eager block is gone; the new
+   `_build_full_keydevs_workbook()` closure is passed instead. The button shows
+   `disabled=True` + a spinner for the whole build, so that wait is explicit.
+2. **Make the overlay track the actual run.** The blind 20 s cap is replaced by a
+   `[data-testid="stStatusWidget"]` check — the widget exists only while a script run
+   is in flight (verified: absent when idle, present with "Stop" while running). The
+   overlay now hides when the content paints, or when the run has finished and stayed
+   idle ~900 ms with nothing painted (so a genuinely empty result still clears it).
+   A 600 s absolute cap remains purely as a last-resort escape hatch.
+
+### Verification (real UI)
+
+| scenario | before | after |
+|---|---|---|
+| 23 cats / All History — grid ready | 334.2 s | **7.6 s** |
+| …dead air (spinner gone, no grid) | **312.1 s** | **0.0 s** |
+| M&A / All History (the reported case) — grid ready | — | **6.2 s**, dead air **0.0 s** |
+| Excel completeness, 23 cats | 101,786,300 B | **101,786,465 B / 152,721 rows** |
+| Excel completeness, M&A | 5,930,988 B | **5,930,990 B / 8,412 rows** (42 s, spinner shown) |
+| "Load more events" | — | 500 → **1,000** |
+| `/calendar` (shares the loader) | — | overlay clears exactly when its iframe paints (13.1 s) |
+| Companies-mode Excel | — | 14,873 B valid |
+
+Nothing was lost by deferring: the workbooks are byte-for-byte the same size and row
+count as the eager build (the few-byte delta is the generated-at timestamp in the
+subtitle row).
+
 ## 6. Out of scope — flagged separately
 
 1. **Still not exercised by a click** (same helper as paths that are proven, so low

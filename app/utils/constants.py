@@ -20,6 +20,51 @@ from utils.server_logger import log_structured_error
 QUARTERLY_FORECASTING_ENABLED = False
 
 # =============================================================================
+# YAHOO FINANCE TICKER SUFFIXES
+# =============================================================================
+
+# `coreiq_companies.exchange_acronym` is contractually a Yahoo Finance ticker
+# SUFFIX ('DE' → ADS.DE), never an exchange name. When the data load writes an
+# exchange name instead ('NYSE', 'NasdaqGS', 'TSX'), every consumer that builds
+# `ticker + '.' + acronym` invents a symbol no table and no vendor knows, and the
+# company silently disappears from every financial view.
+#
+# This set is the single source of truth for "is this acronym a real suffix".
+# Verified on STG 2026-07-30: every suffix below resolves to real rows in
+# coreiq_yf_financials_income_statement, and every rejected value resolves to
+# zero (NYSE 0, NASDAQ 0, NasdaqGS 0, ADX 0).
+YAHOO_SUFFIXES = frozenset({
+    "AS", "AX", "BE", "BR", "CO", "DE", "F", "HE", "HK", "HM", "IR", "IS",
+    "KS", "KQ", "L", "LS", "MC", "MI", "MU", "NS", "NZ", "OL", "PA", "SA",
+    "SG", "SI", "ST", "SW", "T", "TO", "TW", "V", "VI", "WA",
+})
+
+
+def yahoo_symbol(ticker: str, exchange_acronym: Optional[str]) -> str:
+    """Composite Yahoo symbol, or the plain ticker when the acronym is not a suffix.
+
+    Never infer "foreign listing" from a dot in a ticker — the dot only exists
+    because this function put it there. Route on `coreiq_companies.source`.
+
+        yahoo_symbol('ADS',  'DE')   -> 'ADS.DE'    (real suffix)
+        yahoo_symbol('SHOP', 'TO')   -> 'SHOP.TO'   (real suffix)
+        yahoo_symbol('LSPD', 'TSX')  -> 'LSPD'      (exchange name, rejected)
+        yahoo_symbol('CRTO', '')     -> 'CRTO'
+        yahoo_symbol('ORCL', None)   -> 'ORCL'
+    """
+    ticker = (ticker or "").strip()
+    acronym = (exchange_acronym or "").strip()
+    if acronym and acronym in YAHOO_SUFFIXES:
+        return f"{ticker}.{acronym}"
+    return ticker
+
+
+def is_yahoo_suffix(exchange_acronym: Optional[str]) -> bool:
+    """True when the acronym is a genuine Yahoo suffix and a composite is valid."""
+    return (exchange_acronym or "").strip() in YAHOO_SUFFIXES
+
+
+# =============================================================================
 # CURRENCY MAPPINGS
 # =============================================================================
 

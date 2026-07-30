@@ -22,6 +22,7 @@ from data.revenue_forecast_service import (
 from data.source_router import get_company_source
 from utils.retailer_forecaster import RetailerForecaster
 from utils.retailer_quarterly_forecaster import RetailerQuarterlyForecaster
+from utils.constants import yahoo_symbol
 from utils.server_logger import log_structured_error
 
 # Quarterly forecast frame columns not persisted as model rows (parity with annual store).
@@ -52,7 +53,7 @@ def _forecast_store_ticker(display_ticker: str, source: str) -> str:
 
         base = display_ticker.split(".")[0] if "." in display_ticker else display_ticker
         exch = (_CR.get_companies_map().get(base) or {}).get("exchange_acronym")
-        return f"{base}.{exch}" if exch else display_ticker
+        return yahoo_symbol(base, exch)
     return display_ticker
 
 
