@@ -572,45 +572,21 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     # rows (recent rows are interim/half-year), and showing a years-old date as the
     # "Reporting Date" misleads more than "—" does. 15 months gives buffer for late
     # annual reporters while still excluding clearly outdated dates.
-    _stale_cutoff = date.today() - timedelta(days=460)
-    _before_guard = len(result)
-    _stale = {tk: info for tk, info in result.items() if info["date"] < _stale_cutoff}
-    result = {tk: info for tk, info in result.items() if info["date"] >= _stale_cutoff}
-
-    # ── Projected annual date — last resort, always flagged ──────────────────
-    # A company whose only annual row predates the cutoff still reports annually;
-    # the calendar simply never received its latest row (STG has an ingestion hole
-    # across Dec/2025–Mar/2026). Companies report in a near-fixed calendar slot, so
-    # rolling the last CONFIRMED annual date forward in whole years lands within
-    # days of the real one.
+    # NO staleness filter and NO projection: the Reporting Date column shows the
+    # real annual announcement date held in the calendar table, whatever its age.
+    # Product decision 2026-07-30 — an estimated or hidden date is worse than an
+    # old but factual one, because the column must be traceable to a row in
+    # coreiq_nasdaq_earnings_calendar / coreiq_yf_earnings_calendar.
     #
-    # Two hard rules, because a fabricated date is worse than no date at all:
-    #   1. The anchor must be recent. 46 of 164 stale companies anchor on rows over
-    #      four years old — AMPL's is dated 2012, years before the company existed.
-    #      Projecting from junk yields junk, so those stay on hold.
-    #   2. The result carries `is_estimated` and `anchor_date` so the UI labels it
-    #      and it can never masquerade as a confirmed calendar date.
-    _MAX_ANCHOR_AGE_DAYS = 920  # ~2.5 years — two missed cycles plus headroom
+    # Selection above already prefers the nearest UPCOMING annual date and only
+    # falls back to the most recent PAST one, so a past date here means the
+    # calendar genuinely holds nothing newer for that company.
     _today = date.today()
-    _projected = 0
-    for tk, info in _stale.items():
-        anchor = info["date"]
-        if (_today - anchor).days > _MAX_ANCHOR_AGE_DAYS:
-            continue
-        nxt = anchor
-        while nxt < _today:
-            try:
-                nxt = nxt.replace(year=nxt.year + 1)
-            except ValueError:  # 29 Feb anchor rolling into a non-leap year
-                nxt = nxt.replace(year=nxt.year + 1, day=28)
-        result[tk] = {**info, "date": nxt, "is_estimated": True, "anchor_date": anchor}
-        _projected += 1
-
+    _past = sum(1 for info in result.values() if info["date"] < _today)
     log_timing("_annual_q4.TOTAL", (perf_counter() - _t) * 1000,
                f"nasdaq={len(nasdaq_result)} yf={len(yf_result)} "
-               f"confirmed={len(result) - _projected} projected={_projected} "
-               f"total={len(result)} "
-               f"stale_anchor_too_old={len(_stale) - _projected}", level="INFO")
+               f"total={len(result)} upcoming={len(result) - _past} already_reported={_past}",
+               level="INFO")
     return result
 
 
@@ -1182,13 +1158,8 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
         # annual_map values are info dicts; missing key → "—".
         ann_info = annual_map.get(ticker) if "." in ticker else annual_map.get(base)
         ann = ann_info["date"] if ann_info else None
+        # Verbatim from the calendar table — never estimated, never projected.
         annual_str = ann.strftime("%b %d, %Y") if ann else "—"
-        # A projected date must never read as a confirmed calendar entry. It is
-        # last-known-annual rolled forward in whole years because the calendar
-        # never received the newer row — accurate to a few days, but an estimate.
-        _is_est = bool(ann_info and ann_info.get("is_estimated"))
-        if _is_est:
-            annual_str = f"~{annual_str} (est.)"
 
         # Fiscal period from coreiq_model_forecasts.last_actual_date.
         # Show month + day only (no year): the column denotes the fiscal-year-END
@@ -1213,11 +1184,6 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
             "annual_reported_on": annual_str,
             "fiscal_period": fiscal_period_str,
             "last_refresh": lr_str,
-            "annual_date_is_estimated": _is_est,
-            "annual_date_anchor": (
-                ann_info.get("anchor_date").strftime("%b %d, %Y")
-                if _is_est and ann_info.get("anchor_date") else ""
-            ),
             # ── debug / validation fields (not rendered in UI by default) ──
             "annual_reporting_quarter": "Q4" if ann_info else "",
             "annual_reporting_source": ann_info.get("source", "") if ann_info else "",

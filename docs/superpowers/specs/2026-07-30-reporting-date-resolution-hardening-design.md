@@ -10,10 +10,36 @@ F4 not done.
 | Metric | Before | After |
 |---|---|---|
 | Fiscal year-end resolved | 256 | **401** |
-| Reporting dates shown | 124 | **274** (155 confirmed + 116 estimated) |
-| On hold | 245 | **67 — 100% data gaps** |
+| Annual reporting dates resolved | 124 | **321 — every one a real calendar row** |
+| On hold in the dialog | 245 | **27 — 100% data gaps** |
+| Estimated / projected dates | — | **0** |
 
-### F6 — projected annual date (added after the cross-table review)
+### F6 — REVERTED: no estimates, no staleness filter (product decision 2026-07-30)
+
+A projection tier was built and then removed at the product owner's instruction.
+Both the 460-day staleness filter and the projection are gone. The Reporting Date
+column now shows **the real annual announcement date held in the calendar table,
+whatever its age**, and every value is traceable to a row in
+`coreiq_nasdaq_earnings_calendar` / `coreiq_yf_earnings_calendar`.
+
+Selection still prefers the nearest UPCOMING annual date and only falls back to the
+most recent PAST one, so a past date means the calendar genuinely holds nothing newer.
+Split on STG: **31 upcoming, 290 already-reported.**
+
+Rationale for the revert: the column must be verifiable against the source table. An
+estimate — however well flagged — cannot be checked by anyone reading the dialog, and
+a date the vendor never published should not appear in a client-facing surface.
+
+**Known trade-off, accepted:** 290 of the 321 dates are in the past, because of the
+Dec/2025–Mar/2026 ingestion hole. The column therefore reads "last known annual
+reporting date", not "next". It becomes forward-looking again the moment the data team
+backfills the calendar — no code change required.
+
+Rejected outright: substituting the nearest *interim* announcement when no annual row
+exists. A Q3 date labelled as the annual reporting date is a wrong fact, not an
+approximation.
+
+### Superseded — the projection design (kept for reference)
 
 A cross-table sweep with routing disabled — every company checked against **both**
 calendars by every key — showed 164 companies whose annual row *exists* but predates
