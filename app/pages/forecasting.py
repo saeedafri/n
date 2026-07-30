@@ -36,6 +36,7 @@ from data.forecast_refresh_service import (
 )
 from data.revenue_forecast_service import RevenueForecastService
 from utils.constants import get_currency_symbol, QUARTERLY_FORECASTING_ENABLED
+from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
 from utils.server_logger import log_structured_error, log_timing, new_rerun_id, PageLoadTracker, log_render_complete
 
 
@@ -49,9 +50,20 @@ BORDER = '#ECECEE'
 def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "Excel", auto_click: bool = False) -> None:
     """1-click JS Blob download — same pattern as market_data.py."""
     try:
-        import base64
         from streamlit.components.v1 import html as _sthtml
-        b64 = base64.b64encode(excel_bytes).decode("ascii")
+        # Served over HTTP via /media/ — see utils/media_url for why this must not
+        # be base64-inlined into the iframe HTML.
+        file_url = serve_bytes(
+            excel_bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename, page="forecasting",
+        )
+        if not file_url:
+            report_oversized_embed(len(excel_bytes), f"Excel {filename}",
+                                   page="forecasting")
+            st.error("Could not prepare this Excel file — please try again.")
+            return
+        file_url = absolute_app_url(file_url)
         safe_name = filename.replace("'", "\\'").replace('"', '\\"')
         safe_label = label.replace("'", "\\'").replace('"', '\\"')
         auto_trigger = "window.addEventListener('load', function(){ setTimeout(dl, 100); });" if auto_click else ""
@@ -71,19 +83,19 @@ button:active{{opacity:0.85;}}
 </style></head><body>
 <button onclick="dl()"><span class="material-symbols-outlined">table</span>&nbsp;&nbsp;{safe_label}</button>
 <script>
-var _d="{b64}";
+var _src="{file_url}";
 function dl(){{
-  try{{
-    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
-    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
-    var blob=new Blob([u8],{{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
+  fetch(_src).then(function(r){{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.blob();
+  }}).then(function(blob){{
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");
     a.href=url; a.download="{safe_name}";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function(){{URL.revokeObjectURL(url);}},200);
-  }}catch(e){{console.error("Excel download failed:",e);}}
+  }}).catch(function(e){{console.error("Excel download failed:",e);}});
 }}
 {auto_trigger}
 </script></body></html>"""

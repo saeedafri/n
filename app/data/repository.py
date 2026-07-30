@@ -301,6 +301,15 @@ class CompanyRepository:
         """Get single company by ticker (cached 10 min)."""
         companies_map = CompanyRepository.get_companies_map()
         row = companies_map.get(ticker)
+        if not row and '.' in ticker:
+            base_ticker, exchange_acronym = ticker.rsplit('.', 1)
+            base_row = companies_map.get(base_ticker)
+            if (
+                base_row
+                and base_row.get('source') != 'YFinance'
+                and base_row.get('exchange_acronym') == exchange_acronym
+            ):
+                row = base_row
         if not row:
             return None
 
@@ -333,7 +342,7 @@ class CompanyRepository:
             # Skip base-ticker duplicate when a composite entry exists in the map.
             # Composite tickers contain '.'; base duplicates don't.
             exch = row.get('exchange_acronym')
-            if exch and '.' not in ticker:
+            if row.get('source') == 'YFinance' and exch and '.' not in ticker:
                 # This is the base entry (e.g. 'ADS') — composite ('ADS.DE') will be emitted separately
                 continue
             if ticker in seen:
@@ -384,13 +393,18 @@ class CompanyRepository:
             if not ticker:
                 continue
             exchange_acronym = row.get('exchange_acronym') or None
-            composite = f"{ticker}.{exchange_acronym}" if exchange_acronym else None
+            source = row.get('source', '')
+            composite = (
+                f"{ticker}.{exchange_acronym}"
+                if source == 'YFinance' and exchange_acronym
+                else None
+            )
             base_entry = {
                 'ticker': ticker,
                 'name': row.get('name', ''),
                 'name_coresight': row.get('name_coresight', ''),
                 'exchange': row.get('exchange', ''),
-                'source': row.get('source', ''),
+                'source': source,
                 'exchange_acronym': exchange_acronym,
                 'primary_industry_coresight': row.get('primary_industry_coresight', ''),
             }
@@ -2206,8 +2220,19 @@ class CompanyOverviewRepository:
         from data.source_router import get_company_source
 
         source = get_company_source(ticker)
-        # coreiq_yf_company_overview stores base ticker (e.g. 'ADS' not 'ADS.DE')
-        _ov_ticker = ticker.split('.')[0] if ('.' in ticker and source == 'YFinance') else ticker
+        companies_map = CompanyRepository.get_companies_map()
+        _ov_ticker = ticker
+        if source == 'YFinance' and '.' in ticker:
+            _ov_ticker = ticker.rsplit('.', 1)[0]
+        elif '.' in ticker and ticker not in companies_map:
+            base_ticker, exchange_acronym = ticker.rsplit('.', 1)
+            base_info = companies_map.get(base_ticker)
+            if (
+                base_info
+                and base_info.get('source') != 'YFinance'
+                and base_info.get('exchange_acronym') == exchange_acronym
+            ):
+                _ov_ticker = base_ticker
 
         if source == 'YFinance':
             # Query YF company overview table - data is in payload_json
@@ -2284,7 +2309,6 @@ class CompanyOverviewRepository:
                 return default
 
         # Fetch primary_industry_coresight AND exchange from CACHED companies map (FAST - no DB query!)
-        companies_map = CompanyRepository.get_companies_map()
         company_info = companies_map.get(ticker, {})
         primary_industry_coresight = company_info.get('primary_industry_coresight')
 
@@ -2369,6 +2393,48 @@ class CompanyOverviewRepository:
             relationships="N/A",
             projects="N/A",
             activity_logs="N/A"
+        )
+
+    @staticmethod
+    def get_company_overview_or_master(ticker: str) -> Optional[CompanyOverview]:
+        """Return detailed overview data, or a master-only company profile."""
+        overview = CompanyOverviewRepository.get_company_overview(ticker)
+        if overview:
+            return overview
+
+        companies_map = CompanyRepository.get_companies_map()
+        company_info = companies_map.get(ticker)
+        if not company_info and '.' in ticker:
+            company_info = companies_map.get(ticker.rsplit('.', 1)[0])
+        if not company_info:
+            return None
+
+        canonical_ticker = company_info.get('ticker') or ticker
+        canonical_name = (
+            str(company_info.get('name_coresight') or '').strip()
+            or str(canonical_ticker).strip()
+        )
+        return CompanyOverview(
+            ticker=canonical_ticker,
+            name=canonical_name,
+            exchange=company_info.get('exchange'),
+            currency=None,
+            country=None,
+            sector=None,
+            industry=None,
+            primary_industry_coresight=company_info.get(
+                'primary_industry_coresight'
+            ),
+            company_description=None,
+            official_site=None,
+            fiscal_year_end=None,
+            cik=None,
+            market_capitalization=None,
+            pe_ratio=None,
+            eps=None,
+            dividend_yield=None,
+            analyst_target_price=None,
+            fetched_at_utc=datetime.now(timezone.utc),
         )
 
     @staticmethod
@@ -13351,6 +13417,7 @@ class ExecutiveCompensationRepository:
         """
         try:
             import json as _json
+            base_ticker = ticker.rsplit('.', 1)[0] if '.' in ticker else ticker
             query = """
                 SELECT payload_json
                 FROM coreiq_yf_company_overview
@@ -13358,7 +13425,9 @@ class ExecutiveCompensationRepository:
                 ORDER BY ingested_at DESC
                 LIMIT 1
             """
-            rows = db_manager.execute_query_readonly(query, {"ticker": ticker})
+            rows = db_manager.execute_query_readonly(
+                query, {"ticker": base_ticker}
+            )
             if not rows:
                 return []
             payload = rows[0].get("payload_json")

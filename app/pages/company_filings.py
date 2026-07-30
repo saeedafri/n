@@ -39,6 +39,7 @@ hide_sidebar()
 from components.styles import render_styles
 from components.navigation import render_header, render_coresight_footer
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
+from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
 from utils.filing_units import (
     get_filing_units,
     get_filing_unit_display_name,
@@ -986,16 +987,29 @@ def _render_pdf_viewer(pdf_path: str, highlight_page: int = 0, highlight_keyword
 
 
     # ------------------------------------------------------------------
-    # 1. Load PDF bytes — cached in session_state so reruns are instant
+    # 1. Publish the PDF on the /media/ endpoint and hand PDF.js its URL.
+    #    It used to base64 the file into this iframe's HTML, which put the whole
+    #    PDF inside ONE websocket ForwardMsg. 885 of the 3,162 filing blobs are
+    #    over 1 MB (p90 5.2 MB → 6.9 MB base64, max 44 MB) — large enough to be
+    #    truncated in transit, which surfaces as a "Connection error" modal with
+    #    a protobuf `RangeError` (see utils/media_url). A URL is ~60 bytes at any
+    #    file size, and PDF.js range-requests the file so it starts rendering
+    #    before the whole download finishes.
     # ------------------------------------------------------------------
-    cache_key = f"pdf_b64_{pdf_path}"
+    # The BYTES are cached (cheaper than the base64 string this used to hold), and
+    # serve_bytes is called on EVERY run. That re-registration is required, not
+    # optional: Streamlit drops all of a session's media refs at the start of each
+    # script run and deletes orphans at the end (script_runner.clear_session_refs /
+    # remove_orphaned_files), so a URL cached across reruns 404s on the next one.
+    # Content-derived coordinates make the URL identical each time, so PDF.js sees
+    # the same src and does not refetch.
+    cache_key = f"pdf_bytes_{pdf_path}"
     _pdf_load_t0 = _perf_time.time()
     if cache_key not in st.session_state:
-        # Evict older cached PDFs first: each base64 blob is 1-24MB and they were
-        # accumulating unbounded in session_state as the user browsed filings.
-        # Keep at most the 2 most-recent (this one becomes the 3rd) → bounded RAM.
+        # Evict older cached PDFs so session_state stays bounded as the user browses.
         _old_pdf_keys = [k for k in list(st.session_state.keys())
-                         if k.startswith("pdf_b64_") and k != cache_key]
+                         if k.startswith(("pdf_bytes_", "pdf_url_", "pdf_b64_"))
+                         and k != cache_key]
         if len(_old_pdf_keys) >= 2:
             for _k in _old_pdf_keys:
                 del st.session_state[_k]
@@ -1005,11 +1019,8 @@ def _render_pdf_viewer(pdf_path: str, highlight_page: int = 0, highlight_keyword
             _read_t0 = _perf_time.time()
             with st.spinner("Loading filing..."):
                 with open(pdf_path, "rb") as _f:
-                    _raw = _f.read()
+                    st.session_state[cache_key] = _f.read()
             _read_ms = (_perf_time.time() - _read_t0) * 1000
-            _enc_t0 = _perf_time.time()
-            st.session_state[cache_key] = base64.b64encode(_raw).decode("ascii")
-            _enc_ms = (_perf_time.time() - _enc_t0) * 1000
         except Exception as e:
             st.error(f"Could not read PDF: {e}")
             log_error(f"[_render_pdf_viewer] Read failed: {e}")
@@ -1017,7 +1028,19 @@ def _render_pdf_viewer(pdf_path: str, highlight_page: int = 0, highlight_keyword
     else:
         _pdf_cache_ms = (_perf_time.time() - _pdf_load_t0) * 1000
 
-    b64 = st.session_state[cache_key]
+    _enc_t0 = _perf_time.time()
+    pdf_url = serve_bytes(
+        st.session_state[cache_key], "application/pdf",
+        os.path.basename(pdf_path), page="company_filings",
+        for_download=False,   # streamed viewer, re-registered every run
+    )
+    _enc_ms = (_perf_time.time() - _enc_t0) * 1000
+    if not pdf_url:
+        st.error("Could not prepare this filing for viewing — please try again.")
+        return
+    # The component runs in an iframe with an opaque origin, so a root-relative
+    # /media/... path would not resolve there. Make it absolute against the page.
+    pdf_url = absolute_app_url(pdf_url)
 
     # ------------------------------------------------------------------
     # 2. PDF.js component — renders pages lazily to <canvas> elements.
@@ -1059,11 +1082,9 @@ def _render_pdf_viewer(pdf_path: str, highlight_page: int = 0, highlight_keyword
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  // Decode base64 payload into a Uint8Array for PDF.js
-  var b64 = "{b64}";
-  var bin = atob(b64);
-  var u8  = new Uint8Array(bin.length);
-  for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  // PDF.js fetches the file from the /media/ endpoint over HTTP (with range
+  // requests) instead of receiving it base64-inlined through the websocket.
+  var pdfUrl = "{pdf_url}";
 
   var container      = document.getElementById('container');
   var rendered       = {{}};
@@ -1113,7 +1134,7 @@ def _render_pdf_viewer(pdf_path: str, highlight_page: int = 0, highlight_keyword
     }}).catch(function () {{/* non-fatal — canvas render already succeeded */}});
   }}
 
-  pdfjsLib.getDocument({{ data: u8 }}).promise.then(function (pdf) {{
+  pdfjsLib.getDocument({{ url: pdfUrl }}).promise.then(function (pdf) {{
     pdfDoc = pdf;
     var total = pdf.numPages;
     container.innerHTML = '';
@@ -1544,7 +1565,17 @@ def _render_filing_download_button(pdf_bytes: bytes, filename: str, auto_click: 
     import base64
     from streamlit.components.v1 import html as _sthtml
 
-    b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    # The bytes go out over HTTP via /media/ — never base64-inlined into this
+    # iframe's HTML, which would put the whole PDF in one websocket message
+    # (28% of filing PDFs exceed 1 MB; see utils/media_url).
+    file_url = serve_bytes(pdf_bytes, "application/pdf", filename,
+                           page="company_filings")
+    if not file_url:
+        report_oversized_embed(len(pdf_bytes), f"filing PDF {filename}",
+                               page="company_filings")
+        st.error("Could not prepare this filing for download — please try again.")
+        return
+    file_url = absolute_app_url(file_url)
     safe_name = filename.replace("'", "\\'").replace('"', '\\"')
     auto_trigger = "window.addEventListener('load', function(){ setTimeout(dl, 100); });" if auto_click else ""
 
@@ -1578,19 +1609,20 @@ button:active{{opacity:0.85;}}
 <body>
 <button onclick="dl()">&#8659;&nbsp;&nbsp;Download</button>
 <script>
-var _d="{b64}";
+var _src="{file_url}";
 function dl(){{
-  try{{
-    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
-    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
-    var blob=new Blob([u8],{{type:"application/pdf"}});
+  // Fetch over HTTP, then save through a Blob so the download keeps its filename.
+  fetch(_src).then(function(r){{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.blob();
+  }}).then(function(blob){{
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");
     a.href=url; a.download="{safe_name}";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function(){{URL.revokeObjectURL(url);}},200);
-  }}catch(e){{console.error("PDF download failed:",e);}}
+  }}).catch(function(e){{console.error("PDF download failed:",e);}});
 }}
 {auto_trigger}
 </script>

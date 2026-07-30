@@ -547,10 +547,28 @@ _STICKY_REMOVER_JS = """
       // stays the sole owner of the node and unmounts it normally.
       setTimeout(function(){ if(ov){ ov.style.visibility='hidden'; ov.style.pointerEvents='none'; } }, 320);
     }
-    var iv = setInterval(function(){ if(ready()) hide(); }, 150);
-    // hard cap: never trap the user behind the overlay (also covers the rare
-    // no-iframe / no-alert page whose content is plain HTML).
-    setTimeout(hide, 20000);
+    // Is the Streamlit script still running? The status widget ("Stop") exists only
+    // while a run is in flight, so its ABSENCE means the server is done and no
+    // further content is coming.
+    function scriptRunning(){
+      return !!doc.querySelector('[data-testid="stStatusWidget"]');
+    }
+    var sawRunning = false, idlePolls = 0;
+    var iv = setInterval(function(){
+      if(ready()){ hide(); return; }
+      if(scriptRunning()){ sawRunning = true; idlePolls = 0; return; }
+      // Not running. Only trust that once we've actually seen a run start, and only
+      // after a few consecutive idle polls, so a momentary gap between reruns does
+      // not tear the overlay down mid-work.
+      if(sawRunning && ++idlePolls >= 6) hide();   // ~900ms idle and still nothing painted
+    }, 150);
+    // Absolute last-resort cap so a user can never be permanently trapped behind the
+    // overlay. This used to be 20s, which was the real bug behind "the spinner
+    // vanishes but the data arrives later": any run slower than 20s (the 146k-event
+    // key-devs screen took ~340s) hid the overlay while the server was still working,
+    // leaving a static page with no indication anything was happening. The wait is now
+    // bounded by the run itself, not by a blind timer.
+    setTimeout(hide, 600000);
   }catch(e){
     try{ var o=window.parent.document.getElementById('cs-sticky-loader');
          if(o){ o.style.opacity='0'; o.style.visibility='hidden'; o.style.pointerEvents='none'; }}catch(_){}

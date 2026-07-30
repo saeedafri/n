@@ -22,6 +22,7 @@ from data.watchlist_service import get_user_watchlists, get_watchlist_companies
 from core.database import init_database
 from utils.local_storage_manager import load_earnings_calls_state, save_earnings_calls_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
+from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
 try:
     from utils.server_logger import log_error, log_info, log_warning, PageLoadTracker, log_db_timing, log_timing, new_rerun_id, set_page_context, log_structured_error, error_boundary, log_render_complete
 except ImportError:
@@ -906,10 +907,19 @@ def _render_js_download_button(pdf_bytes: bytes, filename: str) -> None:
     except Exception:
         pass
     try:
-        import base64
         from streamlit.components.v1 import html as _sthtml
 
-        b64 = base64.b64encode(pdf_bytes).decode("ascii")
+        # Served over HTTP via /media/, never base64-inlined into this iframe's
+        # HTML — that would put the whole PDF in one websocket ForwardMsg and
+        # large ones get truncated in transit (see utils/media_url).
+        file_url = serve_bytes(pdf_bytes, "application/pdf", filename,
+                               page="earnings_calls")
+        if not file_url:
+            report_oversized_embed(len(pdf_bytes), f"transcript PDF {filename}",
+                                   page="earnings_calls")
+            st.error("Could not prepare this transcript for download — please try again.")
+            return
+        file_url = absolute_app_url(file_url)
         # Escape the filename for safe use in JS string
         safe_name = filename.replace("'", "\\'").replace('"', '\\"')
 
@@ -943,19 +953,19 @@ button:active{{opacity:0.85;}}
 <body>
 <button onclick="dl()">&#8659;&nbsp;&nbsp;Download</button>
 <script>
-var _d="{b64}";
+var _src="{file_url}";
 function dl(){{
-  try{{
-    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
-    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
-    var blob=new Blob([u8],{{type:"application/pdf"}});
+  fetch(_src).then(function(r){{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.blob();
+  }}).then(function(blob){{
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");
     a.href=url; a.download="{safe_name}";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function(){{URL.revokeObjectURL(url);}},200);
-  }}catch(e){{console.error("PDF download failed:",e);}}
+  }}).catch(function(e){{console.error("PDF download failed:",e);}});
 }}
 </script>
 </body></html>"""
@@ -972,10 +982,19 @@ def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "E
     except Exception:
         pass
     try:
-        import base64
         from streamlit.components.v1 import html as _sthtml
 
-        b64 = base64.b64encode(excel_bytes).decode("ascii")
+        file_url = serve_bytes(
+            excel_bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename, page="earnings_calls",
+        )
+        if not file_url:
+            report_oversized_embed(len(excel_bytes), f"Excel {filename}",
+                                   page="earnings_calls")
+            st.error("Could not prepare this Excel file — please try again.")
+            return
+        file_url = absolute_app_url(file_url)
         safe_name = filename.replace("'", "\\'").replace('"', '\\"')
         safe_label = label.replace("'", "\\'").replace('"', '\\"')
         auto_trigger = "window.addEventListener('load', function(){ setTimeout(dl, 100); });" if auto_click else ""
@@ -1016,19 +1035,19 @@ button:active{{opacity:0.85;}}
 <body>
 <button onclick="dl()"><span class="material-symbols-outlined">table</span>&nbsp;&nbsp;{safe_label}</button>
 <script>
-var _d="{b64}";
+var _src="{file_url}";
 function dl(){{
-  try{{
-    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
-    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
-    var blob=new Blob([u8],{{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
+  fetch(_src).then(function(r){{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.blob();
+  }}).then(function(blob){{
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");
     a.href=url; a.download="{safe_name}";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function(){{URL.revokeObjectURL(url);}},200);
-  }}catch(e){{console.error("Excel download failed:",e);}}
+  }}).catch(function(e){{console.error("Excel download failed:",e);}});
 }}
 {auto_trigger}
 </script>
@@ -1246,21 +1265,36 @@ def _render_ec_pdf_viewer(pdf_path: str, highlight_keyword: str = "", target_pag
     earnings_calls.py never imports from pages.company_filings (which would
     trigger that module's bare main() call and redirect to the filings page).
     """
-    import base64
     import json as _json
+    import os as _os
     import streamlit.components.v1 as components
 
-    cache_key = f"ec_pdf_b64_{pdf_path}"
+    # PDF.js fetches the file from /media/ over HTTP. It used to be base64-inlined
+    # into this iframe's HTML, i.e. the whole PDF inside one websocket ForwardMsg —
+    # the failure mode documented in utils/media_url.
+    # Bytes cached; serve_bytes called on EVERY run — Streamlit drops a session's
+    # media refs at the start of each script run and deletes orphans at the end, so a
+    # URL cached across reruns 404s on the next one. Same URL each time (the
+    # coordinates are content-derived), so PDF.js does not refetch.
+    cache_key = f"ec_pdf_bytes_{pdf_path}"
     if cache_key not in st.session_state:
         try:
             with open(pdf_path, "rb") as _f:
-                st.session_state[cache_key] = base64.b64encode(_f.read()).decode("ascii")
+                st.session_state[cache_key] = _f.read()
         except Exception as e:
             log_structured_error(e, page="earnings_calls", component="render_pdf_viewer", operation="READ_PDF")
             st.error(f"Could not read PDF: {e}")
             return
 
-    b64 = st.session_state[cache_key]
+    pdf_url = serve_bytes(
+        st.session_state[cache_key], "application/pdf",
+        _os.path.basename(pdf_path), page="earnings_calls",
+        for_download=False,   # streamed viewer, re-registered every run
+    )
+    if not pdf_url:
+        st.error("Could not prepare this transcript for viewing — please try again.")
+        return
+    pdf_url = absolute_app_url(pdf_url)
     _kw_js = _json.dumps(highlight_keyword)
 
     html = f"""<!DOCTYPE html>
@@ -1293,10 +1327,7 @@ def _render_ec_pdf_viewer(pdf_path: str, highlight_keyword: str = "", target_pag
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  var b64 = "{b64}";
-  var bin = atob(b64);
-  var u8  = new Uint8Array(bin.length);
-  for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  var pdfUrl = "{pdf_url}";
 
   var container        = document.getElementById('container');
   var rendered         = {{}};
@@ -1339,7 +1370,7 @@ def _render_ec_pdf_viewer(pdf_path: str, highlight_keyword: str = "", target_pag
     }}).catch(function () {{}});
   }}
 
-  pdfjsLib.getDocument({{ data: u8 }}).promise.then(function (pdf) {{
+  pdfjsLib.getDocument({{ url: pdfUrl }}).promise.then(function (pdf) {{
     pdfDoc = pdf;
     var total = pdf.numPages;
     container.innerHTML = '';

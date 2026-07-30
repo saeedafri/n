@@ -17,6 +17,7 @@ This iteration implements: Companies flow only.
   • Financial Information (Income Statement, Balance Sheet, Cash Flow)
 """
 
+import hashlib
 import os
 import re
 import textwrap
@@ -4873,51 +4874,6 @@ def _render_keydevs_results():
             )
             st.session_state["kd_df"] = _df0
             st.session_state["kd_cursor"] = _cur0
-            # Build the FULL export ONCE per query (not per rerun) so the single Excel
-            # button below downloads EVERY matching event — no cap. The grid stays
-            # paginated (500) for speed; only the workbook holds the entire set.
-            #
-            # The full set is assembled with the SAME keyset pagination the grid uses
-            # (many fast, index-served seeks) — NOT one giant `LIMIT = total` query.
-            # A single 100k+ row statement exceeds the 120s read_timeout on the
-            # read-only connection and comes back EMPTY (the full 378-company universe
-            # over all history is ~145k events), which is exactly the "download only
-            # gives some records" bug. Each 10k-row page stays well under the timeout,
-            # so the workbook always holds the complete set. Newest-first, in order.
-            # Built behind the sticky loader and cached, so ordinary reruns never rebuild.
-            try:
-                _XL_PAGE = 10000
-                _XL_RUNAWAY = 500000   # safety backstop far above any real dataset
-                _xl_frames: list = []
-                _xl_cur = None
-                _xl_rows = 0
-                while True:
-                    _pg, _xl_cur = get_keydevs_events_for_tickers(
-                        _tickers, _cats, days=_window.get("days"),
-                        start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                        limit=_XL_PAGE,
-                        before_date=(_xl_cur[0] if _xl_cur else None),
-                        before_id=(_xl_cur[1] if _xl_cur else None),
-                    )
-                    if _pg is None or _pg.empty:
-                        break
-                    _xl_frames.append(_pg)
-                    _xl_rows += len(_pg)
-                    if _xl_cur is None or _xl_rows >= _XL_RUNAWAY:
-                        if _xl_rows >= _XL_RUNAWAY:
-                            log_warning(f"[KEYDEVS_EXPORT] runaway guard hit at {_xl_rows} rows")
-                        break
-                _xl_df = (
-                    pd.concat(_xl_frames, ignore_index=True) if _xl_frames else pd.DataFrame()
-                )
-                st.session_state["kd_xl"] = (
-                    _build_keydevs_excel_fast(_xl_df, len(criteria),
-                                              title="Coresight Key Developments")
-                    if not _xl_df.empty else b"")
-            except Exception as _xl_exc:
-                log_structured_error(_xl_exc, page="screening", component="keydevs_full_export",
-                                     operation="build_full_excel")
-                st.session_state["kd_xl"] = b""
 
         events_df = st.session_state.get("kd_df", pd.DataFrame())
         _kd_total = int(st.session_state.get("kd_total", len(events_df)))
@@ -4937,19 +4893,21 @@ def _render_keydevs_results():
                              f"· showing newest {_shown:,}</span>")
             st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
         with _dl_col:
-            # ONE branded Excel button, same place as always. It now carries the FULL
-            # matching set (not just the shown 500) — the workbook is built ONCE per
-            # query in the `kd_sig` block above and cached in session_state, so ordinary
-            # reruns never rebuild it. Deliberately SIMPLE + synchronous: NO st.fragment
-            # / run_every / background thread (run_every=2 here crash-looped STG 19-Jul).
+            # ONE branded Excel button carrying the FULL matching set (not just the
+            # shown 500). The workbook is built ON CLICK, never while the user waits
+            # for the grid: measured on STG for the 146k-event all-history screen, the
+            # grid needs 4.0s (count 1.1s + first 500-row page 2.8s) but the eager
+            # export build added 336s on top (fetch 323s + xlsx 13s) — 99% of the wait,
+            # spent on a file most users never ask for. That is what made "Show Results"
+            # sit there with no grid. st.download_button accepts a callable and defers
+            # it to click time, running it off the event loop, so nothing else blocks.
             from datetime import datetime as _kd_dt
-            _xl_bytes = st.session_state.get("kd_xl") or b""
-            if _xl_bytes:
-                _render_excel_js_download(
-                    _xl_bytes,
-                    f"KeyDev_Screening_{_kd_dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                    label="Excel",
-                )
+            _render_excel_js_download(
+                lambda: _build_full_keydevs_workbook(
+                    _tickers, _cats, _window, len(criteria)),
+                f"KeyDev_Screening_{_kd_dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                label="Excel",
+            )
 
         # Make relative internal URLs absolute so LinkColumn works in any environment
         if "Source Reference" in events_df.columns:
@@ -5082,72 +5040,118 @@ def _render_excel_download(sig: str, builder) -> None:
         st.caption("Excel unavailable — check logs.")
 
 
-def _render_excel_js_download(excel_bytes: bytes, filename: str, label: str = "Excel") -> None:
-    """Client-side Excel download button via JS Blob API — same pattern as market_data.py."""
-    try:
-        import base64
-        from streamlit.components.v1 import html as _sthtml
+_EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-        b64 = base64.b64encode(excel_bytes).decode("ascii")
-        safe_name = filename.replace("'", "\\'").replace('"', '\\"')
-        safe_label = label.replace("'", "\\'").replace('"', '\\"')
-
-        btn_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=table" rel="stylesheet">
+# Branded look for the Excel download buttons — matches the old iframe button
+# (red outline, 13px, table icon, right-aligned) without an iframe.
+_EXCEL_BTN_CSS = """
 <style>
-*{{margin:0;padding:0;box-sizing:border-box;}}
-body{{
-  display:flex;justify-content:flex-end;align-items:center;
-  height:52px;background:transparent;
-  font-family:'Inter','Roboto',Helvetica,Arial,sans-serif;
-  padding:0 2px;
-}}
-button{{
-  background:transparent;
-  border:1px solid #D62E2F;
-  color:#D62E2F;
-  border-radius:4px;
-  padding:6px 10px;
-  font-size:13px;
-  font-weight:500;
-  cursor:pointer;
-  white-space:nowrap;
-  transition:background 0.15s,color 0.15s;
-  letter-spacing:0.01em;
-  display:inline-flex;align-items:center;gap:5px;
-  width:auto;
-}}
-button:hover{{background:#D62E2F;color:#fff;}}
-button:active{{opacity:0.85;}}
-.material-symbols-outlined {{
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  font-size:18px;
-}}
+div[class*="st-key-xlbtn-"]{display:flex;justify-content:flex-end;align-items:center;min-height:52px;}
+div[class*="st-key-xlbtn-"] button{
+  background:transparent;border:1px solid #D62E2F;color:#D62E2F;border-radius:4px;
+  padding:6px 10px;font-size:13px;font-weight:500;letter-spacing:0.01em;
+  white-space:nowrap;width:auto;min-height:0;transition:background .15s,color .15s;
+}
+div[class*="st-key-xlbtn-"] button p{font-size:13px;font-weight:500;margin:0;}
+div[class*="st-key-xlbtn-"] button:hover{background:#D62E2F;color:#fff;}
+div[class*="st-key-xlbtn-"] button:hover p{color:#fff;}
+div[class*="st-key-xlbtn-"] button:active{opacity:.85;}
 </style>
-</head>
-<body>
-<button onclick="dl()"><span class="material-symbols-outlined">table</span>&nbsp;&nbsp;{safe_label}</button>
-<script>
-var _d="{b64}";
-function dl(){{
-  try{{
-    var bin=atob(_d),n=bin.length,u8=new Uint8Array(n);
-    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
-    var blob=new Blob([u8],{{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement("a");
-    a.href=url; a.download="{safe_name}";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    setTimeout(function(){{URL.revokeObjectURL(url);}},200);
-  }}catch(e){{console.error("Excel download failed:",e);}}
-}}
-</script>
-</body></html>"""
-        _sthtml(btn_html, height=52, scrolling=False)
+"""
+
+
+def _render_excel_js_download(excel_bytes, filename: str, label: str = "Excel") -> None:
+    """Branded Excel download button served over HTTP, not the websocket.
+
+    The workbook is handed to Streamlit's media file manager (``st.download_button``),
+    so the ForwardMsg carries only a ``/media/...`` URL and the browser fetches the
+    bytes over plain HTTP.
+
+    It used to base64-inline the whole workbook into a ``components.html`` iframe.
+    That put the entire file inside ONE websocket message, which scales with the
+    result set (~316 B/row xlsx → ~421 B/row after base64: ~7.9 MB at 19k key-dev
+    rows, ~66 MB for the full 156k-event universe). Anything that large is
+    truncated in transit by the marketdata-stg proxy, and the browser's protobuf
+    decoder then fails with `RangeError: index out of range: 99 + 7909686 > 348066`,
+    surfaced as the "Connection error" modal. A URL is a few dozen bytes at any
+    result size, so the message can no longer outgrow the transport.
+    """
+    try:
+        # `excel_bytes` may be ready-made bytes OR a zero-arg callable returning them.
+        # A callable is handed straight to st.download_button, which defers it to click
+        # time and runs it off the event loop — use that for workbooks expensive enough
+        # that building them up-front would stall the page (see the key-devs export).
+        if callable(excel_bytes):
+            size_part = "deferred"
+        else:
+            if not excel_bytes:
+                return
+            size_part = str(len(excel_bytes))
+        # Stable per-call key so the CSS can target it and the widget survives reruns.
+        btn_key = "xlbtn-" + hashlib.md5(
+            f"{filename}|{label}|{size_part}".encode()).hexdigest()[:12]
+        st.markdown(_EXCEL_BTN_CSS, unsafe_allow_html=True)
+        with st.container(key=btn_key):
+            st.download_button(
+                label=label,
+                data=excel_bytes,
+                file_name=filename,
+                mime=_EXCEL_MIME,
+                key=f"dl_{btn_key}",
+                icon=":material/table:",
+                on_click="ignore",   # downloading must not trigger a rerun
+                width="content",
+            )
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_excel_js_download", operation="render_excel_download_button")
+
+
+def _build_full_keydevs_workbook(tickers, categories, window, criteria_count) -> bytes:
+    """Assemble the COMPLETE key-dev export for one query. Called on click only.
+
+    Passed to ``st.download_button`` as a callable so Streamlit defers it until the
+    user actually clicks Excel, and runs it in a worker thread. Building it eagerly
+    while the results page rendered was 99% of the "Show Results" wait (336s of 340s
+    on the 146k-event all-history screen) and produced a file most users never open.
+
+    The set is assembled with the SAME keyset pagination the grid uses (many fast,
+    index-served seeks) — NOT one giant ``LIMIT = total`` query. A single 100k+ row
+    statement exceeds the 120s read_timeout on the read-only connection and comes
+    back EMPTY, which was the old "download only gives some records" bug. Each
+    10k-row page stays well under the timeout, so the workbook always holds the
+    complete set, newest-first.
+    """
+    page_size = 10000
+    runaway_limit = 500000   # safety backstop far above any real dataset
+    frames: list = []
+    cursor = None
+    row_count = 0
+    try:
+        while True:
+            page, cursor = get_keydevs_events_for_tickers(
+                tickers, categories, days=window.get("days"),
+                start_date=window.get("start_date"), end_date=window.get("end_date"),
+                limit=page_size,
+                before_date=(cursor[0] if cursor else None),
+                before_id=(cursor[1] if cursor else None),
+            )
+            if page is None or page.empty:
+                break
+            frames.append(page)
+            row_count += len(page)
+            if cursor is None or row_count >= runaway_limit:
+                if row_count >= runaway_limit:
+                    log_warning(f"[KEYDEVS_EXPORT] runaway guard hit at {row_count} rows")
+                break
+        full = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        if full.empty:
+            return b""
+        return _build_keydevs_excel_fast(full, criteria_count,
+                                        title="Coresight Key Developments")
+    except Exception as exc:
+        log_structured_error(exc, page="screening", component="keydevs_full_export",
+                             operation="build_full_excel")
+        return b""
 
 
 def _build_keydevs_excel_fast(

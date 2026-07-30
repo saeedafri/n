@@ -38,6 +38,7 @@ from utils.local_storage import (
 )
 from utils.local_storage_manager import sync_market_data_state, save_market_data_state, get_persistent_state, set_persistent_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
+from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
 
 
 from utils.constants import (
@@ -60,11 +61,22 @@ def _trigger_excel_download(excel_bytes: bytes, filename: str) -> None:
     content keeps it invisible, and nothing here touches the network (no font).
     """
     try:
-        import base64
         import time as _t
         from streamlit.components.v1 import html as _sthtml
 
-        b64 = base64.b64encode(excel_bytes).decode("ascii")
+        # Served over HTTP via /media/ — see utils/media_url for why the bytes must
+        # not be base64-inlined into this iframe's HTML.
+        file_url = serve_bytes(
+            excel_bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename, page="market_data",
+        )
+        if not file_url:
+            report_oversized_embed(len(excel_bytes), f"Excel {filename}",
+                                   page="market_data")
+            st.error("Could not prepare this Excel file — please try again.")
+            return
+        file_url = absolute_app_url(file_url)
         safe_name = filename.replace("'", "\\'").replace('"', '\\"')
         # Unique nonce per invocation: openpyxl serialises timestamps at 1-second
         # resolution, so two builds in the same second are byte-identical → identical
@@ -78,17 +90,17 @@ def _trigger_excel_download(excel_bytes: bytes, filename: str) -> None:
 <!-- dl-nonce {_nonce} -->
 <script>
 (function(){{
-  try{{
-    var bin=atob("{b64}"),n=bin.length,u8=new Uint8Array(n);
-    for(var i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
-    var blob=new Blob([u8],{{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
+  fetch("{file_url}").then(function(r){{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.blob();
+  }}).then(function(blob){{
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");
     a.href=url; a.download="{safe_name}";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function(){{URL.revokeObjectURL(url);}},1000);
-  }}catch(e){{console.error("Excel download failed:",e);}}
+  }}).catch(function(e){{console.error("Excel download failed:",e);}});
 }})();
 </script>
 </body></html>"""
@@ -1970,7 +1982,9 @@ def render_page():
         try:
             _set_md_thread_ctx()
             t = _time.perf_counter()
-            r = CompanyOverviewRepository.get_company_overview(_company_fetch_ticker)
+            r = CompanyOverviewRepository.get_company_overview_or_master(
+                _company_fetch_ticker
+            )
             return 'company', r, (_time.perf_counter() - t) * 1000
         except Exception as exc:
             log_structured_error(exc, page="market_data", component="render_page", operation="_fetch_company")
@@ -2002,8 +2016,8 @@ def render_page():
     _timings['company_overview_fetch'] = _parallel_elapsed
     _t_tab_setup_start = _time.perf_counter()
 
-    # Note: Ticker validation with fallback is now handled at the start of render_page()
-    # This check is a safety net - should never trigger due to validate_and_get_ticker()
+    # Ticker validation and master-only profiles are handled above. This safety
+    # net now applies only when neither source can resolve the selected ticker.
     if not company:
         # Force fallback to default and reload
         selected_ticker = DEFAULT_FALLBACK_TICKER

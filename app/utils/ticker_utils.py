@@ -50,7 +50,7 @@ def validate_and_get_ticker(
         company = CompanyRepository.get_company_by_ticker(candidate)
         if company:
             # Valid ticker found
-            return candidate, False
+            return company.ticker or candidate, False
     except Exception as e:
         log_error(f"[{page_name}] Error checking ticker {candidate}: {e}")
 
