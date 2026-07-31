@@ -1,0 +1,20 @@
+{
+ "ticker": "CRI",
+ "fiscal_year": 2026,
+ "value": 1068,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total | 15,400 | | 100.0 | %",
+ "by_country": {
+  "United States": 12230,
+  "Canada": 2200,
+  "Mexico": 700
+ },
+ "by_continent": {
+  "North America": 15130
+ },
+ "db_value": 1068,
+ "needs_review": false,
+ "accession": "CRI/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

@@ -1,0 +1,19 @@
+{
+ "ticker": "DXLG",
+ "fiscal_year": 2022,
+ "value": 220,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "UNITED STATES": 220,
+  "Canada": 1
+ },
+ "by_continent": {
+  "North America": 221
+ },
+ "db_value": 290,
+ "needs_review": false,
+ "accession": "DXLG/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

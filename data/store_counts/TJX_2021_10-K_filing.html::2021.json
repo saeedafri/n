@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2021,
+ "value": 3305,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total Stores | 2,402 | | 48 | | 855 | | 3,305 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 3305,
+ "needs_review": false,
+ "accession": "TJX/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

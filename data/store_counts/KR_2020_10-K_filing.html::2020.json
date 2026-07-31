@@ -1,0 +1,14 @@
+{
+ "ticker": "KR",
+ "fiscal_year": 2020,
+ "value": 2757,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of February 1, 2020, Kroger is one of the world’s largest retailers, as measured by revenue, operating 2,757 supermarkets under a variety of local banner names in 35 states and the District of Columbia.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2757,
+ "needs_review": false,
+ "accession": "KR/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

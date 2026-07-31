@@ -1,0 +1,14 @@
+{
+ "ticker": "HZO",
+ "fiscal_year": 2022,
+ "value": 35,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 78,
+ "needs_review": false,
+ "accession": "HZO/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

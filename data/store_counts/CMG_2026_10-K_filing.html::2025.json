@@ -1,0 +1,19 @@
+{
+ "ticker": "CMG",
+ "fiscal_year": 2025,
+ "value": 4042,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (12 facts)",
+ "by_country": {
+  "Chipotle": 3938,
+  "Licensed Units": 14
+ },
+ "by_continent": {
+  "Other": 3952
+ },
+ "db_value": 4042,
+ "needs_review": false,
+ "accession": "CMG/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

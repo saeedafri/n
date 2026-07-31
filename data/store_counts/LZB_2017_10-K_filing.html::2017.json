@@ -1,0 +1,14 @@
+{
+ "ticker": "LZB",
+ "fiscal_year": 2017,
+ "value": 904,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "over 900 branded outlets dedicated to selling La-Z-Boy product (La-Z-Boy Furniture Galleries® stores and Comfort Studio® locations)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LZB/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

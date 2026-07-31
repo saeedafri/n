@@ -1,0 +1,14 @@
+{
+ "ticker": "ACI",
+ "fiscal_year": 2019,
+ "value": 2269,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2269,
+ "needs_review": false,
+ "accession": "ACI/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

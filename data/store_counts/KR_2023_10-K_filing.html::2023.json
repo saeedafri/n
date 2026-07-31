@@ -1,0 +1,14 @@
+{
+ "ticker": "KR",
+ "fiscal_year": 2023,
+ "value": 2800,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "As of January 28, 2023, we operated approximately 2,800 owned or leased supermarkets, distribution warehouses and food production plants through divisions, subsidiaries or affiliates.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2719,
+ "needs_review": false,
+ "accession": "KR/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

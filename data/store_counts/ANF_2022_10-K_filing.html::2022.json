@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2022,
+ "value": 729,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total flagship store exit (benefits) charges | $ | ( 1,153 ) | | | $ | ( 11,636 ) | | | $ | 47,257 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 729,
+ "needs_review": false,
+ "accession": "ANF/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

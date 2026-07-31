@@ -1,0 +1,14 @@
+{
+ "ticker": "ANDE",
+ "fiscal_year": 2023,
+ "value": 122,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "the Company had a total of 2,334 employees across its Trade, Renewables and Nutrient & Industrial segments and Corporate Services function. This total was comprised of 982 salary, 1,277 hourly and 75 seasonal employees who conducted work at 122 locations across the United States, Canada, United Kingdom, Switzerland, Mexico, Romania and Singapore.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ANDE/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

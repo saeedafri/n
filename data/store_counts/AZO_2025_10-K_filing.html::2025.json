@@ -1,0 +1,21 @@
+{
+ "ticker": "AZO",
+ "fiscal_year": 2025,
+ "value": 7657,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "United States": 6627,
+  "Mexico": 883,
+  "Brazil": 147
+ },
+ "by_continent": {
+  "North America": 7510,
+  "South America": 147
+ },
+ "db_value": 7657,
+ "needs_review": false,
+ "accession": "AZO/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "GES",
+ "fiscal_year": 2022,
+ "value": 1631,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "U.S., two stores in Canada and three stores in Central and South America. 40 Table of Contents We ended fiscal 2022 with 1,631 stores and 337 concessions worldwide, comprised as follows: | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1631,
+ "needs_review": false,
+ "accession": "GES/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

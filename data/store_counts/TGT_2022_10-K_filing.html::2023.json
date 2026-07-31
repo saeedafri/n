@@ -1,0 +1,14 @@
+{
+ "ticker": "TGT",
+ "fiscal_year": 2023,
+ "value": 1948,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | 1,948 | | 55 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1948,
+ "needs_review": false,
+ "accession": "TGT/2022/10-K/filing.html::2023",
+ "extractor_version": 1
+}

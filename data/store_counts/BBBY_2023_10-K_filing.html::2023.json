@@ -1,0 +1,14 @@
+{
+ "ticker": "BBBY",
+ "fiscal_year": 2023,
+ "value": 872,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "s, as well as return online purchases to a store, or have an order delivered through one of our delivery partners. We operated 872 retail stores, as of February 25, 2023, consisting of 696 Bed Bath & Beyo",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 872,
+ "needs_review": false,
+ "accession": "BBBY/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

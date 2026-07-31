@@ -1,0 +1,14 @@
+{
+ "ticker": "AAP",
+ "fiscal_year": 2019,
+ "value": 5037,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of stores, end of year | 5,037 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 4872,
+ "needs_review": false,
+ "accession": "AAP/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

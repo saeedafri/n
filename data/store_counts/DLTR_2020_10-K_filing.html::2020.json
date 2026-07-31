@@ -1,0 +1,14 @@
+{
+ "ticker": "DLTR",
+ "fiscal_year": 2020,
+ "value": 15288,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (21 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DLTR/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

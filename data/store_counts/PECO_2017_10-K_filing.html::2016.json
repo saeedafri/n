@@ -1,0 +1,14 @@
+{
+ "ticker": "PECO",
+ "fiscal_year": 2016,
+ "value": 8482,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "| | 8,482 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "PECO/2017/10-K/filing.html::2016",
+ "extractor_version": 1
+}

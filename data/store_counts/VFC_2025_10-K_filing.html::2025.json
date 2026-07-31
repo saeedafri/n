@@ -1,0 +1,14 @@
+{
+ "ticker": "VFC",
+ "fiscal_year": 2025,
+ "value": 1127,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "to the principal properties described above, we lease many offices worldwide for sales and administrative purposes. We operate 1,127 retail stores across the Americas, Europe and Asia-Pacific regions. Retai",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1127,
+ "needs_review": false,
+ "accession": "VFC/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

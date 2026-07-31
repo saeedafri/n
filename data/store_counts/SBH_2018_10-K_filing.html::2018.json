@@ -1,0 +1,18 @@
+{
+ "ticker": "SBH",
+ "fiscal_year": 2018,
+ "value": 4972,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "Chalut": 21
+ },
+ "by_continent": {
+  "Other": 21
+ },
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SBH/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

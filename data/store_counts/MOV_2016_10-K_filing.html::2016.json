@@ -1,0 +1,14 @@
+{
+ "ticker": "MOV",
+ "fiscal_year": 2016,
+ "value": 35,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "at were open as of February 1 st of the prior fiscal year through January 31 st of the current fiscal year. The Company had 35 comparable outlet stores for the year ended January 31, 2016. The sales from stores",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MOV/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

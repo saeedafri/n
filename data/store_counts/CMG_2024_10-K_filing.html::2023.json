@@ -1,0 +1,18 @@
+{
+ "ticker": "CMG",
+ "fiscal_year": 2023,
+ "value": 3437,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (11 facts)",
+ "by_country": {
+  "Chipotle": 3371
+ },
+ "by_continent": {
+  "Other": 3371
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CMG/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

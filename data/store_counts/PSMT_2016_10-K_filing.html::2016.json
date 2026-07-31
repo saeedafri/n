@@ -1,0 +1,33 @@
+{
+ "ticker": "PSMT",
+ "fiscal_year": 2016,
+ "value": 38,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (57 facts)",
+ "by_country": {
+  "Aruba": 1,
+  "Barbados": 1,
+  "Colombia": 7,
+  "Costa Rica": 6,
+  "Dominican Republic": 3,
+  "Guatemala": 3,
+  "Honduras": 3,
+  "Jamaica": 1,
+  "Nicaragua": 2,
+  "Panama": 5,
+  "El Salvador": 2,
+  "United States Virgin Islands": 1,
+  "Trinidad": 4,
+  "Columbia": 6
+ },
+ "by_continent": {
+  "Other": 16,
+  "South America": 7,
+  "North America": 22
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "PSMT/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

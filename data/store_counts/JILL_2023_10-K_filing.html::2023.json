@@ -1,0 +1,14 @@
+{
+ "ticker": "JILL",
+ "fiscal_year": 2023,
+ "value": 243,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "or operations and provide sufficient capacity to meet our anticipated future requirements. As of January 28, 2023, we operated 243 stores in 42 states. Of these stores, approximately half are locat",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 243,
+ "needs_review": false,
+ "accession": "JILL/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

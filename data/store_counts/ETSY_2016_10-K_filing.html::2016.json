@@ -1,0 +1,14 @@
+{
+ "ticker": "ETSY",
+ "fiscal_year": 2016,
+ "value": 25000,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "As of December 31, 2016 , there were 25,000 retailers on the platform.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ETSY/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

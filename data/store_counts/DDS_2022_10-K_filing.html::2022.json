@@ -1,0 +1,14 @@
+{
+ "ticker": "DDS",
+ "fiscal_year": 2022,
+ "value": 280,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total retail store count at end of period | 280 | | | 282 | | | 285 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 280,
+ "needs_review": false,
+ "accession": "DDS/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

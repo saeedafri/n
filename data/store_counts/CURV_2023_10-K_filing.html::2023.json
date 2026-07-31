@@ -1,0 +1,14 @@
+{
+ "ticker": "CURV",
+ "fiscal_year": 2023,
+ "value": 639,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Number of stores (as of end of period) | 639 | | | 624 | | | 608 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 639,
+ "needs_review": false,
+ "accession": "CURV/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

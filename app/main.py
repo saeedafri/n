@@ -49,6 +49,7 @@ try:
 except Exception:
     pass
 
+import threading
 import traceback
 from datetime import datetime
 from time import perf_counter
@@ -571,6 +572,39 @@ if _ENABLE_BG_WARMUP and _auth_ready_for_bg and os.environ.get("APP_BG_WARMUP_ST
         start_background_warmup()
         os.environ["APP_BG_WARMUP_STARTED"] = "1"
         log_timing("MAIN_BG_WARMUP_INIT", (perf_counter() - _warmup_start) * 1000)
+    except Exception:
+        pass
+
+# =============================================================================
+# STORE COUNT CACHE — restore once, then keep itself current
+# =============================================================================
+# Both steps are deliberately off the request path. The restore is a single
+# blob download that only fires when /home holds nothing yet (a fresh container
+# that would otherwise re-extract 4,816 filings); the refresh thread then picks
+# up any new company or newly filed 10-K on its own schedule. A page render
+# never waits for either — readers fall back to the existing DB behaviour until
+# the cache has an answer.
+if _auth_ready_for_bg and os.environ.get("APP_STORE_COUNT_STARTED") != "1":
+    try:
+        os.environ["APP_STORE_COUNT_STARTED"] = "1"
+
+        def _start_store_counts() -> None:
+            try:
+                from data.store_count_cache import restore_from_blob
+                restored = restore_from_blob()
+                if restored:
+                    log_timing("STORE_COUNT_CACHE_RESTORED", 0,
+                               details=f"entries={restored}")
+            except Exception:
+                pass
+            try:
+                from data.store_count_refresh import start_store_count_refresh
+                start_store_count_refresh()
+            except Exception:
+                pass
+
+        threading.Thread(target=_start_store_counts, name="store_count_boot",
+                         daemon=True).start()
     except Exception:
         pass
 

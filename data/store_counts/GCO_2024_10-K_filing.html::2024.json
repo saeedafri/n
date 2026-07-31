@@ -1,0 +1,14 @@
+{
+ "ticker": "GCO",
+ "fiscal_year": 2024,
+ "value": 1396,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1341,
+ "needs_review": false,
+ "accession": "GCO/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

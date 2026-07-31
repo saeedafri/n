@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2016,
+ "value": 2938,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total store revenues | 2,938,466 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "UPBD/2017/10-K/filing.html::2016",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "BRLT",
+ "fiscal_year": 2025,
+ "value": 42,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Retail Showrooms and Office Locations | | 42 | | 129,256 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 43,
+ "needs_review": false,
+ "accession": "BRLT/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

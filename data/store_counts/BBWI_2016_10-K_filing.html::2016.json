@@ -1,0 +1,14 @@
+{
+ "ticker": "BBWI",
+ "fiscal_year": 2016,
+ "value": 3005,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts) | llm value unsupported, rejected",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "BBWI/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

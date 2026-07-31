@@ -1,0 +1,14 @@
+{
+ "ticker": "SAH",
+ "fiscal_year": 2021,
+ "value": 110,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | | 110 | | | 46 | | | 100.0 | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 110,
+ "needs_review": false,
+ "accession": "SAH/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

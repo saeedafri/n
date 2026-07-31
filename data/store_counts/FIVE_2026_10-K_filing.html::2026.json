@@ -1,0 +1,14 @@
+{
+ "ticker": "FIVE",
+ "fiscal_year": 2026,
+ "value": 1921,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "| Total stores at end of period | 1,921 | | | 1,771 | | | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1921,
+ "needs_review": false,
+ "accession": "FIVE/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

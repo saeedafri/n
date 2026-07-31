@@ -1,0 +1,14 @@
+{
+ "ticker": "CART",
+ "fiscal_year": 2024,
+ "value": 1800,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "more than 1,800 retail banners as of December 31, 2024",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CART/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

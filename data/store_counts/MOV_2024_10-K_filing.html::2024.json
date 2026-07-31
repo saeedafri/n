@@ -1,0 +1,19 @@
+{
+ "ticker": "MOV",
+ "fiscal_year": 2024,
+ "value": 55,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "United States": 51,
+  "Canada": 4
+ },
+ "by_continent": {
+  "North America": 55
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MOV/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

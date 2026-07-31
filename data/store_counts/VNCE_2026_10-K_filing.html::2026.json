@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2026,
+ "value": 55,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "phics and customer preferences, and the closing or decline in popularity of adjacent stores. As of January 31, 2026, we operated 55 stores, including 41 company-operated Vince full-price stores and",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 55,
+ "needs_review": false,
+ "accession": "VNCE/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

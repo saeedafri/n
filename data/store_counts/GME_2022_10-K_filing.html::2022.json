@@ -1,0 +1,14 @@
+{
+ "ticker": "GME",
+ "fiscal_year": 2022,
+ "value": 4573,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Stores | 4,816 | | | (243) | | | 4,573 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GME/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

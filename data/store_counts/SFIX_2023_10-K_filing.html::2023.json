@@ -1,0 +1,14 @@
+{
+ "ticker": "SFIX",
+ "fiscal_year": 2023,
+ "value": 5,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ent reduction in headcount, we are actively marketing a portion of this space for sublease. We also currently lease and operate five fulfillment centers in the United States. We currently utilize a total of appro",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SFIX/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

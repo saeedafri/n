@@ -1,0 +1,14 @@
+{
+ "ticker": "MARA",
+ "fiscal_year": 2025,
+ "value": 18,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "gy management and load balancing. Our total energy portfolio consists of approximately 1.9 gigawatts (“GW”) of capacity with 18 data centers in North America, the Middle East, Europe, and Latin Americ",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "MARA/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

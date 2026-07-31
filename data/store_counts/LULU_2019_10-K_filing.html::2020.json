@@ -1,0 +1,21 @@
+{
+ "ticker": "LULU",
+ "fiscal_year": 2020,
+ "value": 491,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (20 facts)",
+ "by_country": {
+  "Mexico": 4,
+  "United Arab Emirates": 3,
+  "Qatar": 1
+ },
+ "by_continent": {
+  "North America": 4,
+  "Asia": 4
+ },
+ "db_value": 491,
+ "needs_review": false,
+ "accession": "LULU/2019/10-K/filing.html::2020",
+ "extractor_version": 1
+}

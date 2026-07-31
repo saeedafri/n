@@ -1,0 +1,14 @@
+{
+ "ticker": "CATO",
+ "fiscal_year": 2019,
+ "value": 1351,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "purchases), decreased by 11.1% to $850.0 million in fiscal 2017 compared to $956.6 million in fiscal 2016. The Company operated 1,351 stores at February 3, 2018 compared to 1,371 stores operated at Ja",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CATO/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

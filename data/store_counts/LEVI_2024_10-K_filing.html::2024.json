@@ -1,0 +1,14 @@
+{
+ "ticker": "LEVI",
+ "fiscal_year": 2024,
+ "value": 1276,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "ated 31%, 29% and 26% of our net revenues in fiscal years 2024, 2023 and 2022, respectively. As of December 1, 2024, we had 1,276 company-operated stores located in 39 countries. The majority of the stores are ded",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1276,
+ "needs_review": false,
+ "accession": "LEVI/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

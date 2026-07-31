@@ -1,0 +1,14 @@
+{
+ "ticker": "DLB",
+ "fiscal_year": 2017,
+ "value": 112,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "In total, 112 Dolby Cinema locations were operational as of the end of fiscal 2017 compared to 37 at the start of fiscal 2017, and we have over 360 Dolby Cinema locations open or committed around the world.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "DLB/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

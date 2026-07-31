@@ -1,0 +1,14 @@
+{
+ "ticker": "VSCO",
+ "fiscal_year": 2025,
+ "value": 812,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "nts our physical retail locations in North America and accounted for $3.428 billion, or 55%, of our revenue in 2024. We operated 812 physical locations as of the end of 2024, including a range of full assortment",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VSCO/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

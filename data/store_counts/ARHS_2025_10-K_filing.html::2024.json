@@ -1,0 +1,14 @@
+{
+ "ticker": "ARHS",
+ "fiscal_year": 2024,
+ "value": 103,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total Showrooms at end of period | 103 | | 92",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ARHS/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

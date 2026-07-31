@@ -1,0 +1,14 @@
+{
+ "ticker": "LULU",
+ "fiscal_year": 2026,
+ "value": 811,
+ "confidence": "medium",
+ "basis": "fits neighbouring years (l2)",
+ "evidence": "XBRL us-gaap:NumberOfStores (9 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 58,
+ "needs_review": false,
+ "accession": "LULU/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

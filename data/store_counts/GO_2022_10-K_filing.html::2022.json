@@ -1,0 +1,14 @@
+{
+ "ticker": "GO",
+ "fiscal_year": 2022,
+ "value": 415,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of stores open at end of period | 415 | | | 380 | | | 347 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GO/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

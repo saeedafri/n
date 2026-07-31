@@ -1,0 +1,14 @@
+{
+ "ticker": "RH",
+ "fiscal_year": 2022,
+ "value": 67,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (7 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 38,
+ "needs_review": false,
+ "accession": "RH/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

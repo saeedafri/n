@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2016,
+ "value": 48,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "e opened 11 new stores consisting of six full-price retail stores and five outlet locations. As of January 30, 2016, we operated 48 stores, consisting of 34 company-operated full-price retail stores",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "VNCE/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

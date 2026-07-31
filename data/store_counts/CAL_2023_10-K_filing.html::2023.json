@@ -1,0 +1,20 @@
+{
+ "ticker": "CAL",
+ "fiscal_year": 2023,
+ "value": 965,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "UNITED STATES": 63,
+  "CHINA": 29
+ },
+ "by_continent": {
+  "North America": 63,
+  "Asia": 29
+ },
+ "db_value": 965,
+ "needs_review": false,
+ "accession": "CAL/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

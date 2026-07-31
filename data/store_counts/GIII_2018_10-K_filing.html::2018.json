@@ -1,0 +1,14 @@
+{
+ "ticker": "GIII",
+ "fiscal_year": 2018,
+ "value": 458,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ual rent for this facility is expected to be $7.5 million for fiscal 2019. Retail Stores As of January 31, 2018, we operated 458 leased store locations, of which 165 are Wilsons Leather retail stores, 139 are G.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GIII/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

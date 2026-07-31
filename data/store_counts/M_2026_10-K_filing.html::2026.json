@@ -1,0 +1,14 @@
+{
+ "ticker": "M",
+ "fiscal_year": 2026,
+ "value": 665,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "District of Columbia, Puerto Rico and Guam, comprising a total of approximately 98 million square feet. These locations consisted of 243 owned locations, 340 leased locations, 79 locations operated under arrangem",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 665,
+ "needs_review": false,
+ "accession": "M/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

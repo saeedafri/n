@@ -1,0 +1,20 @@
+{
+ "ticker": "LZB",
+ "fiscal_year": 2019,
+ "value": 9,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {
+  "Independent dealer assets acquired in fiscal 2019": 9,
+  "Arizona": 9,
+  "Massachusetts": 1
+ },
+ "by_continent": {
+  "Other": 19
+ },
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LZB/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

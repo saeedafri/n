@@ -1,0 +1,14 @@
+{
+ "ticker": "DOCN",
+ "fiscal_year": 2023,
+ "value": 16,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "We also have entered into leases for small spaces in a number of co-working locations. Additionally, we lease space to operate 16 data centers worldwide, including in the United States, Australia, Canad",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "DOCN/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

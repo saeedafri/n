@@ -1,0 +1,14 @@
+{
+ "ticker": "M",
+ "fiscal_year": 2019,
+ "value": 850,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "M/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

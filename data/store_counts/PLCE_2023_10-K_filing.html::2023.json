@@ -1,0 +1,14 @@
+{
+ "ticker": "PLCE",
+ "fiscal_year": 2023,
+ "value": 613,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (13 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 613,
+ "needs_review": false,
+ "accession": "PLCE/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

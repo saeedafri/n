@@ -1,0 +1,14 @@
+{
+ "ticker": "GPI",
+ "fiscal_year": 2024,
+ "value": 179,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 179 | | | 80 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 259,
+ "needs_review": false,
+ "accession": "GPI/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

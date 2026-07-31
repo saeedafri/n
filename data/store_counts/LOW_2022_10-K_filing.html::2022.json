@@ -1,0 +1,18 @@
+{
+ "ticker": "LOW",
+ "fiscal_year": 2022,
+ "value": 1971,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {
+  "United States and Canada": 1971
+ },
+ "by_continent": {
+  "North America": 1971
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LOW/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

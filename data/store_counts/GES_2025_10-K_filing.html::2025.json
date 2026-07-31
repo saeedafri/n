@@ -1,0 +1,14 @@
+{
+ "ticker": "GES",
+ "fiscal_year": 2025,
+ "value": 1597,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "025, we acquired 36 stores, consisting of 34 stores in the United States and two stores in Europe. We ended fiscal 2025 with 1,597 stores and 318 concessions worldwide, comprised as follows: | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1597,
+ "needs_review": false,
+ "accession": "GES/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

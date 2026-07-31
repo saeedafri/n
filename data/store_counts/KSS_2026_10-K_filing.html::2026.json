@@ -1,0 +1,14 @@
+{
+ "ticker": "KSS",
+ "fiscal_year": 2026,
+ "value": 1153,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1153,
+ "needs_review": false,
+ "accession": "KSS/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

@@ -1,0 +1,36 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2024,
+ "value": 890,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (49 facts)",
+ "by_country": {
+  "NEW ZEALAND": 1,
+  "SWEDEN": 1,
+  "United States Operations": 616,
+  "Canadian Operations": 108,
+  "MEXICO": 41,
+  "JAPAN": 36,
+  "UNITED KINGDOM": 29,
+  "KOREA": 19,
+  "AUSTRALIA": 15,
+  "TAIWAN": 14,
+  "CHINA": 7,
+  "SPAIN": 5,
+  "FRANCE": 2,
+  "ICELAND": 1,
+  "Canada Operations": 109
+ },
+ "by_continent": {
+  "Oceania": 16,
+  "Europe": 37,
+  "North America": 766,
+  "Other": 109,
+  "Asia": 76
+ },
+ "db_value": 890,
+ "needs_review": false,
+ "accession": "COST/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

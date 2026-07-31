@@ -1,0 +1,14 @@
+{
+ "ticker": "BURL",
+ "fiscal_year": 2026,
+ "value": 1212,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1212,
+ "needs_review": false,
+ "accession": "BURL/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

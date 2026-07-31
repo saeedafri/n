@@ -1,0 +1,18 @@
+{
+ "ticker": "RH",
+ "fiscal_year": 2020,
+ "value": 68,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "Distribution center closures": 1
+ },
+ "by_continent": {
+  "Other": 1
+ },
+ "db_value": 106,
+ "needs_review": false,
+ "accession": "RH/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

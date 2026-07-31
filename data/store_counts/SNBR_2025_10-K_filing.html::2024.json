@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2024,
+ "value": 640,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "640 retail stores in 50 U.S. states as of the end of 2024",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 640,
+ "needs_review": false,
+ "accession": "SNBR/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

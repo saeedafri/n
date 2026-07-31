@@ -1,0 +1,21 @@
+{
+ "ticker": "CRI",
+ "fiscal_year": 2016,
+ "value": 835,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {
+  "Carter's": 636,
+  "Canada": 147,
+  "OshKosh": 267
+ },
+ "by_continent": {
+  "Other": 903,
+  "North America": 147
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CRI/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

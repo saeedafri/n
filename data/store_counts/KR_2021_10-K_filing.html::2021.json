@@ -1,0 +1,14 @@
+{
+ "ticker": "KR",
+ "fiscal_year": 2021,
+ "value": 2742,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of January 30, 2021, Kroger operated, either directly or through its subsidiaries, 2,742 supermarkets under a variety of local banner names in 35 states and the District of Columbia.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2742,
+ "needs_review": false,
+ "accession": "KR/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

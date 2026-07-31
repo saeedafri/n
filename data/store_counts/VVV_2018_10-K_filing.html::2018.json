@@ -1,0 +1,14 @@
+{
+ "ticker": "VVV",
+ "fiscal_year": 2018,
+ "value": 1242,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total stores | 1,242 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VVV/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

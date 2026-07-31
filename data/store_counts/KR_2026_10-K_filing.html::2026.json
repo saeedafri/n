@@ -1,0 +1,14 @@
+{
+ "ticker": "KR",
+ "fiscal_year": 2026,
+ "value": 2697,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of January 31, 2026, Kroger operated, either directly or through its subsidiaries, 2,697 supermarkets, of which 2,250 had pharmacies and 1,731 had fuel centers.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2697,
+ "needs_review": false,
+ "accession": "KR/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

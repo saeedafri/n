@@ -1,0 +1,14 @@
+{
+ "ticker": "ACI",
+ "fiscal_year": 2025,
+ "value": 2270,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2270,
+ "needs_review": false,
+ "accession": "ACI/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

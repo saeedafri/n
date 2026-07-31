@@ -1,0 +1,14 @@
+{
+ "ticker": "RH",
+ "fiscal_year": 2016,
+ "value": 69,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "distribution, consisting of our stores, catalogs, including our Source Books, and websites. As of January 30, 2016, we operated a total of 69 retail galleries, consisting of 53 legacy Galleries, 6 larger format Design",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "RH/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

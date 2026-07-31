@@ -1,0 +1,14 @@
+{
+ "ticker": "DDS",
+ "fiscal_year": 2026,
+ "value": 271,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total retail store count at end of period | | | 271 | | | | 272 | | | 273 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 271,
+ "needs_review": false,
+ "accession": "DDS/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

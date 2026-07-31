@@ -1,0 +1,14 @@
+{
+ "ticker": "ROST",
+ "fiscal_year": 2024,
+ "value": 2109,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total stores end of period | 2,109 | | | 2,015 | | | 1,923 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2109,
+ "needs_review": false,
+ "accession": "ROST/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

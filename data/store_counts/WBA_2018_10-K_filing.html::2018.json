@@ -1,0 +1,14 @@
+{
+ "ticker": "WBA",
+ "fiscal_year": 2018,
+ "value": 9569,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of locations at period end | | 9,569 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "WBA/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

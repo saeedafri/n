@@ -1,0 +1,14 @@
+{
+ "ticker": "RDNW",
+ "fiscal_year": 2025,
+ "value": 48,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 48,
+ "needs_review": false,
+ "accession": "RDNW/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

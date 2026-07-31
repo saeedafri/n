@@ -1,0 +1,14 @@
+{
+ "ticker": "ONEW",
+ "fiscal_year": 2023,
+ "value": 98,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 98,
+ "needs_review": false,
+ "accession": "ONEW/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

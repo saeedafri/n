@@ -1,0 +1,14 @@
+{
+ "ticker": "HON",
+ "fiscal_year": 2025,
+ "value": 525,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "We have approximately 667 locations, of which 142 are manufacturing sites.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "HON/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

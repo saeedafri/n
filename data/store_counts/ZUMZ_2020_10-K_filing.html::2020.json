@@ -1,0 +1,23 @@
+{
+ "ticker": "ZUMZ",
+ "fiscal_year": 2020,
+ "value": 718,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (20 facts)",
+ "by_country": {
+  "United States": 607,
+  "Canada": 52,
+  "Europe": 49,
+  "Australia": 12
+ },
+ "by_continent": {
+  "North America": 659,
+  "Other": 49,
+  "Oceania": 12
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ZUMZ/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

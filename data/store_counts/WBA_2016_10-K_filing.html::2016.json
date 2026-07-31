@@ -1,0 +1,14 @@
+{
+ "ticker": "WBA",
+ "fiscal_year": 2016,
+ "value": 8184,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ptions, partially offset by the impact from the sale of a majority interest in our infusion business in fiscal 2015. We operated 8,184 locations (8,175 drugstores) as of August 31, 2016, compared to 8,182",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "WBA/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

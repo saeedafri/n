@@ -1,0 +1,14 @@
+{
+ "ticker": "BZH",
+ "fiscal_year": 2018,
+ "value": 1632,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "Total | 1,632 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "BZH/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

@@ -49,6 +49,29 @@ HPE, HZO, KR, KSS, M, MNRO, NKE, OXM, PFGC, PLCE, ROST, TGT, TJX, TLYS, UAA, ULT
 VRA, WMT, WSM, ZUMZ). A further 49 with NULL `fiscal_year_end` were wrong via defect 2. The
 remaining Dec-FYE tickers are unchanged.
 
+## Full audit — all 135 tickers (`docs/reports/2026-07-31-additional-data-period-audit.xlsx`)
+
+Scripts: `.claude/dev/audit/additional_data_period_audit.py` (before/after formulas, both
+implemented in the audit itself so it is independent of the working tree),
+`.claude/dev/audit/build_period_audit_xlsx.py`, `.claude/dev/audit/ui_period_check.py`.
+
+| Check | Before | After |
+|---|---|---|
+| Matches Income Statement fiscal dates | 85 | **129** |
+| Does NOT match Income Statement | 44 | **0** |
+| No overlapping year to compare | 6 | 6 |
+| Matches Key Stats fiscal dates | — | **129 / 0 mismatches** |
+| Tickers whose dates changed | — | 65 |
+| **Regressions (correct before, wrong after)** | — | **0** |
+
+The 6 no-comparison tickers (CTA-PA, GES, QVCA.Q, QVCPQ, SKX, FLWS) have **no annual income
+statement / Key Stats rows at all**, so there is nothing on the other tabs to disagree with.
+For them the label falls back to Dec-31 (before the fix they showed raw 10-K *filing* dates,
+e.g. `Oct-07-2020`). FLWS currently has no ratings/store years in range, so it renders nothing.
+Residual limitation, stated plainly: for a ticker with neither statements nor
+`fiscal_year_end` (e.g. GES, whose real FYE is early February), Dec-31 is a guess — but every
+other tab is empty for those tickers, so no on-screen inconsistency is visible.
+
 ## Verification (local UI, staging DB, Playwright)
 
 | Ticker | Additional Data (after) | Income Statement | Match |
@@ -58,6 +81,12 @@ remaining Dec-FYE tickers are unchanged.
 | COST (NULL FYE) | Aug 2020 → Aug 2025, `12 Months / Aug-31-2020…` | Aug 2020 → Aug 2025 | ✅ |
 | LULU (NULL FYE) | Jan 2021 → Jan 2026, `12 Months / Jan-31-2021…` | Jan 2021 → Jan 2026 | ✅ |
 | CRI (NULL FYE) | Dec 2021 → Dec 2026, `12 Months / Dec-31-2021…` | Dec 2020 → Dec 2025 | labels ✅ |
+
+20 tickers were then re-checked end-to-end in the rendered UI (`.claude/dev/audit/shots/`,
+"UI verification" sheet), reading the column dates off Income Statement, Key Stats and
+Additional Data: WMT, TGT, HD, KR, TJX, ROST, M, ULTA, DKS, LULU, BURL, KSS, FL (Jan-FYE),
+AZO, COST (Aug), NKE (May), VFC (Mar), CRI, AAP (Dec) — all three tabs identical. GES renders
+Additional Data while its statement tabs have no data at all (the no-reference case above).
 
 ## Open item (data side, not fixed here)
 

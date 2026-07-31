@@ -1,0 +1,14 @@
+{
+ "ticker": "RL",
+ "fiscal_year": 2019,
+ "value": 1154,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total stores | | 1,154 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "RL/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

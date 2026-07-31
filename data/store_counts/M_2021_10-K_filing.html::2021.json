@@ -1,0 +1,14 @@
+{
+ "ticker": "M",
+ "fiscal_year": 2021,
+ "value": 727,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "As of January 30, 2021, the operations of the Company included 727 store locations in 43 states, the District of Columbia, Puerto Rico and Guam.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "M/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

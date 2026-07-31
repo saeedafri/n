@@ -1,0 +1,14 @@
+{
+ "ticker": "AN",
+ "fiscal_year": 2020,
+ "value": 230,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "| Total | $ | 2,422.0 | | | $ | 2,558.6 | | | $ | 136.6 | | | 5.3 | | | $ | 2,509.8 | | | $ | (48.8) | | | (1.9) |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 230,
+ "needs_review": true,
+ "accession": "AN/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

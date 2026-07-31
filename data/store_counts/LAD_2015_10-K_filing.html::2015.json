@@ -1,0 +1,14 @@
+{
+ "ticker": "LAD",
+ "fiscal_year": 2015,
+ "value": 133,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LAD/2015/10-K/filing.html::2015",
+ "extractor_version": 1
+}

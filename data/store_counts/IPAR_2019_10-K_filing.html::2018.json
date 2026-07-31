@@ -1,0 +1,14 @@
+{
+ "ticker": "IPAR",
+ "fiscal_year": 2018,
+ "value": 1100,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "As of November 3, 2018, GUESS directly operated over 1,100 retail stores in the Americas, Europe and Asia.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "IPAR/2019/10-K/filing.html::2018",
+ "extractor_version": 1
+}

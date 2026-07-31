@@ -1,0 +1,14 @@
+{
+ "ticker": "SAH",
+ "fiscal_year": 2024,
+ "value": 108,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 108 | | | 18 | | | 15 | | | 100.0 | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 141,
+ "needs_review": false,
+ "accession": "SAH/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

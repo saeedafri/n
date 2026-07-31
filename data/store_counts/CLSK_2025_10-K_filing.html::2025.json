@@ -1,0 +1,14 @@
+{
+ "ticker": "CLSK",
+ "fiscal_year": 2025,
+ "value": 10,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "have a developed data center infrastructure backed by 234 MW, which supports an operational hashrate of 12.43 EH/s. We operate ten wholly owned mining locations in Tennessee, including three sites acquired through our Oc",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CLSK/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SFM",
+ "fiscal_year": 2019,
+ "value": 340,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 341,
+ "needs_review": false,
+ "accession": "SFM/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

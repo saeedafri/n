@@ -1,0 +1,14 @@
+{
+ "ticker": "CDW",
+ "fiscal_year": 2019,
+ "value": 2,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "Ingram Micro, SYNNEX and Tech Data, were each approximately 10% of total US purchases in 2019 . Inventory Management We operate two distribution centers in North America: a 513,000 square foot facility in North L",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CDW/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

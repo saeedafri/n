@@ -1,0 +1,14 @@
+{
+ "ticker": "SWBI",
+ "fiscal_year": 2019,
+ "value": 3,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "o the criteria necessary to evaluate the number of reporting units that exist. In prior years, we had concluded that we had three operating units when reviewing ASC 54 350-20: Firearms , Outdoor",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SWBI/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

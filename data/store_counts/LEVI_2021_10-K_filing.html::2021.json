@@ -1,0 +1,14 @@
+{
+ "ticker": "LEVI",
+ "fiscal_year": 2021,
+ "value": 1083,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ted 25%, 26% and 27% of our net revenues in fiscal years 2021, 2020 and 2019, respectively. As of November 28, 2021, we had 1,083 company-operated stores located in 37 countries. The majority of the stores are ded",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1134,
+ "needs_review": false,
+ "accession": "LEVI/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

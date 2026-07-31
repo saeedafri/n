@@ -1,0 +1,14 @@
+{
+ "ticker": "AMZN",
+ "fiscal_year": 2025,
+ "value": 78131,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | | 741,545 | | 78,131 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "AMZN/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

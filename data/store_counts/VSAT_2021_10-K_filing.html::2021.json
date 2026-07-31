@@ -1,0 +1,14 @@
+{
+ "ticker": "VSAT",
+ "fiscal_year": 2021,
+ "value": 1000,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "over 1,000 active retail dealers (including DirecTV)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VSAT/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

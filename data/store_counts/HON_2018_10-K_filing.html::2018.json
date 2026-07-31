@@ -1,0 +1,14 @@
+{
+ "ticker": "HON",
+ "fiscal_year": 2018,
+ "value": 739,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "We have approximately 991 locations, of which 252 are manufacturing sites.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "HON/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "TOL",
+ "fiscal_year": 2019,
+ "value": 2000,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ed Statement of Operations and Comprehensive Income included in Item 15(a)1 of this Form 10-K. At October 31, 2019 , we had approximately 2,000 units in for-rent apartment projects that were occupied or ready",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "TOL/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

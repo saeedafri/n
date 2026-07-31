@@ -1,0 +1,23 @@
+{
+ "ticker": "ZUMZ",
+ "fiscal_year": 2017,
+ "value": 685,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (14 facts)",
+ "by_country": {
+  "United States": 605,
+  "Canada": 51,
+  "Europe": 30,
+  "Australia": 6
+ },
+ "by_continent": {
+  "North America": 656,
+  "Other": 30,
+  "Oceania": 6
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ZUMZ/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

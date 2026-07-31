@@ -1,0 +1,14 @@
+{
+ "ticker": "FIVE",
+ "fiscal_year": 2023,
+ "value": 1340,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total stores at end of period | 1,340 | | | 1,190 | | | 1,020 | | | 900 | | | 750 | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1340,
+ "needs_review": false,
+ "accession": "FIVE/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

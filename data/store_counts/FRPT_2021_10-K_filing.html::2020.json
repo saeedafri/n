@@ -1,0 +1,14 @@
+{
+ "ticker": "FRPT",
+ "fiscal_year": 2020,
+ "value": 22716,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "Stores at December 31, 2020 and December 31, 2019 consisted of 22,716 and 21,570",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "FRPT/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

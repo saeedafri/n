@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2024,
+ "value": 164,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of March 31, 2024, we have 49 US retail stores and 115 international retail stores",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 164,
+ "needs_review": false,
+ "accession": "DECK/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

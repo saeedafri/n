@@ -1,0 +1,14 @@
+{
+ "ticker": "PII",
+ "fiscal_year": 2018,
+ "value": 93,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "TAP opened nine new 4-Wheel Parts retail stores in 2018, bringing the total store count to 93.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "PII/2019/10-K/filing.html::2018",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "HD",
+ "fiscal_year": 2021,
+ "value": 2296,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "vices, including home improvement installation services and tool and equipment rental. As of the end of fiscal 2020, we had 2,296 The Home Depot stores located throughout the U.S. (including the Commonwealth of",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2296,
+ "needs_review": false,
+ "accession": "HD/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

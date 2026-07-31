@@ -1,0 +1,14 @@
+{
+ "ticker": "LZB",
+ "fiscal_year": 2025,
+ "value": 366,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "the centerpiece of our retail distribution strategy is our network of 366 La-Z-Boy Furniture Galleries ® stores, over 500 La-Z-Boy Comfort Studio ® locations, and over 500 La-Z-Boy branded space locations",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LZB/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

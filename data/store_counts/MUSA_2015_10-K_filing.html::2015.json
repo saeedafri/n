@@ -1,0 +1,14 @@
+{
+ "ticker": "MUSA",
+ "fiscal_year": 2015,
+ "value": 1335,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MUSA/2015/10-K/filing.html::2015",
+ "extractor_version": 1
+}

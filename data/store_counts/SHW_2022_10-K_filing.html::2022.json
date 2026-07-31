@@ -1,0 +1,14 @@
+{
+ "ticker": "SHW",
+ "fiscal_year": 2022,
+ "value": 4931,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "4,931 company-operated specialty paint stores, of which 216 were owned, in the United States, Canada, Puerto Rico, Virgin Islands, Grenada, Trinidad and Tobago, St. Maarten, Jamaica, Curacao, Aruba, St. Lucia, Uruguay, Brazil, Chile, Peru, Mexico, Ecuador and Barbados at December 31, 2022.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 4931,
+ "needs_review": false,
+ "accession": "SHW/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

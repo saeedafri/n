@@ -1,0 +1,14 @@
+{
+ "ticker": "ROST",
+ "fiscal_year": 2021,
+ "value": 1859,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (14 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1859,
+ "needs_review": false,
+ "accession": "ROST/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

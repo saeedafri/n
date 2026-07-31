@@ -1,0 +1,21 @@
+{
+ "ticker": "URBN",
+ "fiscal_year": 2019,
+ "value": 245,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (30 facts)",
+ "by_country": {
+  "United States": 522,
+  "Europe": 63,
+  "Canada": 36
+ },
+ "by_continent": {
+  "North America": 558,
+  "Other": 63
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "URBN/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

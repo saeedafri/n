@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2021,
+ "value": 140,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "s, full price in-line products, as well as products made specifically for the outlet stores. As of March 31, 2021, we had a total of 140 global retail stores, which includes 71 concept stores and 69 outlet stores. Gen",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 140,
+ "needs_review": false,
+ "accession": "DECK/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

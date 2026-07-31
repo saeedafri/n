@@ -1,0 +1,14 @@
+{
+ "ticker": "NKE",
+ "fiscal_year": 2018,
+ "value": 790,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| TOTAL | 790 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "NKE/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

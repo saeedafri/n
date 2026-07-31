@@ -1,0 +1,14 @@
+{
+ "ticker": "TGT",
+ "fiscal_year": 2026,
+ "value": 1995,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | 1,995 | | 70 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1995,
+ "needs_review": false,
+ "accession": "TGT/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

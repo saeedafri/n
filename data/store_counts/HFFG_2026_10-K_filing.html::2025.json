@@ -1,0 +1,14 @@
+{
+ "ticker": "HFFG",
+ "fiscal_year": 2025,
+ "value": 16,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "rsecurity risk exposure, including potential vulnerabilities in IT systems and data security. ITEM 2. PROPERTIES We operate sixteen distribution centers with a total of approximately 1.4 million square feet of wa",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "HFFG/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

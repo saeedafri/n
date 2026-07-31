@@ -1,0 +1,14 @@
+{
+ "ticker": "WBA",
+ "fiscal_year": 2021,
+ "value": 8973,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of locations at period end | | 8,973 | | | 9,028 | | | 9,285 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "WBA/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

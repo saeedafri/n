@@ -1,0 +1,21 @@
+{
+ "ticker": "AZO",
+ "fiscal_year": 2020,
+ "value": 6549,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "Stores in the United States Including Puerto Rico": 5885,
+  "Mexico": 621,
+  "Brazil": 43
+ },
+ "by_continent": {
+  "North America": 6506,
+  "South America": 43
+ },
+ "db_value": 6549,
+ "needs_review": false,
+ "accession": "AZO/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

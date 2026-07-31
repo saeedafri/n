@@ -1,0 +1,14 @@
+{
+ "ticker": "DKS",
+ "fiscal_year": 2017,
+ "value": 797,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of stores at end of period (9) | 797 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DKS/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

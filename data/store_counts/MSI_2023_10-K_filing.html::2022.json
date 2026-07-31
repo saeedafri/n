@@ -1,0 +1,14 @@
+{
+ "ticker": "MSI",
+ "fiscal_year": 2022,
+ "value": 3,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "d on this guidance, we have determined that our Products and Systems Integration and Software and Services segments are comprised of three and two reporting units, respectively. In the fiscal year 2022, we elected to perfo",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "MSI/2023/10-K/filing.html::2022",
+ "extractor_version": 1
+}

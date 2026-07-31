@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2023,
+ "value": 164,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 164,
+ "needs_review": false,
+ "accession": "DECK/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

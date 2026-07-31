@@ -1,0 +1,14 @@
+{
+ "ticker": "GES",
+ "fiscal_year": 2020,
+ "value": 1729,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "and the Middle East, 11 stores in Canada and one store in Central and South America. 37 We ended fiscal 2020 with 1,729 stores and 394 concessions worldwide, comprised as follows: |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1729,
+ "needs_review": false,
+ "accession": "GES/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SCVL",
+ "fiscal_year": 2021,
+ "value": 383,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ur physical stores each generated an average of $2.5 million in annual sales in fiscal 2020. As of January 30, 2021, we operated 383 stores in 35 states and Puerto Rico and offered online shopping at",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SCVL/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

@@ -1,0 +1,24 @@
+{
+ "ticker": "TPR",
+ "fiscal_year": 2018,
+ "value": 1432,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {
+  "Canada": 51,
+  "Greater China": 275,
+  "Japan": 276,
+  "United States": 322,
+  "Other International": 211
+ },
+ "by_continent": {
+  "North America": 373,
+  "Asia": 551,
+  "Other": 211
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TPR/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

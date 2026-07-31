@@ -1,0 +1,14 @@
+{
+ "ticker": "SBUX",
+ "fiscal_year": 2017,
+ "value": 16559,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | 16,559 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SBUX/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

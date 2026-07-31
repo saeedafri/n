@@ -1,0 +1,14 @@
+{
+ "ticker": "CRI",
+ "fiscal_year": 2017,
+ "value": 1061,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts) | llm value unsupported, rejected",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CRI/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

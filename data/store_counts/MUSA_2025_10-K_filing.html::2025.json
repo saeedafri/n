@@ -1,0 +1,14 @@
+{
+ "ticker": "MUSA",
+ "fiscal_year": 2025,
+ "value": 1800,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1800,
+ "needs_review": false,
+ "accession": "MUSA/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "WMK",
+ "fiscal_year": 2025,
+ "value": 94,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "tem 2. Properties: As of December 27, 2025, the Company owned and operated 108 of its retail food stores and leased and operated 94 stores under operating leases that expire at various dates through",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "WMK/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

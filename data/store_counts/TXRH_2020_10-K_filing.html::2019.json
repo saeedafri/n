@@ -1,0 +1,18 @@
+{
+ "ticker": "TXRH",
+ "fiscal_year": 2019,
+ "value": 611,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (57 facts)",
+ "by_country": {
+  "Franchise": 70
+ },
+ "by_continent": {
+  "Other": 70
+ },
+ "db_value": 514,
+ "needs_review": false,
+ "accession": "TXRH/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

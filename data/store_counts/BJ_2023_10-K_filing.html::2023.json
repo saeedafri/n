@@ -1,0 +1,14 @@
+{
+ "ticker": "BJ",
+ "fiscal_year": 2023,
+ "value": 235,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 235,
+ "needs_review": false,
+ "accession": "BJ/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

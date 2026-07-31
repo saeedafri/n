@@ -1,0 +1,14 @@
+{
+ "ticker": "CXT",
+ "fiscal_year": 2022,
+ "value": 6,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "operating segment (a “component”), in which case the component would be the reporting unit. As of December 31, 2022, we had six reporting units. When performing our annual impairment assessment, we compa",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CXT/2023/10-K/filing.html::2022",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "EYE",
+ "fiscal_year": 2021,
+ "value": 1205,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (9 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1205,
+ "needs_review": false,
+ "accession": "EYE/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

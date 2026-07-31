@@ -1,0 +1,14 @@
+{
+ "ticker": "OXM",
+ "fiscal_year": 2025,
+ "value": 136,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total TSR-based restricted share units outstanding at end of year | | 217,343 | | $ | 136",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "OXM/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

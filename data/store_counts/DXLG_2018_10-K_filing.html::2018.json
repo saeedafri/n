@@ -1,0 +1,20 @@
+{
+ "ticker": "DXLG",
+ "fiscal_year": 2018,
+ "value": 212,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {
+  "DXL Stores": 212,
+  "Casual Male XL Retail and Outlet Stores": 78,
+  "Rochester Clothing Stores": 5
+ },
+ "by_continent": {
+  "Other": 295
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DXLG/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

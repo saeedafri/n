@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2026,
+ "value": 600,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of January 3, 2026, the Company operated 600 Sleep Number ® stores, with locations in all 50 states.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 600,
+ "needs_review": false,
+ "accession": "SNBR/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "COLM",
+ "fiscal_year": 2022,
+ "value": 450,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "L Headquarters is leased and the remainder is owned by the Company. In addition, as of December 31, 2022, we directly operated approximately 450 retail stores, the vast majority of which are leased under a variety of a",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 450,
+ "needs_review": false,
+ "accession": "COLM/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

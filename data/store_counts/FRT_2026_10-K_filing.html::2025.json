@@ -1,0 +1,14 @@
+{
+ "ticker": "FRT",
+ "fiscal_year": 2025,
+ "value": 2678,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total —Residential | | | | | | 2,678 units | | | | 95% | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "FRT/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

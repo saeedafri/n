@@ -1,0 +1,14 @@
+{
+ "ticker": "TLYS",
+ "fiscal_year": 2017,
+ "value": 223,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TLYS/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

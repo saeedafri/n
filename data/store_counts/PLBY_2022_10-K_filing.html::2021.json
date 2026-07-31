@@ -1,0 +1,14 @@
+{
+ "ticker": "PLBY",
+ "fiscal_year": 2021,
+ "value": 58,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "1, we acquired Honey Birdette (Aust) Pty Limited, owner of the luxury lingerie brand Honey Birdette (“Honey Birdette”), with 58 stores across three continents (59 stores as of December 31, 2021)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 99,
+ "needs_review": false,
+ "accession": "PLBY/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

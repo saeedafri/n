@@ -1,0 +1,14 @@
+{
+ "ticker": "COLM",
+ "fiscal_year": 2020,
+ "value": 450,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "n | Owned | Cambrai, France | Europe Distribution Center | Owned In addition, as of December 31, 2020, we directly operated nearly 450 retail stores, the vast majority of which are leased under a variety of a",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "COLM/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

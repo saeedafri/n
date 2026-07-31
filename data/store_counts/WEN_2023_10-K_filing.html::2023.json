@@ -1,0 +1,14 @@
+{
+ "ticker": "WEN",
+ "fiscal_year": 2023,
+ "value": 7095,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (43 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WEN/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

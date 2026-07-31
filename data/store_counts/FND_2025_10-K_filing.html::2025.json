@@ -1,0 +1,14 @@
+{
+ "ticker": "FND",
+ "fiscal_year": 2025,
+ "value": 270,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "f Floor and Decor Outlets of America, Inc. in November 2010 by our previous sponsor owners. As of December 25, 2025, we operated 270 warehouse-format stores and five small-format design studios across 39 states. We b",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 270,
+ "needs_review": false,
+ "accession": "FND/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

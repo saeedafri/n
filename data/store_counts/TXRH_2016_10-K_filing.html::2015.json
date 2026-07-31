@@ -1,0 +1,14 @@
+{
+ "ticker": "TXRH",
+ "fiscal_year": 2015,
+ "value": 401,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "7 Table of Contents Existing Restaurant Locations A s of December 29, 2015, we had 401 company restaurants and 82 franchise restaurants in 49 states and four foreign",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TXRH/2016/10-K/filing.html::2015",
+ "extractor_version": 1
+}

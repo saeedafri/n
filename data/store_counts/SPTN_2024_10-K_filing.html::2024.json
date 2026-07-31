@@ -1,0 +1,14 @@
+{
+ "ticker": "SPTN",
+ "fiscal_year": 2024,
+ "value": 196,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "A, location of distribution centers and other value-added services. Retail Segment As of December 28, 2024, the Company operated 196 corporate-owned retail stores in ten states in the Midwest, and include banners of Family",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SPTN/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

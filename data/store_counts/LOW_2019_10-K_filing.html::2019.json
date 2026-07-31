@@ -1,0 +1,19 @@
+{
+ "ticker": "LOW",
+ "fiscal_year": 2019,
+ "value": 2015,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "Mexico": 13,
+  "United States and Canada": 2002
+ },
+ "by_continent": {
+  "North America": 2015
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LOW/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

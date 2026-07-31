@@ -1,0 +1,14 @@
+{
+ "ticker": "RENT",
+ "fiscal_year": 2026,
+ "value": 2,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "which we sublease (or have available to sublease) approximately 47,000 square feet to other parties. We also lease and operate two fulfillment centers in Secaucus, New Jersey and Arlington, Texas under leases t",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "RENT/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

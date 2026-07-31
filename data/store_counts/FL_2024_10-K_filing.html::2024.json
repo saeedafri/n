@@ -1,0 +1,14 @@
+{
+ "ticker": "FL",
+ "fiscal_year": 2024,
+ "value": 2523,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "s a leading footwear and apparel retailer that unlocks the \"inner sneakerhead\" in all of us. As of February 3, 2024, we operated 2,523 stores in 26 countries across North America, Europe, Australia, Ne",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2523,
+ "needs_review": false,
+ "accession": "FL/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

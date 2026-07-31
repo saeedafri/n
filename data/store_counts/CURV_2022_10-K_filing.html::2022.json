@@ -1,0 +1,14 @@
+{
+ "ticker": "CURV",
+ "fiscal_year": 2022,
+ "value": 607,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of stores (as of end of period) | 607 | | | 608 | | | 624 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 624,
+ "needs_review": false,
+ "accession": "CURV/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

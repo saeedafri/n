@@ -1,0 +1,14 @@
+{
+ "ticker": "RL",
+ "fiscal_year": 2024,
+ "value": 1275,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total stores | | 1,275 | | | 1,188 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "RL/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

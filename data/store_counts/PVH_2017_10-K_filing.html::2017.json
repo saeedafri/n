@@ -1,0 +1,14 @@
+{
+ "ticker": "PVH",
+ "fiscal_year": 2017,
+ "value": 1600,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "other administrative/support offices and showrooms in various domestic and international locations. We also leased and operated approximately 1,600 retail locations as of January 29, 2017 in the United States, Canada, Europe",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "PVH/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

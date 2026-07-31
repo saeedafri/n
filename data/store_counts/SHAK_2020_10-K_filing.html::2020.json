@@ -1,0 +1,22 @@
+{
+ "ticker": "SHAK",
+ "fiscal_year": 2020,
+ "value": 183,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (21 facts)",
+ "by_country": {
+  "United States": 183,
+  "Other countries": 106,
+  "UNITED STATES": 167,
+  "Non-United States": 101
+ },
+ "by_continent": {
+  "North America": 451,
+  "Other": 106
+ },
+ "db_value": 311,
+ "needs_review": false,
+ "accession": "SHAK/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

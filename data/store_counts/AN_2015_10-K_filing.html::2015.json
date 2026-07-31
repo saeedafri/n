@@ -1,0 +1,14 @@
+{
+ "ticker": "AN",
+ "fiscal_year": 2015,
+ "value": 254,
+ "confidence": "medium",
+ "basis": "fits the company's own range",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AN/2015/10-K/filing.html::2015",
+ "extractor_version": 1
+}

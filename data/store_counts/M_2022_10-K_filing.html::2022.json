@@ -1,0 +1,14 @@
+{
+ "ticker": "M",
+ "fiscal_year": 2022,
+ "value": 725,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "The Company and its predecessors have been operating department stores since 1830. As of January 29, 2022, the Company operated 725 store locations in 43 states, the District of Columbia, Puerto Rico and Gua",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "M/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "WWW",
+ "fiscal_year": 2019,
+ "value": 96,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "mpany relies on a network of third-party distributors, licensees and joint ventures. At December 28, 2019 , the Company operated 96 retail stores in the U.S. and Canada and 41 consumer-direct eCommerce sit",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "WWW/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

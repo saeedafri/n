@@ -1,0 +1,14 @@
+{
+ "ticker": "FIVE",
+ "fiscal_year": 2025,
+ "value": 1771,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1771,
+ "needs_review": false,
+ "accession": "FIVE/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

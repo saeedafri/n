@@ -1,0 +1,19 @@
+{
+ "ticker": "MOV",
+ "fiscal_year": 2021,
+ "value": 47,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "United States": 45,
+  "Canada": 2
+ },
+ "by_continent": {
+  "North America": 47
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MOV/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

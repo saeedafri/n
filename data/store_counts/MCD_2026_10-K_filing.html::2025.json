@@ -1,0 +1,14 @@
+{
+ "ticker": "MCD",
+ "fiscal_year": 2025,
+ "value": 45356,
+ "confidence": "medium",
+ "basis": "fits the company's own range",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (63 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MCD/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

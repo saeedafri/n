@@ -1,0 +1,14 @@
+{
+ "ticker": "COTY",
+ "fiscal_year": 2025,
+ "value": 38850,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | | 38,850,228 | | | | | 43,293,580 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "COTY/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

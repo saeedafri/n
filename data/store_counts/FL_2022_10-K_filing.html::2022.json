@@ -1,0 +1,14 @@
+{
+ "ticker": "FL",
+ "fiscal_year": 2022,
+ "value": 2858,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Number of stores at year end | | | 2,858 | | 2,998 | | 3,129 | | 3,221 | | 3,310",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2858,
+ "needs_review": false,
+ "accession": "FL/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

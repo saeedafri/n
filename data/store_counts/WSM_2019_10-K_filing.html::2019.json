@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2019,
+ "value": 625,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WSM/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

@@ -1,0 +1,21 @@
+{
+ "ticker": "TXRH",
+ "fiscal_year": 2025,
+ "value": 816,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (53 facts)",
+ "by_country": {
+  "Domestic franchise restaurants": 20,
+  "Franchise": 61,
+  "UNITED STATES": 2
+ },
+ "by_continent": {
+  "Other": 81,
+  "North America": 2
+ },
+ "db_value": 816,
+ "needs_review": false,
+ "accession": "TXRH/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

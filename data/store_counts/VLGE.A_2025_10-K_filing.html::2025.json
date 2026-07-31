@@ -1,0 +1,14 @@
+{
+ "ticker": "VLGE.A",
+ "fiscal_year": 2025,
+ "value": 37,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of stores | 37 | | | 37 | | | 38 | | | 38 | | | 37 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VLGE.A/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

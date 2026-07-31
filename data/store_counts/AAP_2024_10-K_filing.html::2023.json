@@ -1,0 +1,14 @@
+{
+ "ticker": "AAP",
+ "fiscal_year": 2023,
+ "value": 5086,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "and 40 were closed or consolidated, resulting in a total of 5,107 stores and branches as of December 30, 2023 compared with a total of 5,086 stores and branches as of December 31, 2022. We serve our professional and DI",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 5107,
+ "needs_review": false,
+ "accession": "AAP/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

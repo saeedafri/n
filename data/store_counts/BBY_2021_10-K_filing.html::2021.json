@@ -1,0 +1,14 @@
+{
+ "ticker": "BBY",
+ "fiscal_year": 2021,
+ "value": 991,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1159,
+ "needs_review": false,
+ "accession": "BBY/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

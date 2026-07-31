@@ -1,0 +1,14 @@
+{
+ "ticker": "BKE",
+ "fiscal_year": 2025,
+ "value": 441,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BKE/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

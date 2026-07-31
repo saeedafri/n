@@ -1,0 +1,20 @@
+{
+ "ticker": "ORLY",
+ "fiscal_year": 2020,
+ "value": 5616,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "U.S.": 5594,
+  "Mexico": 22
+ },
+ "by_continent": {
+  "Other": 5594,
+  "North America": 22
+ },
+ "db_value": 5616,
+ "needs_review": false,
+ "accession": "ORLY/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

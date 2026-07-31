@@ -1,0 +1,14 @@
+{
+ "ticker": "BRLT",
+ "fiscal_year": 2024,
+ "value": 40,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total Retail Showrooms | | 40 | | 124,507 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 40,
+ "needs_review": false,
+ "accession": "BRLT/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

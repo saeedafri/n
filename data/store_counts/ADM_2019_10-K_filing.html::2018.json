@@ -1,0 +1,14 @@
+{
+ "ticker": "ADM",
+ "fiscal_year": 2018,
+ "value": 450,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "| | | | | | 450 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ADM/2019/10-K/filing.html::2018",
+ "extractor_version": 1
+}

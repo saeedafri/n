@@ -1,0 +1,14 @@
+{
+ "ticker": "TGT",
+ "fiscal_year": 2022,
+ "value": 1926,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | 1,926 | | 48 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1926,
+ "needs_review": false,
+ "accession": "TGT/2021/10-K/filing.html::2022",
+ "extractor_version": 1
+}

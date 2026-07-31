@@ -1,0 +1,14 @@
+{
+ "ticker": "TOL",
+ "fiscal_year": 2021,
+ "value": 3200,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "s in metro markets that are not designated to be developed exclusively with Equity Residential. At October 31, 2021, we had approximately 3,200 units in for-rent apartment projects that were occupied or ready",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "TOL/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

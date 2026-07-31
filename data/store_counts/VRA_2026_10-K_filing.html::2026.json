@@ -1,0 +1,14 @@
+{
+ "ticker": "VRA",
+ "fiscal_year": 2026,
+ "value": 115,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total stores open at end of period | | 115 | | | 126 | | | 124 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 115,
+ "needs_review": false,
+ "accession": "VRA/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

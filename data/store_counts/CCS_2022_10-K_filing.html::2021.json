@@ -1,0 +1,14 @@
+{
+ "ticker": "CCS",
+ "fiscal_year": 2021,
+ "value": 4651,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "At December 31, 2021, we had 4,651 homes in backlog with a total value of $1.9 billion",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CCS/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

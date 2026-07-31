@@ -1,0 +1,14 @@
+{
+ "ticker": "YOU",
+ "fiscal_year": 2025,
+ "value": 340,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "as of December 31, 2025 was available in 61 airports and 340 retail locations nationwide.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "YOU/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

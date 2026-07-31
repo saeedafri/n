@@ -13385,6 +13385,37 @@ class RatingsDataRepository:
                     if _fy in _tot_in_range and _fy not in period_dates and _fd:
                         period_dates[_fy] = _fd
 
+        # ── The filing wins ───────────────────────────────────────────────────
+        # Values extracted from the 10-K itself (and cached permanently by SEC
+        # accession) override both the XBRL layer and the store_count rows: the
+        # filing is where the company actually states the number, and the other
+        # two are derivatives that were measured wrong 18+ times — WMT FY2023
+        # reads 10,623 in its own 'Total retail units' row against 10,325 in the
+        # database. Only values the reconciliation stands behind are published,
+        # so a cache hit is always at least as trustworthy as what it replaces.
+        try:
+            from data.store_count_cache import by_ticker as _filing_counts
+            _from_filings = _filing_counts(ticker)
+        except Exception:
+            _from_filings = {}
+        if _from_filings:
+            _filed = {y: e for y, e in _from_filings.items()
+                      if start_year <= y <= end_year and e.get("value")}
+            if _filed:
+                years = sorted(set(years) | set(_filed))
+                _merged_values: Dict[int, Any] = {}
+                for sc in store_counts:
+                    for _y, _v in sc["values"].items():
+                        if _v is not None:
+                            _merged_values[_y] = _v
+                _merged_values.update({y: e["value"] for y, e in _filed.items()})
+                store_counts = [{
+                    "store_type": "Total",
+                    "label": "Store Count (Total)",
+                    "values": {y: _merged_values.get(y) for y in years},
+                }]
+                _sc_source = "filing"
+
         # Drop store-type rows that ended up with no values (all rows gated out)
         store_counts = [sc for sc in store_counts
                         if any(v is not None for v in sc["values"].values())]

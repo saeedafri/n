@@ -1,0 +1,14 @@
+{
+ "ticker": "BARK",
+ "fiscal_year": 2022,
+ "value": 40000,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "The Company has executed agreements that will bring BARK products to over 40,000 retail doors, including Target, Costco, Walmart, Petco, and Petsmart.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "BARK/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

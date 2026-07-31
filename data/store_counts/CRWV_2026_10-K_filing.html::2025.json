@@ -1,0 +1,14 @@
+{
+ "ticker": "CRWV",
+ "fiscal_year": 2025,
+ "value": 43,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "f December 31, 2024, we operated 32 data centers with approximately 360 MW of active power. As of December 31, 2025, we operated 43 data centers with over 850 MW of active power. As of December 31, 2025,",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CRWV/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

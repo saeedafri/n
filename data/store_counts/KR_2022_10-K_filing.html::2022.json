@@ -1,0 +1,14 @@
+{
+ "ticker": "KR",
+ "fiscal_year": 2022,
+ "value": 2800,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of January 29, 2022, we operated approximately 2,800 owned or leased supermarkets, distribution warehouses and food production plants through divisions, subsidiaries or affiliates.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2800,
+ "needs_review": false,
+ "accession": "KR/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

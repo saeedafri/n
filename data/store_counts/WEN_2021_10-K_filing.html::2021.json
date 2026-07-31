@@ -1,0 +1,14 @@
+{
+ "ticker": "WEN",
+ "fiscal_year": 2021,
+ "value": 6828,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (42 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WEN/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

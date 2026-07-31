@@ -1,0 +1,14 @@
+{
+ "ticker": "LEVI",
+ "fiscal_year": 2017,
+ "value": 750,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "30% , 28% and 26% of our net revenues in fiscal years 2017 , 2016 and 2015 , respectively. As of November 26, 2017 , we had 750 company-operated stores, predominantly Levi's ® stores, located in 31 countries acr",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LEVI/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

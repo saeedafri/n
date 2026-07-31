@@ -1,0 +1,14 @@
+{
+ "ticker": "LEG",
+ "fiscal_year": 2019,
+ "value": 140,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": ". Item 2. Properties. The Company’s corporate office is located in Carthage, Missouri. As of December 31, 2019 , we had 140 manufacturing locations, of which 87 were located across the United States and 53 w",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LEG/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

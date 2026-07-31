@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2020,
+ "value": 1061,
+ "confidence": "medium",
+ "basis": "fits the company's own range",
+ "evidence": "| Total cost of store revenues | 1,061,905 | | | 977,267 | | | 954,098 | | | 84,638 | | | 8.7 | % | | 23,169 | | | 2.4 | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 583,
+ "needs_review": false,
+ "accession": "UPBD/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

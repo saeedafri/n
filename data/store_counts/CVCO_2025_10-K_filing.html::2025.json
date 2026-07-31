@@ -1,0 +1,14 @@
+{
+ "ticker": "CVCO",
+ "fiscal_year": 2025,
+ "value": 80,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "As of March 29, 2025, there were a total of 80 Company-owned retail stores, located in Oregon, Arizona, Nevada, New Mexico, Texas, Indiana, Oklahoma, Florida and New York.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CVCO/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

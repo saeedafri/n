@@ -1,0 +1,14 @@
+{
+ "ticker": "FRPT",
+ "fiscal_year": 2019,
+ "value": 21500,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "As of December 31, 2019, Freshpet Fridges were located in approximately 21,500 stores",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "FRPT/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

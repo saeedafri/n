@@ -1,0 +1,14 @@
+{
+ "ticker": "SAH",
+ "fiscal_year": 2022,
+ "value": 111,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 111 | | | 52 | | | 8 | | | 100.0 | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 171,
+ "needs_review": false,
+ "accession": "SAH/2023/10-K/filing.html::2022",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "KR",
+ "fiscal_year": 2025,
+ "value": 2800,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "As of February 1, 2025, we operated approximately 2,800 owned or leased supermarkets, distribution warehouses, customer fulfillment centers and food production plants through divisions, subsidiaries or affiliates.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2731,
+ "needs_review": false,
+ "accession": "KR/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

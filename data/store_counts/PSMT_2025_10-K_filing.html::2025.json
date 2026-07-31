@@ -1,0 +1,33 @@
+{
+ "ticker": "PSMT",
+ "fiscal_year": 2025,
+ "value": 56,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (62 facts)",
+ "by_country": {
+  "Colombia": 10,
+  "Costa Rica": 9,
+  "Guatemala": 57,
+  "Panama": 7,
+  "Dominican Republic": 5,
+  "El Salvador": 4,
+  "Trinidad": 4,
+  "Honduras": 3,
+  "Jamaica": 2,
+  "Nicaragua": 2,
+  "Barbados": 1,
+  "Aruba": 1,
+  "U.S. Virgin Islands": 1,
+  "United States Virgin Islands": 1
+ },
+ "by_continent": {
+  "South America": 10,
+  "North America": 84,
+  "Other": 13
+ },
+ "db_value": 56,
+ "needs_review": false,
+ "accession": "PSMT/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

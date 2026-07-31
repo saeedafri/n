@@ -1,0 +1,14 @@
+{
+ "ticker": "M",
+ "fiscal_year": 2024,
+ "value": 718,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "The Company and its predecessors have been operating department stores since 1830. As of February 3, 2024, the Company operated 718 store locations in 43 states, the District of Columbia, Puerto Rico and Gua",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 718,
+ "needs_review": false,
+ "accession": "M/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

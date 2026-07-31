@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2019,
+ "value": 156,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": ", full price in-line products, as well as products made specifically for the outlet stores. As of March 31, 2019 , we had a total of 156 company-owned global retail stores, which includes 88 concept stores and 68 outlet stores. Inc",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DECK/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

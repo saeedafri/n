@@ -1,0 +1,14 @@
+{
+ "ticker": "CALY",
+ "fiscal_year": 2021,
+ "value": 67,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "As of December 31, 2021, Topgolf had 67 venues operating in the United States",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 70,
+ "needs_review": false,
+ "accession": "CALY/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "GME",
+ "fiscal_year": 2025,
+ "value": 3203,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Stores | 4,169 | | | 4 | | | (970) | | | 3,203 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GME/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

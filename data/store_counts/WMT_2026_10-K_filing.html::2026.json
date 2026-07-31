@@ -1,0 +1,14 @@
+{
+ "ticker": "WMT",
+ "fiscal_year": 2026,
+ "value": 10955,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total retail units | | 5,678 | | | 5,277 | | | | | | | 10,955 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 10955,
+ "needs_review": false,
+ "accession": "WMT/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

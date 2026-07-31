@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2025,
+ "value": 512,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "stores serve as billboards for our brands, which we believe inspires new and existing customers to also shop online. We operate 512 stores, which include 477 stores in 40 states, Washington, D.C. an",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 512,
+ "needs_review": false,
+ "accession": "WSM/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

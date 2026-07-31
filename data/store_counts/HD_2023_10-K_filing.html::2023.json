@@ -1,0 +1,14 @@
+{
+ "ticker": "HD",
+ "fiscal_year": 2023,
+ "value": 2322,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "vices, including home improvement installation services and tool and equipment rental. As of the end of fiscal 2022, we operated 2,322 stores located throughout the U.S. (including the Commonwealth of",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2322,
+ "needs_review": false,
+ "accession": "HD/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

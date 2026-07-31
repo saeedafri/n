@@ -1,0 +1,14 @@
+{
+ "ticker": "LGIH",
+ "fiscal_year": 2025,
+ "value": 506,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "holesale contracts with varying terms. Ending backlog is valued at the contract amount. (4) As of December 31, 2025, we had 506 units related to bulk sales agreements associated with our wholes",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LGIH/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

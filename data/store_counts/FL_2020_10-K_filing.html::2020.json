@@ -1,0 +1,14 @@
+{
+ "ticker": "FL",
+ "fiscal_year": 2020,
+ "value": 3129,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Number of stores at year end | | | 3,129 | | 3,221 | | 3,310 | | 3,363 | | 3,383",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 3129,
+ "needs_review": false,
+ "accession": "FL/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

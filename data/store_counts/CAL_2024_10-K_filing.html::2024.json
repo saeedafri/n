@@ -1,0 +1,20 @@
+{
+ "ticker": "CAL",
+ "fiscal_year": 2024,
+ "value": 960,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "UNITED STATES": 62,
+  "East Asia": 36
+ },
+ "by_continent": {
+  "North America": 62,
+  "Other": 36
+ },
+ "db_value": 958,
+ "needs_review": false,
+ "accession": "CAL/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

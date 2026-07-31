@@ -1,0 +1,14 @@
+{
+ "ticker": "EGHT",
+ "fiscal_year": 2019,
+ "value": 3,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "parate line item in our Consolidated Statements of Operations. For the year ended March 31, 2018, we determined that we had three reporting units and allocated goodwill to the reporting units for the purpo",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "EGHT/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "MNRO",
+ "fiscal_year": 2025,
+ "value": 1263,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1260,
+ "needs_review": false,
+ "accession": "MNRO/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

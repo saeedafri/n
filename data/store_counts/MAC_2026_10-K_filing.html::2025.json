@@ -1,0 +1,14 @@
+{
+ "ticker": "MAC",
+ "fiscal_year": 2025,
+ "value": 97138,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total debt—Unconsolidated Joint Venture Centers | $ | 154,511 | | | $ | 97,138 | | | $ | 822,883 | | | $ | 239,821 | | | $ | 236,621 | | | $ | 8,986 | | | $ | 1,559,960 | | | $ | 1,542,434 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "MAC/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

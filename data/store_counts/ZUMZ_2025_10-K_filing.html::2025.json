@@ -1,0 +1,23 @@
+{
+ "ticker": "ZUMZ",
+ "fiscal_year": 2025,
+ "value": 730,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
+ "by_country": {
+  "United States": 593,
+  "Europe": 86,
+  "Canada": 47,
+  "Australia": 28
+ },
+ "by_continent": {
+  "North America": 640,
+  "Other": 86,
+  "Oceania": 28
+ },
+ "db_value": 730,
+ "needs_review": false,
+ "accession": "ZUMZ/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

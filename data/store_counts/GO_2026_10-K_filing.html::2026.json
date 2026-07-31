@@ -1,0 +1,14 @@
+{
+ "ticker": "GO",
+ "fiscal_year": 2026,
+ "value": 570,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of stores open at end of period | 570 | | | 533 | | | 468 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GO/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

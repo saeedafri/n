@@ -1,0 +1,18 @@
+{
+ "ticker": "DXLG",
+ "fiscal_year": 2024,
+ "value": 232,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {
+  "UNITED STATES": 232
+ },
+ "by_continent": {
+  "North America": 232
+ },
+ "db_value": 283,
+ "needs_review": false,
+ "accession": "DXLG/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

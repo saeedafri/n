@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2019,
+ "value": 611,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "As of December 28, 2019, there were 611 Sleep Number stores in all 50 states.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 611,
+ "needs_review": false,
+ "accession": "SNBR/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

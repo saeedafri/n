@@ -1,0 +1,14 @@
+{
+ "ticker": "CROX",
+ "fiscal_year": 2021,
+ "value": 373,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "commerce, we are carefully managing our retail fleet, especially full-priced retail stores. As of December 31, 2021, we had 373 company-operated stores. See Part II - Item 7. Management’s Discussion and Analysis",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 373,
+ "needs_review": false,
+ "accession": "CROX/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

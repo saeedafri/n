@@ -1,0 +1,14 @@
+{
+ "ticker": "TGT",
+ "fiscal_year": 2020,
+ "value": 1868,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | 1,868 | | 42 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1868,
+ "needs_review": false,
+ "accession": "TGT/2019/10-K/filing.html::2020",
+ "extractor_version": 1
+}

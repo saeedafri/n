@@ -1,0 +1,14 @@
+{
+ "ticker": "MNRO",
+ "fiscal_year": 2020,
+ "value": 1283,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1283,
+ "needs_review": false,
+ "accession": "MNRO/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

@@ -1,0 +1,34 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2020,
+ "value": 795,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (43 facts)",
+ "by_country": {
+  "FRANCE": 1,
+  "CHINA": 1,
+  "United States Operations": 558,
+  "Canadian Operations": 101,
+  "MEXICO": 39,
+  "UNITED KINGDOM": 29,
+  "JAPAN": 27,
+  "KOREA": 16,
+  "TAIWAN": 14,
+  "AUSTRALIA": 12,
+  "SPAIN": 3,
+  "ICELAND": 1,
+  "Canada Operations": 102
+ },
+ "by_continent": {
+  "Europe": 33,
+  "Asia": 58,
+  "North America": 699,
+  "Other": 102,
+  "Oceania": 12
+ },
+ "db_value": 795,
+ "needs_review": false,
+ "accession": "COST/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

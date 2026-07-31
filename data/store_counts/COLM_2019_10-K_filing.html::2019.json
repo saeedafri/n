@@ -1,0 +1,14 @@
+{
+ "ticker": "COLM",
+ "fiscal_year": 2019,
+ "value": 450,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "France (1 location)—owned | London, Ontario (1 location)—owned | In addition, as of December 31, 2019, we directly operated more than 450 retail stores, the vast majority of which are leased under a variety of a",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "COLM/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

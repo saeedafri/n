@@ -1,0 +1,14 @@
+{
+ "ticker": "HON",
+ "fiscal_year": 2015,
+ "value": 1009,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "We have approximately 1,328 locations, of which 319 are plants.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "HON/2015/10-K/filing.html::2015",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "DBI",
+ "fiscal_year": 2025,
+ "value": 669,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total number of stores | 669 | | | 642 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DBI/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

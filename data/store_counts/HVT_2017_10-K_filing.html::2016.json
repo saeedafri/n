@@ -1,0 +1,14 @@
+{
+ "ticker": "HVT",
+ "fiscal_year": 2016,
+ "value": 124,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| | | 100.0 | % | | | 100.0 | % Stores As of December 31, 2016, we operated 124 stores serving 83 cities in 16 states with approximately 4.5 milli",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "HVT/2017/10-K/filing.html::2016",
+ "extractor_version": 1
+}

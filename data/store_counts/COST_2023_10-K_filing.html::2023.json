@@ -1,0 +1,36 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2023,
+ "value": 861,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (49 facts) | llm value unsupported, rejected",
+ "by_country": {
+  "NEW ZEALAND": 1,
+  "SWEDEN": 1,
+  "United States Operations": 599,
+  "Canadian Operations": 107,
+  "MEXICO": 40,
+  "JAPAN": 33,
+  "UNITED KINGDOM": 29,
+  "KOREA": 18,
+  "AUSTRALIA": 15,
+  "TAIWAN": 14,
+  "CHINA": 5,
+  "SPAIN": 4,
+  "FRANCE": 2,
+  "ICELAND": 1,
+  "Canada Operations": 108
+ },
+ "by_continent": {
+  "Oceania": 16,
+  "Europe": 36,
+  "North America": 747,
+  "Other": 108,
+  "Asia": 70
+ },
+ "db_value": 861,
+ "needs_review": false,
+ "accession": "COST/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

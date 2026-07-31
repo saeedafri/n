@@ -1,0 +1,14 @@
+{
+ "ticker": "NKE",
+ "fiscal_year": 2020,
+ "value": 1091,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "| TOTAL | 758 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1091,
+ "needs_review": true,
+ "accession": "NKE/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

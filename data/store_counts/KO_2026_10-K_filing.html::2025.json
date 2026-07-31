@@ -1,0 +1,14 @@
+{
+ "ticker": "KO",
+ "fiscal_year": 2025,
+ "value": 1379,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "1,379",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "KO/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "CTSH",
+ "fiscal_year": 2017,
+ "value": 174,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "| Total | | 174 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CTSH/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

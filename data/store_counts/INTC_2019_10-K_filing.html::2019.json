@@ -1,0 +1,14 @@
+{
+ "ticker": "INTC",
+ "fiscal_year": 2019,
+ "value": 23,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "y developed solutions by cloud service providers and others. We expect an increasingly competitive environment in 2020. With over 23 million units shipped to date, the Intel ® Xeon ® Scalable platform provi",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "INTC/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SCI",
+ "fiscal_year": 2017,
+ "value": 1488,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "network of funeral service locations and cemeteries unequaled in geographic scale and reach. At December 31, 2017 , we operated 1,488 funeral service locations and 473 cemeteries (including 281 funeral service/cemetery",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SCI/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "LGIH",
+ "fiscal_year": 2021,
+ "value": 1139,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "had 481 units related to bulk sales agreements associated with our wholesale business. (5) As of December 31, 2020, we had 1,139 units related to bulk sales agreements associated with our wholes",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LGIH/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

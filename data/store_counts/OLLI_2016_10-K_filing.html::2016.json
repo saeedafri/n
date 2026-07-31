@@ -1,0 +1,14 @@
+{
+ "ticker": "OLLI",
+ "fiscal_year": 2016,
+ "value": 203,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "OLLI/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "GME",
+ "fiscal_year": 2018,
+ "value": 7535,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GME/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "NKE",
+ "fiscal_year": 2023,
+ "value": 1027,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "| TOTAL | 663 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1027,
+ "needs_review": true,
+ "accession": "NKE/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

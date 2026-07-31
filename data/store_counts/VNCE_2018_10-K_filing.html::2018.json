@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2018,
+ "value": 55,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "and our e-commerce business. During fiscal 2017, we opened one new full-price retail store. As of February 3, 2018, we operated 55 stores, consisting of 41 company-operated full-price retail stores",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "VNCE/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

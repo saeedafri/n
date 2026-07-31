@@ -1,0 +1,18 @@
+{
+ "ticker": "JAKK",
+ "fiscal_year": 2018,
+ "value": 735,
+ "confidence": "low",
+ "basis": "single source (l1), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "Toys \"R\" Us": 735
+ },
+ "by_continent": {
+  "Other": 735
+ },
+ "db_value": null,
+ "needs_review": true,
+ "accession": "JAKK/2019/10-K/filing.html::2018",
+ "extractor_version": 1
+}

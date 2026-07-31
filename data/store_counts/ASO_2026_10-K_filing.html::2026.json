@@ -1,0 +1,14 @@
+{
+ "ticker": "ASO",
+ "fiscal_year": 2026,
+ "value": 322,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ASO/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

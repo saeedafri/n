@@ -1,0 +1,14 @@
+{
+ "ticker": "CPRI",
+ "fiscal_year": 2025,
+ "value": 1158,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total number of retail stores | 1,158 | | | 1,239 | | | 1,272 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1158,
+ "needs_review": false,
+ "accession": "CPRI/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

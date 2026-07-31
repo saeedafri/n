@@ -1,0 +1,14 @@
+{
+ "ticker": "VFC",
+ "fiscal_year": 2022,
+ "value": 1322,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "er-digital business model transformation. In addition to our direct-to-consumer operations, independent parties own and operate approximately 2,700 partnership stores. These are primarily mono-brand retail locations selling VF",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1322,
+ "needs_review": false,
+ "accession": "VFC/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "JJSF",
+ "fiscal_year": 2021,
+ "value": 19000,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "The estimated number of Company-owned frozen beverage dispensers was 19,000 and 27,000 at September 25, 2021 and September 26, 2020, respectively.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "JJSF/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

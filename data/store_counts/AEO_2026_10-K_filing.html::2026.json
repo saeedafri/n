@@ -1,0 +1,14 @@
+{
+ "ticker": "AEO",
+ "fiscal_year": 2026,
+ "value": 1168,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "AEO/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

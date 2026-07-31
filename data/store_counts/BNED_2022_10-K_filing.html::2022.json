@@ -1,0 +1,14 @@
+{
+ "ticker": "BNED",
+ "fiscal_year": 2022,
+ "value": 805,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (9 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1427,
+ "needs_review": false,
+ "accession": "BNED/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

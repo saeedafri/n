@@ -1,0 +1,33 @@
+{
+ "ticker": "PSMT",
+ "fiscal_year": 2020,
+ "value": 46,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (63 facts)",
+ "by_country": {
+  "Costa Rica": 8,
+  "Colombia": 8,
+  "Panama": 7,
+  "Dominican Republic": 5,
+  "Guatemala": 4,
+  "Trinidad": 4,
+  "Honduras": 3,
+  "Nicaragua": 2,
+  "El Salvador": 2,
+  "Aruba": 1,
+  "Barbados": 1,
+  "Jamaica": 1,
+  "United States Virgin Islands": 1,
+  "Bogota, Columbia": 3
+ },
+ "by_continent": {
+  "North America": 29,
+  "South America": 8,
+  "Other": 13
+ },
+ "db_value": 46,
+ "needs_review": false,
+ "accession": "PSMT/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

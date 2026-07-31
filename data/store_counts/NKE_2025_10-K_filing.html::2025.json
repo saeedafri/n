@@ -1,0 +1,14 @@
+{
+ "ticker": "NKE",
+ "fiscal_year": 2025,
+ "value": 1029,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "| TOTAL | 658 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1029,
+ "needs_review": true,
+ "accession": "NKE/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

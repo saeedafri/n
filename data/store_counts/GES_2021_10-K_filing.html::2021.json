@@ -1,0 +1,14 @@
+{
+ "ticker": "GES",
+ "fiscal_year": 2021,
+ "value": 1570,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": ".S., nine stores in Central and South America and four stores in Canada. 34 Table of C ontents We ended fiscal 2021 with 1,570 stores and 376 concessions worldwide, comprised as follows: | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1570,
+ "needs_review": false,
+ "accession": "GES/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

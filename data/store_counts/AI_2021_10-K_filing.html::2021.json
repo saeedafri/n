@@ -1,0 +1,14 @@
+{
+ "ticker": "AI",
+ "fiscal_year": 2021,
+ "value": 9,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "or the fiscal year ended April 30, 2021 was generated from customers outside of North America. As of April 30, 2021, we had nine international sales locations, and we plan to add local sales support in further select i",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "AI/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

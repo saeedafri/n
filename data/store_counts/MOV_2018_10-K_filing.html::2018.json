@@ -1,0 +1,14 @@
+{
+ "ticker": "MOV",
+ "fiscal_year": 2018,
+ "value": 40,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MOV/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

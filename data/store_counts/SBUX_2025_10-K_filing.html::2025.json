@@ -1,0 +1,14 @@
+{
+ "ticker": "SBUX",
+ "fiscal_year": 2025,
+ "value": 18311,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts) | llm value unsupported, rejected",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SBUX/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

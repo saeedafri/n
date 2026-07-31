@@ -1,0 +1,14 @@
+{
+ "ticker": "LEG",
+ "fiscal_year": 2024,
+ "value": 119,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | | 119 | | 33 | | 34 | | 52",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LEG/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

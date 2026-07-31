@@ -1,0 +1,14 @@
+{
+ "ticker": "ROST",
+ "fiscal_year": 2023,
+ "value": 2015,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total stores end of period | 2,015 | | | 1,923 | | | 1,859 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2015,
+ "needs_review": false,
+ "accession": "ROST/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

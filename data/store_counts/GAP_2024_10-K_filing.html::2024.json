@@ -1,0 +1,14 @@
+{
+ "ticker": "GAP",
+ "fiscal_year": 2024,
+ "value": 2835,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Company-operated stores total | | 2,835 | | | 90 | | | 205 | | | 2,685 | | | 31.8 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GAP/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

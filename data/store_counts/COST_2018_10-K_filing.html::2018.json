@@ -1,0 +1,35 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2018,
+ "value": 762,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (40 facts)",
+ "by_country": {
+  "AUSTRALIA": 10,
+  "Canadian Operations": 100,
+  "SPAIN": 2,
+  "FRANCE": 1,
+  "UNITED KINGDOM": 28,
+  "ICELAND": 1,
+  "JAPAN": 26,
+  "KOREA": 15,
+  "MEXICO": 39,
+  "TAIWAN": 13,
+  "United States Operations": 533,
+  "Canada Operations": 100,
+  "CANADA": 98,
+  "UNITED STATES": 519
+ },
+ "by_continent": {
+  "Oceania": 10,
+  "Other": 101,
+  "Europe": 31,
+  "Asia": 54,
+  "North America": 1289
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "COST/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

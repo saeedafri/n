@@ -1,0 +1,14 @@
+{
+ "ticker": "GRBK",
+ "fiscal_year": 2023,
+ "value": 770,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "Total (2) | | 85 | | | 91 | | | 770 | | | $ | 555,200 | | | 80 | | | 5",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GRBK/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

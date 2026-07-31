@@ -1,0 +1,14 @@
+{
+ "ticker": "AN",
+ "fiscal_year": 2019,
+ "value": 231,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "XBRL us-gaap:NumberOfStores (12 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 231,
+ "needs_review": true,
+ "accession": "AN/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

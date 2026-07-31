@@ -1,0 +1,14 @@
+{
+ "ticker": "FRT",
+ "fiscal_year": 2017,
+ "value": 2310,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total All Regions—Residential | | | | | | 2,310 units | | | | 94% | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "FRT/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

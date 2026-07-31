@@ -1,0 +1,14 @@
+{
+ "ticker": "KTB",
+ "fiscal_year": 2026,
+ "value": 150,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "brands are sold or licensed in more than 90 countries, and we believe they have strong consumer connectivity worldwide with approximately 150 million units sold in 2025. We market our brands and products to highligh",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "KTB/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

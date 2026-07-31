@@ -1,0 +1,14 @@
+{
+ "ticker": "VSH",
+ "fiscal_year": 2015,
+ "value": 50,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "None. 22 | Item 2. | | PROPERTIES At December 31, 2015, our business had 50 manufacturing locations. Our manufacturing facilities include owned and leased loca",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VSH/2016/10-K/filing.html::2015",
+ "extractor_version": 1
+}

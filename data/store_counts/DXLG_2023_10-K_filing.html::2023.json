@@ -1,0 +1,18 @@
+{
+ "ticker": "DXLG",
+ "fiscal_year": 2023,
+ "value": 218,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {
+  "UNITED STATES": 218
+ },
+ "by_continent": {
+  "North America": 218
+ },
+ "db_value": 281,
+ "needs_review": false,
+ "accession": "DXLG/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

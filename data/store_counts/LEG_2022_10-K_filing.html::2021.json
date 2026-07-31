@@ -1,0 +1,14 @@
+{
+ "ticker": "LEG",
+ "fiscal_year": 2021,
+ "value": 131,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | | 131 | | 46 | | 33 | | 52",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LEG/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

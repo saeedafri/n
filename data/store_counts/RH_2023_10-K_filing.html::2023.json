@@ -1,0 +1,14 @@
+{
+ "ticker": "RH",
+ "fiscal_year": 2023,
+ "value": 67,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Galleries | | 67 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 119,
+ "needs_review": false,
+ "accession": "RH/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

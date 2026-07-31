@@ -1,0 +1,18 @@
+{
+ "ticker": "ORLY",
+ "fiscal_year": 2025,
+ "value": 6585,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "U.S.": 6585
+ },
+ "by_continent": {
+  "Other": 6585
+ },
+ "db_value": 6585,
+ "needs_review": false,
+ "accession": "ORLY/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

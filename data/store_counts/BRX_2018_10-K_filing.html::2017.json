@@ -1,0 +1,14 @@
+{
+ "ticker": "BRX",
+ "fiscal_year": 2017,
+ "value": 486,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ited States, comprised primarily of community and neighborhood shopping centers. As of December 31, 2017, our portfolio consisted of 486 shopping centers (the “Portfolio”) with approximately 83 million square feet",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "BRX/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "GCO",
+ "fiscal_year": 2019,
+ "value": 1512,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Unless otherwise noted, the discussion that follows relates to continuing operations. At February 2, 2019, the Company operated 1,512 retail stores in the U.S., Puerto Rico, Canada, the United Kingdom, the R",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GCO/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

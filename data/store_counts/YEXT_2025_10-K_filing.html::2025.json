@@ -1,0 +1,14 @@
+{
+ "ticker": "YEXT",
+ "fiscal_year": 2025,
+ "value": 16626,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | | 16,626,333 | | | $ | 6.78 | | | 16,862,629 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "YEXT/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

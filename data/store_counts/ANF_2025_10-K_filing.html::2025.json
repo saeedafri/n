@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2025,
+ "value": 789,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "nditions. The leases expire at various dates between Fiscal 2025 and Fiscal 2035. As of February 1, 2025, the Company operated 789 retail stores as detailed in the table below: | | | | | | | | | | | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 789,
+ "needs_review": false,
+ "accession": "ANF/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

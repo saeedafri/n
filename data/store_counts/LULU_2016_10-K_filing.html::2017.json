@@ -1,0 +1,19 @@
+{
+ "ticker": "LULU",
+ "fiscal_year": 2017,
+ "value": 406,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
+ "by_country": {
+  "United Arab Emirates": 3,
+  "Qatar": 1
+ },
+ "by_continent": {
+  "Asia": 4
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LULU/2016/10-K/filing.html::2017",
+ "extractor_version": 1
+}

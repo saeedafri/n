@@ -1,0 +1,14 @@
+{
+ "ticker": "WMT",
+ "fiscal_year": 2025,
+ "value": 10771,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total retail units | | 6,039 | | | 4,732 | | | | | | | 10,771 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 10771,
+ "needs_review": false,
+ "accession": "WMT/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

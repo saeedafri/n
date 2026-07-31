@@ -1,0 +1,21 @@
+{
+ "ticker": "AZO",
+ "fiscal_year": 2024,
+ "value": 7353,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "United States": 6432,
+  "Mexico": 794,
+  "Brazil": 127
+ },
+ "by_continent": {
+  "North America": 7226,
+  "South America": 127
+ },
+ "db_value": 7353,
+ "needs_review": false,
+ "accession": "AZO/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

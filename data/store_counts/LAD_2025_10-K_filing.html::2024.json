@@ -1,0 +1,14 @@
+{
+ "ticker": "LAD",
+ "fiscal_year": 2024,
+ "value": 459,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 460,
+ "needs_review": false,
+ "accession": "LAD/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

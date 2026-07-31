@@ -1,0 +1,14 @@
+{
+ "ticker": "BARK",
+ "fiscal_year": 2024,
+ "value": 40000,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "BARK products are sold in over 40,000 retail doors, including Target, Walmart, Kroger, Petco, and PetSmart.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "BARK/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

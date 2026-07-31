@@ -1,0 +1,18 @@
+{
+ "ticker": "ABG",
+ "fiscal_year": 2017,
+ "value": 99975,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "Florida": 2
+ },
+ "by_continent": {
+  "Other": 2
+ },
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ABG/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

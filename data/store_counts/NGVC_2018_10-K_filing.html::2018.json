@@ -1,0 +1,14 @@
+{
+ "ticker": "NGVC",
+ "fiscal_year": 2018,
+ "value": 148,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "s. Item 1B. Unresolved Staff Comments. None. I tem 2. Properties . As of September 30, 2018, we had 148 stores located in 19 states, as shown in the following chart:",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "NGVC/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

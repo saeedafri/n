@@ -1,0 +1,14 @@
+{
+ "ticker": "TPR",
+ "fiscal_year": 2020,
+ "value": 1509,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total stores open at fiscal year-end | 1,509 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TPR/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SHW",
+ "fiscal_year": 2017,
+ "value": 4620,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "nt Stores Group and Latin America Coatings Group, along with a specialty retail business of Valspar. The Americas Group consisted of 4,620 company-operated specialty paint stores in the United States, Canada, Latin America and the Caribbe",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SHW/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

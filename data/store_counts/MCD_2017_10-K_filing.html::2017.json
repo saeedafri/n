@@ -1,0 +1,14 @@
+{
+ "ticker": "MCD",
+ "fiscal_year": 2017,
+ "value": 37241,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (68 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MCD/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "CATO",
+ "fiscal_year": 2024,
+ "value": 1178,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "that we filed with or furnished to the SEC. 5 PART I Item 1. Business: Background The Company, founded in 1946, operated 1,178 fashion specialty stores at February 3, 2024, in 31 states, principally in the south",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CATO/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

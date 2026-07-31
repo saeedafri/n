@@ -1,0 +1,14 @@
+{
+ "ticker": "GAP",
+ "fiscal_year": 2017,
+ "value": 3659,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of total store locations open at year-end | | 3,659 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GAP/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

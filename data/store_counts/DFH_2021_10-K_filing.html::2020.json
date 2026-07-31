@@ -1,0 +1,14 @@
+{
+ "ticker": "DFH",
+ "fiscal_year": 2020,
+ "value": 20579,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "Total\n | \n | \n | \n 20,579\n | \n",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "DFH/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

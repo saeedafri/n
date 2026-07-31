@@ -1,0 +1,14 @@
+{
+ "ticker": "DLTH",
+ "fiscal_year": 2017,
+ "value": 20,
+ "confidence": "medium",
+ "basis": "fits the company's own range",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DLTH/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

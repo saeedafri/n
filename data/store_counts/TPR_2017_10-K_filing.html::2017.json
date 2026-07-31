@@ -1,0 +1,21 @@
+{
+ "ticker": "TPR",
+ "fiscal_year": 2017,
+ "value": 1043,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {
+  "Concession Shop-in-Shops": 184,
+  "Outlet Store": 192,
+  "Retail Stores": 247,
+  "Retail and Outlet Stores": 199
+ },
+ "by_continent": {
+  "Other": 822
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TPR/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

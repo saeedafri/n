@@ -1,0 +1,14 @@
+{
+ "ticker": "QTWO",
+ "fiscal_year": 2017,
+ "value": 7362,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "| | 7,362 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "QTWO/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

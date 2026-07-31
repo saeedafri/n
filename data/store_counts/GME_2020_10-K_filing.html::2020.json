@@ -1,0 +1,14 @@
+{
+ "ticker": "GME",
+ "fiscal_year": 2020,
+ "value": 5830,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GME/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

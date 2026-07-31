@@ -1,0 +1,14 @@
+{
+ "ticker": "GES",
+ "fiscal_year": 2023,
+ "value": 1608,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "he U.S., 12 stores in Canada and two stores in Central and South America. 43 Table of Contents We ended fiscal 2023 with 1,608 stores and 333 concessions worldwide, comprised as follows: | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1608,
+ "needs_review": false,
+ "accession": "GES/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

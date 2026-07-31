@@ -1,0 +1,14 @@
+{
+ "ticker": "QSR",
+ "fiscal_year": 2025,
+ "value": 33041,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (24 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 33041,
+ "needs_review": false,
+ "accession": "QSR/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

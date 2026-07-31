@@ -1,0 +1,23 @@
+{
+ "ticker": "ZUMZ",
+ "fiscal_year": 2022,
+ "value": 739,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (15 facts)",
+ "by_country": {
+  "United States": 611,
+  "Canada": 52,
+  "Europe": 69,
+  "Australia": 19
+ },
+ "by_continent": {
+  "North America": 663,
+  "Other": 69,
+  "Oceania": 19
+ },
+ "db_value": 739,
+ "needs_review": false,
+ "accession": "ZUMZ/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

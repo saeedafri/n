@@ -1,0 +1,14 @@
+{
+ "ticker": "SHOO",
+ "fiscal_year": 2015,
+ "value": 169,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SHOO/2015/10-K/filing.html::2015",
+ "extractor_version": 1
+}

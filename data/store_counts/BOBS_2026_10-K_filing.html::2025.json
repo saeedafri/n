@@ -1,0 +1,14 @@
+{
+ "ticker": "BOBS",
+ "fiscal_year": 2025,
+ "value": 209,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of stores at period end | 209 | | 189 | | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "BOBS/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

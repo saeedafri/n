@@ -1,0 +1,14 @@
+{
+ "ticker": "ABG",
+ "fiscal_year": 2020,
+ "value": 95165,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total new vehicle units | 95,165 | | | 105,243 | | | (10,078) | | | (10) | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ABG/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

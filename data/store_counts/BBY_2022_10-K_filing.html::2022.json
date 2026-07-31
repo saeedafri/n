@@ -1,0 +1,14 @@
+{
+ "ticker": "BBY",
+ "fiscal_year": 2022,
+ "value": 984,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Domestic segment stores | | 1,009 | | | 3 | | | (21) | | | 991 | | | 13 | | | (20) | | | 984 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1144,
+ "needs_review": false,
+ "accession": "BBY/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

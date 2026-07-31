@@ -1,0 +1,14 @@
+{
+ "ticker": "BBW",
+ "fiscal_year": 2023,
+ "value": 350,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| ITEM 2. | PROPERTIES Stores We lease all of our store locations. As of January 28, 2023, we operated 350 retail stores located primarily in major malls throughout the U.S., Canad",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 350,
+ "needs_review": false,
+ "accession": "BBW/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

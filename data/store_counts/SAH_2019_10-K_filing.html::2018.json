@@ -1,0 +1,14 @@
+{
+ "ticker": "SAH",
+ "fiscal_year": 2018,
+ "value": 96,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 96 | | 8 | | 100.0 | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 104,
+ "needs_review": false,
+ "accession": "SAH/2019/10-K/filing.html::2018",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "CVNA",
+ "fiscal_year": 2021,
+ "value": 71062,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total website units | 71,062 | | | 31,234 | | | 25,977 | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CVNA/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

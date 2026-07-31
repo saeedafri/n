@@ -1,0 +1,14 @@
+{
+ "ticker": "PLCE",
+ "fiscal_year": 2026,
+ "value": 498,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (20 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 498,
+ "needs_review": false,
+ "accession": "PLCE/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

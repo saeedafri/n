@@ -1,0 +1,14 @@
+{
+ "ticker": "MO",
+ "fiscal_year": 2023,
+ "value": 75000,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "We expanded NJOY ACE distribution to a total of 75,000 stores by the end of 2023",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "MO/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

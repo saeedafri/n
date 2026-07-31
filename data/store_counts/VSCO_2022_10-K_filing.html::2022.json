@@ -1,0 +1,14 @@
+{
+ "ticker": "VSCO",
+ "fiscal_year": 2022,
+ "value": 834,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "s in our North American physical retail locations and accounted for $4.194 billion, or 62%, of our revenues in 2021. We operate 834 physical locations as of the end of 2021, including a range of full assortment",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VSCO/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

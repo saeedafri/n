@@ -1,0 +1,14 @@
+{
+ "ticker": "JILL",
+ "fiscal_year": 2025,
+ "value": 252,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 252,
+ "needs_review": false,
+ "accession": "JILL/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

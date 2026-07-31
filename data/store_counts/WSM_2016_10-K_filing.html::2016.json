@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2016,
+ "value": 618,
+ "confidence": "medium",
+ "basis": "fits series (l3)",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WSM/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

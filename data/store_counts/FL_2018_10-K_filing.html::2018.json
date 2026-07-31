@@ -1,0 +1,14 @@
+{
+ "ticker": "FL",
+ "fiscal_year": 2018,
+ "value": 3310,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "03 ﻿ ﻿ ﻿ ﻿ 14 Athletic Stores ﻿ We operated 3,310 stores in the Athletic Stores segment as of the end of 2017. The f",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "FL/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

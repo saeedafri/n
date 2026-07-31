@@ -1,0 +1,18 @@
+{
+ "ticker": "ABG",
+ "fiscal_year": 2018,
+ "value": 99975,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {
+  "Indianapolis, Indiana": 6
+ },
+ "by_continent": {
+  "Other": 6
+ },
+ "db_value": null,
+ "needs_review": true,
+ "accession": "ABG/2019/10-K/filing.html::2018",
+ "extractor_version": 1
+}

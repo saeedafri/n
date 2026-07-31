@@ -1,0 +1,14 @@
+{
+ "ticker": "EL",
+ "fiscal_year": 2021,
+ "value": 1600,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "United States and the United Kingdom, we continue to expand rapidly in other markets globally. As of June 30, 2021, we operated approximately 1,600 freestanding stores. The total reflects the net impact during fiscal 2021 of st",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "EL/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

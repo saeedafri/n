@@ -1,0 +1,14 @@
+{
+ "ticker": "DRVN",
+ "fiscal_year": 2023,
+ "value": 1888,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total Store Count | | 1,888 | | | 1,846 | | | 42 | | | 2.3 | % | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "DRVN/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

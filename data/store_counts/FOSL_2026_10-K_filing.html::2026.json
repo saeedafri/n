@@ -1,0 +1,14 @@
+{
+ "ticker": "FOSL",
+ "fiscal_year": 2026,
+ "value": 199,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "| Total stores | 248 | | — | | | 49 | | 199 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 199,
+ "needs_review": true,
+ "accession": "FOSL/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

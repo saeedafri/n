@@ -1,0 +1,14 @@
+{
+ "ticker": "LAD",
+ "fiscal_year": 2021,
+ "value": 278,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 278,
+ "needs_review": false,
+ "accession": "LAD/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

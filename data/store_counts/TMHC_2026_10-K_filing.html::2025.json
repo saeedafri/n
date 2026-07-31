@@ -1,0 +1,14 @@
+{
+ "ticker": "TMHC",
+ "fiscal_year": 2025,
+ "value": 12997,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "Total | 12,997 | | 12,896 | | 0.8 | % | | $ | 7,755,434 | | | $ | 7,755,219 | | | — | % | | $ | 597 | | | $ | 601 | | | (0.7 | %) ",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "TMHC/2026/10-K/filing.html::2025",
+ "extractor_version": 1
+}

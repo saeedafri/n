@@ -1,0 +1,14 @@
+{
+ "ticker": "FTDR",
+ "fiscal_year": 2020,
+ "value": 4,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "one. ITEM 2. PROPERT IES Our corporate headquarters is located in downtown Memphis, Tennessee, in a leased facility. We operate four customer care centers throughout the United States that field inbound claims call",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "FTDR/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2026,
+ "value": 3790,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total stores | 2,603 | | 145 | | 1,042 | | 3,790 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 5890,
+ "needs_review": false,
+ "accession": "TJX/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

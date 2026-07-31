@@ -1,0 +1,14 @@
+{
+ "ticker": "VVV",
+ "fiscal_year": 2023,
+ "value": 1852,
+ "confidence": "low",
+ "basis": "single source (l1), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "VVV/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

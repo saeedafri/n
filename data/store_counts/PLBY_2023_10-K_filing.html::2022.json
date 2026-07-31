@@ -1,0 +1,14 @@
+{
+ "ticker": "PLBY",
+ "fiscal_year": 2022,
+ "value": 61,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "square feet of leased office and warehouse space in the Sydney, Australia area. As of December 31, 2022, Honey Birdette operated 61 retail locations in Australia, the U.S. and the U.K., ranging in size betwee",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 101,
+ "needs_review": false,
+ "accession": "PLBY/2023/10-K/filing.html::2022",
+ "extractor_version": 1
+}

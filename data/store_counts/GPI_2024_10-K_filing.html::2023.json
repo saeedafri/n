@@ -1,0 +1,14 @@
+{
+ "ticker": "GPI",
+ "fiscal_year": 2023,
+ "value": 199,
+ "confidence": "medium",
+ "basis": "fits the company's own range",
+ "evidence": "| Total | | 134 | | | 65 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 199,
+ "needs_review": false,
+ "accession": "GPI/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

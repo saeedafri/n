@@ -1,0 +1,14 @@
+{
+ "ticker": "CFR",
+ "fiscal_year": 2025,
+ "value": 3987,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | $ | 3,987,913 | | 398,791,300,000.0 | % | $ | 3,773,028 | | | $ | 2,549,869 | | | $ | 10,310,810 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CFR/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

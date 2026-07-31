@@ -1,0 +1,14 @@
+{
+ "ticker": "CROX",
+ "fiscal_year": 2016,
+ "value": 585,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 585 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CROX/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

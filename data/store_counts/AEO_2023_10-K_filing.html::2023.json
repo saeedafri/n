@@ -1,0 +1,14 @@
+{
+ "ticker": "AEO",
+ "fiscal_year": 2023,
+ "value": 1175,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "AEO/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

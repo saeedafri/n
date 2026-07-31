@@ -1,0 +1,14 @@
+{
+ "ticker": "KD",
+ "fiscal_year": 2024,
+ "value": 364,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "| Total | | 34 | | 4.3 | | 46 | | 1.1 | | 144 | | 4.8 | | 140 | | 3.2 | | 364 | | 13.3",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "KD/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

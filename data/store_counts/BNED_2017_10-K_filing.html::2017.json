@@ -1,0 +1,14 @@
+{
+ "ticker": "BNED",
+ "fiscal_year": 2017,
+ "value": 769,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (12 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BNED/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

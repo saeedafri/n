@@ -1,0 +1,14 @@
+{
+ "ticker": "CALY",
+ "fiscal_year": 2023,
+ "value": 93,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "In total we have 161 Jack Wolfskin retail locations, 49 TravisMathew retail locations, and 24 Callaway retail locations.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 93,
+ "needs_review": false,
+ "accession": "CALY/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

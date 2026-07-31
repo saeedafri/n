@@ -1,0 +1,14 @@
+{
+ "ticker": "CRMT",
+ "fiscal_year": 2023,
+ "value": 156,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| The probability of default (“PD”) or the number of units repossessed or charged-off divided by the number of units financed over the last five fiscal years (based on increments of 1, 1.5, 2, 3, 4, and 5 years).",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 156,
+ "needs_review": false,
+ "accession": "CRMT/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

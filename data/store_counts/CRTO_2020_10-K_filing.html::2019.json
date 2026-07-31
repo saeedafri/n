@@ -1,0 +1,14 @@
+{
+ "ticker": "CRTO",
+ "fiscal_year": 2019,
+ "value": 1,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "s could adversely impact our ability to deliver technology offering to our clients. If, for any reason, our arrangement with one or more data centers is terminated, we could experience additional expense in ar",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CRTO/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

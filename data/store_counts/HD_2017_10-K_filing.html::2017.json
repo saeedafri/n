@@ -1,0 +1,20 @@
+{
+ "ticker": "HD",
+ "fiscal_year": 2017,
+ "value": 2278,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {
+  "CANADA": 182,
+  "MEXICO": 119,
+  "UNITED STATES": 1977
+ },
+ "by_continent": {
+  "North America": 2278
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "HD/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

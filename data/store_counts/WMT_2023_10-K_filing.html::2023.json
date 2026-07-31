@@ -1,0 +1,14 @@
+{
+ "ticker": "WMT",
+ "fiscal_year": 2023,
+ "value": 10623,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total retail units | | 6,026 | | | 4,597 | | | | | | | 10,623 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 10325,
+ "needs_review": false,
+ "accession": "WMT/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

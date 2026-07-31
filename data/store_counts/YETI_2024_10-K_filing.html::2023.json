@@ -1,0 +1,14 @@
+{
+ "ticker": "YETI",
+ "fiscal_year": 2023,
+ "value": 18,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "alia, Canada, the United Kingdom, New Zealand, and the Netherlands. In addition, as of December 30, 2023, we leased and operated 18 retail stores across the United States. We believe that our facilities,",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 18,
+ "needs_review": false,
+ "accession": "YETI/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

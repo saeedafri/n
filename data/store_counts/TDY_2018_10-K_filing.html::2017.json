@@ -1,0 +1,14 @@
+{
+ "ticker": "TDY",
+ "fiscal_year": 2017,
+ "value": 12,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "dwill may be overstated and a charge would need to be taken against net earnings. As of December 31, 2017 , the Company had 12 reporting units for goodwill impairment testing. The carrying value of good",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "TDY/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

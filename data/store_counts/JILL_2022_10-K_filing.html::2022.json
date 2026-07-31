@@ -1,0 +1,14 @@
+{
+ "ticker": "JILL",
+ "fiscal_year": 2022,
+ "value": 253,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "annel Our Stores Our Retail channel represented 50.2% of net sales for Fiscal Year 2021. As of January 29, 2022, we operated 253 stores across 42 states with approximately half located in lifesty",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 253,
+ "needs_review": false,
+ "accession": "JILL/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

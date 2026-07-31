@@ -1,0 +1,22 @@
+{
+ "ticker": "DXLG",
+ "fiscal_year": 2020,
+ "value": 228,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {
+  "DXL Stores": 228,
+  "Casual Male XL Retail and Outlet Stores": 50,
+  "DXL Outlets": 17,
+  "Canada": 2
+ },
+ "by_continent": {
+  "Other": 295,
+  "North America": 2
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DXLG/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

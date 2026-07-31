@@ -1,0 +1,14 @@
+{
+ "ticker": "SDOT",
+ "fiscal_year": 2023,
+ "value": 2,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "7, 2023, we changed our company name from Muscle Maker, Inc., to Sadot Group, Inc. As of December 31, 2023, Sadot Group consisted of two distinct operating units. 1. Sadot LLC (“Sadot Agri-Foods”): Sadot Group’s largest o",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SDOT/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

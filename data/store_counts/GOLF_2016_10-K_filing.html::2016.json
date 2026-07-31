@@ -1,0 +1,14 @@
+{
+ "ticker": "GOLF",
+ "fiscal_year": 2016,
+ "value": 109,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ears announced that (i) its U.S.‑based business, Golfsmith International Holdings, Inc., or Golfsmith, which reportedly operated 109 stores in the United States at that time, commenced a Chapter 11 c",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GOLF/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

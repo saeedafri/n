@@ -1,0 +1,14 @@
+{
+ "ticker": "FOSL",
+ "fiscal_year": 2024,
+ "value": 246,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "| Total stores | 302 | | 5 | | 59 | | 248 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 246,
+ "needs_review": true,
+ "accession": "FOSL/2025/10-K/filing.html::2024",
+ "extractor_version": 1
+}

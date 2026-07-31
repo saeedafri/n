@@ -1,0 +1,14 @@
+{
+ "ticker": "VRA",
+ "fiscal_year": 2021,
+ "value": 144,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total stores open at end of period | | 144 | | | 151 | | | 156 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 145,
+ "needs_review": false,
+ "accession": "VRA/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

@@ -1,0 +1,19 @@
+{
+ "ticker": "LOW",
+ "fiscal_year": 2023,
+ "value": 1738,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "United States": 1738,
+  "Canada": 232
+ },
+ "by_continent": {
+  "North America": 1970
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LOW/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

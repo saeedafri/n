@@ -1,0 +1,14 @@
+{
+ "ticker": "REG",
+ "fiscal_year": 2016,
+ "value": 1787,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Regency Centers Total | | ` | | | | | | | | | | $1,787,217 | | 37,831 | | 95.4% | | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "REG/2017/10-K/filing.html::2016",
+ "extractor_version": 1
+}

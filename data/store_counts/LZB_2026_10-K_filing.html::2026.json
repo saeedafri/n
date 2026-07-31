@@ -1,0 +1,14 @@
+{
+ "ticker": "LZB",
+ "fiscal_year": 2026,
+ "value": 378,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "cquiring independent La-Z-Boy Stores, we have increased our ownership percentage in this store network from 45% to 61%. With 378 stores currently in the La-Z-Boy Store network, we believe there i",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "LZB/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "BOOT",
+ "fiscal_year": 2017,
+ "value": 219,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (25 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BOOT/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

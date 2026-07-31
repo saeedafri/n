@@ -1,0 +1,14 @@
+{
+ "ticker": "BOOT",
+ "fiscal_year": 2025,
+ "value": 459,
+ "confidence": "high",
+ "basis": "two sources agree",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BOOT/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2017,
+ "value": 556,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ce 2012, we have increased our average store size by more than 58% to 2,647 square feet. As of December 30, 2017 , we had 556 retail stores in all 50 U.S. states, including new stores opened in Alask",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SNBR/2017/10-K/filing.html::2017",
+ "extractor_version": 1
+}

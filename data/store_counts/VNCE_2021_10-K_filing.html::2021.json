@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2021,
+ "value": 71,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ics and customer preferences, and the closing or decline in popularity of adjacent stores. As of January 30, 2021, we operated 71 stores, including 46 company-operated Vince full-price stores, 6 c",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "VNCE/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

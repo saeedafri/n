@@ -1,0 +1,14 @@
+{
+ "ticker": "HAIN",
+ "fiscal_year": 2025,
+ "value": 13877,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "13,877",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "HAIN/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

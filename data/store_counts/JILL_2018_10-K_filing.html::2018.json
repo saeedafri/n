@@ -1,0 +1,14 @@
+{
+ "ticker": "JILL",
+ "fiscal_year": 2018,
+ "value": 276,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Channel Our Stores Our retail channel represented 57% of net sales for fiscal year 2017. As of February 3, 2018, we operated 276 stores across 42 states with approximately half located in lifesty",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "JILL/2018/10-K/filing.html::2018",
+ "extractor_version": 1
+}

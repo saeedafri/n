@@ -1,0 +1,14 @@
+{
+ "ticker": "SKY",
+ "fiscal_year": 2026,
+ "value": 84,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "ured home retail business, marketed under the Regional Homes, Titan Factory Direct and Champion Homes Center brands. We had 84 active sales centers spanning the United States at the end of fiscal 2026. We al",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SKY/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

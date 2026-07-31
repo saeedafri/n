@@ -1,0 +1,19 @@
+{
+ "ticker": "URBN",
+ "fiscal_year": 2025,
+ "value": 255,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (13 facts)",
+ "by_country": {
+  "North America": 637,
+  "Europe": 97
+ },
+ "by_continent": {
+  "Other": 734
+ },
+ "db_value": 9,
+ "needs_review": false,
+ "accession": "URBN/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

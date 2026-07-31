@@ -1,0 +1,14 @@
+{
+ "ticker": "SPTN",
+ "fiscal_year": 2019,
+ "value": 156,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "As of December 28, 2019, the Company operates 156 corporate owned retail stores in eight states, predominantly in the Midwest, primarily under the banners of Family Fare, Martin’s Super Markets, D&W Fresh Market, VG’s Grocery and Dan’s Supermarket.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SPTN/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

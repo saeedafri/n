@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2026,
+ "value": 829,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "any had wholesale partnerships, primarily in the Americas and EMEA. Store Count As of January 31, 2026, the Company operated 829 retail stores and the Company’s franchisees operated 60 franchise stores",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 829,
+ "needs_review": false,
+ "accession": "ANF/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "ARKO",
+ "fiscal_year": 2023,
+ "value": 1543,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "If we do not effectively manage our workforce, our labor costs and results of operations could be adversely affected. With approximately 12,000 store employees, our labor costs represent one of our largest sto",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1543,
+ "needs_review": true,
+ "accession": "ARKO/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

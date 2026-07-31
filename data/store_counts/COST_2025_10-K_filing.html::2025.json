@@ -1,0 +1,37 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2025,
+ "value": 914,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (45 facts)",
+ "by_country": {
+  "NEW ZEALAND": 1,
+  "UNITED STATES": 633,
+  "CANADA": 112,
+  "MEXICO": 42,
+  "JAPAN": 37,
+  "UNITED KINGDOM": 29,
+  "KOREA": 20,
+  "AUSTRALIA": 15,
+  "TAIWAN": 14,
+  "CHINA": 7,
+  "SPAIN": 5,
+  "FRANCE": 3,
+  "SWEDEN": 2,
+  "ICELAND": 1,
+  "United States Operations": 624,
+  "Canada Operations": 109
+ },
+ "by_continent": {
+  "Oceania": 16,
+  "North America": 1520,
+  "Asia": 78,
+  "Europe": 39,
+  "Other": 1
+ },
+ "db_value": 914,
+ "needs_review": false,
+ "accession": "COST/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

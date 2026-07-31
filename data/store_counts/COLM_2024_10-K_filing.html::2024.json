@@ -1,0 +1,14 @@
+{
+ "ticker": "COLM",
+ "fiscal_year": 2024,
+ "value": 550,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "as of December 31, 2024, we sold our products in over 550 retail stores, including 28 temporary clearance locations.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 550,
+ "needs_review": false,
+ "accession": "COLM/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

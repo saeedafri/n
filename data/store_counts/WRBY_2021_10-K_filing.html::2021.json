@@ -1,0 +1,14 @@
+{
+ "ticker": "WRBY",
+ "fiscal_year": 2021,
+ "value": 161,
+ "confidence": "low",
+ "basis": "kept DB — ours unverified, needs review",
+ "evidence": "lease approximately 69,580 square feet of space under a lease that expires in August 2031. As of December 31, 2021, we operate 158 retail stores across the United States and three retail stores in Canada.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 161,
+ "needs_review": true,
+ "accession": "WRBY/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

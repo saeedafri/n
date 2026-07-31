@@ -1,0 +1,14 @@
+{
+ "ticker": "TSCO",
+ "fiscal_year": 2019,
+ "value": 2024,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (12 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 2024,
+ "needs_review": false,
+ "accession": "TSCO/2019/10-K/filing.html::2019",
+ "extractor_version": 1
+}

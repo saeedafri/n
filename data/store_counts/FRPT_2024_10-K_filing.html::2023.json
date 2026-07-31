@@ -1,0 +1,14 @@
+{
+ "ticker": "FRPT",
+ "fiscal_year": 2023,
+ "value": 26777,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "we have installed Freshpet Fridges in approximately 26,777 retail stores as of December 31, 2023.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "FRPT/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

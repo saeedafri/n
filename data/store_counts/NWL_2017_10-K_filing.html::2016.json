@@ -1,0 +1,14 @@
+{
+ "ticker": "NWL",
+ "fiscal_year": 2016,
+ "value": 25,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "testing as of a date other than July 1, 2016 was not required during 2016. Potential for Future Impairments The Company had 25 reporting units with total goodwill of $10.2 billion and $9.9 billion of in",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "NWL/2017/10-K/filing.html::2016",
+ "extractor_version": 1
+}

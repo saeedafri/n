@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2024,
+ "value": 765,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| | | | | | | | Abercrombie & Fitch Co. | 7 | 2023 Form 10-K Table of Contents As of February 3, 2024, the Company operated 765 retail stores as detailed in the table below: | | | | | | | | | | | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 765,
+ "needs_review": false,
+ "accession": "ANF/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

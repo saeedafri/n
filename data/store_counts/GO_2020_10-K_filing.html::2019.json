@@ -1,0 +1,14 @@
+{
+ "ticker": "GO",
+ "fiscal_year": 2019,
+ "value": 347,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Number of stores open at end of period | 347 | | | 316 | | | 293 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GO/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

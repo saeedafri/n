@@ -1,0 +1,14 @@
+{
+ "ticker": "SAM",
+ "fiscal_year": 2020,
+ "value": 10,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "The Company currently operates 10 retail locations, including eight brewery tap rooms, a cidery tasting room and a restaurant, where its beers, hard seltzers, hard ciders and distilled spirits are sold and consumed on-premise.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SAM/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

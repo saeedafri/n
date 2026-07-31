@@ -1,0 +1,19 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2025,
+ "value": 1445,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (9 facts)",
+ "by_country": {
+  "United Kingdom": 82,
+  "Ireland": 2
+ },
+ "by_continent": {
+  "Europe": 84
+ },
+ "db_value": 1445,
+ "needs_review": false,
+ "accession": "ULTA/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

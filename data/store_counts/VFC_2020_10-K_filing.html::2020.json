@@ -1,0 +1,14 @@
+{
+ "ticker": "VFC",
+ "fiscal_year": 2020,
+ "value": 1379,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "on. In addition to our direct-to-consumer operations, our licensees, distributors and other independent parties own and operate approximately 3,000 partnership stores. These are primarily mono-brand retail locations selling VF",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1379,
+ "needs_review": false,
+ "accession": "VFC/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

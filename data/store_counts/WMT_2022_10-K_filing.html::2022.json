@@ -1,0 +1,14 @@
+{
+ "ticker": "WMT",
+ "fiscal_year": 2022,
+ "value": 10593,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total retail units | | 6,018 | | | 4,575 | | | | | | | 10,593 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 10493,
+ "needs_review": false,
+ "accession": "WMT/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

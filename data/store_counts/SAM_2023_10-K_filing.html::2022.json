@@ -1,0 +1,14 @@
+{
+ "ticker": "SAM",
+ "fiscal_year": 2022,
+ "value": 9,
+ "confidence": "low",
+ "basis": "single source (l3), unverified",
+ "evidence": "The Company currently operates 9 retail locations, including seven brewery tap rooms, a cidery tasting room and a restaurant, where its beverages are sold and consumed on-premise.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SAM/2023/10-K/filing.html::2022",
+ "extractor_version": 1
+}

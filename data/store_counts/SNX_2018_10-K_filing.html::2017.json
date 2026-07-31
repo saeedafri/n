@@ -1,0 +1,14 @@
+{
+ "ticker": "SNX",
+ "fiscal_year": 2017,
+ "value": 125,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "dded analytics. In fiscal 2017, we acquired Tigerspike which enhanced Concentrix' digital and mobility competencies. We operate over 125 delivery centers and administrative facilities in numerous countries through",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SNX/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

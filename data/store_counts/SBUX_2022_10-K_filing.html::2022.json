@@ -1,0 +1,14 @@
+{
+ "ticker": "SBUX",
+ "fiscal_year": 2022,
+ "value": 17295,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | 17,295 | | | 100 | % | | 18,416 | | | 100 | % | | | | | 35,711 | | | 100 | %",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SBUX/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

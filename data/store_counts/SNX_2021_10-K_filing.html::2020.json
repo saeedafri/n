@@ -1,0 +1,14 @@
+{
+ "ticker": "SNX",
+ "fiscal_year": 2020,
+ "value": 19,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "rated a distributed data processing environment that could integrate service delivery center data servers and databases with nineteen data centers and point of presence strategically located across the glob",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "SNX/2021/10-K/filing.html::2020",
+ "extractor_version": 1
+}

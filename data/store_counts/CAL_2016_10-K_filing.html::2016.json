@@ -1,0 +1,18 @@
+{
+ "ticker": "CAL",
+ "fiscal_year": 2016,
+ "value": 1046,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "Brand Portfolio": 85
+ },
+ "by_continent": {
+  "Other": 85
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CAL/2016/10-K/filing.html::2016",
+ "extractor_version": 1
+}

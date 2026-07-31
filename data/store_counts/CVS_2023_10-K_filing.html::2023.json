@@ -1,0 +1,14 @@
+{
+ "ticker": "CVS",
+ "fiscal_year": 2023,
+ "value": 9395,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total stores (end of year) | 9,395 | | | 9,674 | | | 9,939 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVS/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

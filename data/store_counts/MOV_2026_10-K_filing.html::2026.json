@@ -1,0 +1,19 @@
+{
+ "ticker": "MOV",
+ "fiscal_year": 2026,
+ "value": 57,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "United States": 53,
+  "Canada": 4
+ },
+ "by_continent": {
+  "North America": 57
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MOV/2026/10-K/filing.html::2026",
+ "extractor_version": 1
+}

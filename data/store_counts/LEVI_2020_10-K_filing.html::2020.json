@@ -1,0 +1,14 @@
+{
+ "ticker": "LEVI",
+ "fiscal_year": 2020,
+ "value": 1042,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "ted 25%, 27% and 26% of our net revenues in fiscal years 2020, 2019 and 2018, respectively. As of November 29, 2020, we had 1,042 company-operated stores, predominantly Levi's ® stores, located in 36 countries acr",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1042,
+ "needs_review": false,
+ "accession": "LEVI/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

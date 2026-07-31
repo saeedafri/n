@@ -1,0 +1,14 @@
+{
+ "ticker": "CTRN",
+ "fiscal_year": 2024,
+ "value": 602,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 602,
+ "needs_review": false,
+ "accession": "CTRN/2024/10-K/filing.html::2024",
+ "extractor_version": 1
+}

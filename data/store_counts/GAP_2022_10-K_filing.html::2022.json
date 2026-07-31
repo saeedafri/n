@@ -1,0 +1,14 @@
+{
+ "ticker": "GAP",
+ "fiscal_year": 2022,
+ "value": 3345,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Company-operated stores total | | 3,345 | | | 73 | | | 318 | | | 3,100 | | | 34.6 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "GAP/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

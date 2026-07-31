@@ -1,0 +1,14 @@
+{
+ "ticker": "BURL",
+ "fiscal_year": 2022,
+ "value": 840,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 840,
+ "needs_review": false,
+ "accession": "BURL/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}
