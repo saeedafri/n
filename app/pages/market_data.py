@@ -1101,8 +1101,14 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
         _parts.append('<tr class="row-grey-separator"><th>Ratings &amp; Store Data<span class="header-subtext">Annual (10-K filings)</span></th>')
         for yr in years:
             pd = period_dates.get(yr)
-            _p_date = pd.strftime("%b-%d-%Y") if pd and hasattr(pd, 'strftime') else str(yr)
-            _parts.append(f'<th class="data-col"><span class="period-label">10-K</span><span class="period-date">{_p_date}</span></th>')
+            # "12 Months / Jan-31-2026" — identical to Income Statement / Key
+            # Stats / Segments. Only when the fiscal date is unknown do we fall
+            # back to the filing-type + bare year label.
+            if pd and hasattr(pd, 'strftime'):
+                _p_label, _p_date = "12 Months", pd.strftime("%b-%d-%Y")
+            else:
+                _p_label, _p_date = "10-K", str(yr)
+            _parts.append(f'<th class="data-col"><span class="period-label">{_p_label}</span><span class="period-date">{_p_date}</span></th>')
         _parts.append('</tr></thead><tbody>')
 
         # ── Credit Ratings Section ──

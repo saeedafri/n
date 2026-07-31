@@ -407,6 +407,45 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
         _dropped_no_fye: Set[str] = set()
         _dropped_no_q4: Set[str] = set()
 
+        # Which quarter-end month counts as ANNUAL, decided per ticker.
+        #
+        # Normally it is simply the fiscal-year-end month: a quarter is the annual
+        # one iff its end month equals the FYE month. That is what excludes interim,
+        # half-year and Q1-Q3 rows — a half-yearly reporter's H1 quarter ends
+        # mid-year and can never match, its full-year quarter always does.
+        #
+        # One documented exception. US retailers on a 52/53-week calendar end their
+        # year on the Saturday nearest 31 January, so the two vendors disagree by a
+        # month: coreiq_av_company_overview says "February" while the NASDAQ calendar
+        # labels the same quarter "Jan/2025". Verified on STG — PVH, ZUMZ and VRA all
+        # announce their `Jan/YYYY` quarter in March, and their annual accounts end
+        # 2026-02-28. That IS the annual announcement, and we were discarding it.
+        #
+        # The tolerance is deliberately narrow so it can never grab a wrong quarter:
+        #   * only used when NO quarter matches the FYE month exactly, and
+        #   * only for a month exactly one away, and
+        #   * only when exactly one such month exists for that ticker.
+        # A December-FYE company always has an exact Dec quarter, so it never reaches
+        # this branch; one holding only a June quarter is 6 months away and stays on
+        # hold. Recovers 6 companies on STG, all genuine annual rows.
+        months_by_ticker: Dict[str, Set[int]] = defaultdict(set)
+        for r in nasdaq_rows:
+            tk = (r.get("ticker") or "").strip()
+            if r.get("fqe_month_num"):
+                months_by_ticker[tk].add(int(r["fqe_month_num"]))
+
+        annual_month: Dict[str, int] = {}
+        for tk, months in months_by_ticker.items():
+            fye_m = fye_months.get(tk) or 0
+            if not fye_m:
+                continue
+            if fye_m in months:
+                annual_month[tk] = fye_m
+                continue
+            adjacent = {m for m in months if min((m - fye_m) % 12, (fye_m - m) % 12) == 1}
+            if len(adjacent) == 1:
+                annual_month[tk] = adjacent.pop()
+
         for r in nasdaq_rows:
             tk = (r.get("ticker") or "").strip()
             fqe_m = r.get("fqe_month_num") or 0
@@ -414,11 +453,8 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
             if not fye_m:
                 _dropped_no_fye.add(tk)
                 continue
-            # The ANNUAL period is the quarter whose end month is the fiscal year
-            # end month. This is what excludes interim, half-year and Q1-Q3 rows:
-            # a half-yearly reporter's H1 row ends mid-year and can never match,
-            # while its full-year row ends on the FYE month and always does.
-            if fqe_m != fye_m or fqe_m == 0:
+            want = annual_month.get(tk)
+            if not want or fqe_m != want or fqe_m == 0:
                 _dropped_no_q4.add(tk)
                 continue
             raw_dt = r.get("earnings_date")

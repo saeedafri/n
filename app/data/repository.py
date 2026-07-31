@@ -609,6 +609,32 @@ def _get_fiscal_year_end_cached(ticker: str) -> Optional[str]:
 
     return _result
 
+
+def annual_fiscal_dates(ticker: str) -> Dict[int, date]:
+    """{fiscal year → annual period-end date} exactly as the Income Statement
+    tab labels its columns.
+
+    Used by tabs that only store a fiscal YEAR (Additional Data) so their
+    period filter and column headers match the statement tabs. Preferred over
+    `fiscal_year_end` from the overview table, which is NULL for 49 of the 135
+    tickers that have ratings/store data (COST, LULU, CRI …) — those fell back
+    to a calendar Dec-31 label that disagreed with every other tab.
+    Reads an already-cached row set, so this adds no DB round-trip.
+    """
+    try:
+        rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, "annual")
+        out: Dict[int, date] = {}
+        for row in rows or []:
+            fd = row.get('fiscal_date_ending')
+            if fd is None:
+                continue
+            fd = fd.date() if hasattr(fd, 'date') else fd
+            out[fd.year] = fd
+        return out
+    except Exception:
+        return {}
+
+
 class IncomeStatementRepository:
     """Repository for coreiq_av_financials_income_statement table."""
 
@@ -12437,6 +12463,53 @@ class RatingsDataRepository:
         except Exception:
             return False
 
+    # Tolerance for the corroboration pass below. 15% recovers every value the
+    # 31-Jul review found to be correct-but-unverifiable; 25% additionally
+    # admitted near-miss transcription errors (per business, 31-Jul-2026).
+    _SC_CORROBORATION_TOLERANCE = 0.15
+
+    @staticmethod
+    def _corroborated_store_rows(sc_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply the source-sentence gate, then let the survivors vouch for the
+        rejects.
+
+        The gate (`_store_row_passes_source_check`) checks a value against its own
+        `source_sentence`, and the extraction often stores a caption or a rounded
+        narrative while the value came from the table underneath it — WMT FY2021
+        11,443 sits under "approximately 11,400 stores", FY2020 11,471 under a
+        U.S.-only unit-count table intro. Both are correct; both were hidden, so
+        Walmart showed 3 of its 7 years (31-Jul-2026).
+
+        Second chance: a rejected value is admitted when the SAME ticker has ≥2
+        gate-passed years and the value is within 15% of the nearest passed year.
+        A fleet that size does not move 15% between adjacent filings, so a
+        fabrication has nothing to hide behind — DKS FY2026=42 amid thousands and
+        URBN=9 ("53 years of experience") stay rejected, and a ticker whose every
+        row failed gets no anchor and stays empty.
+        """
+        passed, rejected = [], []
+        for r in sc_rows:
+            (passed if RatingsDataRepository._store_row_passes_source_check(r)
+             else rejected).append(r)
+
+        anchors: Dict[int, int] = {}
+        for r in passed:
+            yr, nv = r.get('report_fiscal_year'), r.get('numeric_value')
+            if yr and nv:
+                anchors[yr] = int(nv)
+        if len(anchors) < 2 or not rejected:
+            return passed
+
+        tol = RatingsDataRepository._SC_CORROBORATION_TOLERANCE
+        for r in rejected:
+            yr, nv = r.get('report_fiscal_year'), r.get('numeric_value')
+            if not yr or not nv:
+                continue
+            nearest = min(anchors, key=lambda y: (abs(y - yr), y))
+            if abs(int(nv) - anchors[nearest]) / max(anchors[nearest], 1) <= tol:
+                passed.append(r)
+        return passed
+
     # ─────────────────────────────────────────────────────────────────────
     #  Square Footage — DB-first + edgartools fallback
     # ─────────────────────────────────────────────────────────────────────
@@ -12776,10 +12849,34 @@ class RatingsDataRepository:
         return sorted(years)
 
     @staticmethod
+    def _fiscal_dates(ticker: str, years: List[int]) -> List[date]:
+        """Fiscal-year-end dates for `years`, same rule the column headers use.
+
+        The Start/End Date dropdowns list these, so Additional Data offers the
+        exact same period options as Income Statement / Key Stats / Segments
+        (WMT → "January 2026", not the calendar "December 2026").
+
+        Real statement dates first; for years the statements don't cover, the
+        FYE month (or the month the statements themselves use) fills in.
+        """
+        _stmt = annual_fiscal_dates(ticker)
+        _fye_m = SegmentDataRepository._fye_month(ticker)
+        if not _fye_m and _stmt:
+            # Overview has no fiscal_year_end — infer the FYE month from the
+            # statement dates (most common month wins).
+            _months = [d.month for d in _stmt.values()]
+            _fye_m = max(set(_months), key=_months.count)
+        return [
+            _stmt.get(y) or SegmentDataRepository._fye_display_date(y, _fye_m)
+            for y in years
+        ]
+
+    @staticmethod
     def get_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
         years = RatingsDataRepository._all_known_years(ticker)
         if years:
-            return date(years[0], 1, 31), date(years[-1], 12, 31)
+            _dates = RatingsDataRepository._fiscal_dates(ticker, [years[0], years[-1]])
+            return _dates[0], _dates[-1]
 
         # No DB rows and no XBRL totals — try credit ratings years, BOUNDED
         # (the wrapper can block up to 120s on an in-flight preload, which
@@ -12792,7 +12889,9 @@ class RatingsDataRepository:
                 edgar_data = _f_cr.result(timeout=3) or {}
                 edgar_years = [k for k in edgar_data if isinstance(k, int)]
                 if edgar_years:
-                    return date(min(edgar_years), 1, 31), date(max(edgar_years), 12, 31)
+                    _dates = RatingsDataRepository._fiscal_dates(
+                        ticker, [min(edgar_years), max(edgar_years)])
+                    return _dates[0], _dates[-1]
             except Exception:
                 pass
         finally:
@@ -12801,7 +12900,8 @@ class RatingsDataRepository:
 
     @staticmethod
     def get_available_dates(ticker: str) -> List[date]:
-        return [date(y, 12, 31) for y in RatingsDataRepository._all_known_years(ticker)]
+        return RatingsDataRepository._fiscal_dates(
+            ticker, RatingsDataRepository._all_known_years(ticker))
 
     @staticmethod
     def get_ratings_data(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
@@ -12918,8 +13018,9 @@ class RatingsDataRepository:
         cr_rows = [r for r in filtered if r.get('source') == 'credit_rating']
         sc_rows = [r for r in filtered if r.get('source') == 'store_count']
         # Accuracy gate: drop rows whose value can't be reproduced from their own
-        # source sentence (LLM transcription/fabrication errors).
-        sc_rows = [r for r in sc_rows if RatingsDataRepository._store_row_passes_source_check(r)]
+        # source sentence (LLM transcription/fabrication errors), then give the
+        # survivors a second chance to vouch for the rejects (see below).
+        sc_rows = RatingsDataRepository._corroborated_store_rows(sc_rows)
 
         # Store Count means RETAIL UNITS — infrastructure counts are different
         # things and never display here (15-Jul, per business):
@@ -13127,6 +13228,46 @@ class RatingsDataRepository:
         credit_ratings = sorted(cr_map.values(), key=lambda x: x["agency"])
         store_counts = sorted(sc_map.values(), key=lambda x: x["store_type"])
 
+        # Label drift → ONE series (31-Jul-2026). The store type comes from the
+        # 10-K's own wording, and issuers rename the same fleet between filings:
+        # FND "stores" (FY2020-21) became "warehouses" (FY2022-25), WMT "stores"
+        # became "locations", PSMT "warehouses"→"clubs", VRA/ARKO/PLBY/OXM/PAG
+        # likewise. Split rows each showed a few years and "-" everywhere else,
+        # reading as missing store data for the other half of the range.
+        # Merge only when it is provably a rename, not a breakdown:
+        #   * the types' fiscal years are pairwise DISJOINT (a real breakdown
+        #     reports its parts in the SAME year — LULU stores+outlets), and
+        #   * the values on either side of every label switch are within 25%
+        #     (guards the rename test against a genuinely different, smaller
+        #     quantity that merely happens not to overlap — LULU 694 stores
+        #     FY2023 → 47 outlets FY2024, RH 106 → 38 — those stay split).
+        if len(store_counts) > 1:
+            _year_sets = [set(k for k, v in sc["values"].items() if v is not None)
+                          for sc in store_counts]
+            _disjoint = all(not (_year_sets[i] & _year_sets[j])
+                            for i in range(len(_year_sets))
+                            for j in range(i + 1, len(_year_sets)))
+            _merged: Dict[int, Any] = {}
+            if _disjoint and all(_year_sets):
+                for sc in store_counts:
+                    for _y, _v in sc["values"].items():
+                        if _v is not None:
+                            _merged[_y] = _v
+                _owner = {y: sc["store_type"] for sc in store_counts
+                          for y, v in sc["values"].items() if v is not None}
+                _seq = sorted(_merged)
+                _continuous = all(
+                    _owner[_a] == _owner[_b]
+                    or abs(_merged[_b] - _merged[_a]) / max(_merged[_a], 1) <= 0.25
+                    for _a, _b in zip(_seq, _seq[1:])
+                )
+                if _continuous:
+                    store_counts = [{
+                        "store_type": "Total",
+                        "label": "Store Count (Total)",
+                        "values": {y: _merged.get(y) for y in years},
+                    }]
+
         # ── Phase 2: XBRL store totals + square footage in parallel ──────────
         # Worldwide-only direction (15-Jul-2026): the per-country breakdown is
         # retired from the UI; instead XBRL us-gaap:NumberOfStores totals become
@@ -13219,10 +13360,25 @@ class RatingsDataRepository:
             _tot_in_range = {y: v for y, v in _all_totals.items() if start_year <= y <= end_year}
             if _tot_in_range:
                 years = sorted(set(years) | set(_tot_in_range))
+                # XBRL wins per YEAR, not wholesale (31-Jul-2026). Issuers tag
+                # NumberOfStores only in the years they choose to, so replacing
+                # the DB series outright punched holes in it: ORLY tagged
+                # FY2011-18 + FY2021 + FY2025 and lost the validated DB values
+                # for FY2019/20/22/23/24, turning a complete 7-year series into
+                # a gappy 10-year one. Keep XBRL's figure wherever it has one and
+                # fall back to the validated DB value for the years it skipped —
+                # the two are already known to describe the same quantity (that
+                # is what `_xbrl_agrees_db` proved before this branch was taken).
+                _db_fallback: Dict[int, Any] = {}
+                for sc in store_counts:
+                    for _y, _v in sc["values"].items():
+                        if _v is not None:
+                            _db_fallback[_y] = max(int(_v), _db_fallback.get(_y, 0))
                 store_counts = [{
                     "store_type": "Total",
                     "label": "Store Count (Total)",
-                    "values": {y: _tot_in_range.get(y) for y in years},
+                    "values": {y: _tot_in_range.get(y, _db_fallback.get(y))
+                               for y in years},
                 }]
                 _sc_source = "xbrl"
                 for _fy, _fd in (_xbrl_totals_raw.get("period_dates") or {}).items():
@@ -13291,12 +13447,11 @@ class RatingsDataRepository:
         # Dec-FYE (CRI FY2023 → Dec-2023) companies. `period_dates` (real filing
         # dates) is left untouched for internal logic; when the FYE month is
         # unknown the UI falls back to it.
-        period_display_dates: Dict[int, date] = {}
-        _fye_m = SegmentDataRepository._fye_month(ticker)
-        if _fye_m:
-            period_display_dates = {
-                y: SegmentDataRepository._fye_display_date(y, _fye_m) for y in years
-            }
+        # Same helper the Start/End Date dropdowns use, so header dates and
+        # filter options can never disagree.
+        period_display_dates: Dict[int, date] = dict(
+            zip(years, RatingsDataRepository._fiscal_dates(ticker, years))
+        )
 
         return {
             "years": years,
