@@ -2,13 +2,13 @@
  "ticker": "CHEF",
  "fiscal_year": 2019,
  "value": 31,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "with thousands of chefs while also acting as a critical marketing arm and route-to-market for many of our suppliers. We operate 31 distribution centers and provide service six days a week in many of our service",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CHEF/2020/10-K/filing.html::2019",
  "extractor_version": 1
 }

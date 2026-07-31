@@ -2,13 +2,13 @@
  "ticker": "PTON",
  "fiscal_year": 2022,
  "value": 135,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "n our sales channels, including through distribution to third-party retailers. Showroom Sites As of June 30, 2022, we operated 135 retail locations across the United States, Canada, the United Kingdom, Austr",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "PTON/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "CRTO",
  "fiscal_year": 2023,
  "value": 1,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ion, impair our reputation and subject us to significant liability. Additionally, if, for any reason, our arrangement with one or more data centers or cloud providers is terminated, we could experience diffi",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CRTO/2024/10-K/filing.html::2023",
  "extractor_version": 1
 }

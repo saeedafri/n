@@ -2,13 +2,13 @@
  "ticker": "LOVE",
  "fiscal_year": 2022,
  "value": 146,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "022 as compared to 32.9% in fiscal 2021 driven by the successful Internet Heroes’ campaign in the prior year period. We had 146 total showrooms including kiosks and mobile concierges open as of January 3",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "LOVE/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

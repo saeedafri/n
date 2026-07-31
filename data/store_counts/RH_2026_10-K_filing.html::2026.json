@@ -5,19 +5,8 @@
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (48 facts)",
- "by_country": {
-  "Canada": 6,
-  "United Kingdom": 3,
-  "Germany": 2,
-  "Belgium": 1,
-  "France": 1,
-  "Spain": 1,
-  "Italy": 1
- },
- "by_continent": {
-  "North America": 6,
-  "Europe": 9
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 129,
  "needs_review": false,
  "accession": "RH/2026/10-K/filing.html::2026",

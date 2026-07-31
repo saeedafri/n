@@ -2,13 +2,13 @@
  "ticker": "VVV",
  "fiscal_year": 2022,
  "value": 1715,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "VVV/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

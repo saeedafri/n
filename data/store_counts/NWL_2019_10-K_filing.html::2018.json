@@ -2,13 +2,13 @@
  "ticker": "NWL",
  "fiscal_year": 2018,
  "value": 7,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "Accelerated Transformation Plan that resulted in a number of businesses designated as held for sale, the Company is now comprised of seven reporting units, within its three primary operating segments as part of its",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "NWL/2019/10-K/filing.html::2018",
  "extractor_version": 1
 }

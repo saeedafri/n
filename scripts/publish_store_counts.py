@@ -36,6 +36,14 @@ for row in rows:
             removed += 1
         continue
     by_country = row.get("by_country") or {}
+    # A split that does not add up to the published total describes a different
+    # scope and must not be shown beside it. AutoZone's total is its US fleet
+    # while its XBRL geography is worldwide, so the two together read as
+    # "North America 5,780 of 5,297" — 109% of the total. Better no split.
+    if by_country:
+        spread = sum(by_country.values())
+        if abs(spread - row["final_value"]) / max(row["final_value"], 1) > 0.02:
+            by_country = {}
     cache.write(f"{row['accession']}::{row['fiscal_year']}", {
         "ticker": row["ticker"],
         "fiscal_year": row["fiscal_year"],

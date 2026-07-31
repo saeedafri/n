@@ -2,13 +2,13 @@
  "ticker": "TDUP",
  "fiscal_year": 2022,
  "value": 5,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "September 2024. We also lease additional corporate facilities in Scottsdale, Arizona and Sofia, Bulgaria. We lease and operate five distribution centers, in Arizona, Georgia, Pennsylvania, Texas, and Sofia, Bulga",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "TDUP/2023/10-K/filing.html::2022",
  "extractor_version": 1
 }

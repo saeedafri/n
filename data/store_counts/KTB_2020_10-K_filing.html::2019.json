@@ -2,13 +2,13 @@
  "ticker": "KTB",
  "fiscal_year": 2019,
  "value": 129,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ased | Masatepe City, Nicaragua | | 108,000 | | | Manufacturing Facility | | Leased As of December 28, 2019 , we operated 129 retail stores across the Americas, EMEA and APAC regions. Retail stores a",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "KTB/2020/10-K/filing.html::2019",
  "extractor_version": 1
 }

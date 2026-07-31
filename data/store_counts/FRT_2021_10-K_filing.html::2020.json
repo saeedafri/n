@@ -2,13 +2,13 @@
  "ticker": "FRT",
  "fiscal_year": 2020,
  "value": 2782,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total —Residential (13) | | | | | | 2,782 units | | | | 95% | |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "FRT/2021/10-K/filing.html::2020",
  "extractor_version": 1
 }

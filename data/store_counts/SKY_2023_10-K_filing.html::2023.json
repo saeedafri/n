@@ -1,0 +1,14 @@
+{
+ "ticker": "SKY",
+ "fiscal_year": 2023,
+ "value": 31,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ory-direct manufactured home retail business, marketed under the Titan Factory Direct and Champion Homes Center brands, with 31 sales centers spanning the United States; and we operate Star Fleet Truck",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SKY/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

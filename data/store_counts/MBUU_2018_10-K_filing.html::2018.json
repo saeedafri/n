@@ -2,13 +2,13 @@
  "ticker": "MBUU",
  "fiscal_year": 2018,
  "value": 6292,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total Units | | 6,292 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "MBUU/2018/10-K/filing.html::2018",
  "extractor_version": 1
 }

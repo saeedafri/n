@@ -5,26 +5,8 @@
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (63 facts)",
- "by_country": {
-  "Aruba": 1,
-  "Barbados": 1,
-  "Colombia": 7,
-  "Costa Rica": 7,
-  "Dominican Republic": 5,
-  "Guatemala": 3,
-  "Honduras": 3,
-  "Jamaica": 1,
-  "Nicaragua": 2,
-  "Panama": 7,
-  "El Salvador": 2,
-  "Trinidad": 4,
-  "United States Virgin Islands": 1
- },
- "by_continent": {
-  "Other": 10,
-  "South America": 7,
-  "North America": 27
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "PSMT/2019/10-K/filing.html::2019",

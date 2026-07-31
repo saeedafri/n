@@ -5,23 +5,8 @@
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
- "by_country": {
-  "Canada": 299,
-  "Australia": 426,
-  "New Zealand": 42,
-  "Austria": 17,
-  "France": 399,
-  "Germany": 186,
-  "Ireland": 44,
-  "Italy": 292,
-  "Switzerland": 16,
-  "United States": 3642
- },
- "by_continent": {
-  "North America": 3941,
-  "Oceania": 468,
-  "Europe": 954
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GME/2021/10-K/filing.html::2021",

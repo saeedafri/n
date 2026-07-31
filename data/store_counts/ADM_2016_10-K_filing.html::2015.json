@@ -2,13 +2,13 @@
  "ticker": "ADM",
  "fiscal_year": 2015,
  "value": 429,
- "confidence": "low",
- "basis": "single source (l3), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| | 262 | | 18 | | 280 | | 380 | | 49 | | 429 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "ADM/2016/10-K/filing.html::2015",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "DLB",
  "fiscal_year": 2021,
  "value": 260,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": ". Dolby Cinema Highlights: We continue to expand our global presence for Dolby Cinema. As of the end of fiscal 2021, we had over 260 Dolby Cinema locations established across 14 countries, as compared to over 250 Do",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "DLB/2021/10-K/filing.html::2021",
  "extractor_version": 1
 }

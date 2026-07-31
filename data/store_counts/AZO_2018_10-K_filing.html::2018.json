@@ -5,15 +5,8 @@
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
- "by_country": {
-  "Brazil": 20,
-  "Mexico": 564,
-  "Stores in the United States Including Puerto Rico": 5618
- },
- "by_continent": {
-  "South America": 20,
-  "North America": 6182
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "AZO/2018/10-K/filing.html::2018",

@@ -1,0 +1,14 @@
+{
+ "ticker": "KRG",
+ "fiscal_year": 2015,
+ "value": 71,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Wal-Mart | | 14 | | Target | | 16 | | Lowe's Home Improvement | | 14 | | Publix | | 18 | | Kohls | | 9 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "KRG/2016/10-K/filing.html::2015",
+ "extractor_version": 1
+}

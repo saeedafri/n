@@ -5,15 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (19 facts)",
- "by_country": {
-  "Mexico": 4,
-  "United Arab Emirates": 3,
-  "Qatar": 1
- },
- "by_continent": {
-  "North America": 4,
-  "Asia": 4
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 559,
  "needs_review": false,
  "accession": "LULU/2020/10-K/filing.html::2021",

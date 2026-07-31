@@ -1,14 +1,14 @@
 {
  "ticker": "FOSL",
  "fiscal_year": 2022,
- "value": 338,
- "confidence": "low",
- "basis": "kept DB — ours unverified, needs review",
+ "value": 370,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total stores | 370 | | 5 | | 33 | | 342",
  "by_country": {},
  "by_continent": {},
  "db_value": 338,
- "needs_review": true,
+ "needs_review": false,
  "accession": "FOSL/2023/10-K/filing.html::2022",
  "extractor_version": 1
 }

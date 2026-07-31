@@ -2,13 +2,13 @@
  "ticker": "FOSL",
  "fiscal_year": 2022,
  "value": 338,
- "confidence": "low",
- "basis": "kept DB — ours unverified, needs review",
+ "confidence": "medium",
+ "basis": "fits neighbouring years (db)",
  "evidence": "| Total stores | 162 | | | 125 | | | 83 | | | 370 | | | 185 | | | 147 | | | 89 | | | 421 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 338,
- "needs_review": true,
+ "needs_review": false,
  "accession": "FOSL/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

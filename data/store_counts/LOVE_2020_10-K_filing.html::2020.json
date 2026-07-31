@@ -2,13 +2,13 @@
  "ticker": "LOVE",
  "fiscal_year": 2020,
  "value": 91,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "adverse effect on our business, financial condition, operating results and prospects. As of February 2, 2020, we had 91 showrooms, but our growth strategy requires us to increase our showro",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "LOVE/2020/10-K/filing.html::2020",
  "extractor_version": 1
 }

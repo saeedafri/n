@@ -2,13 +2,13 @@
  "ticker": "VLGE.A",
  "fiscal_year": 2019,
  "value": 33,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Number of stores | 33 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "VLGE.A/2019/10-K/filing.html::2019",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "GIII",
  "fiscal_year": 2019,
  "value": 404,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "fits neighbouring years (l2)",
  "evidence": "| - | | 144,000 Retail Stores As of January 31, 2019, we operated 404 leased store locations, of which 139 are Wilsons Leather retail stores, 111 are G.",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "GIII/2019/10-K/filing.html::2019",
  "extractor_version": 1
 }

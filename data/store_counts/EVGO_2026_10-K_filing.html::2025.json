@@ -2,13 +2,13 @@
  "ticker": "EVGO",
  "fiscal_year": 2025,
  "value": 1200,
- "confidence": "low",
- "basis": "single source (l3), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "With more than 1,200 fast charging stations across 47 states,",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "EVGO/2026/10-K/filing.html::2025",
  "extractor_version": 1
 }

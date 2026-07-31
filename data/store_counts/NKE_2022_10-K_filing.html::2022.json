@@ -1,14 +1,14 @@
 {
  "ticker": "NKE",
  "fiscal_year": 2022,
- "value": 1041,
- "confidence": "low",
- "basis": "kept DB — ours unverified, needs review",
+ "value": 702,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| TOTAL | 702 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 1041,
- "needs_review": true,
+ "needs_review": false,
  "accession": "NKE/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

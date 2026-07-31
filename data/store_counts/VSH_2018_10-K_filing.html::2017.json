@@ -2,13 +2,13 @@
  "ticker": "VSH",
  "fiscal_year": 2017,
  "value": 48,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "None. 21 | Item 2. | | PROPERTIES At December 31, 2017, our business had 48 manufacturing locations. Our manufacturing facilities include owned and leased loca",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "VSH/2018/10-K/filing.html::2017",
  "extractor_version": 1
 }

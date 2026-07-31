@@ -5,13 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (51 facts)",
- "by_country": {
-  "Domestic franchise restaurants": 20,
-  "Franchise": 60
- },
- "by_continent": {
-  "Other": 80
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 784,
  "needs_review": false,
  "accession": "TXRH/2025/10-K/filing.html::2024",

@@ -1,0 +1,14 @@
+{
+ "ticker": "CASY",
+ "fiscal_year": 2022,
+ "value": 2452,
+ "confidence": "medium",
+ "basis": "fits series (l3)",
+ "evidence": "XBRL us-gaap:NumberOfStores (19 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CASY/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

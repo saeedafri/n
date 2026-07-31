@@ -5,15 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
- "by_country": {
-  "United States": 485,
-  "Europe": 52,
-  "Canada": 35
- },
- "by_continent": {
-  "North America": 520,
-  "Other": 52
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "URBN/2016/10-K/filing.html::2016",

@@ -2,13 +2,13 @@
  "ticker": "WBA",
  "fiscal_year": 2017,
  "value": 8109,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Number of locations at period end | | 8,109 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "WBA/2017/10-K/filing.html::2017",
  "extractor_version": 1
 }

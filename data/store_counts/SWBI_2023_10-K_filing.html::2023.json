@@ -2,13 +2,13 @@
  "ticker": "SWBI",
  "fiscal_year": 2023,
  "value": 5,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ith enhanced features and capacity. We believe the M&P Shield pistol is one of the most popular firearms in the market, with over five million units having been shipped. Our Performance Center department ha",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "SWBI/2023/10-K/filing.html::2023",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "YEXT",
  "fiscal_year": 2024,
  "value": 16617,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total | | 16,617,242 | | | $ | 6.26 | | | 9,345,275 | |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "YEXT/2024/10-K/filing.html::2024",
  "extractor_version": 1
 }

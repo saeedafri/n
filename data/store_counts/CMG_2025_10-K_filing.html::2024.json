@@ -5,14 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (11 facts)",
- "by_country": {
-  "Chipotle": 3644,
-  "Licensed Units": 3,
-  "International": 1
- },
- "by_continent": {
-  "Other": 3648
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 3726,
  "needs_review": false,
  "accession": "CMG/2025/10-K/filing.html::2024",

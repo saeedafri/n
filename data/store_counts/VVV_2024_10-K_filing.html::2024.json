@@ -2,13 +2,13 @@
  "ticker": "VVV",
  "fiscal_year": 2024,
  "value": 2000,
- "confidence": "low",
- "basis": "single source (l1), unverified",
+ "confidence": "medium",
+ "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "VVV/2024/10-K/filing.html::2024",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "EL",
  "fiscal_year": 2024,
  "value": 1600,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ina, the United States and the United Kingdom, we continue to expand in other markets globally. As of June 30, 2024, we operated approximately 1,600 freestanding stores. The total reflects the net impact during fiscal 2024 of le",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "EL/2024/10-K/filing.html::2024",
  "extractor_version": 1
 }

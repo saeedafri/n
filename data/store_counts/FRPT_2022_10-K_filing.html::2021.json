@@ -2,13 +2,13 @@
  "ticker": "FRPT",
  "fiscal_year": 2021,
  "value": 23600,
- "confidence": "low",
- "basis": "single source (l3), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "We have installed Freshpet Fridges in approximately 23,600 retail stores as of December 31, 2021.",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "FRPT/2022/10-K/filing.html::2021",
  "extractor_version": 1
 }

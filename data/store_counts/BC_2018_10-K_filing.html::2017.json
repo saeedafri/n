@@ -1,0 +1,14 @@
+{
+ "ticker": "BC",
+ "fiscal_year": 2017,
+ "value": 20,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "these businesses, collectively, are the leading distributors of marine parts and accessories throughout North America, with 20 distribution warehouses located throughout the United States and Canada offering sa",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BC/2018/10-K/filing.html::2017",
+ "extractor_version": 1
+}

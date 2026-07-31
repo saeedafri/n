@@ -1,0 +1,14 @@
+{
+ "ticker": "GAP",
+ "fiscal_year": 2025,
+ "value": 2685,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Company-operated stores total | | 2,685 | | | 59 | | | 93 | | | 2,562 | | | 30.6 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GAP/2025/10-K/filing.html::2025",
+ "extractor_version": 1
+}

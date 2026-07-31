@@ -5,12 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
- "by_country": {
-  "Africa, Asia, Australia, Mexico, the Middle East and South America": 62
- },
- "by_continent": {
-  "Oceania": 62
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 372,
  "needs_review": false,
  "accession": "BBW/2020/10-K/filing.html::2020",

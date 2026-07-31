@@ -2,13 +2,13 @@
  "ticker": "LOVE",
  "fiscal_year": 2023,
  "value": 195,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "d by 9.9% in fiscal 2023 as compared to 14.5% in fiscal 2022 driven by the successful campaigns throughout the year. We had 195 total showrooms including kiosks and mobile concierges open as of January 2",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "LOVE/2023/10-K/filing.html::2023",
  "extractor_version": 1
 }

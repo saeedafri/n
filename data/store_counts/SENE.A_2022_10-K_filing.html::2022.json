@@ -2,13 +2,13 @@
  "ticker": "SENE.A",
  "fiscal_year": 2022,
  "value": 10049,
- "confidence": "low",
- "basis": "single source (l3), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| | | 10,049 | | | | | 9,860 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "SENE.A/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

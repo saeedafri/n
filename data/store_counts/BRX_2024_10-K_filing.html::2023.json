@@ -2,13 +2,13 @@
  "ticker": "BRX",
  "fiscal_year": 2023,
  "value": 362,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "\"U.S.\"), comprised primarily of community and neighborhood shopping centers. As of December 31, 2023, our portfolio was comprised of 362 shopping centers (the \"Portfolio\") totaling approximately 64 million square",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "BRX/2024/10-K/filing.html::2023",
  "extractor_version": 1
 }

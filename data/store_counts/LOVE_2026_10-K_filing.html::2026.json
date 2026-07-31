@@ -2,13 +2,13 @@
  "ticker": "LOVE",
  "fiscal_year": 2026,
  "value": 278,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "fits neighbouring years (l2)",
  "evidence": "terial adverse effect on our business, financial condition, operating results and prospects. As of February 1, 2026, we had 278 showrooms. Our growth strategy relies in part on our ability to incre",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "LOVE/2026/10-K/filing.html::2026",
  "extractor_version": 1
 }

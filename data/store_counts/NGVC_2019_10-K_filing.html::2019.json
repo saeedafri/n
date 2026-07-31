@@ -2,13 +2,13 @@
  "ticker": "NGVC",
  "fiscal_year": 2019,
  "value": 153,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "Comments. None. 34 Table of Contents Item 2. Properties. As of September 30, 2019, we had 153 stores located in 19 states, as shown in the following chart:",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "NGVC/2019/10-K/filing.html::2019",
  "extractor_version": 1
 }

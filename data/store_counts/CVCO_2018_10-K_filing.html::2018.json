@@ -2,13 +2,13 @@
  "ticker": "CVCO",
  "fiscal_year": 2018,
  "value": 39,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": ", 2017 and 2016 , respectively, through Company-owned and independent distribution channels. As of March 31, 2018 , we had a total of 39 Company-owned retail centers, located in Oregon, Arizona, New Mexico, Texas, Oklahoma an",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CVCO/2018/10-K/filing.html::2018",
  "extractor_version": 1
 }

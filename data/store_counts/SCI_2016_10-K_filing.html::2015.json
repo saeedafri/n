@@ -2,13 +2,13 @@
  "ticker": "SCI",
  "fiscal_year": 2015,
  "value": 1535,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "network of funeral service locations and cemeteries unequaled in geographic scale and reach. At December 31, 2015 , we operated 1,535 funeral service locations and 469 cemeteries (including 262 funeral service/cemetery",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "SCI/2016/10-K/filing.html::2015",
  "extractor_version": 1
 }

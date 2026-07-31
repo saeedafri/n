@@ -2,13 +2,13 @@
  "ticker": "KTB",
  "fiscal_year": 2024,
  "value": 147,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "bearing our brands are sold in more than 70 countries, and we believe they have strong consumer connectivity worldwide with approximately 147 million units sold in 2024. We market our brands and products to highligh",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "KTB/2025/10-K/filing.html::2024",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "MKC",
  "fiscal_year": 2018,
  "value": 20,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "avor solutions aligned with our customers’ new product launch plans, many of which include “better-for-you” innovation. With over 20 product innovation centers around the world, we are supporting the growth of our brand",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "MKC/2019/10-K/filing.html::2018",
  "extractor_version": 1
 }

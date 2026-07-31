@@ -2,13 +2,13 @@
  "ticker": "EL",
  "fiscal_year": 2017,
  "value": 1430,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "valuating opportunities to open additional freestanding stores for certain of our other brands. As of June 30, 2017, we operated approximately 1,430 freestanding stores, and more than 500 freestanding stores are operated around",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "EL/2017/10-K/filing.html::2017",
  "extractor_version": 1
 }

@@ -5,13 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
- "by_country": {
-  "United Arab Emirates": 3,
-  "Qatar": 1
- },
- "by_continent": {
-  "Asia": 4
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LULU/2016/10-K/filing.html::2017",

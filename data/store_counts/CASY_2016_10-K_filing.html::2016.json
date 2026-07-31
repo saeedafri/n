@@ -1,14 +1,14 @@
 {
  "ticker": "CASY",
  "fiscal_year": 2016,
- "value": 950,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "value": 1931,
+ "confidence": "medium",
+ "basis": "fits the company's own range",
  "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CASY/2016/10-K/filing.html::2016",
  "extractor_version": 1
 }

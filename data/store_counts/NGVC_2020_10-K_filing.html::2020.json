@@ -2,13 +2,13 @@
  "ticker": "NGVC",
  "fiscal_year": 2020,
  "value": 159,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "None. 40 Table of Contents Item 2. Properties. As of September 30, 2020, we had 159 stores located in 20 states, as shown in the following chart:",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "NGVC/2020/10-K/filing.html::2020",
  "extractor_version": 1
 }

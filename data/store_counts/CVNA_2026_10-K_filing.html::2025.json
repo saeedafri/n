@@ -2,13 +2,13 @@
  "ticker": "CVNA",
  "fiscal_year": 2025,
  "value": 75683,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total website units | 75,683 | | | 53,360 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CVNA/2026/10-K/filing.html::2025",
  "extractor_version": 1
 }

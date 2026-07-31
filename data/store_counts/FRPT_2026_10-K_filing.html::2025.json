@@ -2,13 +2,13 @@
  "ticker": "FRPT",
  "fiscal_year": 2025,
  "value": 30235,
- "confidence": "low",
- "basis": "single source (l3), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "As of December 31, 2025, we are in approximately 30,235 stores, with approximately 24% of stores having multiple Freshpet Fridges.",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "FRPT/2026/10-K/filing.html::2025",
  "extractor_version": 1
 }

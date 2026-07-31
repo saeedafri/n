@@ -1,0 +1,14 @@
+{
+ "ticker": "CVCO",
+ "fiscal_year": 2020,
+ "value": 39,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "As of March 28, 2020, there were a total of 39 Company-owned retail centers, located in Oregon, Arizona, New Mexico, Texas, Oklahoma and Florida.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVCO/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}

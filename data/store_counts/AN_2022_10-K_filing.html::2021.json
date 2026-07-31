@@ -2,13 +2,13 @@
  "ticker": "AN",
  "fiscal_year": 2021,
  "value": 247,
- "confidence": "low",
- "basis": "kept DB — ours unverified, needs review",
+ "confidence": "medium",
+ "basis": "fits series (db)",
  "evidence": "| Total | $ | 2,876.2 | | | $ | 2,422.0 | | | $ | (454.2) | | | (18.8) | | | $ | 2,558.6 | | | $ | 136.6 | | | 5.3 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 247,
- "needs_review": true,
+ "needs_review": false,
  "accession": "AN/2022/10-K/filing.html::2021",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "USFD",
  "fiscal_year": 2022,
  "value": 86,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ce to our customers. Our extensive network of 70 distribution facilities and fleet of approximately 6,500 trucks, along with 86 cash and carry locations, allow us to operate efficiently and provide high levels of",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "USFD/2023/10-K/filing.html::2022",
  "extractor_version": 1
 }

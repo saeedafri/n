@@ -78,7 +78,18 @@ def main() -> None:
         entries.sort(key=lambda r: r["fiscal_year"])
         anchors = {r["fiscal_year"]: anchor_for(r) for r in entries}
         known = [v for v in anchors.values() if v]
-        scale = statistics.median(known) if known else None
+        if known:
+            scale = statistics.median(known)
+        else:
+            # No year where two sources agree. Rather than fall back to source
+            # priority — which took Asbury's 96,787 (vehicle inventory) over the
+            # LLM's correct 110 purely because the filing parse ranks first —
+            # take the median of EVERY candidate across the whole series. Wrong
+            # readings scatter; the real fleet clusters, so the median lands on
+            # it. ABG's candidates run 2, 6, 97, 110, 112, 96787 ... and the
+            # median sits with the real dealership count.
+            every = [v for r in entries for v in candidates_of(r).values() if v]
+            scale = statistics.median(every) if len(every) >= 3 else None
 
         for row in entries:
             year = row["fiscal_year"]
@@ -252,6 +263,17 @@ def main() -> None:
                     row["final_confidence"] = "none"
                     row["final_basis"] = ("dropped — outside this company's "
                                           "range, likely a different quantity")
+
+        # A lone year, from a lone source, has nothing to be checked against —
+        # every series test above needs neighbours. Asbury survived all of them
+        # on 23,709 (a vehicle count) purely because it was the only year left.
+        # Corroborated single years are fine; unverified ones are withheld.
+        surviving = [r for r in entries if r["final_value"]]
+        if len(surviving) == 1 and surviving[0]["final_confidence"] != "high":
+            surviving[0]["final_value"] = None
+            surviving[0]["final_confidence"] = "none"
+            surviving[0]["final_basis"] = ("single unverified year — nothing to "
+                                           "corroborate it against")
 
         for row in entries:
             if row["final_value"]:

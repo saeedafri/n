@@ -2,13 +2,13 @@
  "ticker": "COTY",
  "fiscal_year": 2022,
  "value": 40259,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total | | 40,259,723 | | | | | 35,160,379 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "COTY/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

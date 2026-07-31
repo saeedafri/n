@@ -5,15 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (10 facts)",
- "by_country": {
-  "United States": 2452,
-  "International": 37,
-  "Chipotle": 2427
- },
- "by_continent": {
-  "North America": 2452,
-  "Other": 2464
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "CMG/2019/10-K/filing.html::2018",

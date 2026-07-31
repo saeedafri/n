@@ -2,13 +2,13 @@
  "ticker": "CXT",
  "fiscal_year": 2015,
  "value": 7,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "t operating segment (a “component”), in which case the component would be the reporting unit. At December 31, 2015 , we had seven reporting units. When performing our annual impairment assessment, we compa",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CXT/2016/10-K/filing.html::2015",
  "extractor_version": 1
 }

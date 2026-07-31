@@ -2,13 +2,13 @@
  "ticker": "CDW",
  "fiscal_year": 2016,
  "value": 3,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "e us to meet all of the needs of our customers and would cause us to incur incremental operating costs. In addition, we operate three customer data centers and numerous sales offices which may contain both business-",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CDW/2017/10-K/filing.html::2016",
  "extractor_version": 1
 }

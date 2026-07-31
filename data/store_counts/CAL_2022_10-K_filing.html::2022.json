@@ -5,14 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
- "by_country": {
-  "UNITED STATES": 70,
-  "CHINA": 16
- },
- "by_continent": {
-  "North America": 70,
-  "Asia": 16
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 980,
  "needs_review": false,
  "accession": "CAL/2022/10-K/filing.html::2022",

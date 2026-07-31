@@ -5,15 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (20 facts)",
- "by_country": {
-  "United States": 254,
-  "Other countries": 149,
-  "Non-United States": 140
- },
- "by_continent": {
-  "North America": 394,
-  "Other": 149
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 436,
  "needs_review": false,
  "accession": "SHAK/2022/10-K/filing.html::2022",

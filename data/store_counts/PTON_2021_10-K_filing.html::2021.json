@@ -2,13 +2,13 @@
  "ticker": "PTON",
  "fiscal_year": 2021,
  "value": 123,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "form that ensures a best-in-class, end-to-end experience. We have a direct-to-consumer multi-channel sales platform. We had 123 showrooms as of June 30, 2021, with knowledgeable sales specialists,",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "PTON/2021/10-K/filing.html::2021",
  "extractor_version": 1
 }

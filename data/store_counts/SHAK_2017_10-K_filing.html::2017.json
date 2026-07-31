@@ -5,13 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (20 facts)",
- "by_country": {
-  "Company-operated": 90,
-  "Licensed": 59
- },
- "by_continent": {
-  "Other": 149
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SHAK/2017/10-K/filing.html::2017",

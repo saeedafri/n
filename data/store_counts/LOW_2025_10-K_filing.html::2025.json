@@ -5,13 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
- "by_country": {
-  "United States": 1748,
-  "Canada": 232
- },
- "by_continent": {
-  "North America": 1980
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LOW/2025/10-K/filing.html::2025",

@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2021,
+ "value": 589,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total store revenues | 4,429,408 | | | 2,714,153 | | | | | 1,715,255 | | | 63.2 | % | | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 589,
+ "needs_review": false,
+ "accession": "UPBD/2022/10-K/filing.html::2021",
+ "extractor_version": 1
+}

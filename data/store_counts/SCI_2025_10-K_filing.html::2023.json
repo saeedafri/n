@@ -2,13 +2,13 @@
  "ticker": "SCI",
  "fiscal_year": 2023,
  "value": 1989,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total funeral service locations and cemeteries | | 1,493 | | | 496 | | | 1,989 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "SCI/2025/10-K/filing.html::2023",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "LEG",
  "fiscal_year": 2020,
  "value": 132,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total | | 132 | | 49 | | 32 | | 51",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "LEG/2021/10-K/filing.html::2020",
  "extractor_version": 1
 }

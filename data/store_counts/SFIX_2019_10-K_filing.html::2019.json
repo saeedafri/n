@@ -2,13 +2,13 @@
  "ticker": "SFIX",
  "fiscal_year": 2019,
  "value": 5,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "an additional 34,800 square feet of office space in Texas, where our client experience team is based. We also lease and operate five fulfillment centers, comprising a total of approximately 2,578,000 square feet,",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "SFIX/2019/10-K/filing.html::2019",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "TDY",
  "fiscal_year": 2021,
  "value": 9,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "in assumptions may have a material effect on the results of our impairment analysis. As of January 3, 2021, the Company had nine reporting units for goodwill impairment testing. The carrying value of good",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "TDY/2021/10-K/filing.html::2021",
  "extractor_version": 1
 }

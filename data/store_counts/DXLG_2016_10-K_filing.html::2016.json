@@ -5,14 +5,8 @@
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
- "by_country": {
-  "DXL Stores": 166,
-  "Casual Male XL Retail and Outlet Stores": 125,
-  "Rochester Clothing Stores": 5
- },
- "by_continent": {
-  "Other": 296
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "DXLG/2016/10-K/filing.html::2016",

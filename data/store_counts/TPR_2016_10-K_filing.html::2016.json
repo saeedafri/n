@@ -5,15 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
- "by_country": {
-  "Concession Shop-in-Shops": 195,
-  "Outlet Store": 195,
-  "Retail Stores": 250,
-  "Retail and Outlet Stores": 185
- },
- "by_continent": {
-  "Other": 825
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "TPR/2016/10-K/filing.html::2016",

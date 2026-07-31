@@ -5,19 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
- "by_country": {
-  "CHINA": 6,
-  "GUAM": 1,
-  "ITALY": 1,
-  "UNITED STATES": 141,
-  "CANADA": 79
- },
- "by_continent": {
-  "Asia": 6,
-  "Other": 1,
-  "Europe": 1,
-  "North America": 220
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "CAL/2020/10-K/filing.html::2020",

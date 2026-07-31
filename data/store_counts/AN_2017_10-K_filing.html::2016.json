@@ -3,7 +3,7 @@
  "fiscal_year": 2016,
  "value": 265,
  "confidence": "medium",
- "basis": "fits the company's own range",
+ "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
  "by_country": {},
  "by_continent": {},

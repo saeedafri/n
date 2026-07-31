@@ -5,13 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
- "by_country": {
-  "United States": 45,
-  "Canada": 2
- },
- "by_continent": {
-  "North America": 47
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "MOV/2020/10-K/filing.html::2020",

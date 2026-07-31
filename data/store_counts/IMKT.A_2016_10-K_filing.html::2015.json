@@ -2,13 +2,13 @@
  "ticker": "IMKT.A",
  "fiscal_year": 2015,
  "value": 99,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ducts, bakery departments and prepared foods including delicatessen sections. As of September 2 4 , 201 6 , the Company operated 99 in-store pharmacies and 93 fuel centers. Ingles also operates a flu",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "IMKT.A/2016/10-K/filing.html::2015",
  "extractor_version": 1
 }

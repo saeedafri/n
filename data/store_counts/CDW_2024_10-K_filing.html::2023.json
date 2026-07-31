@@ -2,13 +2,13 @@
  "ticker": "CDW",
  "fiscal_year": 2023,
  "value": 2,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "vide logistics management and supply-chain services for us, as well as for our vendor partners. Inventory Management We operate two distribution centers in North America and one distribution center in the UK whic",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CDW/2024/10-K/filing.html::2023",
  "extractor_version": 1
 }

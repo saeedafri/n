@@ -2,13 +2,13 @@
  "ticker": "FRT",
  "fiscal_year": 2024,
  "value": 3104,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Total —Residential | | | | | | 3,104 units | | | | 95% | |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "FRT/2025/10-K/filing.html::2024",
  "extractor_version": 1
 }

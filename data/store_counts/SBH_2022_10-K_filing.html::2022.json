@@ -1,0 +1,14 @@
+{
+ "ticker": "SBH",
+ "fiscal_year": 2022,
+ "value": 4794,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Consolidated 4,794",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SBH/2022/10-K/filing.html::2022",
+ "extractor_version": 1
+}

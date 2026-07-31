@@ -2,13 +2,13 @@
  "ticker": "SFIX",
  "fiscal_year": 2021,
  "value": 6,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ndemic, as of the date of this filing we still intend to occupy this location when conditions permit. We also lease and operate six fulfillment centers in the United States. These comprise a total of approximate",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "SFIX/2021/10-K/filing.html::2021",
  "extractor_version": 1
 }

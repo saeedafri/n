@@ -1,0 +1,14 @@
+{
+ "ticker": "CVCO",
+ "fiscal_year": 2021,
+ "value": 40,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "As of April 3, 2021, there were a total of 40 Company-owned retail stores, located in Oregon, Arizona, New Mexico, Texas, Oklahoma and Florida.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVCO/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

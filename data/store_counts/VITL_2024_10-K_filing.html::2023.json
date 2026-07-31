@@ -1,0 +1,14 @@
+{
+ "ticker": "VITL",
+ "fiscal_year": 2023,
+ "value": 40,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ful foodservice program is True Food Kitchen, an award-winning restaurant brand and a pioneer of wellness-driven dining with over 40 locations across the country that shares our values for improving the",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "VITL/2024/10-K/filing.html::2023",
+ "extractor_version": 1
+}

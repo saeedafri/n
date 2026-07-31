@@ -1,0 +1,14 @@
+{
+ "ticker": "PII",
+ "fiscal_year": 2015,
+ "value": 860,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "At the end of 2015, approximately 860 Polaris dealers were located in areas of the United States where snowmobiles are not regularly sold.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "PII/2015/10-K/filing.html::2015",
+ "extractor_version": 1
+}

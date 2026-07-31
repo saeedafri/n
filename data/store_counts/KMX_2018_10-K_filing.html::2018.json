@@ -2,13 +2,13 @@
  "ticker": "KMX",
  "fiscal_year": 2018,
  "value": 188,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "uit City through a tax-free transaction, becoming an independent, publicly traded company. As of February 28, 2018 , we operated 188 used car stores in 91 U.S. television markets. Our home office is located a",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "KMX/2018/10-K/filing.html::2018",
  "extractor_version": 1
 }

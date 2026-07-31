@@ -2,13 +2,13 @@
  "ticker": "EL",
  "fiscal_year": 2020,
  "value": 1600,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ically open new points of distribution globally, and exited certain locations when appropriate. As of June 30, 2020, we operated approximately 1,600 freestanding stores. Most are operated under a single brand name, such as M·A·C",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "EL/2020/10-K/filing.html::2020",
  "extractor_version": 1
 }

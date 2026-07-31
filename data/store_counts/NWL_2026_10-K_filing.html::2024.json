@@ -1,14 +1,14 @@
 {
  "ticker": "NWL",
  "fiscal_year": 2024,
- "value": 240,
- "confidence": "low",
- "basis": "kept DB — ours unverified, needs review",
+ "value": 6,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "goodwill impairment testing and generally are one level below the operating segment level. The Company’s operations are comprised of six reporting units, within its three primary operating segments. The Company h",
  "by_country": {},
  "by_continent": {},
  "db_value": 240,
- "needs_review": true,
+ "needs_review": false,
  "accession": "NWL/2026/10-K/filing.html::2024",
  "extractor_version": 1
 }

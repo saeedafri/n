@@ -2,13 +2,13 @@
  "ticker": "MSI",
  "fiscal_year": 2023,
  "value": 3,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "d on this guidance, we have determined that our Products and Systems Integration and Software and Services segments are comprised of three and two reporting units, respectively. We performed a qualitative assessment to det",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "MSI/2024/10-K/filing.html::2023",
  "extractor_version": 1
 }

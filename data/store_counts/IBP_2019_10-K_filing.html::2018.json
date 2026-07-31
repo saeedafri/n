@@ -2,13 +2,13 @@
  "ticker": "IBP",
  "fiscal_year": 2018,
  "value": 175,
- "confidence": "low",
- "basis": "single source (l3), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "over 175 branch locations serving all 48 continental states and the District of Columbia",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "IBP/2019/10-K/filing.html::2018",
  "extractor_version": 1
 }

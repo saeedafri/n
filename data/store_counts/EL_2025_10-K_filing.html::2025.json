@@ -2,13 +2,13 @@
  "ticker": "EL",
  "fiscal_year": 2025,
  "value": 1600,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "ores in underperforming areas of our business and opened new freestanding stores where growth opportunities existed. We operated approximately 1,600 freestanding stores as of June 30, 2025. Most freestanding stores are operated",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "EL/2025/10-K/filing.html::2025",
  "extractor_version": 1
 }

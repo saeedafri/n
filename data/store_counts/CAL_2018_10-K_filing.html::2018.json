@@ -5,12 +5,8 @@
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
- "by_country": {
-  "Brand Portfolio": 151
- },
- "by_continent": {
-  "Other": 151
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "CAL/2018/10-K/filing.html::2018",

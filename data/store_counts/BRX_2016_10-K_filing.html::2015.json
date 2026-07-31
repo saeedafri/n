@@ -2,13 +2,13 @@
  "ticker": "BRX",
  "fiscal_year": 2015,
  "value": 518,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "-owned portfolio of grocery-anchored community and neighborhood shopping centers in the United States. Our portfolio is comprised of 518 shopping centers totaling approximately 87 million square feet of gross leas",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "BRX/2016/10-K/filing.html::2015",
  "extractor_version": 1
 }

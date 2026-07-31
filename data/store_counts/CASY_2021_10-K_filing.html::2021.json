@@ -1,0 +1,14 @@
+{
+ "ticker": "CASY",
+ "fiscal_year": 2021,
+ "value": 2243,
+ "confidence": "medium",
+ "basis": "fits series (l3)",
+ "evidence": "XBRL us-gaap:NumberOfStores (32 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CASY/2021/10-K/filing.html::2021",
+ "extractor_version": 1
+}

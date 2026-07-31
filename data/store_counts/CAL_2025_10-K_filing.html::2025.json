@@ -5,14 +5,8 @@
  "confidence": "medium",
  "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
- "by_country": {
-  "United states": 60,
-  "East Asia": 54
- },
- "by_continent": {
-  "North America": 60,
-  "Other": 54
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 960,
  "needs_review": false,
  "accession": "CAL/2025/10-K/filing.html::2025",

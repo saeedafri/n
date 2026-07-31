@@ -2,13 +2,13 @@
  "ticker": "MCW",
  "fiscal_year": 2024,
  "value": 514,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "PART I Item 1. Business Who We Are Founded in 1996, Mister Car Wash, Inc. is the largest national car wash brand, with 514 locations in 21 states, as of December 31, 2024. Primarily offering e",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "MCW/2025/10-K/filing.html::2024",
  "extractor_version": 1
 }

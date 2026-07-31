@@ -5,26 +5,8 @@
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (59 facts)",
- "by_country": {
-  "Colombia": 9,
-  "Costa Rica": 8,
-  "Panama": 7,
-  "Dominican Republic And Guatemala": 5,
-  "Trinidad": 4,
-  "El Salvador": 3,
-  "Honduras": 3,
-  "Nicaragua": 2,
-  "Jamaica": 2,
-  "Barbados": 1,
-  "U.S. Virgin Islands": 1,
-  "Aruba": 1,
-  "United States Virgin Islands": 1
- },
- "by_continent": {
-  "South America": 9,
-  "North America": 26,
-  "Other": 12
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 51,
  "needs_review": false,
  "accession": "PSMT/2023/10-K/filing.html::2023",

@@ -2,13 +2,13 @@
  "ticker": "WWW",
  "fiscal_year": 2017,
  "value": 81,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "mpany relies on a network of third-party distributors, licensees and joint ventures. At December 30, 2017 , the Company operated 81 retail stores in the U.S. and Canada and 29 consumer-direct websites. 201",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "WWW/2018/10-K/filing.html::2017",
  "extractor_version": 1
 }

@@ -5,13 +5,8 @@
  "confidence": "medium",
  "basis": "fits neighbouring years (l1)",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (16 facts)",
- "by_country": {
-  "Company-operated": 64,
-  "Licensed": 43
- },
- "by_continent": {
-  "Other": 107
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SHAK/2016/10-K/filing.html::2016",

@@ -2,13 +2,13 @@
  "ticker": "CHEF",
  "fiscal_year": 2025,
  "value": 44,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "raging an experienced and sophisticated sales force of approximately 1,100 sales and customer service professionals. We operate 44 distribution centers and provide service six days a week in many of our service",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CHEF/2026/10-K/filing.html::2025",
  "extractor_version": 1
 }

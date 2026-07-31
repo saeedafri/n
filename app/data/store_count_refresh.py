@@ -15,11 +15,15 @@ Design constraints, in priority order:
   1. NEVER slow a page down. The thread is a daemon, sleeps between filings,
      and every reader path falls back to the existing DB behaviour when the
      cache has nothing. Nothing waits on it.
-  2. NEVER surprise the bill. LLM use is off unless STORE_COUNT_REFRESH_LLM=1,
-     and even then a per-pass ceiling applies. The free layers alone resolve
-     most filings.
+  2. NEVER surprise the bill. The free layers resolve ~77% of filings for
+     nothing; the LLM is asked only for the rest, under a per-pass ceiling.
+     Set STORE_COUNT_REFRESH_LLM=0 to turn it off entirely.
   3. NEVER repeat work. A filed 10-K is immutable, so a cached accession is
-     never re-read.
+     never re-read — including one that yielded nothing, which is recorded as
+     a tombstone so it is not paid for twice.
+  4. NEVER publish a number we do not believe. The filing outranks XBRL and the
+     database, but a parse that disagrees with the company's own history is our
+     error, not the filing's, and is withheld.
 """
 
 from __future__ import annotations
@@ -39,7 +43,13 @@ _lock = threading.Lock()
 PAUSE_BETWEEN_FILINGS = float(os.getenv("STORE_COUNT_REFRESH_PAUSE", "3.0"))
 PAUSE_BETWEEN_PASSES = float(os.getenv("STORE_COUNT_REFRESH_INTERVAL", "21600"))
 MAX_PER_PASS = int(os.getenv("STORE_COUNT_REFRESH_MAX", "200"))
-LLM_ENABLED = os.getenv("STORE_COUNT_REFRESH_LLM", "0") == "1"
+# ON by default. The whole point of the ladder is that a new filing gets an
+# answer, and the free layers leave ~23% of filings unresolved — switching this
+# off would silently drop roughly a quarter of every new company's history.
+# The exposure is trivial and bounded twice over: ~1,000 new 10-Ks a year at a
+# 23% residue is ~230 calls ≈ $0.04/year, and LLM_BUDGET_PER_PASS stops a pass
+# dead if anything unexpected happens. Set STORE_COUNT_REFRESH_LLM=0 to disable.
+LLM_ENABLED = os.getenv("STORE_COUNT_REFRESH_LLM", "1") == "1"
 LLM_BUDGET_PER_PASS = float(os.getenv("STORE_COUNT_REFRESH_BUDGET", "0.10"))
 
 
@@ -115,10 +125,35 @@ def _extract_one(filing: Dict[str, Any], container, cursor, budget: Dict[str, fl
     if facts and facts.value:
         value, rule, evidence = facts.value, facts.source_rule, facts.evidence
 
+    # What we already hold for this company, used to sanity-check anything new.
+    history = [entry["value"] for entry in cache.by_ticker(filing["ticker"]).values()
+               if entry.get("value")]
+
+    def believable(candidate: Optional[int]) -> bool:
+        """Is this the same quantity the company has been reporting?
+
+        The offline pipeline validates against the whole series before
+        publishing; the worker must apply the same test or a bad parse of a new
+        filing walks straight into the cache. MUSA's filing yields 17,621 (a
+        fuel volume) against a real fleet of ~1,500, and AutoNation's 2,509 is
+        vehicle inventory against 239. With no history yet there is nothing to
+        check against, so the value is accepted and the next run's
+        reconciliation will catch it.
+        """
+        if not candidate or not history:
+            return bool(candidate)
+        history.sort()
+        middle = history[len(history) // 2]
+        return abs(candidate - middle) / max(middle, 1) <= 0.60
+
     best = choose_best(extract_from_filing(text))
-    if best and best.value:
+    if best and best.value and believable(best.value):
         # The filing is the source of truth — it outranks the XBRL layer.
         value, rule, evidence = best.value, best.source_rule, best.evidence
+    elif best and best.value and value is None:
+        # Filing parse is out of range and XBRL gave nothing: record the miss
+        # rather than publish a number we do not believe.
+        rule, evidence = "rejected", f"filing parse {best.value} out of range"
 
     if value is None and LLM_ENABLED and budget["spent"] < LLM_BUDGET_PER_PASS:
         from openai import OpenAI
@@ -128,13 +163,26 @@ def _extract_one(filing: Dict[str, Any], container, cursor, budget: Dict[str, fl
                 OpenAI(api_key=os.environ["OPENAI_API_KEY"]),
                 filing["ticker"], year, fye, llm_windows(text))
             budget["spent"] += llm_call_cost(prompt_tokens, completion_tokens)
-            if parsed and parsed.get("found") and parsed.get("value"):
-                value, rule = int(parsed["value"]), "L3_llm"
+            proposed = int(parsed["value"]) if (
+                parsed and parsed.get("found") and parsed.get("value")) else None
+            if proposed and believable(proposed):
+                value, rule = proposed, "L3_llm"
                 evidence = str(parsed.get("quote") or "")[:400]
         except Exception:
             pass
 
     if value is None:
+        # Record the miss. Without this the filing has no cache entry, so the
+        # next pass treats it as new and pays for the same LLM call again —
+        # forever, every six hours, for each of the ~2,800 filings that hold no
+        # store count at all. A tombstone carries no value, so readers skip it
+        # and the snapshot ignores it, but the worker knows not to come back.
+        cache.write(f"{accession}::{year}", {
+            "ticker": filing["ticker"], "fiscal_year": year, "value": None,
+            "confidence": "none", "basis": "no store count found in this filing",
+            "fye_date": fye, "by_country": {}, "by_continent": {},
+            "needs_review": False,
+        })
         return False
 
     by_country = geography_from_filing(text, value)

@@ -5,14 +5,8 @@
  "confidence": "medium",
  "basis": "fits series (db)",
  "evidence": "| Total | 15,400 | | 100.0 | %",
- "by_country": {
-  "United States": 12230,
-  "Canada": 2200,
-  "Mexico": 700
- },
- "by_continent": {
-  "North America": 15130
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 1068,
  "needs_review": false,
  "accession": "CRI/2026/10-K/filing.html::2026",

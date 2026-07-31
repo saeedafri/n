@@ -2,13 +2,13 @@
  "ticker": "BRX",
  "fiscal_year": 2016,
  "value": 512,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "PG’s common stock. Item 1B . Unresolved Staff Comments None. Item 2 . Properties Our Portfolio at December 31, 2016 consisted of 512 shopping centers, including 511 wholly owned shopping centers and one shoppi",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "BRX/2017/10-K/filing.html::2016",
  "extractor_version": 1
 }

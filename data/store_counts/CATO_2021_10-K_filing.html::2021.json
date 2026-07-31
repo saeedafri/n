@@ -2,13 +2,13 @@
  "ticker": "CATO",
  "fiscal_year": 2021,
  "value": 1330,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "that we filed with or furnished to the SEC. 5 PART I Item 1. Business: Background The Company, founded in 1946, operated 1,330 fashion specialty stores at January 30, 2021, in 33 states, principally in the south",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "CATO/2021/10-K/filing.html::2021",
  "extractor_version": 1
 }

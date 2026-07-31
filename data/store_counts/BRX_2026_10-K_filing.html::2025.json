@@ -2,13 +2,13 @@
  "ticker": "BRX",
  "fiscal_year": 2025,
  "value": 348,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "d primarily of grocery-anchored community and neighborhood shopping centers. As of December 31, 2025, our portfolio was comprised of 348 shopping centers (the \"Portfolio\") totaling approximately 63 million square",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "BRX/2026/10-K/filing.html::2025",
  "extractor_version": 1
 }

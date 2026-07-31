@@ -1,0 +1,14 @@
+{
+ "ticker": "CLSK",
+ "fiscal_year": 2023,
+ "value": 5,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "the heading “Bitcoin Mining Operations”. Overview CleanSpark is a bitcoin mining company. We independently own and operate five data centers in Georgia for a total developed capacity of 230 megawatts",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CLSK/2023/10-K/filing.html::2023",
+ "extractor_version": 1
+}

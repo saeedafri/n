@@ -2,13 +2,13 @@
  "ticker": "HFFG",
  "fiscal_year": 2023,
  "value": 18,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "grams as well as the current threat environment. ITEM 2. PROPERTIES. As of the date of this report, we owned and/or operated eighteen distribution centers and cross-docks with a total of approximately 1.3 million s",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "HFFG/2024/10-K/filing.html::2023",
  "extractor_version": 1
 }

@@ -2,13 +2,13 @@
  "ticker": "BRX",
  "fiscal_year": 2024,
  "value": 363,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "urther information relating to cybersecurity risks. 16 Item 2 . Properties As of December 31, 2024, our Portfolio was comprised of 363 shopping centers totaling approximately 64 million square feet of GLA. Our h",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "BRX/2025/10-K/filing.html::2024",
  "extractor_version": 1
 }

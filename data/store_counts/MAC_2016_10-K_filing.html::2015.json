@@ -1,0 +1,14 @@
+{
+ "ticker": "MAC",
+ "fiscal_year": 2015,
+ "value": 58,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of Centers at year end | 58 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MAC/2016/10-K/filing.html::2015",
+ "extractor_version": 1
+}

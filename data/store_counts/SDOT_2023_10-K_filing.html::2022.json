@@ -1,0 +1,14 @@
+{
+ "ticker": "SDOT",
+ "fiscal_year": 2022,
+ "value": 44,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "egarding franchise location leases. System-Wide Restaurant Counts: As of December 31, 2022, our restaurant system consisted of 44 restaurants comprised of 19 Company-operated restaurants and 25 franchi",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SDOT/2023/10-K/filing.html::2022",
+ "extractor_version": 1
+}

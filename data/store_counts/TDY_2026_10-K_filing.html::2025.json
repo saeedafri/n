@@ -2,13 +2,13 @@
  "ticker": "TDY",
  "fiscal_year": 2025,
  "value": 11,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "rences in assumptions may have a material effect on the results of our impairment analysis. As of December 28, 2025, we had eleven reporting units for goodwill impairment testing. In the fourth quarter of 2",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "TDY/2026/10-K/filing.html::2025",
  "extractor_version": 1
 }

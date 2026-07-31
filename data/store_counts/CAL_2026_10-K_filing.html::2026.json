@@ -5,13 +5,8 @@
  "confidence": "high",
  "basis": "two sources agree",
  "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
- "by_country": {
-  "North America": 85,
-  "Non-US": 103
- },
- "by_continent": {
-  "Other": 188
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": 1009,
  "needs_review": false,
  "accession": "CAL/2026/10-K/filing.html::2026",

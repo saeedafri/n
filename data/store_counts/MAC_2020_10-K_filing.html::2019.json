@@ -1,0 +1,14 @@
+{
+ "ticker": "MAC",
+ "fiscal_year": 2019,
+ "value": 52,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of Centers at year end | 52 | | | 52 | | | 55 | | | 57 | | | 58 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MAC/2020/10-K/filing.html::2019",
+ "extractor_version": 1
+}

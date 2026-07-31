@@ -2,13 +2,13 @@
  "ticker": "WBA",
  "fiscal_year": 2022,
  "value": 8901,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "| Number of locations at period end | | 8,901 | | | 8,973 | | | 9,028 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "WBA/2022/10-K/filing.html::2022",
  "extractor_version": 1
 }

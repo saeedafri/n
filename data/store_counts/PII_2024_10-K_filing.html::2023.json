@@ -2,13 +2,13 @@
  "ticker": "PII",
  "fiscal_year": 2023,
  "value": 250,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "many of our global vehicle platforms. The Polaris Adventures network has completed over 1,500,000 rides since 2017, and had over 250 locations as of December 31, 2023. The financial results of the Polar",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": true,
+ "needs_review": false,
  "accession": "PII/2024/10-K/filing.html::2023",
  "extractor_version": 1
 }

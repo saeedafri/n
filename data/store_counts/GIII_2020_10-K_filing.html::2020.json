@@ -1,0 +1,14 @@
+{
+ "ticker": "GIII",
+ "fiscal_year": 2020,
+ "value": 388,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "office, warehouse and distribution facility | | April 2022 | | - | | 301,000 Retail Stores As of January 31, 2020, we operated 388 leased store locations, of which 124 are Wilsons Leather retail stores, 99 are G.H",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GIII/2020/10-K/filing.html::2020",
+ "extractor_version": 1
+}
