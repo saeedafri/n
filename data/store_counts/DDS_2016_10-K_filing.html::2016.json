@@ -1,14 +1,18 @@
 {
  "ticker": "DDS",
  "fiscal_year": 2016,
+ "accession": "DDS/2016/10-K/filing.html::2016",
+ "fye_date": "2016-01-30",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 297,
+ "l3_value": null,
  "value": 297,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "| Total retail store count at end of period | 297 |",
+ "evidence": "| Total retail store count at end of period | 297 | | | 297 | | | 296 | |",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "DDS/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "MCW",
+ "fiscal_year": 2021,
+ "value": 396,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "siness Who We Are Mister Car Wash, Inc. is the largest national car wash brand offering express exterior and interior cleaning services to customers across 396 car wash locations in 21 states, as of December 31, 2021. Founded in 1996, we employ an efficien",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MCW/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

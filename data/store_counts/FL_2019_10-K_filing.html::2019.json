@@ -4,11 +4,11 @@
  "value": 3221,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "k in 1989, is a leading global retailer of athletically inspired shoes and apparel. As of February 2, 2019, the Company operated 3,221 primarily mall-based stores, as well as stores in high-traffic urban retail areas and h",
+ "evidence": "45 | | 134 | | 3,221 | | 122 | | 7,628 | | 13,239 We operated 3,221 stores as of the end of 2018. The following is a brief description o",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "FL/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

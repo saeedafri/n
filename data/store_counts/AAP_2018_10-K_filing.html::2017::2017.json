@@ -1,0 +1,14 @@
+{
+ "ticker": "AAP",
+ "fiscal_year": 2017,
+ "value": 5183,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (39 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AAP/2018/10-K/filing.html::2017::2017",
+ "extractor_version": 5
+}

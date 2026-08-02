@@ -1,14 +1,18 @@
 {
  "ticker": "BRX",
  "fiscal_year": 2021,
+ "accession": "BRX/2022/10-K/filing.html::2021",
+ "fye_date": "2021-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 382,
+ "l3_value": null,
  "value": 382,
+ "source_rule": "L2_prose",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "“U.S.”), comprised primarily of community and neighborhood shopping centers. As of December 31, 2021, our portfolio was comprised of 382 shopping centers (the “Portfolio”) totaling approximately 67 million square",
+ "evidence": "’s stock. Item 1B. Unresolved Staff Comments None. 17 Item 2. Properties As of December 31, 2021, our Portfolio was comprised of 382 shopping centers totaling approximately 67 million square feet of GLA. Our h",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BRX/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

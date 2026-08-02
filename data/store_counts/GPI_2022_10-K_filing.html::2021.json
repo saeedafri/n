@@ -1,14 +1,14 @@
 {
  "ticker": "GPI",
  "fiscal_year": 2021,
- "value": 202,
+ "value": 130,
  "confidence": "medium",
- "basis": "fits the company's own range",
+ "basis": "filing (10-K)",
  "evidence": "| Total | | 130 | | | 72 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 202,
  "needs_review": false,
  "accession": "GPI/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

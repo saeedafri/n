@@ -1,0 +1,18 @@
+{
+ "ticker": "CVGW",
+ "fiscal_year": 2021,
+ "accession": "CVGW/2021/10-K/filing.html::2021",
+ "fye_date": "2021-10-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 3672,
+ "l3_value": null,
+ "value": 3672,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| TOTAL | | 549 | | 3,123 | | 3,672",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

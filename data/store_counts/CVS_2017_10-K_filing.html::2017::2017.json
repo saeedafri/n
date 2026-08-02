@@ -1,0 +1,14 @@
+{
+ "ticker": "CVS",
+ "fiscal_year": 2017,
+ "value": 8108,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "you to Note 7 “Leases” in our Annual Report to Stockholders for the year ended December 31, 2017, which section is incorporated by reference herein. As of December 31, 2017, we owned approximately 4% of our 8,108 retail stores. Net selling space for our retail store",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVS/2017/10-K/filing.html::2017::2017",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "PECO",
+ "fiscal_year": 2017,
+ "value": 236,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "LP Transaction, we are now an internally-managed, non-traded grocery-anchored shopping center REIT with a total enterprise value of approximately $4.3 billion. As of December 31, 2017, we owned a high-quality, nationally diversified portfolio of 236 grocery-anchored shopping centers comprising approximately 26.3 million s",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "PECO/2018/10-K/filing.html::2017",
+ "extractor_version": 5
+}

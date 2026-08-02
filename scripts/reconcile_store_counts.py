@@ -47,8 +47,21 @@ TREND_TOLERANCE = 0.25
 
 
 def candidates_of(row: Dict[str, Any]) -> Dict[str, Optional[int]]:
-    return {"l1": row["l1_value"], "l2": row["l2_value"],
-            "l3": row["l3_value"], "db": row["db_value"]}
+    # Rows restored from the accession cache carry only the settled value, not
+    # the per-layer columns a fresh extraction produces, so every lookup has to
+    # tolerate a missing key. A cached row still offers its own value as a
+    # candidate — that is what it is.
+    picks = {"l1": row.get("l1_value"), "l2": row.get("l2_value"),
+             "l3": row.get("l3_value"), "db": row.get("db_value")}
+    # A cached row carries no per-layer columns, only the value the filing
+    # produced. Offering it as a candidate ONLY when nothing else exists was
+    # wrong: where the DB also had a value, the filing's own reading was left
+    # out of the running entirely and the DB won by default. Walmart's exact
+    # 11,501 lost to the database's 11,471 that way, which inverts the rule
+    # this whole pipeline is built on — the filing is the source of truth.
+    if picks["l2"] is None and row.get("value"):
+        picks["l2"] = row["value"]
+    return picks
 
 
 def anchor_for(row: Dict[str, Any]) -> Optional[int]:
@@ -75,6 +88,12 @@ def main() -> None:
     output: List[Dict[str, Any]] = []
 
     for ticker, entries in by_ticker.items():
+        # Tombstones — filings we read and found nothing in — carry no fiscal
+        # year. They belong in the output as evidence of coverage, but they
+        # cannot take part in any series reasoning.
+        entries = [r for r in entries if r.get("fiscal_year") is not None]
+        if not entries:
+            continue
         entries.sort(key=lambda r: r["fiscal_year"])
         anchors = {r["fiscal_year"]: anchor_for(r) for r in entries}
         known = [v for v in anchors.values() if v]
@@ -228,12 +247,41 @@ def main() -> None:
             # whereas a trend line tolerates growth and still rejects a step to
             # a different quantity. Median-of-slopes is unmoved by the outliers
             # it is meant to find, which a least-squares fit would not be.
-            slopes = [(math.log(v2) - math.log(v1)) / (y2 - y1)
-                      for i, (y1, v1) in enumerate(points)
-                      for (y2, v2) in points[i + 1:] if y2 != y1]
-            slope = statistics.median(slopes) if slopes else 0.0
-            intercept = statistics.median(
-                [math.log(v) - slope * y for y, v in points])
+            # ...but median-of-slopes assumes the series is a fleet with a few
+            # bad years in it. When the parser has mixed in a SECOND quantity
+            # for half the series the median lands between the two groups and
+            # rejects both — that is how Albertsons' verified 2,277/2,276/2,271
+            # were being withheld alongside the 90/110/90 that displaced them.
+            #
+            # So fit a line through every pair and keep the best-supported one.
+            # Support is judged by the anchors FIRST, not by headcount: on
+            # Build-A-Bear the wrong quantity covers more years than the right
+            # one, and on AutoNation the vehicle-inventory cluster is both
+            # larger and more numerous than the real 240-odd dealerships.
+            # A year where two independent sources agree is what identifies
+            # which of the two quantities is the fleet.
+            # Tried breaking anchorless ties toward whichever line covers the
+            # EARLIEST filings, on the theory that a company's history starts at
+            # its real size and the misread quantity creeps in later. Carvana
+            # improved; Haverty's broke — its early years are the square-footage
+            # ones, so the rule handed it 2,152 in place of a correct 121. The
+            # premise is simply not true, so headcount stands and Carvana is
+            # left to the industry gate and the unsupported report instead.
+            def support(slope: float, intercept: float) -> tuple:
+                fitted = [(y, v) for y, v in points
+                          if abs(math.log(v) - (slope * y + intercept)) <= TREND_TOLERANCE]
+                agreed = sum(1 for y, v in fitted if anchors.get(y) == v)
+                return (agreed, len(fitted), sum(v for _, v in fitted))
+
+            slope, intercept, best = 0.0, math.log(points[0][1]), (-1, -1, -1)
+            for index, (y1, v1) in enumerate(points):
+                for y2, v2 in points[index + 1:]:
+                    if y2 == y1:
+                        continue
+                    trial = (math.log(v2) - math.log(v1)) / (y2 - y1)
+                    scored = support(trial, math.log(v1) - trial * y1)
+                    if scored > best:
+                        slope, intercept, best = trial, math.log(v1) - trial * y1, scored
 
             def predicted(year: int) -> float:
                 return slope * year + intercept

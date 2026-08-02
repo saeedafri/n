@@ -4,11 +4,11 @@
  "value": 160,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total stores open at end of year | | 160 |",
+ "evidence": "| Total stores open at end of year | | 160 | | | 159 | | | 150 | | | 125 | | | 99 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "VRA/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

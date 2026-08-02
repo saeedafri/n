@@ -1,14 +1,14 @@
 {
  "ticker": "GIII",
  "fiscal_year": 2022,
- "value": 282,
+ "value": 182,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "gment that resulted in the closure of 150 Wilsons, G.H. Bass and Calvin Klein Performance stores during fiscal 2021. We operated 282 stores as of January 31, 2020, 50 stores as of January 31, 2021 an",
+ "evidence": "| Total | | 182 40",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GIII/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

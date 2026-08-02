@@ -1,0 +1,14 @@
+{
+ "ticker": "WOOF",
+ "fiscal_year": 2025,
+ "value": 1398,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total pet care centers (U.S. and Puerto Rico) at end of period | | | 1,398 | | | | 1,423 | | | | 1,430 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WOOF/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

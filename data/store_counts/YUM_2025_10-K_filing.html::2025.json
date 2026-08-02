@@ -1,0 +1,14 @@
+{
+ "ticker": "YUM",
+ "fiscal_year": 2025,
+ "value": 63285,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (29 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "YUM/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

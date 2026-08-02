@@ -1,14 +1,18 @@
 {
  "ticker": "DRVN",
  "fiscal_year": 2021,
- "value": 1682,
+ "accession": "DRVN/2022/10-K/filing.html::2021",
+ "fye_date": "2021-12-25",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 952,
+ "l3_value": null,
+ "value": 952,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "| Total Store Count | | 1,682 | | | 1,545 | | | 137 | | | 9 | %",
+ "evidence": "| Total Store Count | 952 |",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "DRVN/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

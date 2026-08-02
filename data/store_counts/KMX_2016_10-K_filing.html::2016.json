@@ -4,11 +4,11 @@
  "value": 158,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "uit City through a tax-free transaction, becoming an independent, publicly traded company. As of February 29, 2016 , we operated 158 used car stores in 78 metropolitan markets. Our home office is located at 1",
+ "evidence": "inia | 10 | | Minnesota | 2 | | | Washington | 1 | | Mississippi | 2 | | | Wisconsin | 4 | | Missouri | 3 | | | Total | 158 | Of the 158 used car stores open as of February 29, 2016, 84 were located on owned sites and 74",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "KMX/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

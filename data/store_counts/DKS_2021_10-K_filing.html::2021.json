@@ -1,14 +1,18 @@
 {
  "ticker": "DKS",
  "fiscal_year": 2021,
- "value": 854,
+ "accession": "DKS/2021/10-K/filing.html::2021",
+ "fye_date": "2021-01-30",
+ "db_value": 854,
+ "l1_value": 730,
+ "l2_value": 854,
+ "l3_value": null,
+ "value": 730,
+ "source_rule": "L1_xbrl",
  "confidence": "high",
- "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": 854,
- "needs_review": false,
- "accession": "DKS/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

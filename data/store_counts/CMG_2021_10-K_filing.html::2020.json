@@ -1,9 +1,15 @@
 {
  "ticker": "CMG",
  "fiscal_year": 2020,
- "value": 2768,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "CMG/2021/10-K/filing.html::2020",
+ "fye_date": "2020-12-31",
+ "db_value": null,
+ "l1_value": 2724,
+ "l2_value": 2768,
+ "l3_value": null,
+ "value": 2724,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (9 facts)",
  "by_country": {
   "Chipotle": 2724
@@ -11,8 +17,6 @@
  "by_continent": {
   "Other": 2724
  },
- "db_value": null,
- "needs_review": false,
- "accession": "CMG/2021/10-K/filing.html::2020",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

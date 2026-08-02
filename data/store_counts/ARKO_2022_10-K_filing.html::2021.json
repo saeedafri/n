@@ -1,14 +1,18 @@
 {
  "ticker": "ARKO",
  "fiscal_year": 2021,
- "value": 3034,
+ "accession": "ARKO/2022/10-K/filing.html::2021",
+ "fye_date": "2021-12-31",
+ "db_value": 3034,
+ "l1_value": null,
+ "l2_value": 50,
+ "l3_value": null,
+ "value": 50,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "If we do not effectively manage our workforce, our labor costs and results of operations could be adversely affected. With over 11,000 store employees, our labor costs represent one of our largest sto",
+ "evidence": "ions and organic growth within the highly fragmented convenience store industry. With approximately 70% of the convenience store market composed of chains with 50 or fewer locations as of 2020, we believe that there is ample opportu",
  "by_country": {},
  "by_continent": {},
- "db_value": 3034,
- "needs_review": false,
- "accession": "ARKO/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

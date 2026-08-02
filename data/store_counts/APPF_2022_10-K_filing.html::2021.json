@@ -1,0 +1,18 @@
+{
+ "ticker": "APPF",
+ "fiscal_year": 2021,
+ "accession": "APPF/2022/10-K/filing.html::2021",
+ "fye_date": "2021-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 36,
+ "l3_value": null,
+ "value": 36,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ure business opportunities. We define property management units under management as the number of active units on our core solutions. We had 6.35 million and 5.36 million property management units under management as of December 31, 2021 and 2020, respectively. Seasonality We",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

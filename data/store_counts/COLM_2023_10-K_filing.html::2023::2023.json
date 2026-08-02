@@ -1,0 +1,14 @@
+{
+ "ticker": "COLM",
+ "fiscal_year": 2023,
+ "value": 450,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "rally-managed departmental functions, including consumer digital technology, certain supply chain functions, finance, human resources and legal. In addition, as of December 31, 2023, we directly operated approximately 450 retail stores and 34 temporary clearance locations. T",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 484,
+ "needs_review": false,
+ "accession": "COLM/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

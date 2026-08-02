@@ -4,11 +4,11 @@
  "value": 96,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "tem 2. Properties: As of December 30, 2023, the Company owned and operated 101 of its retail food stores and leased and operated 96 stores under operating leases that expire at various dates through",
+ "evidence": "updated. This framework is designed to mitigate risks related to data breaches or other security incidents originating from third parties. Item 2. Properties: As of December 30, 2023, the Company owned and operated 101 of its retail food stores and leased and operated 96 stores under operating leases that expire at v",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "WMK/2024/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

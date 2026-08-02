@@ -1,0 +1,14 @@
+{
+ "ticker": "YUM",
+ "fiscal_year": 2019,
+ "value": 50000,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "YUM/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

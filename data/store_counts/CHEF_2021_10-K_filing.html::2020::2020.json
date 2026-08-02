@@ -1,0 +1,14 @@
+{
+ "ticker": "CHEF",
+ "fiscal_year": 2020,
+ "value": 36,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "that can be acted upon at stockholder meetings. Item 1B. UNRESOLVED STAFF COMMENTS None. Item 2. PROPERTIES We operate 36 distributions centers located in the United States and Canada totaling approximat",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CHEF/2021/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

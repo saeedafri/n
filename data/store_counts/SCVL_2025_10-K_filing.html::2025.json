@@ -4,11 +4,11 @@
  "value": 430,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "tructure and modernization of our store fleet as key drivers of profitable growth. As of our Fiscal 2024 year end, we operated 430 stores across 36 states and Puerto Rico. Including e-commerce sale",
+ "evidence": "| Total Stores | | 430 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SCVL/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

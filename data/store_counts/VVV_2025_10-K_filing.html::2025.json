@@ -2,13 +2,13 @@
  "ticker": "VVV",
  "fiscal_year": 2025,
  "value": 2200,
- "confidence": "medium",
- "basis": "fits series (l1)",
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "VVV/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

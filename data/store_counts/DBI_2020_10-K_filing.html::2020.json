@@ -1,0 +1,18 @@
+{
+ "ticker": "DBI",
+ "fiscal_year": 2020,
+ "accession": "DBI/2020/10-K/filing.html::2020",
+ "fye_date": "2020-02-01",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 16,
+ "l3_value": null,
+ "value": 16,
+ "source_rule": "L2_prose",
+ "confidence": "medium",
+ "evidence": "uare feet. Most of the store leases are for a fixed term with options for extension periods, exercisable at our option, with 16 stores leased from Schottenstein Affiliates, a related party.",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

@@ -4,11 +4,11 @@
  "value": 31070,
  "confidence": "high",
  "basis": "two sources agree",
- "evidence": "XBRL us-gaap:NumberOfRestaurants (26 facts) | llm value unsupported, rejected",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (26 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 31070,
  "needs_review": false,
  "accession": "QSR/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

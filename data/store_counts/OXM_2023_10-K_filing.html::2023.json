@@ -1,0 +1,14 @@
+{
+ "ticker": "OXM",
+ "fiscal_year": 2023,
+ "value": 292,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "'total' repeated per table: 9 + 59 + 67 + 157 = 292, a figure stated in the filing",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "OXM/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

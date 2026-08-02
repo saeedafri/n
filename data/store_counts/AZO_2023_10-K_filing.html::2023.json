@@ -1,9 +1,15 @@
 {
  "ticker": "AZO",
  "fiscal_year": 2023,
+ "accession": "AZO/2023/10-K/filing.html::2023",
+ "fye_date": "2023-08-26",
+ "db_value": 7140,
+ "l1_value": 7140,
+ "l2_value": 7140,
+ "l3_value": null,
  "value": 7140,
+ "source_rule": "L1_xbrl_geo_sum",
  "confidence": "high",
- "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
  "by_country": {
   "United States": 6300,
@@ -14,8 +20,6 @@
   "North America": 7040,
   "South America": 100
  },
- "db_value": 7140,
- "needs_review": false,
- "accession": "AZO/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

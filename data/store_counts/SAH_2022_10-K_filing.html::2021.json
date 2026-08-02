@@ -4,11 +4,11 @@
  "value": 110,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "| Total | | 110 | | | 46 | | | 100.0 | %",
+ "evidence": "agement and operational reporting purposes, we group certain businesses together that share management and inventory (principally used vehicles) into “stores.” As of December 31, 2021, we operated 110 stores in the Franchised Dealerships Segment a",
  "by_country": {},
  "by_continent": {},
  "db_value": 110,
  "needs_review": false,
  "accession": "SAH/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

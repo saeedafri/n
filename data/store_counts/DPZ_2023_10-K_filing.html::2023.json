@@ -1,0 +1,18 @@
+{
+ "ticker": "DPZ",
+ "fiscal_year": 2023,
+ "accession": "DPZ/2023/10-K/filing.html::2023",
+ "fye_date": "2023-01-01",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 13194,
+ "l3_value": null,
+ "value": 13194,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ccounted for $295.0 million, or 6%, of our consolidated revenues. This segment is comprised of a network of franchised stores in over 90 international markets. As of January 1, 2023, we had 13,194 international franchise stores. The principal sources of revenues from",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

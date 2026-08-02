@@ -1,0 +1,14 @@
+{
+ "ticker": "TPH",
+ "fiscal_year": 2016,
+ "value": 37,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "as a percentage of overall orders) decreased to 15% for the year ended December 31, 2016 from 16% for the year ended December 31, 2015. Backlog units increased 37 units, or 3%, to 1,193 as of December 31, 2016, compared to 1,156 as of December 31, 2",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TPH/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

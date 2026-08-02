@@ -2,13 +2,13 @@
  "ticker": "TSCO",
  "fiscal_year": 2016,
  "value": 1738,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (9 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "TSCO/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

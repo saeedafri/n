@@ -3,12 +3,12 @@
  "fiscal_year": 2019,
  "value": 169,
  "confidence": "medium",
- "basis": "fits the company's own range",
- "evidence": "umer sales are generated through our brand and factory house stores and e-commerce website. As of December 31, 2019, we had 169 factory house stores in North America primarily located in outlet 3 Table of Con",
+ "basis": "filing (10-K)",
+ "evidence": "s ended December 31, 2019 and 2018, respectively. Our direct to consumer sales are generated through our brand and factory house stores and e-commerce website. As of December 31, 2019, we had 169 factory house stores in North America primarily located in o",
  "by_country": {},
  "by_continent": {},
  "db_value": 388,
  "needs_review": false,
  "accession": "UAA/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

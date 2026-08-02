@@ -4,11 +4,11 @@
  "value": 59,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ur e-commerce business. During fiscal 2018, we opened net four new full-price retail stores. As of February 2, 2019, we operated 59 stores, consisting of 45 company-operated full-price retail stores",
+ "evidence": "egment includes our company-operated retail and outlet stores and our e-commerce business. During fiscal 2018, we opened net four new full-price retail stores. As of February 2, 2019, we operated 59 stores, consisting of 45 company-operated full",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "VNCE/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

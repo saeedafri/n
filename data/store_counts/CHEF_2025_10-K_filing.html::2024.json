@@ -1,14 +1,18 @@
 {
  "ticker": "CHEF",
  "fiscal_year": 2024,
+ "accession": "CHEF/2025/10-K/filing.html::2024",
+ "fye_date": "2024-12-27",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 49,
+ "l3_value": null,
  "value": 49,
+ "source_rule": "L2_prose",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "veraging an experienced and sophisticated sales force of approximately 980 sales and customer service professionals. We operate 49 distribution centers and provide service six days a week in many of our service",
+ "evidence": "ty and data privacy incidents (if any) and status on key information security initiatives. 31 Item 2. PROPERTIES We operate 49 distributions centers located in the United States, Canada, Qatar, Oman, and Unit",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CHEF/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

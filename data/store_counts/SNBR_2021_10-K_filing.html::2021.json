@@ -2,13 +2,13 @@
  "ticker": "SNBR",
  "fiscal_year": 2021,
  "value": 602,
- "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "lt Lake City, UT) and four assembly distribution centers (Irmo, SC; Salt Lake City, UT; Ontario, CA; and Baltimore, MD) with two additional locations (Dallas, TX and Tampa, FL) opening in early 2021. Primary o",
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "lds. Certain retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of our 602 retail stores as of January 2, 2021: | | | | | | | | | | | | | | | | | | |",
  "by_country": {},
  "by_continent": {},
  "db_value": 602,
  "needs_review": false,
  "accession": "SNBR/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

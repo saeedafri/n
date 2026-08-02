@@ -1,0 +1,25 @@
+{
+ "ticker": "DRI",
+ "fiscal_year": 2021,
+ "accession": "DRI/2021/10-K/filing.html::2021",
+ "fye_date": "2021-05-30",
+ "db_value": null,
+ "l1_value": 84,
+ "l2_value": 1834,
+ "l3_value": null,
+ "value": 84,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (9 facts)",
+ "by_country": {
+  "North America": 33,
+  "Latin America, the Middle East and Malaysia": 24,
+  "Latin America": 27
+ },
+ "by_continent": {
+  "Other": 60,
+  "Asia": 24
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

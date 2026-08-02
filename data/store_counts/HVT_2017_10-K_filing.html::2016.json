@@ -1,14 +1,14 @@
 {
  "ticker": "HVT",
  "fiscal_year": 2016,
- "value": 124,
+ "value": 2247,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| | | 100.0 | % | | | 100.0 | % Stores As of December 31, 2016, we operated 124 stores serving 83 cities in 16 states with approximately 4.5 milli",
+ "evidence": ", and the ability to make prompt delivery of orders through maintenance of inventory, significant competitive advantages. 5 Employees As of December 31, 2016, we had 3,656 employees: 2,247 in individual retail store operations, 194 in our corporate and cr",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "HVT/2017/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

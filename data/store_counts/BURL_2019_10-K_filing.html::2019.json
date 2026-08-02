@@ -1,14 +1,18 @@
 {
  "ticker": "BURL",
  "fiscal_year": 2019,
+ "accession": "BURL/2019/10-K/filing.html::2019",
+ "fye_date": "2019-02-02",
+ "db_value": null,
+ "l1_value": 727,
+ "l2_value": 675,
+ "l3_value": null,
  "value": 727,
- "confidence": "medium",
- "basis": "fits series (l1)",
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (12 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BURL/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

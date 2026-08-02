@@ -1,0 +1,14 @@
+{
+ "ticker": "CVS",
+ "fiscal_year": 2018,
+ "value": 9900,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVS/2018/10-K/filing.html::2018::2018",
+ "extractor_version": 5
+}

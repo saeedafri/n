@@ -1,14 +1,14 @@
 {
  "ticker": "LESL",
  "fiscal_year": 2023,
- "value": 1000,
+ "value": 1008,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "tents Item 1B. Unresolve d Staff Comments. None. Item 2. Pr operties. Properties As of September 30, 2023, we had over 1,000 locations in 39 states, two manufacturing facilities, and six distrib",
+ "evidence": "| Number of locations open at end of period | | | 1,008 | | | | 990 | | | | 952 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LESL/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

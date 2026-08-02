@@ -4,11 +4,11 @@
  "value": 5,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ROPERT IES ﻿ Our corporate headquarters is located in downtown Memphis, Tennessee, in a leased facility. We operate five customer care centers throughout the United States that field inbound claims call",
+ "evidence": "PROPERTIES ﻿ Our corporate headquarters is located in downtown Memphis, Tennessee, in a leased facility. We operate five customer care centers throughout the United States that field inbound claims call",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "FTDR/2019/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,7 +1,7 @@
 {
  "ticker": "SPWH",
  "fiscal_year": 2016,
- "value": 66,
+ "value": 64,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
@@ -10,5 +10,5 @@
  "db_value": null,
  "needs_review": false,
  "accession": "SPWH/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

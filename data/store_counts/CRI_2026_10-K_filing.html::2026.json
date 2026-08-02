@@ -1,14 +1,18 @@
 {
  "ticker": "CRI",
  "fiscal_year": 2026,
- "value": 1068,
+ "accession": "CRI/2026/10-K/filing.html::2026",
+ "fye_date": "2026-01-03",
+ "db_value": 1068,
+ "l1_value": null,
+ "l2_value": 804,
+ "l3_value": null,
+ "value": 804,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "| Total | 15,400 | | 100.0 | %",
+ "evidence": "ducts, as well as other products, depending on the store and location. As of January 3, 2026, our stores averaged approximately 5,100 square feet per location. As of January 3, 2026, we operated 804 stores in the United States. In the fourth qua",
  "by_country": {},
  "by_continent": {},
- "db_value": 1068,
- "needs_review": false,
- "accession": "CRI/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

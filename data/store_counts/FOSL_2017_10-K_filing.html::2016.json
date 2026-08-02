@@ -1,14 +1,14 @@
 {
  "ticker": "FOSL",
  "fiscal_year": 2016,
- "value": 281,
+ "value": 619,
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "| Total stores | 281 |",
+ "basis": "fits neighbouring years (l2)",
+ "evidence": "| Total stores | 281 | | | 204 | | | 134 | | | 619 | | | 296 | | | 174 | | | 123 | | | 593 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "FOSL/2017/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

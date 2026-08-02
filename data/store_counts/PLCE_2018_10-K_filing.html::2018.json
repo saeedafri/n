@@ -4,11 +4,11 @@
  "value": 1014,
  "confidence": "medium",
  "basis": "fits neighbouring years (l2)",
- "evidence": "| Number of stores operated by the Company, end of period | 1,014 |",
+ "evidence": "| Number of stores operated by the Company, end of period | 1,014 | | | 1,039 | | | 1,069 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "PLCE/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

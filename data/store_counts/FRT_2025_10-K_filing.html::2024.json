@@ -1,14 +1,14 @@
 {
  "ticker": "FRT",
  "fiscal_year": 2024,
- "value": 3104,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "| Total —Residential | | | | | | 3,104 units | | | | 95% | |",
+ "value": 5,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "tements. 2024 Acquisitions and Dispositions On May 31, 2024, we acquired the fee interest in Virginia Gateway, which is comprised of five adjacent shopping centers in Gainesville, Virginia, totaling 664,000 square feet, for",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": false,
+ "needs_review": true,
  "accession": "FRT/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

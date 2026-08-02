@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2020,
+ "value": 145,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "stores, we sell some of our discontinued styles from prior seasons, full price in-line products, as well as products made specifically for the outlet stores. As of March 31, 2020, we had a total of 145 global retail stores, which includes 76 concept stores and 6",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 145,
+ "needs_review": false,
+ "accession": "DECK/2020/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

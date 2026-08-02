@@ -1,14 +1,18 @@
 {
  "ticker": "COLM",
  "fiscal_year": 2023,
+ "accession": "COLM/2023/10-K/filing.html::2023",
+ "fye_date": "2023-12-31",
+ "db_value": 484,
+ "l1_value": null,
+ "l2_value": 450,
+ "l3_value": null,
  "value": 450,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "certain supply chain functions, finance, human resources and legal. In addition, as of December 31, 2023, we directly operated approximately 450 reta il stores and 34 temporary clearance locations. The vast majority of",
+ "evidence": "rally-managed departmental functions, including consumer digital technology, certain supply chain functions, finance, human resources and legal. In addition, as of December 31, 2023, we directly operated approximately 450 retail stores and 34 temporary clearance locations. T",
  "by_country": {},
  "by_continent": {},
- "db_value": 484,
- "needs_review": false,
- "accession": "COLM/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

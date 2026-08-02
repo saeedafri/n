@@ -1,14 +1,18 @@
 {
  "ticker": "BBBY",
  "fiscal_year": 2022,
+ "accession": "BBBY/2022/10-K/filing.html::2022",
+ "fye_date": "2022-02-26",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 953,
+ "l3_value": null,
  "value": 953,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "d.com, bedbathandbeyond.ca, harmondiscount.com, facevalues.com, buybuybaby.com, buybuybaby.ca and decorist.com. We also operate 953 retail stores, as of February 26, 2022 , consisting of 771 Bed Bath & Bey",
+ "evidence": "latforms include bedbathandbeyond.com, bedbathandbeyond.ca, harmondiscount.com, facevalues.com, buybuybaby.com, buybuybaby.ca and decorist.com. We also operate 953 retail stores, as of February 26, 2022, consisting of 771 Bed Bath & Beyond st",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BBBY/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

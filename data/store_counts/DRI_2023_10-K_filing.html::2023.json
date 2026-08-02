@@ -1,0 +1,24 @@
+{
+ "ticker": "DRI",
+ "fiscal_year": 2023,
+ "accession": "DRI/2023/10-K/filing.html::2023",
+ "fye_date": "2023-05-28",
+ "db_value": null,
+ "l1_value": 101,
+ "l2_value": 1914,
+ "l3_value": null,
+ "value": 101,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (9 facts)",
+ "by_country": {
+  "North America": 34,
+  "Latin America, Caribbean And Asia": 32,
+  "Latin America": 35
+ },
+ "by_continent": {
+  "Other": 101
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

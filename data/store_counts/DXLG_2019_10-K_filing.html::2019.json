@@ -1,14 +1,24 @@
 {
  "ticker": "DXLG",
  "fiscal_year": 2019,
- "value": 216,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "DXLG/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "fye_date": "2019-02-02",
+ "db_value": null,
+ "l1_value": 287,
+ "l2_value": 216,
+ "l3_value": null,
+ "value": 287,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {
+  "DXL Stores": 216,
+  "Casual Male XL Retail and Outlet Stores": 66,
+  "Rochester Clothing Stores": 5
+ },
+ "by_continent": {
+  "Other": 287
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

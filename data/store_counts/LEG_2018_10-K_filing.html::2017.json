@@ -4,11 +4,11 @@
  "value": 121,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": ". Item 2. Properties. The Company’s corporate office is located in Carthage, Missouri. As of December 31, 2017 we had 121 manufacturing locations, of which 73 are located across the United States and 48 ar",
+ "evidence": "| Total | | 121 | | 52 | | 7 | | 34 | | 28",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LEG/2018/10-K/filing.html::2017",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "DXLG",
+ "fiscal_year": 2019,
+ "value": 216,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DXLG/2019/10-K/filing.html::2019::2019",
+ "extractor_version": 5
+}

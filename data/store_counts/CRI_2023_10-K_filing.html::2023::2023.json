@@ -1,0 +1,14 @@
+{
+ "ticker": "CRI",
+ "fiscal_year": 2023,
+ "value": 792,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "prices per unit increased mid-single digits. Comparable net sales, including retail store and eCommerce, decreased 12.2% driven by the factors mentioned above. As of December 30, 2023, we operated 792 retail stores in the U.S. compared to 757 in fiscal 2",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1034,
+ "needs_review": false,
+ "accession": "CRI/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

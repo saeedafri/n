@@ -1,0 +1,14 @@
+{
+ "ticker": "DBI",
+ "fiscal_year": 2022,
+ "value": 648,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total number of stores | 648 | | | 663 | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DBI/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

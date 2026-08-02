@@ -1,0 +1,14 @@
+{
+ "ticker": "WMT",
+ "fiscal_year": 2016,
+ "value": 11528,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total retail units | | 6,588 | | | — | | | 4,940 | | | — | | | 11,528 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WMT/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

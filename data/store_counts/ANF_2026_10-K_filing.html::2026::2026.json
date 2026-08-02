@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2026,
+ "value": 889,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 665 | | | 156 | | | 68 | | | 889 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 829,
+ "needs_review": false,
+ "accession": "ANF/2026/10-K/filing.html::2026::2026",
+ "extractor_version": 5
+}

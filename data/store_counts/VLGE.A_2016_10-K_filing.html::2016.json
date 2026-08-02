@@ -4,11 +4,11 @@
  "value": 29,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Number of stores | 29 |",
+ "evidence": "| Number of stores | 29 | | | 29 | | | 29 | | | 29 | | | 29 | |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "VLGE.A/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

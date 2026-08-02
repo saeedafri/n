@@ -1,0 +1,14 @@
+{
+ "ticker": "CROX",
+ "fiscal_year": 2023,
+ "value": 345,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 345 | | 29 | | 11 | | 363",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 363,
+ "needs_review": false,
+ "accession": "CROX/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

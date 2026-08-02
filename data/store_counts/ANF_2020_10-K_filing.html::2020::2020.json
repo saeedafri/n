@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2020,
+ "value": 854,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Number of stores at end of period | 854 | | | 861 | | | 868 | | | 898 | | | 932 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 854,
+ "needs_review": false,
+ "accession": "ANF/2020/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

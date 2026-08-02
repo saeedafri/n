@@ -1,0 +1,14 @@
+{
+ "ticker": "BBW",
+ "fiscal_year": 2017,
+ "value": 361,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 361,
+ "needs_review": false,
+ "accession": "BBW/2018/10-K/filing.html::2017::2017",
+ "extractor_version": 5
+}

@@ -1,14 +1,14 @@
 {
  "ticker": "SAH",
  "fiscal_year": 2016,
- "value": 107,
+ "value": 116,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ses together that share management and inventory (principally used vehicles) into “stores.” As of December 31, 2016, we operated 107 franchised dealership stores and five EchoPark ® stores. Our franchised dealerships pr",
+ "evidence": "onic Automotive, Inc. was incorporated in Delaware in 1997. We are one of the largest automotive retailers in the United States (as measured by total revenue). As of December 31, 2016, we operated 116 franchises in 13 states (representing 25 different",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SAH/2017/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

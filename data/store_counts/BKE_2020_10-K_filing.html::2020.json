@@ -1,14 +1,18 @@
 {
  "ticker": "BKE",
  "fiscal_year": 2020,
- "value": 448,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "BKE/2020/10-K/filing.html::2020",
+ "fye_date": "2020-02-01",
+ "db_value": null,
+ "l1_value": 456,
+ "l2_value": 448,
+ "l3_value": null,
+ "value": 456,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BKE/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

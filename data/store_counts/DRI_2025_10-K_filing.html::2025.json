@@ -1,0 +1,25 @@
+{
+ "ticker": "DRI",
+ "fiscal_year": 2025,
+ "accession": "DRI/2025/10-K/filing.html::2025",
+ "fye_date": "2025-05-25",
+ "db_value": null,
+ "l1_value": 220,
+ "l2_value": 2159,
+ "l3_value": null,
+ "value": 220,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (14 facts)",
+ "by_country": {
+  "North America": 91,
+  "Canada, Latin America, Caribbean, Asia And Middle East": 69,
+  "Latin America, the Caribbean, Asia and the Middle East": 60
+ },
+ "by_continent": {
+  "Other": 151,
+  "North America": 69
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

@@ -1,9 +1,15 @@
 {
  "ticker": "DXLG",
  "fiscal_year": 2021,
- "value": 226,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "DXLG/2021/10-K/filing.html::2021",
+ "fye_date": "2021-01-30",
+ "db_value": null,
+ "l1_value": 228,
+ "l2_value": 226,
+ "l3_value": null,
+ "value": 228,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
  "by_country": {
   "UNITED STATES": 226,
@@ -12,8 +18,6 @@
  "by_continent": {
   "North America": 228
  },
- "db_value": null,
- "needs_review": false,
- "accession": "DXLG/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

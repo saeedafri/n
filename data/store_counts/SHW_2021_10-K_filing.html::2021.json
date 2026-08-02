@@ -1,14 +1,14 @@
 {
  "ticker": "SHW",
  "fiscal_year": 2021,
- "value": 4859,
+ "value": 5081,
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "The total number of stores in operation at December 31, 2021 was 4,859 in the United States, Canada, Latin America and the Caribbean.",
+ "basis": "fits series (db)",
+ "evidence": "",
  "by_country": {},
  "by_continent": {},
  "db_value": 5081,
  "needs_review": false,
  "accession": "SHW/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

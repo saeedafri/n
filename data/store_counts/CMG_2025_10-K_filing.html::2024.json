@@ -1,14 +1,24 @@
 {
  "ticker": "CMG",
  "fiscal_year": 2024,
- "value": 3726,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "XBRL us-gaap:NumberOfRestaurants (11 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": 3726,
- "needs_review": false,
  "accession": "CMG/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "fye_date": "2024-12-31",
+ "db_value": 3726,
+ "l1_value": 3726,
+ "l2_value": 3644,
+ "l3_value": null,
+ "value": 3726,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (11 facts)",
+ "by_country": {
+  "Chipotle": 3644,
+  "International": 1,
+  "Licensed Units": 3
+ },
+ "by_continent": {
+  "Other": 3648
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

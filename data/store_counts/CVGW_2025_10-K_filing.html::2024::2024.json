@@ -1,0 +1,14 @@
+{
+ "ticker": "CVGW",
+ "fiscal_year": 2024,
+ "value": 2106,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| TOTAL | | 522 | | 1,584 | | 2,106",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVGW/2025/10-K/filing.html::2024::2024",
+ "extractor_version": 5
+}

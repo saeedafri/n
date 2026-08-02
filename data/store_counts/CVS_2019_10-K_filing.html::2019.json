@@ -1,14 +1,18 @@
 {
  "ticker": "CVS",
  "fiscal_year": 2019,
- "value": 9941,
+ "accession": "CVS/2019/10-K/filing.html::2019",
+ "fye_date": "2019-12-31",
+ "db_value": null,
+ "l1_value": 9900,
+ "l2_value": 9941,
+ "l3_value": null,
+ "value": 9900,
+ "source_rule": "L1_xbrl",
  "confidence": "high",
- "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (13 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CVS/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

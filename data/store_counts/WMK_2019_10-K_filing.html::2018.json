@@ -1,14 +1,14 @@
 {
  "ticker": "WMK",
  "fiscal_year": 2018,
- "value": 92,
+ "value": 107,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "d Regional General Manager of Walmart Ohio, a retail store SuperCenter, from February 2010 until May 2014. Walmart Ohio consisted of 92 stores that geographically included all stores South of Toledo, Cl",
+ "evidence": "resolved staff comments. 5 WEIS MARKETS, INC. Table of Contents Item 2. Properties: ﻿ As of December 29, 2018, the Company owned and operated 95 of its retail food stores and leased and operated 107 stores under operating leases that expire at v",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "WMK/2019/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

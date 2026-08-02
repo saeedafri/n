@@ -1,14 +1,14 @@
 {
  "ticker": "SBUX",
  "fiscal_year": 2018,
- "value": 17454,
+ "value": 15341,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total | 17,454 |",
+ "evidence": "land | 81,000 | | | Warehouse and distribution We own most of our roasting facilities and lease the majority of our warehousing and distribution locations. As of September 30, 2018, Starbucks had 15,341 company-operated stores, almost all of which are leased. We als",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SBUX/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,14 +1,18 @@
 {
  "ticker": "BBY",
  "fiscal_year": 2019,
- "value": 1369,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "BBY/2019/10-K/filing.html::2019",
+ "fye_date": "2019-02-02",
+ "db_value": null,
+ "l1_value": 800,
+ "l2_value": 1369,
+ "l3_value": null,
+ "value": 800,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BBY/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -2,13 +2,13 @@
  "ticker": "SCVL",
  "fiscal_year": 2026,
  "value": 426,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SCVL/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "VRSN",
+ "fiscal_year": 2020,
+ "value": 909,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 909 | | | 872 | | | 900 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "VRSN/2021/10-K/filing.html::2020",
+ "extractor_version": 5
+}

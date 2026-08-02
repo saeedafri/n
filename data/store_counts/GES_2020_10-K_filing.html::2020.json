@@ -4,11 +4,11 @@
  "value": 1729,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "and the Middle East, 11 stores in Canada and one store in Central and South America. 37 We ended fiscal 2020 with 1,729 stores and 394 concessions worldwide, comprised as follows: |",
+ "evidence": "| Total | | 1,729 | | | 1,169 | | | 560 | | | 394 | | | 183 | | | 211 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 1729,
  "needs_review": false,
  "accession": "GES/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

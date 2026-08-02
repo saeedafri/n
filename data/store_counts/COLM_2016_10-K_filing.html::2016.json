@@ -1,14 +1,18 @@
 {
  "ticker": "COLM",
  "fiscal_year": 2016,
- "value": 750,
+ "accession": "COLM/2016/10-K/filing.html::2016",
+ "fye_date": "2016-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 20,
+ "l3_value": null,
+ "value": 20,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "erce websites across multiple platforms and has distribution relationships with approximately 60 wholesale dealers that operate approximately 750 retail locations. As a 60% majority-owned entity that we control, the joint",
+ "evidence": "approximately 500 wholesale customers in locations throughout the EMEA region, including Russia, portions of Europe, the Middle East, and Africa. In addition, as of December 31, 2016, we operated 20 outlet and shop-in-shop locations and 1 branded retail store in various l",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "COLM/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

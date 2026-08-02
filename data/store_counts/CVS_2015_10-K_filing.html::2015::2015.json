@@ -1,0 +1,14 @@
+{
+ "ticker": "CVS",
+ "fiscal_year": 2015,
+ "value": 9681,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of stores (at end of year) | 9,681 | | | 7,866 | | | 7,702 | | | 7,508 | | | 7,388 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVS/2015/10-K/filing.html::2015::2015",
+ "extractor_version": 5
+}

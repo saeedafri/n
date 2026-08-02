@@ -1,14 +1,38 @@
 {
  "ticker": "COST",
  "fiscal_year": 2021,
- "value": 815,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "XBRL us-gaap:NumberOfStores (43 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": 815,
- "needs_review": false,
  "accession": "COST/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "fye_date": "2021-08-29",
+ "db_value": 815,
+ "l1_value": 838,
+ "l2_value": 815,
+ "l3_value": null,
+ "value": 838,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (43 facts)",
+ "by_country": {
+  "FRANCE": 1,
+  "CHINA": 1,
+  "United States Operations": 571,
+  "Canadian Operations": 105,
+  "MEXICO": 39,
+  "JAPAN": 30,
+  "UNITED KINGDOM": 29,
+  "KOREA": 16,
+  "TAIWAN": 14,
+  "AUSTRALIA": 13,
+  "SPAIN": 3,
+  "ICELAND": 1,
+  "Canada Operations": 105
+ },
+ "by_continent": {
+  "Europe": 33,
+  "Asia": 61,
+  "North America": 715,
+  "Other": 106,
+  "Oceania": 13
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

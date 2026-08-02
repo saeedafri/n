@@ -1,14 +1,14 @@
 {
  "ticker": "SHW",
  "fiscal_year": 2020,
- "value": 4774,
+ "value": 4995,
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "the operations of The Americas Group included 4,774 company-operated specialty paint stores",
+ "basis": "fits series (db)",
+ "evidence": "| Total | | 10 | 51 | 61 | | 20 | 17 | 37",
  "by_country": {},
  "by_continent": {},
  "db_value": 4995,
  "needs_review": false,
  "accession": "SHW/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

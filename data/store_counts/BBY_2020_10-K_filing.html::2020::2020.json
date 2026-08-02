@@ -1,0 +1,14 @@
+{
+ "ticker": "BBY",
+ "fiscal_year": 2020,
+ "value": 1009,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Domestic segment stores | | 1,298 | | | 4 | | | (276) | | | 1,026 | | | 5 | | | (22) | | | 1,009 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 977,
+ "needs_review": false,
+ "accession": "BBY/2020/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "AN",
+ "fiscal_year": 2022,
+ "value": 343,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "able of Contents PART I ITEM 1. BUSINESS General AutoNation, Inc., through its subsidiaries, is one of the largest automotive retailers in the United States. As of December 31, 2022, we owned and operated 343 new vehicle franchises from 247 stores located in the United S",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 247,
+ "needs_review": false,
+ "accession": "AN/2023/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

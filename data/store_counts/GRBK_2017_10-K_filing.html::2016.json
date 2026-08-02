@@ -1,0 +1,14 @@
+{
+ "ticker": "GRBK",
+ "fiscal_year": 2016,
+ "value": 5189,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "'total' repeated per table: 954 + 4,235 = 5,189, a figure stated in the filing",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GRBK/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

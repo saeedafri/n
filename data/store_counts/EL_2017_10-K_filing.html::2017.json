@@ -1,14 +1,18 @@
 {
  "ticker": "EL",
  "fiscal_year": 2017,
+ "accession": "EL/2017/10-K/filing.html::2017",
+ "fye_date": "2017-06-30",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1430,
+ "l3_value": null,
  "value": 1430,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "valuating opportunities to open additional freestanding stores for certain of our other brands. As of June 30, 2017, we operated approximately 1,430 freestanding stores, and more than 500 freestanding stores are operated around",
+ "evidence": "by MžAžC, Jo Malone London, Bobbi Brown and Aveda. We are also evaluating opportunities to open additional freestanding stores for certain of our other brands. As of June 30, 2017, we operated approximately 1,430 freestanding stores, and more than 500 freestanding stores",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "EL/2017/10-K/filing.html::2017",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

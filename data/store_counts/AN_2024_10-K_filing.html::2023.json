@@ -1,14 +1,18 @@
 {
  "ticker": "AN",
  "fiscal_year": 2023,
- "value": 252,
+ "accession": "AN/2024/10-K/filing.html::2023",
+ "fye_date": "2023-12-31",
+ "db_value": 252,
+ "l1_value": null,
+ "l2_value": 60,
+ "l3_value": null,
+ "value": 60,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "| Total | $ | 3,253.2 | | | $ | 3,026.1 | | | $ | (227.1) | | | (7.5) | | | $ | 2,876.2 | | | $ | (149.9) | | | (5.2) |",
+ "evidence": "| Total | 63.4 | | | 57.5 | | | (590) | | | bps | | 58.1 | | | 60 | | | bps",
  "by_country": {},
  "by_continent": {},
- "db_value": 252,
- "needs_review": false,
- "accession": "AN/2024/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

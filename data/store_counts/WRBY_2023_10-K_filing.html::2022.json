@@ -1,14 +1,14 @@
 {
  "ticker": "WRBY",
  "fiscal_year": 2022,
- "value": 195,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "lease approximately 69,580 square feet of space under a lease that expires in August 2031. As of December 31, 2022, we operated 195 retail stores across the United States and five retail stores in Canada.",
+ "value": 200,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "n 2010 in cities such as New York, Nashville, and San Francisco, followed by our first permanent retail store in New York in 2013. Since then, we have grown to 200 retail stores across the United States and Canada as of December 31, 2022. Additionally, our net revenue increase",
  "by_country": {},
  "by_continent": {},
  "db_value": 200,
  "needs_review": false,
  "accession": "WRBY/2023/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,7 +1,7 @@
 {
  "ticker": "SBUX",
  "fiscal_year": 2024,
- "value": 18424,
+ "value": 21018,
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
@@ -10,5 +10,5 @@
  "db_value": null,
  "needs_review": false,
  "accession": "SBUX/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

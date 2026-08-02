@@ -2,13 +2,13 @@
  "ticker": "VNCE",
  "fiscal_year": 2023,
  "value": 67,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "ics and customer preferences, and the closing or decline in popularity of adjacent stores. As of January 28, 2023, we operated 67 stores, including 49 company-operated Vince full-price stores and",
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total Mall and Lifestyle Centers (33) | | | | | | | | | 72,659 | | | | 55,962 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 67,
  "needs_review": false,
  "accession": "VNCE/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

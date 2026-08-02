@@ -1,14 +1,14 @@
 {
  "ticker": "KR",
  "fiscal_year": 2023,
- "value": 2800,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "As of January 28, 2023, we operated approximately 2,800 owned or leased supermarkets, distribution warehouses and food production plants through divisions, subsidiaries or affiliates.",
+ "value": 2719,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "ude the following: Stores As of January 28, 2023, Kroger operates supermarkets under a variety of local banner names in 35 states and the District of Columbia. As of January 28, 2023, Kroger operated, either directly or through its subsidiaries, 2,719 supermarkets, of which 2,252 had pharmacies and 1,63",
  "by_country": {},
  "by_continent": {},
  "db_value": 2719,
  "needs_review": false,
  "accession": "KR/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

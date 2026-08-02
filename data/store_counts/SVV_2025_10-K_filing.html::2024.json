@@ -1,14 +1,14 @@
 {
  "ticker": "SVV",
  "fiscal_year": 2024,
- "value": 10488,
+ "value": 351,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total | 10,488 |",
+ "evidence": "s warehouses | 230 | | Corporate offices | 26 | | Total | 10,488 | As of December 28, 2024, our total consolidated selling square feet was 7.1 million. As of December 28, 2024, we operated 351 retail stores in the U.S., Canada and Australia. For",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SVV/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

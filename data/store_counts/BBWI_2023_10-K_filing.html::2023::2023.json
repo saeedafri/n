@@ -1,0 +1,19 @@
+{
+ "ticker": "BBWI",
+ "fiscal_year": 2023,
+ "value": 1802,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 1,755 | | | 95 | | | (48) | | | 1,802 |",
+ "by_country": {
+  "United States": 1693,
+  "Canada": 109
+ },
+ "by_continent": {
+  "North America": 1802
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BBWI/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

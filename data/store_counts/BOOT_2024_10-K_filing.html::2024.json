@@ -1,14 +1,18 @@
 {
  "ticker": "BOOT",
  "fiscal_year": 2024,
- "value": 400,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "BOOT/2024/10-K/filing.html::2024",
+ "fye_date": "2024-03-30",
+ "db_value": null,
+ "l1_value": 459,
+ "l2_value": 400,
+ "l3_value": null,
+ "value": 459,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (14 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BOOT/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,0 +1,18 @@
+{
+ "ticker": "EGHT",
+ "fiscal_year": 2026,
+ "accession": "EGHT/2026/10-K/filing.html::2026",
+ "fye_date": "2026-03-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1000,
+ "l3_value": null,
+ "value": 1000,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| Total | | 1,000 | | | | | 1,000 | | |",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

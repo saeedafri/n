@@ -1,14 +1,18 @@
 {
  "ticker": "BJ",
  "fiscal_year": 2022,
- "value": 226,
+ "accession": "BJ/2022/10-K/filing.html::2022",
+ "fye_date": "2022-01-29",
+ "db_value": 226,
+ "l1_value": 235,
+ "l2_value": 226,
+ "l3_value": null,
+ "value": 235,
+ "source_rule": "L1_xbrl",
  "confidence": "high",
- "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": 226,
- "needs_review": false,
- "accession": "BJ/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

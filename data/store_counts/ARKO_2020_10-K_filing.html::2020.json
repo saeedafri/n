@@ -1,0 +1,18 @@
+{
+ "ticker": "ARKO",
+ "fiscal_year": 2020,
+ "accession": "ARKO/2020/10-K/filing.html::2020",
+ "fye_date": "2020-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1330,
+ "l3_value": null,
+ "value": 1330,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "limited partner units. For the year ended December 31, 2020, 99.8% of the total fuel gallons distributed by GPMP were to our locations. 1 Retail Business As of December 31, 2020, we operated 1,330 retail convenience stores. The stores offer a wide array of cold",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

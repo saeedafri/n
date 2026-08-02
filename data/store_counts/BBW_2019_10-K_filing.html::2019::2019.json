@@ -1,0 +1,14 @@
+{
+ "ticker": "BBW",
+ "fiscal_year": 2019,
+ "value": 373,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "NRESOLVED STAFF COMMENTS Not applicable. | ITEM 2. | PROPERTIES Stores We lease all of our store locations. As of February 2, 2019, we operated 373 retail stores located primarily in major malls throug",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 373,
+ "needs_review": false,
+ "accession": "BBW/2019/10-K/filing.html::2019::2019",
+ "extractor_version": 5
+}

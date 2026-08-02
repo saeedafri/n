@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2019,
+ "value": 861,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of stores at end of period | 861 | | | 868 | | | 898 | | | 932 | | | 969 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ANF/2019/10-K/filing.html::2019::2019",
+ "extractor_version": 5
+}

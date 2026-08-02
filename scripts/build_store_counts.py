@@ -176,10 +176,22 @@ def main() -> None:
         ticker = row["ticker"]
         accession = row.get("filing_accession") or row["archive_blob"]
 
+        # Non-retail tickers are still RECORDED, as a tombstone carrying no
+        # value. Returning early left 319 filings with no cache entry at all,
+        # so every later pass treated them as new work and re-read them
+        # forever. "We looked and there is nothing here" is a result.
         if ticker.upper() in NON_RETAIL_TICKERS:
             with lock:
                 skipped_non_retail.append(ticker)
-            return None
+            year = int(row["fy"]) if row.get("fy") else None
+            record = {"ticker": ticker, "fiscal_year": year, "value": None,
+                      "accession": f"{accession}::{year}", "db_value": None,
+                      "l1_value": None, "l2_value": None, "l3_value": None,
+                      "confidence": "none", "by_country": {}, "by_continent": {},
+                      "basis": "not a store operator", "needs_review": False}
+            if year is not None:
+                cache.write(record["accession"], record)
+            return record
 
         year = int(row["fy"]) if row.get("fy") else None
         if year is not None:
@@ -197,9 +209,20 @@ def main() -> None:
         fye = None
         if year is None:
             stated = fiscal_year_of(text) if text else None
-            if not stated:
-                return None            # cannot place it on a timeline
-            year, fye = stated
+            if stated:
+                year, fye = stated
+            else:
+                # The filing does not spell out "fiscal year ended", which is
+                # why 91 filings — IBM, Kodak, PVH, Yum among them — were
+                # dropped entirely rather than reported as empty. The blob
+                # folder names the year the filing was archived under, which is
+                # good enough to place it on a timeline and far better than
+                # pretending the filing does not exist.
+                folder = str(row["archive_blob"]).split("/")
+                year = next((int(part) for part in folder
+                             if part.isdigit() and 1990 < int(part) < 2100), None)
+                if year is None:
+                    return None
             cached = cache.read(f"{accession}::{year}")
             if cached:
                 return cached
@@ -247,6 +270,13 @@ def main() -> None:
                     spend = llm_call_cost(prompt_tokens, completion_tokens)
                     budget.settle(spend)
                     record["llm_cost"] = spend
+                    # A self-declared subset is refused outright. The model is
+                    # asked to state its scope precisely so this is checkable
+                    # rather than a matter of trust.
+                    if parsed and parsed.get("scope") not in (None, "worldwide"):
+                        record["evidence"] += (
+                            f" | llm reported {parsed.get('scope')} scope, refused")
+                        parsed = None
                     if parsed and parsed.get("found") and parsed.get("value"):
                         proposed = int(parsed["value"])
                         quote = str(parsed.get("quote") or "")
@@ -286,24 +316,25 @@ def main() -> None:
 
     cache.rebuild_index()
 
+    # Write BEFORE reporting. An hour of parsing was lost to a KeyError in the
+    # summary block below, because the results only reached disk after it.
+    with open("/tmp/sc_report/build_results.json", "w") as handle:
+        json.dump(results, handle, indent=1, default=str)
+    print("wrote /tmp/sc_report/build_results.json")
+
     got = [r for r in results if r["value"]]
     matched = [r for r in got if r["db_value"] and r["value"] == r["db_value"]]
     print(f"\nprocessed {len(results)} filings in {time.time() - started:.0f}s")
     print(f"  produced a value       : {len(got)}")
     print(f"  agrees with DB         : {len(matched)}")
-    print(f"  L1 xbrl                : {sum(1 for r in got if r['l1_value'])}")
-    print(f"  L2 filing              : {sum(1 for r in got if r['l2_value'])}")
-    print(f"  L3 llm                 : {sum(1 for r in got if r['l3_value'])}")
-    print(f"  with country breakdown : {sum(1 for r in got if r['by_country'])}")
+    for layer in ("l1_value", "l2_value", "l3_value"):
+        print(f"  {layer:22} : {sum(1 for r in got if r.get(layer))}")
+    print(f"  with country breakdown : {sum(1 for r in got if r.get('by_country'))}")
     print(f"  skipped non-retail     : {len(skipped_non_retail)}")
     print(f"\nLLM calls {budget.calls}   spend ${budget.spent:.4f} of ${budget.ceiling:.2f}")
     if budget.refused:
         print(f"  !! {budget.refused} calls REFUSED — budget ceiling reached, "
               f"those rows have no L3 opinion")
-
-    with open("/tmp/sc_report/build_results.json", "w") as handle:
-        json.dump(results, handle, indent=1, default=str)
-    print("wrote /tmp/sc_report/build_results.json")
 
 
 if __name__ == "__main__":

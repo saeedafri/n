@@ -1,0 +1,14 @@
+{
+ "ticker": "CENT",
+ "fiscal_year": 2025,
+ "value": 6000,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "tailers. The retail channel is equally diverse, ranging from national chains like Petco, Pet Supplies Plus and PetSmart with over 6,000 locations to the roughly 5,900 independent stores, along with mass me",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CENT/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

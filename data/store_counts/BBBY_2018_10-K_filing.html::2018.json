@@ -1,0 +1,18 @@
+{
+ "ticker": "BBBY",
+ "fiscal_year": 2018,
+ "accession": "BBBY/2018/10-K/filing.html::2018",
+ "fye_date": "2018-03-03",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1552,
+ "l3_value": null,
+ "value": 1552,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| Number of stores open (at period end) | | | 1,552 | | | | 1,546 | | | | 1,530 | | | | 1,513 | | | | 1,496 |",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

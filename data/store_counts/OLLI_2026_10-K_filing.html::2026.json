@@ -3,12 +3,12 @@
  "fiscal_year": 2026,
  "value": 645,
  "confidence": "high",
- "basis": "two sources agree",
+ "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "OLLI/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

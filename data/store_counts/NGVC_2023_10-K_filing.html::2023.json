@@ -4,11 +4,11 @@
  "value": 165,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "None. 38 Table of Contents Item 2. Properties. As of September 30, 2023, we had 165 stores located in 21 states, as shown in the following chart:",
+ "evidence": "e governance requirements. Item 1B. Unresolved Staff Comments. None. 38 Table of Contents Item 2. Properties. As of September 30, 2023, we had 165 stores located in 21 states, as shown in the f",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "NGVC/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

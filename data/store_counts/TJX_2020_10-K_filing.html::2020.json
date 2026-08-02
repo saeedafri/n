@@ -1,14 +1,14 @@
 {
  "ticker": "TJX",
  "fiscal_year": 2020,
- "value": 3290,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "| Total Stores | 2,403 | | 46 | | 841 | | 3,290 |",
+ "value": 4529,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "'total stores' repeated per table: 54 + 513 + 672 + 3,290 = 4,529, a figure stated in the filing",
  "by_country": {},
  "by_continent": {},
  "db_value": 3290,
  "needs_review": false,
  "accession": "TJX/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

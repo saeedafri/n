@@ -1,0 +1,14 @@
+{
+ "ticker": "PATH",
+ "fiscal_year": 2026,
+ "value": 780,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 780 | | | | | 780 | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "PATH/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "ARKO",
+ "fiscal_year": 2025,
+ "value": 1118,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1630,
+ "needs_review": false,
+ "accession": "ARKO/2026/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

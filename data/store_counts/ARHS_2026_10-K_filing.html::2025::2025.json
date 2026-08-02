@@ -1,0 +1,14 @@
+{
+ "ticker": "ARHS",
+ "fiscal_year": 2025,
+ "value": 107,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Showrooms at end of period | 107 | | 103",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ARHS/2026/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

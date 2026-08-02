@@ -1,0 +1,14 @@
+{
+ "ticker": "BKE",
+ "fiscal_year": 2016,
+ "value": 468,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BKE/2016/10-K/filing.html::2016::2016",
+ "extractor_version": 5
+}

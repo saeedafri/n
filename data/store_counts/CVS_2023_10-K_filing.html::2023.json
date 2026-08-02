@@ -1,14 +1,18 @@
 {
  "ticker": "CVS",
  "fiscal_year": 2023,
+ "accession": "CVS/2023/10-K/filing.html::2023",
+ "fye_date": "2023-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 9395,
+ "l3_value": null,
  "value": 9395,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "filing (10-K)",
  "evidence": "| Total stores (end of year) | 9,395 | | | 9,674 | | | 9,939 |",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CVS/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

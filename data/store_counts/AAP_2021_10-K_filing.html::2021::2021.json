@@ -1,0 +1,14 @@
+{
+ "ticker": "AAP",
+ "fiscal_year": 2021,
+ "value": 4976,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Number of stores, end of year | 4,976 | | | 5,037 | | | 5,109 | | | 5,183 | | | 5,189 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 4806,
+ "needs_review": false,
+ "accession": "AAP/2021/10-K/filing.html::2021::2021",
+ "extractor_version": 5
+}

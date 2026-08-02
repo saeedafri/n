@@ -1,14 +1,14 @@
 {
  "ticker": "FRPT",
  "fiscal_year": 2018,
- "value": 19499,
+ "value": 19500,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "Net Sales\n\n19,499\n\nStores at December 31, 2018 and December 31, 2017 consisted of 10,129 and 9,056 grocery (including online) and 4,164 and 3,930 mass and club, respectively.",
+ "evidence": "customers’ stores. We continue to roll out Freshpet Fridges across leading retailers across North America and have installed Freshpet Fridges in approximately 19,500 retail stores as of December 31, 2018. Our products are sold under the Freshp",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "FRPT/2019/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,14 +1,23 @@
 {
  "ticker": "CASY",
  "fiscal_year": 2026,
- "value": 2944,
- "confidence": "medium",
- "basis": "fits series (l1)",
- "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "CASY/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "fye_date": "2026-04-30",
+ "db_value": null,
+ "l1_value": 2944,
+ "l2_value": null,
+ "l3_value": null,
+ "value": 2944,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
+ "by_country": {
+  "Texas": 148,
+  "Alabama, Florida And Mississippi": 50
+ },
+ "by_continent": {
+  "Other": 198
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

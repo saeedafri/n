@@ -4,11 +4,11 @@
  "value": 3594,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Number of total store locations open at year-end | | 3,594 |",
+ "evidence": "| Number of total store locations open at year-end | | 3,594 | | | 3,659 | | | 3,721 | | | 3,709 | | | 3,539 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GAP/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

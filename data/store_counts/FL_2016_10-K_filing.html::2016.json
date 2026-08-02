@@ -1,0 +1,14 @@
+{
+ "ticker": "FL",
+ "fiscal_year": 2016,
+ "value": 3383,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| | | | 209 | | | | 7,580 | | | | 12,918 | Athletic Stores The Company operates 3,383 stores in the Athletic Stores segment. The following is a brief de",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "FL/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

@@ -1,0 +1,19 @@
+{
+ "ticker": "BBWI",
+ "fiscal_year": 2025,
+ "value": 1895,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 1,850 | | | 106 | | | (61) | | | 1,895 |",
+ "by_country": {
+  "United States": 1782,
+  "Canada": 113
+ },
+ "by_continent": {
+  "North America": 1895
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BBWI/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

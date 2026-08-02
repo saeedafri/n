@@ -4,11 +4,11 @@
  "value": 400,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "reased 84%, Gross Profit margin expanded 570 basis points, and Net Sales grew 13%. As of our Fiscal 2023 year end, we operated 400 stores across 35 states and Puerto Rico under our Shoe Carnival an",
+ "evidence": "| Total Stores | | 400 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SCVL/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

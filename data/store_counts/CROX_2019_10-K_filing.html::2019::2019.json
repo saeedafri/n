@@ -1,0 +1,14 @@
+{
+ "ticker": "CROX",
+ "fiscal_year": 2019,
+ "value": 383,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | | | | | | 383 | | | 15 | | | 31 | | | 367 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 367,
+ "needs_review": false,
+ "accession": "CROX/2019/10-K/filing.html::2019::2019",
+ "extractor_version": 5
+}

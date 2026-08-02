@@ -1,0 +1,14 @@
+{
+ "ticker": "CPRI",
+ "fiscal_year": 2023,
+ "value": 1272,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total number of retail stores | 1,272 | | | 1,271 | | | 1,257 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1272,
+ "needs_review": false,
+ "accession": "CPRI/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

@@ -4,11 +4,11 @@
  "value": 162,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "nts. None. 40 Table of Contents Item 2. Properties. As of September 30, 2021, we had 162 stores located in 20 states, as shown in the following chart:",
+ "evidence": "| Number of stores at end of period | | | 162 | | | | 159 | | | | 153 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "NGVC/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

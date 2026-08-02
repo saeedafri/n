@@ -1,14 +1,18 @@
 {
  "ticker": "COLM",
  "fiscal_year": 2019,
+ "accession": "COLM/2019/10-K/filing.html::2019",
+ "fye_date": "2019-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 450,
+ "l3_value": null,
  "value": 450,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "France (1 location)—owned | London, Ontario (1 location)—owned | In addition, as of December 31, 2019, we directly operated more than 450 retail stores, the vast majority of which are leased under a variety of a",
+ "evidence": "tion Facility: | Canadian Operation and Distribution Facility: | Cambrai, France (1 location)—owned | London, Ontario (1 location)—owned | In addition, as of December 31, 2019, we directly operated more than 450 retail stores, the vast majority of which are leased",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "COLM/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

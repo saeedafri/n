@@ -1,0 +1,14 @@
+{
+ "ticker": "CASY",
+ "fiscal_year": 2026,
+ "value": 2944,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CASY/2026/10-K/filing.html::2026::2026",
+ "extractor_version": 5
+}

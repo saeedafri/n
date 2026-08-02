@@ -1,0 +1,14 @@
+{
+ "ticker": "CVS",
+ "fiscal_year": 2020,
+ "value": 9962,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total stores (end of year) | 9,962 | | | 9,896 | | | 9,921 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVS/2020/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

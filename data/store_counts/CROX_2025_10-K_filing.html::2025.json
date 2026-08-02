@@ -1,14 +1,18 @@
 {
  "ticker": "CROX",
  "fiscal_year": 2025,
+ "accession": "CROX/2025/10-K/filing.html::2025",
+ "fye_date": "2025-12-31",
+ "db_value": 514,
+ "l1_value": null,
+ "l2_value": 514,
+ "l3_value": null,
  "value": 514,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "ial adverse effect on our business and financial results. During 2025, we opened 88 and closed 16 retail stores, and we operated 514 retail stores at December 31, 2025. Many of our company-operated retail",
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "the principal properties listed above, we lease various other offices and distribution centers worldwide to meet our sales and operational needs. We also lease 514 retail locations worldwide as of December 31, 2025. See Item 1. Business of this Annual Re",
  "by_country": {},
  "by_continent": {},
- "db_value": 514,
- "needs_review": false,
- "accession": "CROX/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

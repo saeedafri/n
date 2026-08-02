@@ -1,14 +1,18 @@
 {
  "ticker": "BBBY",
  "fiscal_year": 2023,
+ "accession": "BBBY/2023/10-K/filing.html::2023",
+ "fye_date": "2023-02-25",
+ "db_value": 872,
+ "l1_value": null,
+ "l2_value": 872,
+ "l3_value": null,
  "value": 872,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "s, as well as return online purchases to a store, or have an order delivered through one of our delivery partners. We operated 872 retail stores, as of February 25, 2023, consisting of 696 Bed Bath & Beyo",
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "actless Curbside Pickup services, as well as return online purchases to a store, or have an order delivered through one of our delivery partners. We operated 872 retail stores, as of February 25, 2023, consisting of 696 Bed Bath & Beyond st",
  "by_country": {},
  "by_continent": {},
- "db_value": 872,
- "needs_review": false,
- "accession": "BBBY/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

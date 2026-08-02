@@ -1,0 +1,14 @@
+{
+ "ticker": "MHO",
+ "fiscal_year": 2025,
+ "value": 25652,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 10,487 | | 6,361 | | 8,804 | | 25,652 | | 24,329 | | 49,981 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MHO/2026/10-K/filing.html::2025",
+ "extractor_version": 5
+}

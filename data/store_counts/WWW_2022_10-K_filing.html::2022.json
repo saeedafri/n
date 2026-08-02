@@ -1,0 +1,14 @@
+{
+ "ticker": "WWW",
+ "fiscal_year": 2022,
+ "value": 143,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Company relies on a network of third-party distributors, licensees and joint ventures. At January 1, 2022, the Company operated 143 retail stores in the U.S., United Kingdom, and Canada and 65 consumer-dir",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WWW/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

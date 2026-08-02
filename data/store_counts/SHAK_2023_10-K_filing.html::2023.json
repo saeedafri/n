@@ -1,7 +1,7 @@
 {
  "ticker": "SHAK",
  "fiscal_year": 2023,
- "value": 295,
+ "value": 223,
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (20 facts)",
@@ -10,5 +10,5 @@
  "db_value": 518,
  "needs_review": false,
  "accession": "SHAK/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

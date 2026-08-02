@@ -4,11 +4,11 @@
  "value": 924,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "| Number of stores operated by the Company, end of period | 924 |",
+ "evidence": "| Number of stores operated by the Company, end of period | 924 | | | 972 | | | 1,014 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 924,
  "needs_review": false,
  "accession": "PLCE/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

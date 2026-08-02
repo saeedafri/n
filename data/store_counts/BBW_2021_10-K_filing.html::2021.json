@@ -1,14 +1,22 @@
 {
  "ticker": "BBW",
  "fiscal_year": 2021,
- "value": 354,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": 354,
- "needs_review": false,
  "accession": "BBW/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "fye_date": "2021-01-30",
+ "db_value": 354,
+ "l1_value": 80,
+ "l2_value": 71,
+ "l3_value": null,
+ "value": 80,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {
+  "Africa, Asia, Australia, Mexico, the Middle East and South America": 80
+ },
+ "by_continent": {
+  "Oceania": 80
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

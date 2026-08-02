@@ -1,0 +1,14 @@
+{
+ "ticker": "WWW",
+ "fiscal_year": 2023,
+ "value": 166,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ompany relies on a network of third-party distributors, licensees and joint ventures. At December 30, 2023, the Company operated 166 retail stores in the U.S., United Kingdom, and Canada and 56 direct-to-co",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "WWW/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

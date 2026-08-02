@@ -1,14 +1,18 @@
 {
  "ticker": "CURV",
  "fiscal_year": 2023,
+ "accession": "CURV/2023/10-K/filing.html::2023",
+ "fye_date": "2023-01-28",
+ "db_value": 639,
+ "l1_value": null,
+ "l2_value": 639,
+ "l3_value": null,
  "value": 639,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "source_rule": "L2_table",
+ "confidence": "medium",
  "evidence": "| Number of stores (as of end of period) | 639 | | | 624 | | | 608 |",
  "by_country": {},
  "by_continent": {},
- "db_value": 639,
- "needs_review": false,
- "accession": "CURV/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,0 +1,18 @@
+{
+ "ticker": "ARKO",
+ "fiscal_year": 2022,
+ "accession": "ARKO/2023/10-K/filing.html::2022",
+ "fye_date": "2022-12-31",
+ "db_value": 1430,
+ "l1_value": null,
+ "l2_value": 183,
+ "l3_value": null,
+ "value": 183,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ardlock locations (unstaffed fueling locations), and issuance of proprietary fuel cards that provide customers access to a nationwide network of fueling sites. As of December 31, 2022, we operated 183 cardlock locations. We are well diversified geographical",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

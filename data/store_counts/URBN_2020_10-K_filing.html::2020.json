@@ -1,14 +1,21 @@
 {
  "ticker": "URBN",
  "fiscal_year": 2020,
- "value": 248,
+ "value": 644,
  "confidence": "medium",
- "basis": "filing (10-K)",
+ "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (24 facts)",
- "by_country": {},
- "by_continent": {},
+ "by_country": {
+  "United States": 522,
+  "Europe": 78,
+  "Canada": 35
+ },
+ "by_continent": {
+  "North America": 557,
+  "Other": 78
+ },
  "db_value": null,
  "needs_review": false,
  "accession": "URBN/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

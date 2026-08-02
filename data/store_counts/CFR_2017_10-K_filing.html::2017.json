@@ -1,14 +1,18 @@
 {
  "ticker": "CFR",
  "fiscal_year": 2017,
- "value": 134,
+ "accession": "CFR/2017/10-K/filing.html::2017",
+ "fye_date": "2017-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 21098,
+ "l3_value": null,
+ "value": 21098,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "approximately 134 financial centers across Texas",
+ "evidence": "| Total | 21,098 | | | 0.2 | | | 16,703 | | | 0.1 | | | 16,579 | | | 0.1 |",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CFR/2017/10-K/filing.html::2017",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

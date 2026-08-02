@@ -1,0 +1,18 @@
+{
+ "ticker": "EFOR",
+ "fiscal_year": 2024,
+ "accession": "EFOR/2025/10-K/filing.html::2024",
+ "fye_date": "2024-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 3,
+ "l3_value": null,
+ "value": 3,
+ "source_rule": "L2_prose",
+ "confidence": "medium",
+ "evidence": "s, and the trademarks, exceeded their respective carrying amounts. For the 2024 goodwill impairment test, the Company had three reporting units: Apex, Creative Circle and Federal Government. Following th",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

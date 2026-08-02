@@ -1,0 +1,14 @@
+{
+ "ticker": "SAM",
+ "fiscal_year": 2024,
+ "value": 9,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ard Seltzer, Samuel Adams, Dogfish Head, Angry Orchard, Sun Cruiser and Hard Mountain Dew brands. The Company currently operates 9 retail locations where its beverages are sold and consumed on-premise, inclu",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SAM/2025/10-K/filing.html::2024",
+ "extractor_version": 5
+}

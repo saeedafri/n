@@ -1,14 +1,14 @@
 {
  "ticker": "PAG",
  "fiscal_year": 2021,
- "value": 320,
+ "value": 343,
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "ed by the $22.5 billion in total retail automotive dealership revenue we generated in 2021. As of December 31, 2021, we operated 320 retail automotive franchised dealerships, of which 146 are located in the U.S. and 174 are located o",
+ "basis": "fits series (db)",
+ "evidence": "| Total | | 23 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 343,
  "needs_review": false,
  "accession": "PAG/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

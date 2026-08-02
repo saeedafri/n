@@ -1,14 +1,14 @@
 {
  "ticker": "KTB",
  "fiscal_year": 2024,
- "value": 147,
+ "value": 77,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "bearing our brands are sold in more than 70 countries, and we believe they have strong consumer connectivity worldwide with approximately 147 million units sold in 2024. We market our brands and products to highligh",
+ "evidence": "xico | | 88,000 | | | Manufacturing Facility | | Owned | San Antonio del Coyote, Mexico | | 88,000 | | | Manufacturing Facility | | Owned | | | | | | | As of December 28, 2024, we operated 77 retail stores across the Americas, EMEA and APAC regi",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "KTB/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

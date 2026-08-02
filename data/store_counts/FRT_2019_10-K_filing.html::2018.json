@@ -1,14 +1,14 @@
 {
  "ticker": "FRT",
  "fiscal_year": 2018,
- "value": 2669,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "| Total All Regions—Residential | | | | | | 2,669 units | | | | 96% | |",
+ "value": 122,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "roximately 120,000 square feet of retail space and the 158 room hotel have opened, and all of the residential units have been completed. Phase II also includes 122 for-sale condominium units, of which 107 have closed as of December 31, 2018. The remaining 15 units are expected to",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
- "needs_review": false,
+ "needs_review": true,
  "accession": "FRT/2019/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

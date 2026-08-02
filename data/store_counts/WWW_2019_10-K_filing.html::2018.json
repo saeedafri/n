@@ -4,11 +4,11 @@
  "value": 80,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "mpany relies on a network of third-party distributors, licensees and joint ventures. At December 29, 2018 , the Company operated 80 retail stores in the U.S. and Canada and 42 consumer-direct eCommerce sit",
+ "evidence": "ompany relies on a network of third-party distributors, licensees and joint ventures. At December 29, 2018, the Company operated 80 retail stores in the U.S. and Canada and 42 consumer-direct eCommerce sit",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "WWW/2019/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

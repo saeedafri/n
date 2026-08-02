@@ -2,13 +2,13 @@
  "ticker": "SHW",
  "fiscal_year": 2019,
  "value": 4758,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "4,758 company-operated specialty paint stores, of which 217 were owned, in the United States, Canada, Puerto Rico, Virgin Islands, Grenada, Trinidad and Tobago, St. Maarten, Jamaica, Curacao, Aruba, St. Lucia, Uruguay, Brazil, Chile, Peru, Mexico, Ecuador and Barbados at December 31, 2019.",
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "",
  "by_country": {},
  "by_continent": {},
  "db_value": 4758,
  "needs_review": false,
  "accession": "SHW/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

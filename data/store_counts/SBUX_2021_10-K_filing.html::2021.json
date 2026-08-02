@@ -1,14 +1,14 @@
 {
  "ticker": "SBUX",
  "fiscal_year": 2021,
- "value": 16826,
+ "value": 17133,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total | 16,826 | | | 100 | % | | 17,007 | | | 100 | % | | | | | 33,833 | | | 100 | %",
+ "evidence": ", China | 175,000 | | | Corporate administrative We own most of our roasting facilities and lease the majority of our warehousing and distribution locations. As of October 3, 2021, Starbucks had 17,133 company-operated stores, almost all of which are leased. We als",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SBUX/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

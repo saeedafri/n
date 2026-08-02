@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2019,
+ "value": 4306,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "'total' repeated per table: 484 + 679 + 765 + 2,378 = 4,306, a figure stated in the filing",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TJX/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

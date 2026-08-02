@@ -1,0 +1,14 @@
+{
+ "ticker": "BOOT",
+ "fiscal_year": 2024,
+ "value": 400,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (14 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BOOT/2024/10-K/filing.html::2024::2024",
+ "extractor_version": 5
+}

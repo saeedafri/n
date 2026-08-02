@@ -1,0 +1,14 @@
+{
+ "ticker": "GPI",
+ "fiscal_year": 2015,
+ "value": 199,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "PART I Item 1. Business General Group 1 Automotive, Inc., a Delaware corporation organized in 1995, is a leading operator in the automotive retail industry. As of December 31, 2015, we owned and operated 199 franchises, representing 32 brands of automobiles,",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "GPI/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

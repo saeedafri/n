@@ -1,14 +1,18 @@
 {
  "ticker": "DECK",
  "fiscal_year": 2024,
- "value": 164,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "As of March 31, 2024, we have 49 US retail stores and 115 international retail stores",
+ "accession": "DECK/2024/10-K/filing.html::2024",
+ "fye_date": "2024-03-31",
+ "db_value": 164,
+ "l1_value": null,
+ "l2_value": 56,
+ "l3_value": null,
+ "value": 56,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "wareness of our brands’ promises and key initiatives, offers targeted information to specific consumer demographics, and drives consumers to our retail stores. As of March 31, 2024, we operate Company-owned e-commerce websites in 56 different countries. Retail Stores. Our global Company-owned mono-branded",
  "by_country": {},
  "by_continent": {},
- "db_value": 164,
- "needs_review": false,
- "accession": "DECK/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

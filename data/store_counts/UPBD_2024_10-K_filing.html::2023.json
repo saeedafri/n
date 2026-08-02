@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2023,
+ "value": 2410,
+ "confidence": "medium",
+ "basis": "fits neighbouring years (l2)",
+ "evidence": "| Total locations | 2,410 | | | 2,424 | | | 2,435 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 571,
+ "needs_review": false,
+ "accession": "UPBD/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

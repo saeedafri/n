@@ -1,0 +1,18 @@
+{
+ "ticker": "APC",
+ "fiscal_year": 2025,
+ "accession": "APC/2026/10-K/filing.html::2025",
+ "fye_date": "2025-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 52,
+ "l3_value": null,
+ "value": 52,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ARKO Parent will also inform our Audit Committee and management, who will consult on appropriate disclosure responsive to such an incident. ITEM 2. PROPERTIES. As of December 31, 2025, we owned 197 properties, including 52 consignment agent locations, 113 lessee-dealer sites and 32 fleet f",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

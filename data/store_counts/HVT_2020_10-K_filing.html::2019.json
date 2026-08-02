@@ -1,14 +1,14 @@
 {
  "ticker": "HVT",
  "fiscal_year": 2019,
- "value": 121,
+ "value": 2146,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "00.0 | % | | | 100.0 | % 2 Stores As of December 31, 2019, we operated 121 stores serving 84 cities in 16 states with approximately 4.4 milli",
+ "evidence": "enance of inventory, significant competitive advantages. Employees Our employees are among our best investments and are critical for our success. As of December 31, 2019, we had 3,425 employees: 2,146 in individual retail store operations, 212 in our corporate and c",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "HVT/2020/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

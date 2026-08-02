@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2016,
+ "value": 932,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total number of stores open | 932 | | | 969 | | | 1,006 | | | 1,041 | | | 1,045 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ANF/2016/10-K/filing.html::2016::2016",
+ "extractor_version": 5
+}

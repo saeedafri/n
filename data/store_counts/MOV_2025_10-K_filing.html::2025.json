@@ -1,9 +1,9 @@
 {
  "ticker": "MOV",
  "fiscal_year": 2025,
- "value": 55,
+ "value": 56,
  "confidence": "medium",
- "basis": "filing (10-K)",
+ "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
  "by_country": {
   "United States": 52,
@@ -15,5 +15,5 @@
  "db_value": null,
  "needs_review": false,
  "accession": "MOV/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

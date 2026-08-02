@@ -1,14 +1,18 @@
 {
  "ticker": "DLB",
  "fiscal_year": 2017,
+ "accession": "DLB/2017/10-K/filing.html::2017",
+ "fye_date": "2017-09-29",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 112,
+ "l3_value": null,
  "value": 112,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "In total, 112 Dolby Cinema locations were operational as of the end of fiscal 2017 compared to 37 at the start of fiscal 2017, and we have over 360 Dolby Cinema locations open or committed around the world.",
+ "evidence": "ibitors who feature Dolby Cinema, including AMC in the U.S., Wanda and Jackie Chan Cinema in China, Cineplexx in Austria, and Vue in the Netherlands. In total, 112 Dolby Cinema locations were operational as of the end of fiscal 2017 compared to 37 at the start of fiscal 2",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "DLB/2017/10-K/filing.html::2017",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

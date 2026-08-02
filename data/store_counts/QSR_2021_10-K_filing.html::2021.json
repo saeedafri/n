@@ -2,13 +2,13 @@
  "ticker": "QSR",
  "fiscal_year": 2021,
  "value": 29456,
- "confidence": "high",
- "basis": "two sources agree",
+ "confidence": "medium",
+ "basis": "fits the company's own range",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (17 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 29456,
  "needs_review": false,
  "accession": "QSR/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

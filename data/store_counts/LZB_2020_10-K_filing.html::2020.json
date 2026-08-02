@@ -1,0 +1,14 @@
+{
+ "ticker": "LZB",
+ "fiscal_year": 2020,
+ "value": 9,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "d included the acquisition of the assets of two independent operators of La-Z-Boy Furniture Galleries® stores, one that operated nine stores and two warehouses in Arizona and one that operated one store in Massachusetts",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LZB/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

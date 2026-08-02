@@ -1,14 +1,18 @@
 {
  "ticker": "CRMT",
  "fiscal_year": 2016,
- "value": 143,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "CRMT/2016/10-K/filing.html::2016",
+ "fye_date": "2016-04-30",
+ "db_value": null,
+ "l1_value": 147,
+ "l2_value": 143,
+ "l3_value": null,
+ "value": 147,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CRMT/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

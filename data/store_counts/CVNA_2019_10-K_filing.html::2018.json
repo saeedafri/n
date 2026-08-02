@@ -1,0 +1,18 @@
+{
+ "ticker": "CVNA",
+ "fiscal_year": 2018,
+ "accession": "CVNA/2019/10-K/filing.html::2018",
+ "fye_date": "2018-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 85,
+ "l3_value": null,
+ "value": 85,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| Number of markets at period end | | 85 | | 44 | | 21 | | 9 | | 3",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

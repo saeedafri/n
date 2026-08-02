@@ -2,13 +2,13 @@
  "ticker": "FIVE",
  "fiscal_year": 2019,
  "value": 750,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (48 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "FIVE/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

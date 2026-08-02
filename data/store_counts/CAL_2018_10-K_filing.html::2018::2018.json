@@ -1,0 +1,14 @@
+{
+ "ticker": "CAL",
+ "fiscal_year": 2018,
+ "value": 1262,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CAL/2018/10-K/filing.html::2018::2018",
+ "extractor_version": 5
+}

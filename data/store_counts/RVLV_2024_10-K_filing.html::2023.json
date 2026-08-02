@@ -1,14 +1,14 @@
 {
  "ticker": "RVLV",
  "fiscal_year": 2023,
- "value": 3,
+ "value": 1478,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "’ purchases and could harm our reputation and ultimately, our business, financial condition and operating results. We operate three fulfillment centers located in California and Pennsylvania. We expect that our",
+ "evidence": "| Total | | | 1,478 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "RVLV/2024/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,18 @@
+{
+ "ticker": "ADC",
+ "fiscal_year": 2016,
+ "accession": "ADC/2017/10-K/filing.html::2016",
+ "fye_date": "2016-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 8175,
+ "l3_value": null,
+ "value": 8175,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "d total assets of approximately $72.7 billion, annual net sales of $117.4 billion, annual net income of $4.2 billion and shareholders’ equity of $30.3 billion. As of August 31, 2016, Walgreens operated 8,175 locations in 50 states, the District of Columbia,",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

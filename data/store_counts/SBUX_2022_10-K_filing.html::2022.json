@@ -1,14 +1,14 @@
 {
  "ticker": "SBUX",
  "fiscal_year": 2022,
- "value": 17295,
+ "value": 18253,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total | 17,295 | | | 100 | % | | 18,416 | | | 100 | % | | | | | 35,711 | | | 100 | %",
+ "evidence": ", China | 225,000 | | | Corporate administrative We own most of our roasting facilities and lease the majority of our warehousing and distribution locations. As of October 2, 2022, Starbucks had 18,253 company-operated stores, almost all of which are leased. We als",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SBUX/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

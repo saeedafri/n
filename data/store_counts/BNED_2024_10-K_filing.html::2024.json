@@ -1,0 +1,18 @@
+{
+ "ticker": "BNED",
+ "fiscal_year": 2024,
+ "accession": "BNED/2024/10-K/filing.html::2024",
+ "fye_date": "2024-04-27",
+ "db_value": 1245,
+ "l1_value": 1272,
+ "l2_value": null,
+ "l3_value": null,
+ "value": 1272,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

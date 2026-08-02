@@ -4,11 +4,11 @@
  "value": 54,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "square feet of leased office and warehouse space in the Sydney, Australia area. As of December 31, 2024, Honey Birdette operated 54 retail locations in Australia, the U.S. and the U.K., ranging in size betwee",
+ "evidence": "revenue from sales of consumer products sold online direct-to-customer or at brick-and-mortar retail stores through our lingerie business, Honey Birdette, with 54 stores in three countries as of December 31, 2024. The TLA and Yandy direct-to-consumer b",
  "by_country": {},
  "by_continent": {},
  "db_value": 54,
  "needs_review": false,
  "accession": "PLBY/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

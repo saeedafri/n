@@ -1,0 +1,14 @@
+{
+ "ticker": "BBW",
+ "fiscal_year": 2022,
+ "value": 346,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total | | | 72 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 346,
+ "needs_review": false,
+ "accession": "BBW/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

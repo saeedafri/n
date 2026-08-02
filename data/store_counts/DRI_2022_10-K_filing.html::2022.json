@@ -1,0 +1,25 @@
+{
+ "ticker": "DRI",
+ "fiscal_year": 2022,
+ "accession": "DRI/2022/10-K/filing.html::2022",
+ "fye_date": "2022-05-29",
+ "db_value": null,
+ "l1_value": 85,
+ "l2_value": 1867,
+ "l3_value": null,
+ "value": 85,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (9 facts)",
+ "by_country": {
+  "North America": 34,
+  "Latin America": 25,
+  "Latin America, the Middle East and Malaysia": 26
+ },
+ "by_continent": {
+  "Other": 59,
+  "Asia": 26
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "CRI",
+ "fiscal_year": 2021,
+ "value": 864,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "et by an increase in eCommerce sales. The 53rd week in fiscal 2020 contributed approximately $18.2 million in additional sales to the U.S. Retail segment. 29 As of January 2, 2021, we operated 864 retail stores in the U.S. compared to 862 (excluding",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1101,
+ "needs_review": false,
+ "accession": "CRI/2021/10-K/filing.html::2021::2021",
+ "extractor_version": 5
+}

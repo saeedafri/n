@@ -1,0 +1,14 @@
+{
+ "ticker": "PAG",
+ "fiscal_year": 2016,
+ "value": 355,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "cond largest automotive retailer headquartered in the U.S. as measured by the $18.7 billion in total retail automotive dealership revenue we generated in 2016. As of December 31, 2016, we operated 355 retail automotive franchises, of which 164 franchises are located in",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "PAG/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

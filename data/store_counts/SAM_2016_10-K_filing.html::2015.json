@@ -1,0 +1,14 @@
+{
+ "ticker": "SAM",
+ "fiscal_year": 2015,
+ "value": 8,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "risen for both spot purchases and forward contract pricing, accordingly. The Company enters into purchase commitments with eight primary hop dealers, based on the Company’s projected future volumes and brewin",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SAM/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

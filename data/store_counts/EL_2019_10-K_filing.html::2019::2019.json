@@ -1,0 +1,14 @@
+{
+ "ticker": "EL",
+ "fiscal_year": 2019,
+ "value": 1500,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ed and approved. In fiscal 2019, we continued to strategically open new points of distribution globally, and exited certain locations when appropriate. As of June 30, 2019, we operated approximately 1,500 freestanding stores. Most are operated under a single brand",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "EL/2019/10-K/filing.html::2019::2019",
+ "extractor_version": 5
+}

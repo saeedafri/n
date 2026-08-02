@@ -1,14 +1,18 @@
 {
  "ticker": "CFR",
  "fiscal_year": 2023,
- "value": 180,
+ "accession": "CFR/2023/10-K/filing.html::2023",
+ "fye_date": "2023-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 26477,
+ "l3_value": null,
+ "value": 26477,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "approximately 180 financial centers across Texas",
+ "evidence": "| Total | | 26,477 | | | | | — | | |",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CFR/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

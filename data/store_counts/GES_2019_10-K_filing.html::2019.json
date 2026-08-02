@@ -4,11 +4,11 @@
  "value": 1719,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ddle East, 23 stores in the U.S., 13 stores in Central and South America and six stores in Canada. We ended fiscal 2019 with 1,719 stores and 423 concessions worldwide, comprised as follows: |",
+ "evidence": "| Total | | 1,719 | | | 1,161 | | | 558 | | | 423 | | | 238 | | | 185 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GES/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

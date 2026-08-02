@@ -1,14 +1,18 @@
 {
  "ticker": "BBW",
  "fiscal_year": 2019,
+ "accession": "BBW/2019/10-K/filing.html::2019",
+ "fye_date": "2019-02-02",
+ "db_value": 373,
+ "l1_value": null,
+ "l2_value": 373,
+ "l3_value": null,
  "value": 373,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "ITEM 2. | PROPERTIES Stores We lease all of our store locations. As of February 2, 2019, we operated 373 retail stores located primarily in major malls throughout the U.S., Canad",
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "NRESOLVED STAFF COMMENTS Not applicable. | ITEM 2. | PROPERTIES Stores We lease all of our store locations. As of February 2, 2019, we operated 373 retail stores located primarily in major malls throug",
  "by_country": {},
  "by_continent": {},
- "db_value": 373,
- "needs_review": false,
- "accession": "BBW/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

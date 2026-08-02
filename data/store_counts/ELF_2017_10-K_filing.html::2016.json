@@ -1,0 +1,18 @@
+{
+ "ticker": "ELF",
+ "fiscal_year": 2016,
+ "accession": "ELF/2017/10-K/filing.html::2016",
+ "fye_date": "2016-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 16,
+ "l3_value": null,
+ "value": 16,
+ "source_rule": "L2_prose",
+ "confidence": "medium",
+ "evidence": "mercial space, and approximately 212,668 square feet of commercial space for our distribution center. In addition, we operated 16 e.l.f. stores in the New York metro area and three e.l.f. stores in South",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

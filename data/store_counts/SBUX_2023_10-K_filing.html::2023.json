@@ -1,7 +1,7 @@
 {
  "ticker": "SBUX",
  "fiscal_year": 2023,
- "value": 17810,
+ "value": 19592,
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
@@ -10,5 +10,5 @@
  "db_value": null,
  "needs_review": false,
  "accession": "SBUX/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2021,
+ "value": 735,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | | 497 | | | 238 | | | 735 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 735,
+ "needs_review": false,
+ "accession": "ANF/2021/10-K/filing.html::2021::2021",
+ "extractor_version": 5
+}

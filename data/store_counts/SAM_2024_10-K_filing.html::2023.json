@@ -1,0 +1,14 @@
+{
+ "ticker": "SAM",
+ "fiscal_year": 2023,
+ "value": 8,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "January 2020, the Company opened the Samuel Adams Tap Room and small brewery in downtown Boston. The Company currently operates 8 retail locations, including seven brewery tap rooms, a cidery tasting room a",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SAM/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

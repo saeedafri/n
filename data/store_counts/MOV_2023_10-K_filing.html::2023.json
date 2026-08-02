@@ -1,19 +1,14 @@
 {
  "ticker": "MOV",
  "fiscal_year": 2023,
- "value": 55,
+ "value": 51,
  "confidence": "medium",
- "basis": "fits series (l1)",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
- "by_country": {
-  "United States": 51,
-  "Canada": 4
- },
- "by_continent": {
-  "North America": 55
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "MOV/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

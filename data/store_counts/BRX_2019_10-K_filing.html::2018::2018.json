@@ -1,0 +1,14 @@
+{
+ "ticker": "BRX",
+ "fiscal_year": 2018,
+ "value": 425,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "stock. Item 1B. Unresolved Staff Comments None. 15 Item 2. Properties As of December 31, 2018, our Portfolio consisted of 425 shopping centers with approximately 74 million square feet of GLA. Our high-",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BRX/2019/10-K/filing.html::2018::2018",
+ "extractor_version": 5
+}

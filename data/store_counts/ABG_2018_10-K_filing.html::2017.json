@@ -1,0 +1,22 @@
+{
+ "ticker": "ABG",
+ "fiscal_year": 2017,
+ "accession": "ABG/2018/10-K/filing.html::2017",
+ "fye_date": "2017-12-31",
+ "db_value": null,
+ "l1_value": 2,
+ "l2_value": 94,
+ "l3_value": null,
+ "value": 2,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "Florida": 2
+ },
+ "by_continent": {
+  "Other": 2
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

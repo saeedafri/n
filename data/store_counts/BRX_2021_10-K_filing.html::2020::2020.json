@@ -1,0 +1,14 @@
+{
+ "ticker": "BRX",
+ "fiscal_year": 2020,
+ "value": 393,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ding BPG. Item 1B. Unresolved Staff Comments None. 16 Item 2. Properties As of December 31, 2020, our Portfolio was comprised of 393 shopping centers totaling approximately 69 million square feet of GLA. Our h",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BRX/2021/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

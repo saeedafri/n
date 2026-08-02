@@ -1,14 +1,18 @@
 {
  "ticker": "DLTR",
  "fiscal_year": 2016,
- "value": 13851,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "DLTR/2016/10-K/filing.html::2016",
+ "fye_date": "2016-01-30",
+ "db_value": null,
+ "l1_value": 14038,
+ "l2_value": 13851,
+ "l3_value": null,
+ "value": 14038,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "DLTR/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

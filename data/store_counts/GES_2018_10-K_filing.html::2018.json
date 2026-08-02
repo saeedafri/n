@@ -4,11 +4,11 @@
  "value": 1663,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "le East, 38 stores in the U.S., 24 stores in Canada and three stores in Central and South America. We ended fiscal 2018 with 1,663 stores and 429 concessions worldwide, comprised as follows: |",
+ "evidence": "| Total | | 1,663 | | | 1,011 | | | 652 | | | 429 | | | 237 | | | 192 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GES/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

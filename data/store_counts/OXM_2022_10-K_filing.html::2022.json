@@ -1,0 +1,14 @@
+{
+ "ticker": "OXM",
+ "fiscal_year": 2022,
+ "value": 216,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "'total' repeated per table: 58 + 158 = 216, a figure stated in the filing",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "OXM/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

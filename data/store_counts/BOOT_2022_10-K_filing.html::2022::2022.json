@@ -1,0 +1,14 @@
+{
+ "ticker": "BOOT",
+ "fiscal_year": 2022,
+ "value": 300,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BOOT/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

@@ -4,11 +4,11 @@
  "value": 5012,
  "confidence": "medium",
  "basis": "fits series (db)",
- "evidence": "| Total | $ | 23,051.9 | | | $ | 22,148.9 | | | $ | 903.0 | | | 4.1 | % | | — | % | | 1.0 | %",
+ "evidence": "| Total | | 11 | 82 | 93 | | 24 | 42 | 66",
  "by_country": {},
  "by_continent": {},
  "db_value": 5012,
  "needs_review": false,
  "accession": "SHW/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

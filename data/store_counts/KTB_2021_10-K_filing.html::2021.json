@@ -1,0 +1,14 @@
+{
+ "ticker": "KTB",
+ "fiscal_year": 2021,
+ "value": 86,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| San Marcos, Nicaragua | | 115,000 | | | Manufacturing Facility | | Leased | Masatepe City, Nicaragua | | 108,000 | | | Manufacturing Facility | | Leased As of January 2, 2021, we operated 86 retail stores across the Americas, EMEA and APAC regi",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "KTB/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}

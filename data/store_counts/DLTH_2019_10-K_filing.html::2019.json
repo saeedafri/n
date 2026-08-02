@@ -1,0 +1,18 @@
+{
+ "ticker": "DLTH",
+ "fiscal_year": 2019,
+ "accession": "DLTH/2019/10-K/filing.html::2019",
+ "fye_date": "2019-02-03",
+ "db_value": null,
+ "l1_value": 52,
+ "l2_value": 2016,
+ "l3_value": null,
+ "value": 52,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

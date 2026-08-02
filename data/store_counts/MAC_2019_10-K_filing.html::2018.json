@@ -4,11 +4,11 @@
  "value": 52,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Number of Centers at year end | 52 |",
+ "evidence": "| Number of Centers at year end | 52 | | | 55 | | | 57 | | | 58 | | | 60 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "MAC/2019/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,651 +1,1167 @@
 {
+ "AAC": [
+  "AAC/2025/10-K/filing.html::2025"
+ ],
  "AAP": [
   "AAP/2016/10-K/filing.html::2016",
+  "AAP/2016/10-K/filing.html::2016::2016",
   "AAP/2017/10-K/filing.html::2016",
+  "AAP/2017/10-K/filing.html::2016::2016",
   "AAP/2018/10-K/filing.html::2017",
+  "AAP/2018/10-K/filing.html::2017::2017",
   "AAP/2019/10-K/filing.html::2018",
+  "AAP/2019/10-K/filing.html::2018::2018",
   "AAP/2020/10-K/filing.html::2019",
+  "AAP/2020/10-K/filing.html::2019::2019",
   "AAP/2021/10-K/filing.html::2021",
+  "AAP/2021/10-K/filing.html::2021::2021",
   "AAP/2022/10-K/filing.html::2022",
+  "AAP/2022/10-K/filing.html::2022::2022",
   "AAP/2023/10-K/filing.html::2022",
+  "AAP/2023/10-K/filing.html::2022::2022",
   "AAP/2024/10-K/filing.html::2023",
+  "AAP/2024/10-K/filing.html::2023::2023",
   "AAP/2025/10-K/filing.html::2024",
-  "AAP/2026/10-K/filing.html::2026"
+  "AAP/2025/10-K/filing.html::2024::2024",
+  "AAP/2026/10-K/filing.html::2026",
+  "AAP/2026/10-K/filing.html::2026::2026"
+ ],
+ "ABG": [
+  "ABG/2015/10-K/filing.html::2015",
+  "ABG/2016/10-K/filing.html::2015",
+  "ABG/2017/10-K/filing.html::2016",
+  "ABG/2018/10-K/filing.html::2017",
+  "ABG/2018/10-K/filing.html::2017::2017",
+  "ABG/2019/10-K/filing.html::2018",
+  "ABG/2019/10-K/filing.html::2018::2018",
+  "ABG/2020/10-K/filing.html::2019",
+  "ABG/2021/10-K/filing.html::2020",
+  "ABG/2022/10-K/filing.html::2021",
+  "ABG/2022/10-K/filing.html::2021::2021",
+  "ABG/2023/10-K/filing.html::2022",
+  "ABG/2023/10-K/filing.html::2022::2022",
+  "ABG/2024/10-K/filing.html::2023",
+  "ABG/2024/10-K/filing.html::2023::2023",
+  "ABG/2025/10-K/filing.html::2024",
+  "ABG/2025/10-K/filing.html::2024::2024",
+  "ABG/2026/10-K/filing.html::2025",
+  "ABG/2026/10-K/filing.html::2025::2025"
  ],
  "ACI": [
   "ACI/2018/10-K/filing.html::2018",
+  "ACI/2018/10-K/filing.html::2018::2018",
   "ACI/2019/10-K/filing.html::2019",
+  "ACI/2019/10-K/filing.html::2019::2019",
   "ACI/2020/10-K/filing.html::2020",
+  "ACI/2020/10-K/filing.html::2020::2020",
   "ACI/2021/10-K/filing.html::2021",
+  "ACI/2021/10-K/filing.html::2021::2021",
   "ACI/2022/10-K/filing.html::2022",
+  "ACI/2022/10-K/filing.html::2022::2022",
   "ACI/2023/10-K/filing.html::2023",
+  "ACI/2023/10-K/filing.html::2023::2023",
   "ACI/2024/10-K/filing.html::2024",
+  "ACI/2024/10-K/filing.html::2024::2024",
   "ACI/2025/10-K/filing.html::2025",
-  "ACI/2026/10-K/filing.html::2026"
+  "ACI/2025/10-K/filing.html::2025::2025",
+  "ACI/2026/10-K/filing.html::2026",
+  "ACI/2026/10-K/filing.html::2026::2026"
  ],
- "ADM": [
-  "ADM/2016/10-K/filing.html::2015",
-  "ADM/2017/10-K/filing.html::2016",
-  "ADM/2018/10-K/filing.html::2017",
-  "ADM/2019/10-K/filing.html::2018",
-  "ADM/2021/10-K/filing.html::2020"
+ "ADC": [
+  "ADC/2016/10-K/filing.html::2015",
+  "ADC/2016/10-K/filing.html::2015::2015",
+  "ADC/2017/10-K/filing.html::2016",
+  "ADC/2017/10-K/filing.html::2016::2016",
+  "ADC/2018/10-K/filing.html::2017",
+  "ADC/2018/10-K/filing.html::2017::2017"
  ],
  "AEO": [
   "AEO/2016/10-K/filing.html::2016",
+  "AEO/2016/10-K/filing.html::2016::2016",
   "AEO/2017/10-K/filing.html::2017",
+  "AEO/2017/10-K/filing.html::2017::2017",
   "AEO/2018/10-K/filing.html::2018",
+  "AEO/2018/10-K/filing.html::2018::2018",
   "AEO/2019/10-K/filing.html::2019",
+  "AEO/2019/10-K/filing.html::2019::2019",
   "AEO/2020/10-K/filing.html::2020",
+  "AEO/2020/10-K/filing.html::2020::2020",
   "AEO/2021/10-K/filing.html::2021",
+  "AEO/2021/10-K/filing.html::2021::2021",
   "AEO/2022/10-K/filing.html::2022",
+  "AEO/2022/10-K/filing.html::2022::2022",
   "AEO/2023/10-K/filing.html::2023",
   "AEO/2024/10-K/filing.html::2024",
+  "AEO/2024/10-K/filing.html::2024::2024",
   "AEO/2025/10-K/filing.html::2025",
-  "AEO/2026/10-K/filing.html::2026"
- ],
- "AI": [
-  "AI/2021/10-K/filing.html::2021",
-  "AI/2022/10-K/filing.html::2022",
-  "AI/2023/10-K/filing.html::2023",
-  "AI/2024/10-K/filing.html::2024",
-  "AI/2025/10-K/filing.html::2025",
-  "AI/2026/10-K/filing.html::2026"
- ],
- "AMZN": [
-  "AMZN/2021/10-K/filing.html::2021",
-  "AMZN/2022/10-K/filing.html::2022",
-  "AMZN/2023/10-K/filing.html::2023"
+  "AEO/2025/10-K/filing.html::2025::2025",
+  "AEO/2026/10-K/filing.html::2026",
+  "AEO/2026/10-K/filing.html::2026::2026"
  ],
  "ANDE": [
   "ANDE/2016/10-K/filing.html::2015",
+  "ANDE/2016/10-K/filing.html::2015::2015",
   "ANDE/2017/10-K/filing.html::2016",
+  "ANDE/2017/10-K/filing.html::2016::2016",
   "ANDE/2018/10-K/filing.html::2017",
-  "ANDE/2019/10-K/filing.html::2018"
+  "ANDE/2018/10-K/filing.html::2017::2017",
+  "ANDE/2019/10-K/filing.html::2018",
+  "ANDE/2019/10-K/filing.html::2018::2018"
  ],
  "ANF": [
   "ANF/2016/10-K/filing.html::2016",
+  "ANF/2016/10-K/filing.html::2016::2016",
   "ANF/2017/10-K/filing.html::2017",
+  "ANF/2017/10-K/filing.html::2017::2017",
   "ANF/2018/10-K/filing.html::2018",
+  "ANF/2018/10-K/filing.html::2018::2018",
   "ANF/2019/10-K/filing.html::2019",
+  "ANF/2019/10-K/filing.html::2019::2019",
   "ANF/2020/10-K/filing.html::2020",
+  "ANF/2020/10-K/filing.html::2020::2020",
   "ANF/2021/10-K/filing.html::2021",
+  "ANF/2021/10-K/filing.html::2021::2021",
   "ANF/2022/10-K/filing.html::2022",
+  "ANF/2022/10-K/filing.html::2022::2022",
   "ANF/2023/10-K/filing.html::2023",
+  "ANF/2023/10-K/filing.html::2023::2023",
   "ANF/2024/10-K/filing.html::2024",
+  "ANF/2024/10-K/filing.html::2024::2024",
   "ANF/2025/10-K/filing.html::2025",
-  "ANF/2026/10-K/filing.html::2026"
+  "ANF/2025/10-K/filing.html::2025::2025",
+  "ANF/2026/10-K/filing.html::2026",
+  "ANF/2026/10-K/filing.html::2026::2026"
  ],
  "AN": [
   "AN/2015/10-K/filing.html::2015",
+  "AN/2015/10-K/filing.html::2015::2015",
   "AN/2016/10-K/filing.html::2015",
+  "AN/2016/10-K/filing.html::2015::2015",
   "AN/2017/10-K/filing.html::2016",
+  "AN/2017/10-K/filing.html::2016::2016",
   "AN/2018/10-K/filing.html::2017",
+  "AN/2018/10-K/filing.html::2017::2017",
   "AN/2019/10-K/filing.html::2018",
+  "AN/2019/10-K/filing.html::2018::2018",
   "AN/2020/10-K/filing.html::2019",
+  "AN/2020/10-K/filing.html::2019::2019",
   "AN/2021/10-K/filing.html::2020",
+  "AN/2021/10-K/filing.html::2020::2020",
   "AN/2022/10-K/filing.html::2021",
+  "AN/2022/10-K/filing.html::2021::2021",
   "AN/2023/10-K/filing.html::2022",
+  "AN/2023/10-K/filing.html::2022::2022",
   "AN/2024/10-K/filing.html::2023",
+  "AN/2024/10-K/filing.html::2023::2023",
   "AN/2025/10-K/filing.html::2024",
-  "AN/2026/10-K/filing.html::2025"
+  "AN/2025/10-K/filing.html::2024::2024",
+  "AN/2026/10-K/filing.html::2025",
+  "AN/2026/10-K/filing.html::2025::2025"
+ ],
+ "APC": [
+  "APC/2026/10-K/filing.html::2025"
+ ],
+ "APPF": [
+  "APPF/2022/10-K/filing.html::2021",
+  "APPF/2023/10-K/filing.html::2022",
+  "APPF/2023/10-K/filing.html::2022::2022",
+  "APPF/2024/10-K/filing.html::2023",
+  "APPF/2024/10-K/filing.html::2023::2023",
+  "APPF/2025/10-K/filing.html::2024",
+  "APPF/2026/10-K/filing.html::2025"
  ],
  "ARHS": [
   "ARHS/2022/10-K/filing.html::2021",
+  "ARHS/2022/10-K/filing.html::2021::2021",
   "ARHS/2023/10-K/filing.html::2022",
+  "ARHS/2023/10-K/filing.html::2022::2022",
   "ARHS/2024/10-K/filing.html::2023",
+  "ARHS/2024/10-K/filing.html::2023::2023",
   "ARHS/2025/10-K/filing.html::2024",
-  "ARHS/2026/10-K/filing.html::2025"
+  "ARHS/2025/10-K/filing.html::2024::2024",
+  "ARHS/2026/10-K/filing.html::2025",
+  "ARHS/2026/10-K/filing.html::2025::2025"
  ],
  "ARKO": [
+  "ARKO/2020/10-K/filing.html::2020",
+  "ARKO/2020/10-K/filing.html::2020::2020",
+  "ARKO/2021/10-K/filing.html::2020",
+  "ARKO/2021/10-K/filing.html::2020::2020",
   "ARKO/2022/10-K/filing.html::2021",
+  "ARKO/2023/10-K/filing.html::2022",
+  "ARKO/2023/10-K/filing.html::2022::2022",
+  "ARKO/2024/10-K/filing.html::2023",
+  "ARKO/2024/10-K/filing.html::2023::2023",
   "ARKO/2025/10-K/filing.html::2024",
-  "ARKO/2026/10-K/filing.html::2025"
+  "ARKO/2025/10-K/filing.html::2024::2024",
+  "ARKO/2026/10-K/filing.html::2025",
+  "ARKO/2026/10-K/filing.html::2025::2025"
  ],
  "ASO": [
+  "ASO/2021/10-K/filing.html::2021",
+  "ASO/2021/10-K/filing.html::2021::2021",
   "ASO/2022/10-K/filing.html::2022",
+  "ASO/2022/10-K/filing.html::2022::2022",
   "ASO/2023/10-K/filing.html::2023",
+  "ASO/2023/10-K/filing.html::2023::2023",
   "ASO/2024/10-K/filing.html::2024",
+  "ASO/2024/10-K/filing.html::2024::2024",
   "ASO/2025/10-K/filing.html::2025",
-  "ASO/2026/10-K/filing.html::2026"
+  "ASO/2025/10-K/filing.html::2025::2025",
+  "ASO/2026/10-K/filing.html::2026",
+  "ASO/2026/10-K/filing.html::2026::2026"
+ ],
+ "AVO": [
+  "AVO/2022/10-K/filing.html::2022",
+  "AVO/2022/10-K/filing.html::2022::2022",
+  "AVO/2023/10-K/filing.html::2023",
+  "AVO/2023/10-K/filing.html::2023::2023",
+  "AVO/2024/10-K/filing.html::2024",
+  "AVO/2024/10-K/filing.html::2024::2024",
+  "AVO/2025/10-K/filing.html::2025",
+  "AVO/2025/10-K/filing.html::2025::2025"
  ],
  "AZO": [
   "AZO/2016/10-K/filing.html::2016",
+  "AZO/2016/10-K/filing.html::2016::2016",
   "AZO/2017/10-K/filing.html::2017",
+  "AZO/2017/10-K/filing.html::2017::2017",
   "AZO/2018/10-K/filing.html::2018",
+  "AZO/2018/10-K/filing.html::2018::2018",
   "AZO/2019/10-K/filing.html::2019",
+  "AZO/2019/10-K/filing.html::2019::2019",
   "AZO/2020/10-K/filing.html::2020",
+  "AZO/2020/10-K/filing.html::2020::2020",
   "AZO/2021/10-K/filing.html::2021",
+  "AZO/2021/10-K/filing.html::2021::2021",
   "AZO/2022/10-K/filing.html::2022",
+  "AZO/2022/10-K/filing.html::2022::2022",
   "AZO/2023/10-K/filing.html::2023",
+  "AZO/2023/10-K/filing.html::2023::2023",
   "AZO/2024/10-K/filing.html::2024",
-  "AZO/2025/10-K/filing.html::2025"
- ],
- "BARK": [
-  "BARK/2022/10-K/filing.html::2022",
-  "BARK/2023/10-K/filing.html::2023",
-  "BARK/2024/10-K/filing.html::2024",
-  "BARK/2025/10-K/filing.html::2025"
+  "AZO/2024/10-K/filing.html::2024::2024",
+  "AZO/2025/10-K/filing.html::2025",
+  "AZO/2025/10-K/filing.html::2025::2025"
  ],
  "BBBY": [
+  "BBBY/2016/10-K/filing.html::2016",
+  "BBBY/2017/10-K/filing.html::2017",
+  "BBBY/2018/10-K/filing.html::2018",
+  "BBBY/2019/10-K/filing.html::2019",
+  "BBBY/2020/10-K/filing.html::2020",
   "BBBY/2021/10-K/filing.html::2021",
+  "BBBY/2021/10-K/filing.html::2021::2021",
   "BBBY/2022/10-K/filing.html::2022",
-  "BBBY/2023/10-K/filing.html::2023"
+  "BBBY/2022/10-K/filing.html::2022::2022",
+  "BBBY/2023/10-K/filing.html::2023",
+  "BBBY/2023/10-K/filing.html::2023::2023"
  ],
  "BBWI": [
   "BBWI/2016/10-K/filing.html::2016",
+  "BBWI/2016/10-K/filing.html::2016::2016",
   "BBWI/2017/10-K/filing.html::2017",
+  "BBWI/2017/10-K/filing.html::2017::2017",
   "BBWI/2018/10-K/filing.html::2018",
+  "BBWI/2018/10-K/filing.html::2018::2018",
   "BBWI/2019/10-K/filing.html::2019",
+  "BBWI/2019/10-K/filing.html::2019::2019",
   "BBWI/2020/10-K/filing.html::2020",
-  "BBWI/2021/10-K/filing.html::2021"
+  "BBWI/2020/10-K/filing.html::2020::2020",
+  "BBWI/2021/10-K/filing.html::2021",
+  "BBWI/2021/10-K/filing.html::2021::2021",
+  "BBWI/2022/10-K/filing.html::2022",
+  "BBWI/2023/10-K/filing.html::2023",
+  "BBWI/2023/10-K/filing.html::2023::2023",
+  "BBWI/2024/10-K/filing.html::2024",
+  "BBWI/2024/10-K/filing.html::2024::2024",
+  "BBWI/2025/10-K/filing.html::2025",
+  "BBWI/2025/10-K/filing.html::2025::2025",
+  "BBWI/2026/10-K/filing.html::2026",
+  "BBWI/2026/10-K/filing.html::2026::2026"
  ],
  "BBW": [
   "BBW/2016/10-K/filing.html::2016",
+  "BBW/2016/10-K/filing.html::2016::2016",
   "BBW/2017/10-K/filing.html::2016",
+  "BBW/2017/10-K/filing.html::2016::2016",
   "BBW/2018/10-K/filing.html::2016",
+  "BBW/2018/10-K/filing.html::2017",
+  "BBW/2018/10-K/filing.html::2017::2017",
   "BBW/2019/10-K/filing.html::2019",
+  "BBW/2019/10-K/filing.html::2019::2019",
   "BBW/2020/10-K/filing.html::2020",
+  "BBW/2020/10-K/filing.html::2020::2020",
   "BBW/2021/10-K/filing.html::2021",
+  "BBW/2021/10-K/filing.html::2021::2021",
   "BBW/2022/10-K/filing.html::2022",
+  "BBW/2022/10-K/filing.html::2022::2022",
   "BBW/2023/10-K/filing.html::2023",
-  "BBW/2025/10-K/filing.html::2025"
+  "BBW/2023/10-K/filing.html::2023::2023",
+  "BBW/2024/10-K/filing.html::2024",
+  "BBW/2025/10-K/filing.html::2025",
+  "BBW/2025/10-K/filing.html::2025::2025",
+  "BBW/2026/10-K/filing.html::2026"
  ],
  "BBY": [
   "BBY/2016/10-K/filing.html::2016",
   "BBY/2017/10-K/filing.html::2017",
   "BBY/2018/10-K/filing.html::2018",
   "BBY/2019/10-K/filing.html::2019",
+  "BBY/2019/10-K/filing.html::2019::2019",
+  "BBY/2020/10-K/filing.html::2020",
+  "BBY/2020/10-K/filing.html::2020::2020",
   "BBY/2021/10-K/filing.html::2021",
+  "BBY/2021/10-K/filing.html::2021::2021",
   "BBY/2022/10-K/filing.html::2022",
+  "BBY/2022/10-K/filing.html::2022::2022",
   "BBY/2023/10-K/filing.html::2023",
+  "BBY/2023/10-K/filing.html::2023::2023",
   "BBY/2024/10-K/filing.html::2024",
+  "BBY/2024/10-K/filing.html::2024::2024",
   "BBY/2025/10-K/filing.html::2025",
-  "BBY/2026/10-K/filing.html::2026"
+  "BBY/2025/10-K/filing.html::2025::2025",
+  "BBY/2026/10-K/filing.html::2026",
+  "BBY/2026/10-K/filing.html::2026::2026"
  ],
- "BC": [
-  "BC/2015/10-K/filing.html::2015",
-  "BC/2016/10-K/filing.html::2015",
-  "BC/2017/10-K/filing.html::2016",
-  "BC/2018/10-K/filing.html::2017",
-  "BC/2019/10-K/filing.html::2018"
+ "BHE": [
+  "BHE/2026/10-K/filing.html::2025"
  ],
  "BJ": [
   "BJ/2019/10-K/filing.html::2019",
+  "BJ/2019/10-K/filing.html::2019::2019",
   "BJ/2020/10-K/filing.html::2020",
+  "BJ/2020/10-K/filing.html::2020::2020",
   "BJ/2021/10-K/filing.html::2021",
+  "BJ/2021/10-K/filing.html::2021::2021",
   "BJ/2022/10-K/filing.html::2022",
+  "BJ/2022/10-K/filing.html::2022::2022",
   "BJ/2023/10-K/filing.html::2023",
+  "BJ/2023/10-K/filing.html::2023::2023",
   "BJ/2024/10-K/filing.html::2024",
+  "BJ/2024/10-K/filing.html::2024::2024",
   "BJ/2025/10-K/filing.html::2025",
-  "BJ/2026/10-K/filing.html::2026"
+  "BJ/2025/10-K/filing.html::2025::2025",
+  "BJ/2026/10-K/filing.html::2026",
+  "BJ/2026/10-K/filing.html::2026::2026"
  ],
  "BKE": [
   "BKE/2016/10-K/filing.html::2016",
+  "BKE/2016/10-K/filing.html::2016::2016",
   "BKE/2017/10-K/filing.html::2017",
+  "BKE/2017/10-K/filing.html::2017::2017",
   "BKE/2018/10-K/filing.html::2018",
+  "BKE/2018/10-K/filing.html::2018::2018",
   "BKE/2019/10-K/filing.html::2019",
+  "BKE/2019/10-K/filing.html::2019::2019",
   "BKE/2020/10-K/filing.html::2020",
+  "BKE/2020/10-K/filing.html::2020::2020",
   "BKE/2021/10-K/filing.html::2021",
+  "BKE/2021/10-K/filing.html::2021::2021",
   "BKE/2022/10-K/filing.html::2022",
+  "BKE/2022/10-K/filing.html::2022::2022",
   "BKE/2023/10-K/filing.html::2023",
+  "BKE/2023/10-K/filing.html::2023::2023",
   "BKE/2024/10-K/filing.html::2024",
+  "BKE/2024/10-K/filing.html::2024::2024",
   "BKE/2025/10-K/filing.html::2025",
-  "BKE/2026/10-K/filing.html::2026"
+  "BKE/2025/10-K/filing.html::2025::2025",
+  "BKE/2026/10-K/filing.html::2026",
+  "BKE/2026/10-K/filing.html::2026::2026"
  ],
  "BNED": [
   "BNED/2016/10-K/filing.html::2016",
+  "BNED/2016/10-K/filing.html::2016::2016",
   "BNED/2017/10-K/filing.html::2017",
   "BNED/2018/10-K/filing.html::2018",
   "BNED/2019/10-K/filing.html::2019",
+  "BNED/2019/10-K/filing.html::2019::2019",
   "BNED/2020/10-K/filing.html::2020",
+  "BNED/2020/10-K/filing.html::2020::2020",
   "BNED/2021/10-K/filing.html::2021",
+  "BNED/2021/10-K/filing.html::2021::2021",
   "BNED/2022/10-K/filing.html::2022",
+  "BNED/2022/10-K/filing.html::2022::2022",
   "BNED/2023/10-K/filing.html::2023",
+  "BNED/2024/10-K/filing.html::2024",
+  "BNED/2024/10-K/filing.html::2024::2024",
   "BNED/2025/10-K/filing.html::2025",
-  "BNED/2026/10-K/filing.html::2026"
+  "BNED/2025/10-K/filing.html::2025::2025",
+  "BNED/2026/10-K/filing.html::2026",
+  "BNED/2026/10-K/filing.html::2026::2026"
+ ],
+ "BOBS": [
+  "BOBS/2026/10-K/filing.html::2025"
  ],
  "BOOT": [
   "BOOT/2016/10-K/filing.html::2016",
+  "BOOT/2016/10-K/filing.html::2016::2016",
   "BOOT/2017/10-K/filing.html::2017",
+  "BOOT/2017/10-K/filing.html::2017::2017",
   "BOOT/2018/10-K/filing.html::2018",
+  "BOOT/2018/10-K/filing.html::2018::2018",
   "BOOT/2019/10-K/filing.html::2019",
+  "BOOT/2019/10-K/filing.html::2019::2019",
   "BOOT/2020/10-K/filing.html::2020",
+  "BOOT/2020/10-K/filing.html::2020::2020",
   "BOOT/2021/10-K/filing.html::2021",
+  "BOOT/2021/10-K/filing.html::2021::2021",
   "BOOT/2022/10-K/filing.html::2022",
+  "BOOT/2022/10-K/filing.html::2022::2022",
   "BOOT/2023/10-K/filing.html::2023",
+  "BOOT/2023/10-K/filing.html::2023::2023",
   "BOOT/2024/10-K/filing.html::2024",
+  "BOOT/2024/10-K/filing.html::2024::2024",
   "BOOT/2025/10-K/filing.html::2025",
-  "BOOT/2026/10-K/filing.html::2026"
+  "BOOT/2025/10-K/filing.html::2025::2025",
+  "BOOT/2026/10-K/filing.html::2026",
+  "BOOT/2026/10-K/filing.html::2026::2026"
  ],
  "BRLT": [
+  "BRLT/2021/10-K/filing.html::2021",
+  "BRLT/2022/10-K/filing.html::2021",
+  "BRLT/2023/10-K/filing.html::2022",
   "BRLT/2024/10-K/filing.html::2023",
+  "BRLT/2024/10-K/filing.html::2023::2023",
   "BRLT/2025/10-K/filing.html::2024",
-  "BRLT/2026/10-K/filing.html::2025"
+  "BRLT/2025/10-K/filing.html::2024::2024",
+  "BRLT/2026/10-K/filing.html::2025",
+  "BRLT/2026/10-K/filing.html::2025::2025"
  ],
  "BRX": [
   "BRX/2016/10-K/filing.html::2015",
+  "BRX/2016/10-K/filing.html::2015::2015",
   "BRX/2017/10-K/filing.html::2016",
+  "BRX/2017/10-K/filing.html::2016::2016",
   "BRX/2018/10-K/filing.html::2017",
+  "BRX/2018/10-K/filing.html::2017::2017",
   "BRX/2019/10-K/filing.html::2018",
+  "BRX/2019/10-K/filing.html::2018::2018",
   "BRX/2020/10-K/filing.html::2019",
+  "BRX/2020/10-K/filing.html::2019::2019",
   "BRX/2021/10-K/filing.html::2020",
+  "BRX/2021/10-K/filing.html::2020::2020",
   "BRX/2022/10-K/filing.html::2021",
+  "BRX/2022/10-K/filing.html::2021::2021",
   "BRX/2023/10-K/filing.html::2022",
+  "BRX/2023/10-K/filing.html::2022::2022",
   "BRX/2024/10-K/filing.html::2023",
+  "BRX/2024/10-K/filing.html::2023::2023",
   "BRX/2025/10-K/filing.html::2024",
-  "BRX/2026/10-K/filing.html::2025"
+  "BRX/2025/10-K/filing.html::2024::2024",
+  "BRX/2026/10-K/filing.html::2025",
+  "BRX/2026/10-K/filing.html::2025::2025"
  ],
  "BURL": [
   "BURL/2016/10-K/filing.html::2016",
+  "BURL/2016/10-K/filing.html::2016::2016",
   "BURL/2017/10-K/filing.html::2017",
+  "BURL/2017/10-K/filing.html::2017::2017",
   "BURL/2018/10-K/filing.html::2018",
+  "BURL/2018/10-K/filing.html::2018::2018",
   "BURL/2019/10-K/filing.html::2019",
+  "BURL/2019/10-K/filing.html::2019::2019",
   "BURL/2020/10-K/filing.html::2020",
+  "BURL/2020/10-K/filing.html::2020::2020",
   "BURL/2021/10-K/filing.html::2021",
+  "BURL/2021/10-K/filing.html::2021::2021",
   "BURL/2022/10-K/filing.html::2022",
+  "BURL/2022/10-K/filing.html::2022::2022",
   "BURL/2023/10-K/filing.html::2023",
+  "BURL/2023/10-K/filing.html::2023::2023",
   "BURL/2024/10-K/filing.html::2024",
+  "BURL/2024/10-K/filing.html::2024::2024",
   "BURL/2025/10-K/filing.html::2025",
-  "BURL/2026/10-K/filing.html::2026"
- ],
- "BZH": [
-  "BZH/2018/10-K/filing.html::2018",
-  "BZH/2019/10-K/filing.html::2019"
- ],
- "CALY": [
-  "CALY/2022/10-K/filing.html::2021",
-  "CALY/2023/10-K/filing.html::2022",
-  "CALY/2024/10-K/filing.html::2023",
-  "CALY/2025/10-K/filing.html::2024",
-  "CALY/2026/10-K/filing.html::2025"
+  "BURL/2025/10-K/filing.html::2025::2025",
+  "BURL/2026/10-K/filing.html::2026",
+  "BURL/2026/10-K/filing.html::2026::2026"
  ],
  "CAL": [
   "CAL/2016/10-K/filing.html::2016",
+  "CAL/2016/10-K/filing.html::2016::2016",
   "CAL/2017/10-K/filing.html::2017",
+  "CAL/2017/10-K/filing.html::2017::2017",
   "CAL/2018/10-K/filing.html::2018",
+  "CAL/2018/10-K/filing.html::2018::2018",
   "CAL/2019/10-K/filing.html::2019",
+  "CAL/2019/10-K/filing.html::2019::2019",
   "CAL/2020/10-K/filing.html::2020",
+  "CAL/2020/10-K/filing.html::2020::2020",
   "CAL/2021/10-K/filing.html::2021",
+  "CAL/2021/10-K/filing.html::2021::2021",
   "CAL/2022/10-K/filing.html::2022",
+  "CAL/2022/10-K/filing.html::2022::2022",
   "CAL/2023/10-K/filing.html::2023",
+  "CAL/2023/10-K/filing.html::2023::2023",
   "CAL/2024/10-K/filing.html::2024",
+  "CAL/2024/10-K/filing.html::2024::2024",
   "CAL/2025/10-K/filing.html::2025",
-  "CAL/2026/10-K/filing.html::2026"
+  "CAL/2025/10-K/filing.html::2025::2025",
+  "CAL/2026/10-K/filing.html::2026",
+  "CAL/2026/10-K/filing.html::2026::2026"
  ],
  "CASY": [
   "CASY/2016/10-K/filing.html::2016",
+  "CASY/2016/10-K/filing.html::2016::2016",
+  "CASY/2017/10-K/filing.html::2017",
+  "CASY/2017/10-K/filing.html::2017::2017",
   "CASY/2018/10-K/filing.html::2018",
+  "CASY/2018/10-K/filing.html::2018::2018",
   "CASY/2019/10-K/filing.html::2019",
+  "CASY/2019/10-K/filing.html::2019::2019",
   "CASY/2020/10-K/filing.html::2020",
+  "CASY/2020/10-K/filing.html::2020::2020",
   "CASY/2021/10-K/filing.html::2021",
+  "CASY/2021/10-K/filing.html::2021::2021",
   "CASY/2022/10-K/filing.html::2022",
+  "CASY/2022/10-K/filing.html::2022::2022",
   "CASY/2023/10-K/filing.html::2023",
+  "CASY/2023/10-K/filing.html::2023::2023",
   "CASY/2024/10-K/filing.html::2024",
+  "CASY/2024/10-K/filing.html::2024::2024",
   "CASY/2025/10-K/filing.html::2025",
-  "CASY/2026/10-K/filing.html::2026"
+  "CASY/2025/10-K/filing.html::2025::2025",
+  "CASY/2026/10-K/filing.html::2026",
+  "CASY/2026/10-K/filing.html::2026::2026"
  ],
  "CATO": [
   "CATO/2016/10-K/filing.html::2016",
+  "CATO/2016/10-K/filing.html::2016::2016",
   "CATO/2018/10-K/filing.html::2018",
+  "CATO/2018/10-K/filing.html::2018::2018",
   "CATO/2019/10-K/filing.html::2019",
+  "CATO/2019/10-K/filing.html::2019::2019",
   "CATO/2020/10-K/filing.html::2020",
+  "CATO/2020/10-K/filing.html::2020::2020",
   "CATO/2021/10-K/filing.html::2021",
+  "CATO/2021/10-K/filing.html::2021::2021",
   "CATO/2022/10-K/filing.html::2022",
+  "CATO/2022/10-K/filing.html::2022::2022",
   "CATO/2023/10-K/filing.html::2023",
+  "CATO/2023/10-K/filing.html::2023::2023",
   "CATO/2024/10-K/filing.html::2024",
+  "CATO/2024/10-K/filing.html::2024::2024",
   "CATO/2025/10-K/filing.html::2025",
-  "CATO/2026/10-K/filing.html::2026"
+  "CATO/2025/10-K/filing.html::2025::2025",
+  "CATO/2026/10-K/filing.html::2026",
+  "CATO/2026/10-K/filing.html::2026::2026"
  ],
- "CDW": [
-  "CDW/2016/10-K/filing.html::2015",
-  "CDW/2017/10-K/filing.html::2016",
-  "CDW/2018/10-K/filing.html::2017",
-  "CDW/2019/10-K/filing.html::2018",
-  "CDW/2020/10-K/filing.html::2019",
-  "CDW/2021/10-K/filing.html::2020",
-  "CDW/2022/10-K/filing.html::2021",
-  "CDW/2023/10-K/filing.html::2022",
-  "CDW/2024/10-K/filing.html::2023",
-  "CDW/2025/10-K/filing.html::2024",
-  "CDW/2026/10-K/filing.html::2025"
+ "CCS": [
+  "CCS/2025/10-K/filing.html::2024",
+  "CCS/2025/10-K/filing.html::2024::2024",
+  "CCS/2026/10-K/filing.html::2025",
+  "CCS/2026/10-K/filing.html::2025::2025"
  ],
  "CENT": [
   "CENT/2016/10-K/filing.html::2016",
-  "CENT/2025/10-K/filing.html::2025"
+  "CENT/2016/10-K/filing.html::2016::2016",
+  "CENT/2025/10-K/filing.html::2025",
+  "CENT/2025/10-K/filing.html::2025::2025"
  ],
  "CFR": [
   "CFR/2015/10-K/filing.html::2015",
+  "CFR/2015/10-K/filing.html::2015::2015",
+  "CFR/2016/10-K/filing.html::2016",
+  "CFR/2016/10-K/filing.html::2016::2016",
   "CFR/2017/10-K/filing.html::2017",
+  "CFR/2017/10-K/filing.html::2017::2017",
   "CFR/2018/10-K/filing.html::2018",
   "CFR/2019/10-K/filing.html::2019",
+  "CFR/2020/10-K/filing.html::2020",
+  "CFR/2021/10-K/filing.html::2021",
+  "CFR/2021/10-K/filing.html::2021::2021",
+  "CFR/2022/10-K/filing.html::2022",
+  "CFR/2022/10-K/filing.html::2022::2022",
   "CFR/2023/10-K/filing.html::2023",
+  "CFR/2023/10-K/filing.html::2023::2023",
   "CFR/2024/10-K/filing.html::2024"
  ],
  "CHEF": [
-  "CHEF/2016/10-K/filing.html::2015",
-  "CHEF/2017/10-K/filing.html::2016",
-  "CHEF/2018/10-K/filing.html::2017",
-  "CHEF/2019/10-K/filing.html::2018",
   "CHEF/2020/10-K/filing.html::2019",
+  "CHEF/2020/10-K/filing.html::2019::2019",
   "CHEF/2021/10-K/filing.html::2020",
+  "CHEF/2021/10-K/filing.html::2020::2020",
   "CHEF/2022/10-K/filing.html::2021",
+  "CHEF/2022/10-K/filing.html::2021::2021",
   "CHEF/2023/10-K/filing.html::2022",
+  "CHEF/2023/10-K/filing.html::2022::2022",
   "CHEF/2024/10-K/filing.html::2023",
+  "CHEF/2024/10-K/filing.html::2023::2023",
   "CHEF/2025/10-K/filing.html::2024",
-  "CHEF/2026/10-K/filing.html::2025"
+  "CHEF/2025/10-K/filing.html::2024::2024",
+  "CHEF/2026/10-K/filing.html::2025",
+  "CHEF/2026/10-K/filing.html::2025::2025"
  ],
  "CLSK": [
-  "CLSK/2023/10-K/filing.html::2023",
+  "CLSK/2021/10-K/filing.html::2021",
+  "CLSK/2022/10-K/filing.html::2022",
+  "CLSK/2024/10-K/filing.html::2024",
   "CLSK/2025/10-K/filing.html::2025"
  ],
  "CMG": [
+  "CMG/2015/10-K/filing.html::2015",
+  "CMG/2015/10-K/filing.html::2015::2015",
+  "CMG/2016/10-K/filing.html::2015",
+  "CMG/2016/10-K/filing.html::2015::2015",
+  "CMG/2017/10-K/filing.html::2016",
+  "CMG/2017/10-K/filing.html::2016::2016",
+  "CMG/2018/10-K/filing.html::2017",
+  "CMG/2018/10-K/filing.html::2017::2017",
   "CMG/2019/10-K/filing.html::2018",
+  "CMG/2019/10-K/filing.html::2018::2018",
   "CMG/2020/10-K/filing.html::2019",
+  "CMG/2020/10-K/filing.html::2019::2019",
   "CMG/2021/10-K/filing.html::2020",
+  "CMG/2021/10-K/filing.html::2020::2020",
   "CMG/2022/10-K/filing.html::2021",
+  "CMG/2022/10-K/filing.html::2021::2021",
   "CMG/2023/10-K/filing.html::2022",
+  "CMG/2023/10-K/filing.html::2022::2022",
   "CMG/2024/10-K/filing.html::2023",
+  "CMG/2024/10-K/filing.html::2023::2023",
   "CMG/2025/10-K/filing.html::2024",
-  "CMG/2026/10-K/filing.html::2025"
+  "CMG/2025/10-K/filing.html::2024::2024",
+  "CMG/2026/10-K/filing.html::2025",
+  "CMG/2026/10-K/filing.html::2025::2025"
  ],
  "COLM": [
+  "COLM/2015/10-K/filing.html::2015",
   "COLM/2016/10-K/filing.html::2016",
+  "COLM/2017/10-K/filing.html::2017",
   "COLM/2018/10-K/filing.html::2018",
   "COLM/2019/10-K/filing.html::2019",
+  "COLM/2019/10-K/filing.html::2019::2019",
   "COLM/2020/10-K/filing.html::2020",
+  "COLM/2020/10-K/filing.html::2020::2020",
   "COLM/2021/10-K/filing.html::2021",
+  "COLM/2021/10-K/filing.html::2021::2021",
   "COLM/2022/10-K/filing.html::2022",
+  "COLM/2022/10-K/filing.html::2022::2022",
   "COLM/2023/10-K/filing.html::2023",
+  "COLM/2023/10-K/filing.html::2023::2023",
   "COLM/2024/10-K/filing.html::2024",
   "COLM/2025/10-K/filing.html::2025",
   "COLM/2026/10-K/filing.html::2025"
  ],
  "COST": [
   "COST/2016/10-K/filing.html::2016",
+  "COST/2016/10-K/filing.html::2016::2016",
   "COST/2017/10-K/filing.html::2017",
+  "COST/2017/10-K/filing.html::2017::2017",
   "COST/2018/10-K/filing.html::2018",
+  "COST/2018/10-K/filing.html::2018::2018",
   "COST/2019/10-K/filing.html::2019",
+  "COST/2019/10-K/filing.html::2019::2019",
   "COST/2020/10-K/filing.html::2020",
+  "COST/2020/10-K/filing.html::2020::2020",
   "COST/2021/10-K/filing.html::2021",
+  "COST/2021/10-K/filing.html::2021::2021",
   "COST/2022/10-K/filing.html::2022",
+  "COST/2022/10-K/filing.html::2022::2022",
   "COST/2023/10-K/filing.html::2023",
+  "COST/2023/10-K/filing.html::2023::2023",
   "COST/2024/10-K/filing.html::2024",
-  "COST/2025/10-K/filing.html::2025"
- ],
- "COTY": [
-  "COTY/2017/10-K/filing.html::2017",
-  "COTY/2022/10-K/filing.html::2022",
-  "COTY/2024/10-K/filing.html::2024",
-  "COTY/2025/10-K/filing.html::2025"
+  "COST/2024/10-K/filing.html::2024::2024",
+  "COST/2025/10-K/filing.html::2025",
+  "COST/2025/10-K/filing.html::2025::2025"
  ],
  "CPRI": [
+  "CPRI/2016/10-K/filing.html::2016",
+  "CPRI/2017/10-K/filing.html::2017",
+  "CPRI/2018/10-K/filing.html::2018",
   "CPRI/2019/10-K/filing.html::2019",
+  "CPRI/2019/10-K/filing.html::2019::2019",
   "CPRI/2020/10-K/filing.html::2020",
+  "CPRI/2020/10-K/filing.html::2020::2020",
   "CPRI/2021/10-K/filing.html::2021",
+  "CPRI/2021/10-K/filing.html::2021::2021",
   "CPRI/2022/10-K/filing.html::2022",
+  "CPRI/2022/10-K/filing.html::2022::2022",
   "CPRI/2023/10-K/filing.html::2023",
+  "CPRI/2023/10-K/filing.html::2023::2023",
   "CPRI/2024/10-K/filing.html::2024",
-  "CPRI/2025/10-K/filing.html::2025"
+  "CPRI/2024/10-K/filing.html::2024::2024",
+  "CPRI/2025/10-K/filing.html::2025",
+  "CPRI/2025/10-K/filing.html::2025::2025",
+  "CPRI/2026/10-K/filing.html::2026",
+  "CPRI/2026/10-K/filing.html::2026::2026"
  ],
  "CRI": [
   "CRI/2016/10-K/filing.html::2016",
   "CRI/2017/10-K/filing.html::2017",
+  "CRI/2017/10-K/filing.html::2017::2017",
   "CRI/2018/10-K/filing.html::2018",
   "CRI/2019/10-K/filing.html::2019",
+  "CRI/2019/10-K/filing.html::2019::2019",
   "CRI/2020/10-K/filing.html::2019",
+  "CRI/2020/10-K/filing.html::2019::2019",
+  "CRI/2021/10-K/filing.html::2021",
+  "CRI/2021/10-K/filing.html::2021::2021",
   "CRI/2022/10-K/filing.html::2022",
+  "CRI/2022/10-K/filing.html::2022::2022",
   "CRI/2023/10-K/filing.html::2023",
+  "CRI/2023/10-K/filing.html::2023::2023",
   "CRI/2024/10-K/filing.html::2024",
+  "CRI/2024/10-K/filing.html::2024::2024",
   "CRI/2025/10-K/filing.html::2024",
-  "CRI/2026/10-K/filing.html::2026"
+  "CRI/2025/10-K/filing.html::2024::2024",
+  "CRI/2026/10-K/filing.html::2026",
+  "CRI/2026/10-K/filing.html::2026::2026"
  ],
  "CRMT": [
   "CRMT/2016/10-K/filing.html::2016",
+  "CRMT/2016/10-K/filing.html::2016::2016",
   "CRMT/2017/10-K/filing.html::2017",
+  "CRMT/2017/10-K/filing.html::2017::2017",
   "CRMT/2018/10-K/filing.html::2018",
+  "CRMT/2018/10-K/filing.html::2018::2018",
   "CRMT/2019/10-K/filing.html::2019",
+  "CRMT/2019/10-K/filing.html::2019::2019",
   "CRMT/2020/10-K/filing.html::2020",
+  "CRMT/2020/10-K/filing.html::2020::2020",
+  "CRMT/2021/10-K/filing.html::2021",
+  "CRMT/2021/10-K/filing.html::2021::2021",
+  "CRMT/2022/10-K/filing.html::2022",
+  "CRMT/2022/10-K/filing.html::2022::2022",
   "CRMT/2023/10-K/filing.html::2023",
+  "CRMT/2023/10-K/filing.html::2023::2023",
   "CRMT/2024/10-K/filing.html::2024",
-  "CRMT/2025/10-K/filing.html::2025"
+  "CRMT/2024/10-K/filing.html::2024::2024",
+  "CRMT/2025/10-K/filing.html::2025",
+  "CRMT/2025/10-K/filing.html::2025::2025",
+  "CRMT/2026/10-K/filing.html::2026"
  ],
  "CROX": [
+  "CROX/2015/10-K/filing.html::2015",
   "CROX/2016/10-K/filing.html::2016",
   "CROX/2017/10-K/filing.html::2017",
   "CROX/2018/10-K/filing.html::2018",
   "CROX/2019/10-K/filing.html::2019",
+  "CROX/2019/10-K/filing.html::2019::2019",
   "CROX/2020/10-K/filing.html::2020",
+  "CROX/2020/10-K/filing.html::2020::2020",
   "CROX/2021/10-K/filing.html::2021",
+  "CROX/2021/10-K/filing.html::2021::2021",
+  "CROX/2022/10-K/filing.html::2022",
+  "CROX/2022/10-K/filing.html::2022::2022",
   "CROX/2023/10-K/filing.html::2023",
+  "CROX/2023/10-K/filing.html::2023::2023",
   "CROX/2024/10-K/filing.html::2024",
+  "CROX/2024/10-K/filing.html::2024::2024",
   "CROX/2025/10-K/filing.html::2025",
-  "CROX/2026/10-K/filing.html::2025"
+  "CROX/2025/10-K/filing.html::2025::2025",
+  "CROX/2026/10-K/filing.html::2025",
+  "CROX/2026/10-K/filing.html::2025::2025"
  ],
- "CRTO": [
-  "CRTO/2016/10-K/filing.html::2015",
-  "CRTO/2017/10-K/filing.html::2016",
-  "CRTO/2018/10-K/filing.html::2017",
-  "CRTO/2019/10-K/filing.html::2018",
-  "CRTO/2020/10-K/filing.html::2019",
-  "CRTO/2021/10-K/filing.html::2020",
-  "CRTO/2022/10-K/filing.html::2021",
-  "CRTO/2023/10-K/filing.html::2022",
-  "CRTO/2024/10-K/filing.html::2023",
-  "CRTO/2025/10-K/filing.html::2024",
-  "CRTO/2026/10-K/filing.html::2025"
- ],
- "CTA-PA": [
-  "CTA-PA/2016/10-K/filing.html::2015",
-  "CTA-PA/2017/10-K/filing.html::2016"
+ "CRSR": [
+  "CRSR/2024/10-K/filing.html::2023",
+  "CRSR/2024/10-K/filing.html::2023::2023",
+  "CRSR/2025/10-K/filing.html::2024",
+  "CRSR/2025/10-K/filing.html::2024::2024",
+  "CRSR/2026/10-K/filing.html::2025",
+  "CRSR/2026/10-K/filing.html::2025::2025"
  ],
  "CTRN": [
   "CTRN/2016/10-K/filing.html::2016",
+  "CTRN/2016/10-K/filing.html::2016::2016",
   "CTRN/2017/10-K/filing.html::2017",
+  "CTRN/2017/10-K/filing.html::2017::2017",
   "CTRN/2018/10-K/filing.html::2018",
+  "CTRN/2018/10-K/filing.html::2018::2018",
   "CTRN/2019/10-K/filing.html::2019",
+  "CTRN/2019/10-K/filing.html::2019::2019",
   "CTRN/2020/10-K/filing.html::2020",
+  "CTRN/2020/10-K/filing.html::2020::2020",
   "CTRN/2021/10-K/filing.html::2021",
+  "CTRN/2021/10-K/filing.html::2021::2021",
   "CTRN/2022/10-K/filing.html::2022",
+  "CTRN/2022/10-K/filing.html::2022::2022",
   "CTRN/2023/10-K/filing.html::2023",
+  "CTRN/2023/10-K/filing.html::2023::2023",
   "CTRN/2024/10-K/filing.html::2024",
+  "CTRN/2024/10-K/filing.html::2024::2024",
   "CTRN/2025/10-K/filing.html::2025",
-  "CTRN/2026/10-K/filing.html::2026"
- ],
- "CTSH": [
-  "CTSH/2017/10-K/filing.html::2016",
-  "CTSH/2018/10-K/filing.html::2017"
+  "CTRN/2025/10-K/filing.html::2025::2025",
+  "CTRN/2026/10-K/filing.html::2026",
+  "CTRN/2026/10-K/filing.html::2026::2026"
  ],
  "CURV": [
   "CURV/2022/10-K/filing.html::2022",
+  "CURV/2022/10-K/filing.html::2022::2022",
   "CURV/2023/10-K/filing.html::2023",
+  "CURV/2023/10-K/filing.html::2023::2023",
   "CURV/2024/10-K/filing.html::2024",
+  "CURV/2024/10-K/filing.html::2024::2024",
   "CURV/2025/10-K/filing.html::2025",
-  "CURV/2026/10-K/filing.html::2026"
+  "CURV/2025/10-K/filing.html::2025::2025",
+  "CURV/2026/10-K/filing.html::2026",
+  "CURV/2026/10-K/filing.html::2026::2026"
  ],
  "CVCO": [
   "CVCO/2016/10-K/filing.html::2016",
+  "CVCO/2016/10-K/filing.html::2016::2016",
   "CVCO/2017/10-K/filing.html::2017",
+  "CVCO/2017/10-K/filing.html::2017::2017",
   "CVCO/2018/10-K/filing.html::2018",
-  "CVCO/2019/10-K/filing.html::2019",
-  "CVCO/2020/10-K/filing.html::2020",
-  "CVCO/2021/10-K/filing.html::2021",
-  "CVCO/2022/10-K/filing.html::2022"
+  "CVCO/2018/10-K/filing.html::2018::2018"
+ ],
+ "CVGW": [
+  "CVGW/2021/10-K/filing.html::2021",
+  "CVGW/2021/10-K/filing.html::2021::2021",
+  "CVGW/2022/10-K/filing.html::2022",
+  "CVGW/2022/10-K/filing.html::2022::2022",
+  "CVGW/2024/10-K/filing.html::2023",
+  "CVGW/2024/10-K/filing.html::2023::2023",
+  "CVGW/2025/10-K/filing.html::2024",
+  "CVGW/2025/10-K/filing.html::2024::2024",
+  "CVGW/2026/10-K/filing.html::2025",
+  "CVGW/2026/10-K/filing.html::2025::2025"
+ ],
+ "CVLT": [
+  "CVLT/2020/10-K/filing.html::2020"
  ],
  "CVNA": [
+  "CVNA/2017/10-K/filing.html::2017",
+  "CVNA/2018/10-K/filing.html::2017",
+  "CVNA/2019/10-K/filing.html::2018",
+  "CVNA/2020/10-K/filing.html::2019",
+  "CVNA/2021/10-K/filing.html::2020",
   "CVNA/2022/10-K/filing.html::2021",
   "CVNA/2023/10-K/filing.html::2022",
+  "CVNA/2024/10-K/filing.html::2023",
+  "CVNA/2025/10-K/filing.html::2024",
   "CVNA/2026/10-K/filing.html::2025"
  ],
  "CVS": [
   "CVS/2015/10-K/filing.html::2015",
+  "CVS/2015/10-K/filing.html::2015::2015",
   "CVS/2016/10-K/filing.html::2016",
+  "CVS/2016/10-K/filing.html::2016::2016",
+  "CVS/2017/10-K/filing.html::2017",
+  "CVS/2017/10-K/filing.html::2017::2017",
   "CVS/2018/10-K/filing.html::2018",
+  "CVS/2018/10-K/filing.html::2018::2018",
   "CVS/2019/10-K/filing.html::2019",
+  "CVS/2019/10-K/filing.html::2019::2019",
   "CVS/2020/10-K/filing.html::2020",
+  "CVS/2020/10-K/filing.html::2020::2020",
   "CVS/2021/10-K/filing.html::2021",
+  "CVS/2021/10-K/filing.html::2021::2021",
   "CVS/2022/10-K/filing.html::2022",
+  "CVS/2022/10-K/filing.html::2022::2022",
   "CVS/2023/10-K/filing.html::2023",
+  "CVS/2023/10-K/filing.html::2023::2023",
   "CVS/2024/10-K/filing.html::2024",
+  "CVS/2024/10-K/filing.html::2024::2024",
   "CVS/2025/10-K/filing.html::2025",
-  "CVS/2026/10-K/filing.html::2025"
+  "CVS/2025/10-K/filing.html::2025::2025",
+  "CVS/2026/10-K/filing.html::2025",
+  "CVS/2026/10-K/filing.html::2025::2025"
  ],
  "CWH": [
   "CWH/2017/10-K/filing.html::2016",
+  "CWH/2017/10-K/filing.html::2016::2016",
   "CWH/2018/10-K/filing.html::2017",
+  "CWH/2018/10-K/filing.html::2017::2017",
+  "CWH/2019/10-K/filing.html::2018",
   "CWH/2020/10-K/filing.html::2019",
+  "CWH/2020/10-K/filing.html::2019::2019",
   "CWH/2021/10-K/filing.html::2020",
+  "CWH/2021/10-K/filing.html::2020::2020",
   "CWH/2022/10-K/filing.html::2021",
+  "CWH/2022/10-K/filing.html::2021::2021",
   "CWH/2023/10-K/filing.html::2022",
+  "CWH/2023/10-K/filing.html::2022::2022",
   "CWH/2024/10-K/filing.html::2023",
+  "CWH/2024/10-K/filing.html::2023::2023",
   "CWH/2025/10-K/filing.html::2024",
-  "CWH/2026/10-K/filing.html::2025"
+  "CWH/2025/10-K/filing.html::2024::2024",
+  "CWH/2026/10-K/filing.html::2025",
+  "CWH/2026/10-K/filing.html::2025::2025"
  ],
  "CXT": [
   "CXT/2016/10-K/filing.html::2015",
+  "CXT/2016/10-K/filing.html::2015::2015",
   "CXT/2017/10-K/filing.html::2016",
+  "CXT/2017/10-K/filing.html::2016::2016",
   "CXT/2018/10-K/filing.html::2017",
+  "CXT/2018/10-K/filing.html::2017::2017",
   "CXT/2019/10-K/filing.html::2018",
+  "CXT/2019/10-K/filing.html::2018::2018",
   "CXT/2020/10-K/filing.html::2019",
+  "CXT/2020/10-K/filing.html::2019::2019",
   "CXT/2021/10-K/filing.html::2020",
+  "CXT/2021/10-K/filing.html::2020::2020",
   "CXT/2022/10-K/filing.html::2021",
-  "CXT/2023/10-K/filing.html::2022"
+  "CXT/2022/10-K/filing.html::2021::2021",
+  "CXT/2023/10-K/filing.html::2022",
+  "CXT/2023/10-K/filing.html::2022::2022",
+  "CXT/2025/10-K/filing.html::2024",
+  "CXT/2026/10-K/filing.html::2025"
  ],
  "DBI": [
   "DBI/2016/10-K/filing.html::2016",
+  "DBI/2016/10-K/filing.html::2016::2016",
   "DBI/2017/10-K/filing.html::2017",
+  "DBI/2017/10-K/filing.html::2017::2017",
+  "DBI/2018/10-K/filing.html::2018",
+  "DBI/2019/10-K/filing.html::2019",
+  "DBI/2020/10-K/filing.html::2020",
   "DBI/2021/10-K/filing.html::2021",
+  "DBI/2021/10-K/filing.html::2021::2021",
   "DBI/2022/10-K/filing.html::2022",
-  "DBI/2023/10-K/filing.html::2023",
-  "DBI/2024/10-K/filing.html::2024",
+  "DBI/2022/10-K/filing.html::2022::2022",
   "DBI/2025/10-K/filing.html::2025",
-  "DBI/2026/10-K/filing.html::2026"
+  "DBI/2025/10-K/filing.html::2025::2025",
+  "DBI/2026/10-K/filing.html::2026",
+  "DBI/2026/10-K/filing.html::2026::2026"
  ],
  "DDS": [
   "DDS/2016/10-K/filing.html::2016",
+  "DDS/2016/10-K/filing.html::2016::2016",
   "DDS/2017/10-K/filing.html::2017",
+  "DDS/2017/10-K/filing.html::2017::2017",
   "DDS/2018/10-K/filing.html::2018",
+  "DDS/2018/10-K/filing.html::2018::2018",
   "DDS/2019/10-K/filing.html::2019",
+  "DDS/2019/10-K/filing.html::2019::2019",
   "DDS/2020/10-K/filing.html::2020",
+  "DDS/2020/10-K/filing.html::2020::2020",
   "DDS/2021/10-K/filing.html::2021",
+  "DDS/2021/10-K/filing.html::2021::2021",
   "DDS/2022/10-K/filing.html::2022",
+  "DDS/2022/10-K/filing.html::2022::2022",
   "DDS/2023/10-K/filing.html::2023",
+  "DDS/2023/10-K/filing.html::2023::2023",
   "DDS/2024/10-K/filing.html::2024",
+  "DDS/2024/10-K/filing.html::2024::2024",
   "DDS/2025/10-K/filing.html::2025",
-  "DDS/2026/10-K/filing.html::2026"
+  "DDS/2025/10-K/filing.html::2025::2025",
+  "DDS/2026/10-K/filing.html::2026",
+  "DDS/2026/10-K/filing.html::2026::2026"
  ],
  "DECK": [
   "DECK/2016/10-K/filing.html::2016",
+  "DECK/2016/10-K/filing.html::2016::2016",
   "DECK/2017/10-K/filing.html::2017",
+  "DECK/2017/10-K/filing.html::2017::2017",
   "DECK/2018/10-K/filing.html::2018",
   "DECK/2019/10-K/filing.html::2019",
+  "DECK/2019/10-K/filing.html::2019::2019",
   "DECK/2020/10-K/filing.html::2020",
+  "DECK/2020/10-K/filing.html::2020::2020",
   "DECK/2021/10-K/filing.html::2021",
+  "DECK/2021/10-K/filing.html::2021::2021",
   "DECK/2022/10-K/filing.html::2022",
+  "DECK/2022/10-K/filing.html::2022::2022",
   "DECK/2023/10-K/filing.html::2023",
   "DECK/2024/10-K/filing.html::2024",
+  "DECK/2024/10-K/filing.html::2024::2024",
   "DECK/2025/10-K/filing.html::2025",
-  "DECK/2026/10-K/filing.html::2026"
+  "DECK/2025/10-K/filing.html::2025::2025",
+  "DECK/2026/10-K/filing.html::2026",
+  "DECK/2026/10-K/filing.html::2026::2026"
  ],
  "DG": [
   "DG/2016/10-K/filing.html::2016",
+  "DG/2016/10-K/filing.html::2016::2016",
   "DG/2017/10-K/filing.html::2017",
+  "DG/2017/10-K/filing.html::2017::2017",
   "DG/2018/10-K/filing.html::2018",
+  "DG/2018/10-K/filing.html::2018::2018",
   "DG/2019/10-K/filing.html::2019",
+  "DG/2019/10-K/filing.html::2019::2019",
   "DG/2020/10-K/filing.html::2020",
+  "DG/2020/10-K/filing.html::2020::2020",
   "DG/2021/10-K/filing.html::2021",
+  "DG/2021/10-K/filing.html::2021::2021",
   "DG/2022/10-K/filing.html::2022",
+  "DG/2022/10-K/filing.html::2022::2022",
   "DG/2023/10-K/filing.html::2023",
+  "DG/2023/10-K/filing.html::2023::2023",
   "DG/2024/10-K/filing.html::2024",
+  "DG/2024/10-K/filing.html::2024::2024",
   "DG/2025/10-K/filing.html::2025",
-  "DG/2026/10-K/filing.html::2026"
+  "DG/2025/10-K/filing.html::2025::2025",
+  "DG/2026/10-K/filing.html::2026",
+  "DG/2026/10-K/filing.html::2026::2026"
  ],
  "DKS": [
   "DKS/2016/10-K/filing.html::2016",
+  "DKS/2016/10-K/filing.html::2016::2016",
   "DKS/2017/10-K/filing.html::2017",
+  "DKS/2017/10-K/filing.html::2017::2017",
   "DKS/2018/10-K/filing.html::2018",
+  "DKS/2018/10-K/filing.html::2018::2018",
   "DKS/2019/10-K/filing.html::2019",
+  "DKS/2019/10-K/filing.html::2019::2019",
   "DKS/2020/10-K/filing.html::2020",
+  "DKS/2020/10-K/filing.html::2020::2020",
   "DKS/2021/10-K/filing.html::2021",
+  "DKS/2021/10-K/filing.html::2021::2021",
   "DKS/2022/10-K/filing.html::2022",
+  "DKS/2022/10-K/filing.html::2022::2022",
   "DKS/2023/10-K/filing.html::2023",
+  "DKS/2023/10-K/filing.html::2023::2023",
   "DKS/2024/10-K/filing.html::2024",
-  "DKS/2025/10-K/filing.html::2025"
+  "DKS/2024/10-K/filing.html::2024::2024",
+  "DKS/2025/10-K/filing.html::2025",
+  "DKS/2025/10-K/filing.html::2025::2025",
+  "DKS/2026/10-K/filing.html::2026"
  ],
  "DLB": [
   "DLB/2017/10-K/filing.html::2017",
+  "DLB/2017/10-K/filing.html::2017::2017",
+  "DLB/2018/10-K/filing.html::2018",
   "DLB/2020/10-K/filing.html::2020",
-  "DLB/2021/10-K/filing.html::2021"
+  "DLB/2020/10-K/filing.html::2020::2020",
+  "DLB/2021/10-K/filing.html::2021",
+  "DLB/2021/10-K/filing.html::2021::2021"
  ],
  "DLTH": [
+  "DLTH/2016/10-K/filing.html::2016",
   "DLTH/2017/10-K/filing.html::2017",
   "DLTH/2018/10-K/filing.html::2018",
+  "DLTH/2019/10-K/filing.html::2019",
+  "DLTH/2019/10-K/filing.html::2019::2019",
+  "DLTH/2020/10-K/filing.html::2020",
+  "DLTH/2020/10-K/filing.html::2020::2020",
+  "DLTH/2021/10-K/filing.html::2021",
+  "DLTH/2021/10-K/filing.html::2021::2021",
+  "DLTH/2022/10-K/filing.html::2022",
+  "DLTH/2022/10-K/filing.html::2022::2022",
   "DLTH/2023/10-K/filing.html::2023",
+  "DLTH/2023/10-K/filing.html::2023::2023",
   "DLTH/2024/10-K/filing.html::2024",
-  "DLTH/2025/10-K/filing.html::2025"
+  "DLTH/2024/10-K/filing.html::2024::2024",
+  "DLTH/2025/10-K/filing.html::2025",
+  "DLTH/2025/10-K/filing.html::2025::2025",
+  "DLTH/2026/10-K/filing.html::2026",
+  "DLTH/2026/10-K/filing.html::2026::2026"
  ],
  "DLTR": [
   "DLTR/2016/10-K/filing.html::2016",
+  "DLTR/2016/10-K/filing.html::2016::2016",
   "DLTR/2017/10-K/filing.html::2017",
+  "DLTR/2017/10-K/filing.html::2017::2017",
   "DLTR/2018/10-K/filing.html::2018",
+  "DLTR/2018/10-K/filing.html::2018::2018",
   "DLTR/2019/10-K/filing.html::2019",
+  "DLTR/2019/10-K/filing.html::2019::2019",
   "DLTR/2020/10-K/filing.html::2020",
+  "DLTR/2020/10-K/filing.html::2020::2020",
   "DLTR/2021/10-K/filing.html::2021",
+  "DLTR/2021/10-K/filing.html::2021::2021",
   "DLTR/2022/10-K/filing.html::2022",
+  "DLTR/2022/10-K/filing.html::2022::2022",
   "DLTR/2023/10-K/filing.html::2023",
-  "DLTR/2024/10-K/filing.html::2024"
- ],
- "DOCN": [
-  "DOCN/2022/10-K/filing.html::2021",
-  "DOCN/2023/10-K/filing.html::2022",
-  "DOCN/2024/10-K/filing.html::2023",
-  "DOCN/2025/10-K/filing.html::2024"
+  "DLTR/2023/10-K/filing.html::2023::2023",
+  "DLTR/2024/10-K/filing.html::2024",
+  "DLTR/2025/10-K/filing.html::2025",
+  "DLTR/2026/10-K/filing.html::2026"
  ],
  "DPZ": [
   "DPZ/2016/10-K/filing.html::2016",
+  "DPZ/2016/10-K/filing.html::2016::2016",
   "DPZ/2017/10-K/filing.html::2017",
+  "DPZ/2017/10-K/filing.html::2017::2017",
   "DPZ/2018/10-K/filing.html::2018",
+  "DPZ/2018/10-K/filing.html::2018::2018",
   "DPZ/2019/10-K/filing.html::2019",
-  "DPZ/2020/10-K/filing.html::2019"
+  "DPZ/2019/10-K/filing.html::2019::2019",
+  "DPZ/2020/10-K/filing.html::2019",
+  "DPZ/2020/10-K/filing.html::2019::2019",
+  "DPZ/2021/10-K/filing.html::2021",
+  "DPZ/2022/10-K/filing.html::2022",
+  "DPZ/2022/10-K/filing.html::2022::2022",
+  "DPZ/2023/10-K/filing.html::2023",
+  "DPZ/2023/10-K/filing.html::2023::2023",
+  "DPZ/2024/10-K/filing.html::2024",
+  "DPZ/2024/10-K/filing.html::2024::2024",
+  "DPZ/2025/10-K/filing.html::2025",
+  "DPZ/2025/10-K/filing.html::2025::2025",
+  "DPZ/2026/10-K/filing.html::2025",
+  "DPZ/2026/10-K/filing.html::2025::2025"
+ ],
+ "DRI": [
+  "DRI/2016/10-K/filing.html::2016",
+  "DRI/2017/10-K/filing.html::2017",
+  "DRI/2018/10-K/filing.html::2018",
+  "DRI/2019/10-K/filing.html::2019",
+  "DRI/2020/10-K/filing.html::2020",
+  "DRI/2021/10-K/filing.html::2021",
+  "DRI/2022/10-K/filing.html::2022",
+  "DRI/2023/10-K/filing.html::2023",
+  "DRI/2024/10-K/filing.html::2024",
+  "DRI/2025/10-K/filing.html::2025",
+  "DRI/2026/10-K/filing.html::2026"
  ],
  "DRVN": [
   "DRVN/2021/10-K/filing.html::2020",
   "DRVN/2022/10-K/filing.html::2021",
   "DRVN/2023/10-K/filing.html::2022",
+  "DRVN/2023/10-K/filing.html::2022::2022",
   "DRVN/2024/10-K/filing.html::2023",
-  "DRVN/2025/10-K/filing.html::2024"
+  "DRVN/2024/10-K/filing.html::2023::2023",
+  "DRVN/2025/10-K/filing.html::2024",
+  "DRVN/2025/10-K/filing.html::2024::2024",
+  "DRVN/2026/10-K/filing.html::2025",
+  "DRVN/2026/10-K/filing.html::2025::2025"
  ],
  "DXLG": [
   "DXLG/2016/10-K/filing.html::2016",
+  "DXLG/2016/10-K/filing.html::2016::2016",
   "DXLG/2017/10-K/filing.html::2017",
+  "DXLG/2017/10-K/filing.html::2017::2017",
   "DXLG/2018/10-K/filing.html::2018",
+  "DXLG/2018/10-K/filing.html::2018::2018",
   "DXLG/2019/10-K/filing.html::2019",
+  "DXLG/2019/10-K/filing.html::2019::2019",
   "DXLG/2020/10-K/filing.html::2020",
+  "DXLG/2020/10-K/filing.html::2020::2020",
   "DXLG/2021/10-K/filing.html::2021",
+  "DXLG/2021/10-K/filing.html::2021::2021",
   "DXLG/2022/10-K/filing.html::2022",
+  "DXLG/2022/10-K/filing.html::2022::2022",
   "DXLG/2023/10-K/filing.html::2023",
+  "DXLG/2023/10-K/filing.html::2023::2023",
   "DXLG/2024/10-K/filing.html::2024",
-  "DXLG/2025/10-K/filing.html::2025"
+  "DXLG/2024/10-K/filing.html::2024::2024",
+  "DXLG/2025/10-K/filing.html::2025",
+  "DXLG/2025/10-K/filing.html::2025::2025"
+ ],
+ "EFOR": [
+  "EFOR/2025/10-K/filing.html::2024"
+ ],
+ "EGHT": [
+  "EGHT/2019/10-K/filing.html::2019",
+  "EGHT/2019/10-K/filing.html::2019::2019",
+  "EGHT/2026/10-K/filing.html::2026",
+  "EGHT/2026/10-K/filing.html::2026::2026"
+ ],
+ "ELF": [
+  "ELF/2016/10-K/filing.html::2016",
+  "ELF/2016/10-K/filing.html::2016::2016",
+  "ELF/2017/10-K/filing.html::2016",
+  "ELF/2017/10-K/filing.html::2016::2016",
+  "ELF/2018/10-K/filing.html::2017",
+  "ELF/2018/10-K/filing.html::2017::2017",
+  "ELF/2019/10-K/filing.html::2018"
  ],
  "EL": [
   "EL/2016/10-K/filing.html::2016",
+  "EL/2016/10-K/filing.html::2016::2016",
   "EL/2017/10-K/filing.html::2017",
+  "EL/2017/10-K/filing.html::2017::2017",
   "EL/2018/10-K/filing.html::2018",
+  "EL/2018/10-K/filing.html::2018::2018",
   "EL/2019/10-K/filing.html::2019",
+  "EL/2019/10-K/filing.html::2019::2019",
   "EL/2020/10-K/filing.html::2020",
   "EL/2021/10-K/filing.html::2021",
+  "EL/2021/10-K/filing.html::2021::2021",
   "EL/2022/10-K/filing.html::2022",
   "EL/2023/10-K/filing.html::2023",
-  "EL/2024/10-K/filing.html::2024",
-  "EL/2025/10-K/filing.html::2025"
- ],
- "EPAM": [
-  "EPAM/2021/10-K/filing.html::2020",
-  "EPAM/2022/10-K/filing.html::2021"
- ],
- "EVGO": [
-  "EVGO/2022/10-K/filing.html::2021",
-  "EVGO/2024/10-K/filing.html::2023",
-  "EVGO/2026/10-K/filing.html::2025"
+  "EL/2024/10-K/filing.html::2024"
  ],
  "EYE": [
   "EYE/2017/10-K/filing.html::2017",
@@ -676,6 +1192,8 @@
   "FIVE/2026/10-K/filing.html::2026"
  ],
  "FL": [
+  "FL/2016/10-K/filing.html::2016",
+  "FL/2017/10-K/filing.html::2017",
   "FL/2018/10-K/filing.html::2018",
   "FL/2019/10-K/filing.html::2019",
   "FL/2020/10-K/filing.html::2020",
@@ -686,6 +1204,7 @@
   "FL/2025/10-K/filing.html::2025"
  ],
  "FND": [
+  "FND/2017/10-K/filing.html::2017",
   "FND/2019/10-K/filing.html::2019",
   "FND/2020/10-K/filing.html::2020",
   "FND/2021/10-K/filing.html::2021",
@@ -700,6 +1219,8 @@
   "FOSL/2017/10-K/filing.html::2016",
   "FOSL/2018/10-K/filing.html::2017",
   "FOSL/2019/10-K/filing.html::2018",
+  "FOSL/2020/10-K/filing.html::2019",
+  "FOSL/2021/10-K/filing.html::2021",
   "FOSL/2022/10-K/filing.html::2022",
   "FOSL/2023/10-K/filing.html::2022",
   "FOSL/2024/10-K/filing.html::2023",
@@ -707,6 +1228,7 @@
   "FOSL/2026/10-K/filing.html::2026"
  ],
  "FRPT": [
+  "FRPT/2016/10-K/filing.html::2015",
   "FRPT/2017/10-K/filing.html::2016",
   "FRPT/2018/10-K/filing.html::2017",
   "FRPT/2019/10-K/filing.html::2018",
@@ -719,22 +1241,13 @@
   "FRPT/2026/10-K/filing.html::2025"
  ],
  "FRT": [
-  "FRT/2017/10-K/filing.html::2016",
-  "FRT/2018/10-K/filing.html::2017",
   "FRT/2019/10-K/filing.html::2018",
-  "FRT/2020/10-K/filing.html::2019",
-  "FRT/2021/10-K/filing.html::2020",
-  "FRT/2022/10-K/filing.html::2021",
-  "FRT/2023/10-K/filing.html::2022",
-  "FRT/2024/10-K/filing.html::2023",
-  "FRT/2025/10-K/filing.html::2024",
-  "FRT/2026/10-K/filing.html::2025"
+  "FRT/2025/10-K/filing.html::2024"
  ],
  "FTDR": [
   "FTDR/2019/10-K/filing.html::2018",
   "FTDR/2020/10-K/filing.html::2019",
-  "FTDR/2021/10-K/filing.html::2020",
-  "FTDR/2022/10-K/filing.html::2021"
+  "FTDR/2021/10-K/filing.html::2020"
  ],
  "GAP": [
   "GAP/2016/10-K/filing.html::2016",
@@ -746,7 +1259,8 @@
   "GAP/2022/10-K/filing.html::2022",
   "GAP/2023/10-K/filing.html::2023",
   "GAP/2024/10-K/filing.html::2024",
-  "GAP/2025/10-K/filing.html::2025"
+  "GAP/2025/10-K/filing.html::2025",
+  "GAP/2026/10-K/filing.html::2026"
  ],
  "GCO": [
   "GCO/2019/10-K/filing.html::2019",
@@ -771,9 +1285,10 @@
   "GES/2025/10-K/filing.html::2025"
  ],
  "GIII": [
-  "GIII/2019/10-K/filing.html::2019",
-  "GIII/2020/10-K/filing.html::2020",
+  "GIII/2021/10-K/filing.html::2021",
   "GIII/2022/10-K/filing.html::2022",
+  "GIII/2023/10-K/filing.html::2023",
+  "GIII/2024/10-K/filing.html::2024",
   "GIII/2025/10-K/filing.html::2025",
   "GIII/2026/10-K/filing.html::2026"
  ],
@@ -785,13 +1300,7 @@
   "GME/2020/10-K/filing.html::2020",
   "GME/2021/10-K/filing.html::2021",
   "GME/2022/10-K/filing.html::2022",
-  "GME/2023/10-K/filing.html::2023",
-  "GME/2024/10-K/filing.html::2024",
   "GME/2025/10-K/filing.html::2025"
- ],
- "GOLF": [
-  "GOLF/2016/10-K/filing.html::2016",
-  "GOLF/2017/10-K/filing.html::2016"
  ],
  "GO": [
   "GO/2020/10-K/filing.html::2019",
@@ -803,21 +1312,20 @@
   "GO/2026/10-K/filing.html::2026"
  ],
  "GPI": [
+  "GPI/2015/10-K/filing.html::2015",
+  "GPI/2016/10-K/filing.html::2015",
+  "GPI/2017/10-K/filing.html::2016",
+  "GPI/2018/10-K/filing.html::2017",
   "GPI/2020/10-K/filing.html::2019",
   "GPI/2021/10-K/filing.html::2020",
   "GPI/2022/10-K/filing.html::2021",
   "GPI/2023/10-K/filing.html::2022",
-  "GPI/2024/10-K/filing.html::2023",
-  "GPI/2025/10-K/filing.html::2024",
-  "GPI/2026/10-K/filing.html::2025"
+  "GPI/2024/10-K/filing.html::2023"
  ],
  "GRBK": [
-  "GRBK/2019/10-K/filing.html::2018",
-  "GRBK/2023/10-K/filing.html::2022"
- ],
- "HAIN": [
-  "HAIN/2018/10-K/filing.html::2018",
-  "HAIN/2019/10-K/filing.html::2019"
+  "GRBK/2016/10-K/filing.html::2015",
+  "GRBK/2017/10-K/filing.html::2016",
+  "GRBK/2018/10-K/filing.html::2017"
  ],
  "HD": [
   "HD/2016/10-K/filing.html::2016",
@@ -829,59 +1337,33 @@
   "HD/2022/10-K/filing.html::2022",
   "HD/2023/10-K/filing.html::2023",
   "HD/2024/10-K/filing.html::2024",
+  "HD/2025/10-K/filing.html::2025",
   "HD/2026/10-K/filing.html::2026"
  ],
  "HFFG": [
   "HFFG/2020/10-K/filing.html::2019",
-  "HFFG/2021/10-K/filing.html::2020",
-  "HFFG/2024/10-K/filing.html::2023",
-  "HFFG/2025/10-K/filing.html::2024",
-  "HFFG/2026/10-K/filing.html::2025"
- ],
- "HON": [
-  "HON/2015/10-K/filing.html::2015",
-  "HON/2016/10-K/filing.html::2016",
-  "HON/2018/10-K/filing.html::2018",
-  "HON/2019/10-K/filing.html::2019",
-  "HON/2021/10-K/filing.html::2021",
-  "HON/2022/10-K/filing.html::2022",
-  "HON/2025/10-K/filing.html::2025",
-  "HON/2026/10-K/filing.html::2025"
- ],
- "HPE": [
-  "HPE/2021/10-K/filing.html::2021",
-  "HPE/2022/10-K/filing.html::2022",
-  "HPE/2023/10-K/filing.html::2023",
-  "HPE/2024/10-K/filing.html::2024",
-  "HPE/2025/10-K/filing.html::2025"
+  "HFFG/2021/10-K/filing.html::2020"
  ],
  "HVT": [
   "HVT/2016/10-K/filing.html::2015",
   "HVT/2017/10-K/filing.html::2016",
   "HVT/2018/10-K/filing.html::2017",
   "HVT/2019/10-K/filing.html::2018",
-  "HVT/2020/10-K/filing.html::2019",
-  "HVT/2021/10-K/filing.html::2020",
-  "HVT/2022/10-K/filing.html::2021"
+  "HVT/2020/10-K/filing.html::2019"
  ],
  "HZO": [
   "HZO/2016/10-K/filing.html::2016",
-  "HZO/2017/10-K/filing.html::2017",
-  "HZO/2018/10-K/filing.html::2018",
   "HZO/2019/10-K/filing.html::2019",
   "HZO/2020/10-K/filing.html::2020",
   "HZO/2021/10-K/filing.html::2021",
   "HZO/2022/10-K/filing.html::2022",
-  "HZO/2023/10-K/filing.html::2023"
- ],
- "IBP": [
-  "IBP/2019/10-K/filing.html::2018",
-  "IBP/2020/10-K/filing.html::2019",
-  "IBP/2021/10-K/filing.html::2020",
-  "IBP/2024/10-K/filing.html::2023"
+  "HZO/2023/10-K/filing.html::2023",
+  "HZO/2024/10-K/filing.html::2024",
+  "HZO/2025/10-K/filing.html::2024"
  ],
  "IMKT.A": [
   "IMKT.A/2016/10-K/filing.html::2015",
+  "IMKT.A/2016/10-K/filing.html::2016",
   "IMKT.A/2017/10-K/filing.html::2017",
   "IMKT.A/2019/10-K/filing.html::2019",
   "IMKT.A/2020/10-K/filing.html::2020",
@@ -890,10 +1372,6 @@
   "IMKT.A/2023/10-K/filing.html::2023",
   "IMKT.A/2024/10-K/filing.html::2024",
   "IMKT.A/2025/10-K/filing.html::2025"
- ],
- "IPAR": [
-  "IPAR/2016/10-K/filing.html::2015",
-  "IPAR/2019/10-K/filing.html::2018"
  ],
  "JILL": [
   "JILL/2017/10-K/filing.html::2017",
@@ -907,19 +1385,18 @@
   "JILL/2025/10-K/filing.html::2025",
   "JILL/2026/10-K/filing.html::2026"
  ],
- "KD": [
-  "KD/2023/10-K/filing.html::2021",
-  "KD/2024/10-K/filing.html::2024"
- ],
- "KEYS": [
-  "KEYS/2019/10-K/filing.html::2019",
-  "KEYS/2020/10-K/filing.html::2020",
-  "KEYS/2021/10-K/filing.html::2021",
-  "KEYS/2022/10-K/filing.html::2022"
+ "KHC": [
+  "KHC/2017/10-K/filing.html::2016",
+  "KHC/2018/10-K/filing.html::2017",
+  "KHC/2019/10-K/filing.html::2018",
+  "KHC/2020/10-K/filing.html::2019"
  ],
  "KIM": [
-  "KIM/2018/10-K/filing.html::2017",
-  "KIM/2019/10-K/filing.html::2018"
+  "KIM/2022/10-K/filing.html::2021",
+  "KIM/2023/10-K/filing.html::2022",
+  "KIM/2024/10-K/filing.html::2023",
+  "KIM/2025/10-K/filing.html::2024",
+  "KIM/2026/10-K/filing.html::2025"
  ],
  "KMX": [
   "KMX/2016/10-K/filing.html::2016",
@@ -934,17 +1411,17 @@
   "KMX/2025/10-K/filing.html::2025",
   "KMX/2026/10-K/filing.html::2026"
  ],
- "KO": [
-  "KO/2015/10-K/filing.html::2015",
-  "KO/2018/10-K/filing.html::2018"
- ],
  "KRG": [
   "KRG/2016/10-K/filing.html::2015",
-  "KRG/2022/10-K/filing.html::2021",
-  "KRG/2023/10-K/filing.html::2022",
-  "KRG/2026/10-K/filing.html::2025"
+  "KRG/2017/10-K/filing.html::2016",
+  "KRG/2018/10-K/filing.html::2017",
+  "KRG/2019/10-K/filing.html::2018"
  ],
  "KR": [
+  "KR/2016/10-K/filing.html::2016",
+  "KR/2017/10-K/filing.html::2017",
+  "KR/2018/10-K/filing.html::2018",
+  "KR/2019/10-K/filing.html::2019",
   "KR/2020/10-K/filing.html::2020",
   "KR/2021/10-K/filing.html::2021",
   "KR/2022/10-K/filing.html::2022",
@@ -969,8 +1446,10 @@
  "KTB": [
   "KTB/2019/10-K/filing.html::2019",
   "KTB/2020/10-K/filing.html::2019",
-  "KTB/2025/10-K/filing.html::2024",
-  "KTB/2026/10-K/filing.html::2026"
+  "KTB/2021/10-K/filing.html::2021",
+  "KTB/2023/10-K/filing.html::2022",
+  "KTB/2024/10-K/filing.html::2023",
+  "KTB/2025/10-K/filing.html::2024"
  ],
  "LAD": [
   "LAD/2015/10-K/filing.html::2015",
@@ -987,7 +1466,6 @@
   "LAD/2026/10-K/filing.html::2025"
  ],
  "LEG": [
-  "LEG/2016/10-K/filing.html::2015",
   "LEG/2017/10-K/filing.html::2016",
   "LEG/2018/10-K/filing.html::2017",
   "LEG/2019/10-K/filing.html::2018",
@@ -1027,6 +1505,7 @@
   "LE/2018/10-K/filing.html::2018"
  ],
  "LGIH": [
+  "LGIH/2022/10-K/filing.html::2021",
   "LGIH/2024/10-K/filing.html::2023",
   "LGIH/2026/10-K/filing.html::2025"
  ],
@@ -1067,9 +1546,8 @@
   "LULU/2026/10-K/filing.html::2026"
  ],
  "LZB": [
-  "LZB/2016/10-K/filing.html::2016",
-  "LZB/2025/10-K/filing.html::2025",
-  "LZB/2026/10-K/filing.html::2026"
+  "LZB/2019/10-K/filing.html::2019",
+  "LZB/2020/10-K/filing.html::2020"
  ],
  "MAC": [
   "MAC/2016/10-K/filing.html::2015",
@@ -1078,13 +1556,6 @@
   "MAC/2019/10-K/filing.html::2018",
   "MAC/2020/10-K/filing.html::2019",
   "MAC/2021/10-K/filing.html::2020"
- ],
- "MBUU": [
-  "MBUU/2018/10-K/filing.html::2018",
-  "MBUU/2019/10-K/filing.html::2019",
-  "MBUU/2020/10-K/filing.html::2020",
-  "MBUU/2021/10-K/filing.html::2021",
-  "MBUU/2022/10-K/filing.html::2022"
  ],
  "MCD": [
   "MCD/2015/10-K/filing.html::2015",
@@ -1101,20 +1572,28 @@
   "MCD/2026/10-K/filing.html::2025"
  ],
  "MCW": [
+  "MCW/2022/10-K/filing.html::2021",
+  "MCW/2023/10-K/filing.html::2022",
+  "MCW/2024/10-K/filing.html::2023",
   "MCW/2025/10-K/filing.html::2024",
   "MCW/2026/10-K/filing.html::2025"
  ],
- "MKC": [
-  "MKC/2018/10-K/filing.html::2017",
-  "MKC/2019/10-K/filing.html::2018",
-  "MKC/2020/10-K/filing.html::2019",
-  "MKC/2021/10-K/filing.html::2020",
-  "MKC/2022/10-K/filing.html::2021",
-  "MKC/2023/10-K/filing.html::2022",
-  "MKC/2024/10-K/filing.html::2023",
-  "MKC/2026/10-K/filing.html::2025"
+ "MHO": [
+  "MHO/2016/10-K/filing.html::2015",
+  "MHO/2017/10-K/filing.html::2016",
+  "MHO/2018/10-K/filing.html::2017",
+  "MHO/2019/10-K/filing.html::2018",
+  "MHO/2020/10-K/filing.html::2019",
+  "MHO/2021/10-K/filing.html::2020",
+  "MHO/2022/10-K/filing.html::2021",
+  "MHO/2023/10-K/filing.html::2022",
+  "MHO/2024/10-K/filing.html::2023",
+  "MHO/2025/10-K/filing.html::2024",
+  "MHO/2026/10-K/filing.html::2025"
  ],
  "MNRO": [
+  "MNRO/2016/10-K/filing.html::2016",
+  "MNRO/2017/10-K/filing.html::2017",
   "MNRO/2018/10-K/filing.html::2018",
   "MNRO/2019/10-K/filing.html::2019",
   "MNRO/2020/10-K/filing.html::2020",
@@ -1138,15 +1617,6 @@
   "MOV/2025/10-K/filing.html::2025",
   "MOV/2026/10-K/filing.html::2026"
  ],
- "MSI": [
-  "MSI/2019/10-K/filing.html::2018",
-  "MSI/2020/10-K/filing.html::2019",
-  "MSI/2021/10-K/filing.html::2020",
-  "MSI/2022/10-K/filing.html::2021",
-  "MSI/2023/10-K/filing.html::2022",
-  "MSI/2024/10-K/filing.html::2023",
-  "MSI/2025/10-K/filing.html::2024"
- ],
  "MUSA": [
   "MUSA/2015/10-K/filing.html::2015",
   "MUSA/2016/10-K/filing.html::2016",
@@ -1162,6 +1632,7 @@
   "MUSA/2026/10-K/filing.html::2025"
  ],
  "M": [
+  "M/2018/10-K/filing.html::2018",
   "M/2019/10-K/filing.html::2019",
   "M/2021/10-K/filing.html::2021",
   "M/2022/10-K/filing.html::2022",
@@ -1183,7 +1654,6 @@
   "NGVC/2025/10-K/filing.html::2025"
  ],
  "NKE": [
-  "NKE/2016/10-K/filing.html::2016",
   "NKE/2017/10-K/filing.html::2017",
   "NKE/2018/10-K/filing.html::2018",
   "NKE/2019/10-K/filing.html::2019",
@@ -1194,11 +1664,6 @@
   "NKE/2024/10-K/filing.html::2024",
   "NKE/2025/10-K/filing.html::2025",
   "NKE/2026/10-K/filing.html::2026"
- ],
- "NWL": [
-  "NWL/2016/10-K/filing.html::2015",
-  "NWL/2019/10-K/filing.html::2018",
-  "NWL/2026/10-K/filing.html::2024"
  ],
  "OLLI": [
   "OLLI/2016/10-K/filing.html::2016",
@@ -1236,11 +1701,21 @@
   "ORLY/2026/10-K/filing.html::2025"
  ],
  "OXM": [
+  "OXM/2019/10-K/filing.html::2019",
+  "OXM/2020/10-K/filing.html::2020",
+  "OXM/2021/10-K/filing.html::2021",
+  "OXM/2022/10-K/filing.html::2022",
+  "OXM/2023/10-K/filing.html::2023",
   "OXM/2024/10-K/filing.html::2024",
   "OXM/2025/10-K/filing.html::2025",
   "OXM/2026/10-K/filing.html::2026"
  ],
  "PAG": [
+  "PAG/2015/10-K/filing.html::2015",
+  "PAG/2016/10-K/filing.html::2015",
+  "PAG/2017/10-K/filing.html::2016",
+  "PAG/2018/10-K/filing.html::2017",
+  "PAG/2019/10-K/filing.html::2018",
   "PAG/2020/10-K/filing.html::2019",
   "PAG/2022/10-K/filing.html::2021",
   "PAG/2023/10-K/filing.html::2022",
@@ -1248,11 +1723,17 @@
   "PAG/2025/10-K/filing.html::2024",
   "PAG/2026/10-K/filing.html::2025"
  ],
- "PII": [
-  "PII/2015/10-K/filing.html::2015",
-  "PII/2016/10-K/filing.html::2015",
-  "PII/2024/10-K/filing.html::2023",
-  "PII/2025/10-K/filing.html::2024"
+ "PATH": [
+  "PATH/2025/10-K/filing.html::2025",
+  "PATH/2026/10-K/filing.html::2026"
+ ],
+ "PECO": [
+  "PECO/2018/10-K/filing.html::2017",
+  "PECO/2022/10-K/filing.html::2021",
+  "PECO/2023/10-K/filing.html::2022",
+  "PECO/2024/10-K/filing.html::2023",
+  "PECO/2025/10-K/filing.html::2024",
+  "PECO/2026/10-K/filing.html::2025"
  ],
  "PLBY": [
   "PLBY/2022/10-K/filing.html::2021",
@@ -1284,19 +1765,6 @@
   "PSMT/2024/10-K/filing.html::2024",
   "PSMT/2025/10-K/filing.html::2025"
  ],
- "PTON": [
-  "PTON/2020/10-K/filing.html::2020",
-  "PTON/2021/10-K/filing.html::2021",
-  "PTON/2022/10-K/filing.html::2022"
- ],
- "PVH": [
-  "PVH/2016/10-K/filing.html::2016",
-  "PVH/2017/10-K/filing.html::2017"
- ],
- "QCOM": [
-  "QCOM/2017/10-K/filing.html::2017",
-  "QCOM/2019/10-K/filing.html::2019"
- ],
  "QSR": [
   "QSR/2015/10-K/filing.html::2015",
   "QSR/2016/10-K/filing.html::2016",
@@ -1316,17 +1784,6 @@
   "RDNW/2024/10-K/filing.html::2023",
   "RDNW/2025/10-K/filing.html::2024",
   "RDNW/2026/10-K/filing.html::2025"
- ],
- "REG": [
-  "REG/2016/10-K/filing.html::2015",
-  "REG/2017/10-K/filing.html::2016",
-  "REG/2018/10-K/filing.html::2017",
-  "REG/2019/10-K/filing.html::2018"
- ],
- "RENT": [
-  "RENT/2024/10-K/filing.html::2024",
-  "RENT/2025/10-K/filing.html::2025",
-  "RENT/2026/10-K/filing.html::2026"
  ],
  "RH": [
   "RH/2016/10-K/filing.html::2016",
@@ -1368,10 +1825,9 @@
   "ROST/2026/10-K/filing.html::2026"
  ],
  "RVLV": [
+  "RVLV/2022/10-K/filing.html::2021",
   "RVLV/2023/10-K/filing.html::2022",
-  "RVLV/2024/10-K/filing.html::2023",
-  "RVLV/2025/10-K/filing.html::2024",
-  "RVLV/2026/10-K/filing.html::2025"
+  "RVLV/2024/10-K/filing.html::2023"
  ],
  "SAH": [
   "SAH/2015/10-K/filing.html::2015",
@@ -1388,18 +1844,28 @@
   "SAH/2026/10-K/filing.html::2025"
  ],
  "SAM": [
+  "SAM/2016/10-K/filing.html::2015",
+  "SAM/2017/10-K/filing.html::2016",
+  "SAM/2018/10-K/filing.html::2017",
+  "SAM/2019/10-K/filing.html::2018",
+  "SAM/2020/10-K/filing.html::2019",
   "SAM/2021/10-K/filing.html::2020",
   "SAM/2022/10-K/filing.html::2021",
   "SAM/2023/10-K/filing.html::2022",
+  "SAM/2024/10-K/filing.html::2023",
+  "SAM/2025/10-K/filing.html::2024",
   "SAM/2026/10-K/filing.html::2025"
  ],
  "SBH": [
+  "SBH/2016/10-K/filing.html::2016",
   "SBH/2017/10-K/filing.html::2017",
   "SBH/2018/10-K/filing.html::2018",
   "SBH/2019/10-K/filing.html::2019",
   "SBH/2020/10-K/filing.html::2020",
   "SBH/2021/10-K/filing.html::2021",
-  "SBH/2022/10-K/filing.html::2022"
+  "SBH/2023/10-K/filing.html::2023",
+  "SBH/2024/10-K/filing.html::2024",
+  "SBH/2025/10-K/filing.html::2025"
  ],
  "SBUX": [
   "SBUX/2016/10-K/filing.html::2016",
@@ -1412,23 +1878,9 @@
   "SBUX/2024/10-K/filing.html::2024",
   "SBUX/2025/10-K/filing.html::2025"
  ],
- "SCI": [
-  "SCI/2016/10-K/filing.html::2015",
-  "SCI/2017/10-K/filing.html::2016",
-  "SCI/2018/10-K/filing.html::2017",
-  "SCI/2019/10-K/filing.html::2018",
-  "SCI/2020/10-K/filing.html::2017",
-  "SCI/2021/10-K/filing.html::2018",
-  "SCI/2022/10-K/filing.html::2019",
-  "SCI/2023/10-K/filing.html::2020",
-  "SCI/2024/10-K/filing.html::2021",
-  "SCI/2025/10-K/filing.html::2023",
-  "SCI/2026/10-K/filing.html::2024"
- ],
  "SCVL": [
   "SCVL/2016/10-K/filing.html::2016",
   "SCVL/2017/10-K/filing.html::2017",
-  "SCVL/2018/10-K/filing.html::2018",
   "SCVL/2019/10-K/filing.html::2019",
   "SCVL/2020/10-K/filing.html::2020",
   "SCVL/2021/10-K/filing.html::2021",
@@ -1439,22 +1891,9 @@
   "SCVL/2026/10-K/filing.html::2026"
  ],
  "SDOT": [
+  "SDOT/2019/10-K/filing.html::2019",
   "SDOT/2020/10-K/filing.html::2019",
-  "SDOT/2021/10-K/filing.html::2020",
   "SDOT/2023/10-K/filing.html::2022"
- ],
- "SENE.A": [
-  "SENE.A/2022/10-K/filing.html::2022",
-  "SENE.A/2023/10-K/filing.html::2023",
-  "SENE.A/2024/10-K/filing.html::2024",
-  "SENE.A/2025/10-K/filing.html::2025"
- ],
- "SFIX": [
-  "SFIX/2019/10-K/filing.html::2019",
-  "SFIX/2020/10-K/filing.html::2020",
-  "SFIX/2021/10-K/filing.html::2021",
-  "SFIX/2022/10-K/filing.html::2022",
-  "SFIX/2023/10-K/filing.html::2023"
  ],
  "SFM": [
   "SFM/2016/10-K/filing.html::2016",
@@ -1470,14 +1909,11 @@
   "SFM/2026/10-K/filing.html::2025"
  ],
  "SHAK": [
-  "SHAK/2015/10-K/filing.html::2015",
-  "SHAK/2016/10-K/filing.html::2016",
   "SHAK/2017/10-K/filing.html::2017",
-  "SHAK/2020/10-K/filing.html::2020",
+  "SHAK/2018/10-K/filing.html::2018",
+  "SHAK/2019/10-K/filing.html::2019",
   "SHAK/2021/10-K/filing.html::2021",
-  "SHAK/2022/10-K/filing.html::2022",
   "SHAK/2023/10-K/filing.html::2023",
-  "SHAK/2024/10-K/filing.html::2024",
   "SHAK/2025/10-K/filing.html::2025",
   "SHAK/2026/10-K/filing.html::2025"
  ],
@@ -1508,6 +1944,11 @@
   "SHW/2025/10-K/filing.html::2025",
   "SHW/2026/10-K/filing.html::2025"
  ],
+ "SKX": [
+  "SKX/2018/10-K/filing.html::2018",
+  "SKX/2019/10-K/filing.html::2019",
+  "SKX/2020/10-K/filing.html::2020"
+ ],
  "SKY": [
   "SKY/2019/10-K/filing.html::2019",
   "SKY/2020/10-K/filing.html::2020",
@@ -1517,6 +1958,7 @@
  "SNBR": [
   "SNBR/2016/10-K/filing.html::2016",
   "SNBR/2017/10-K/filing.html::2017",
+  "SNBR/2018/10-K/filing.html::2018",
   "SNBR/2019/10-K/filing.html::2019",
   "SNBR/2020/10-K/filing.html::2019",
   "SNBR/2021/10-K/filing.html::2021",
@@ -1526,16 +1968,15 @@
   "SNBR/2025/10-K/filing.html::2024",
   "SNBR/2026/10-K/filing.html::2026"
  ],
- "SNX": [
-  "SNX/2016/10-K/filing.html::2015",
-  "SNX/2017/10-K/filing.html::2016",
-  "SNX/2018/10-K/filing.html::2017"
- ],
  "SPTN": [
+  "SPTN/2016/10-K/filing.html::2016",
   "SPTN/2017/10-K/filing.html::2017",
   "SPTN/2018/10-K/filing.html::2018",
   "SPTN/2019/10-K/filing.html::2019",
   "SPTN/2020/10-K/filing.html::2019",
+  "SPTN/2021/10-K/filing.html::2021",
+  "SPTN/2022/10-K/filing.html::2022",
+  "SPTN/2023/10-K/filing.html::2023",
   "SPTN/2024/10-K/filing.html::2024",
   "SPTN/2025/10-K/filing.html::2024"
  ],
@@ -1553,40 +1994,14 @@
   "SPWH/2026/10-K/filing.html::2026"
  ],
  "SVV": [
+  "SVV/2024/10-K/filing.html::2023",
   "SVV/2025/10-K/filing.html::2024",
   "SVV/2026/10-K/filing.html::2026"
  ],
- "SWBI": [
-  "SWBI/2019/10-K/filing.html::2019",
-  "SWBI/2022/10-K/filing.html::2022",
-  "SWBI/2023/10-K/filing.html::2023",
-  "SWBI/2024/10-K/filing.html::2024"
- ],
- "SWIM": [
-  "SWIM/2023/10-K/filing.html::2022",
-  "SWIM/2024/10-K/filing.html::2023",
-  "SWIM/2025/10-K/filing.html::2024",
-  "SWIM/2026/10-K/filing.html::2025"
- ],
- "TDUP": [
-  "TDUP/2021/10-K/filing.html::2021",
-  "TDUP/2022/10-K/filing.html::2021",
-  "TDUP/2023/10-K/filing.html::2022",
-  "TDUP/2024/10-K/filing.html::2023",
-  "TDUP/2025/10-K/filing.html::2024",
-  "TDUP/2026/10-K/filing.html::2025"
- ],
- "TDY": [
-  "TDY/2018/10-K/filing.html::2017",
-  "TDY/2020/10-K/filing.html::2019",
-  "TDY/2021/10-K/filing.html::2021",
-  "TDY/2022/10-K/filing.html::2022",
-  "TDY/2023/10-K/filing.html::2023",
-  "TDY/2024/10-K/filing.html::2023",
-  "TDY/2025/10-K/filing.html::2024",
-  "TDY/2026/10-K/filing.html::2025"
- ],
  "TGT": [
+  "TGT/2016/10-K/filing.html::2017",
+  "TGT/2017/10-K/filing.html::2018",
+  "TGT/2018/10-K/filing.html::2019",
   "TGT/2019/10-K/filing.html::2020",
   "TGT/2020/10-K/filing.html::2021",
   "TGT/2021/10-K/filing.html::2022",
@@ -1597,6 +2012,8 @@
   "TGT/2026/10-K/filing.html::2026"
  ],
  "TJX": [
+  "TJX/2018/10-K/filing.html::2018",
+  "TJX/2019/10-K/filing.html::2019",
   "TJX/2020/10-K/filing.html::2020",
   "TJX/2021/10-K/filing.html::2021",
   "TJX/2022/10-K/filing.html::2022",
@@ -1618,17 +2035,10 @@
   "TLYS/2025/10-K/filing.html::2025",
   "TLYS/2026/10-K/filing.html::2026"
  ],
- "TMHC": [
-  "TMHC/2017/10-K/filing.html::2016",
-  "TMHC/2020/10-K/filing.html::2019",
-  "TMHC/2025/10-K/filing.html::2024"
- ],
- "TOL": [
-  "TOL/2018/10-K/filing.html::2018",
-  "TOL/2019/10-K/filing.html::2019",
-  "TOL/2020/10-K/filing.html::2020",
-  "TOL/2021/10-K/filing.html::2021",
-  "TOL/2023/10-K/filing.html::2023"
+ "TPH": [
+  "TPH/2017/10-K/filing.html::2016",
+  "TPH/2018/10-K/filing.html::2017",
+  "TPH/2021/10-K/filing.html::2020"
  ],
  "TPR": [
   "TPR/2016/10-K/filing.html::2016",
@@ -1666,16 +2076,21 @@
   "TXRH/2026/10-K/filing.html::2025"
  ],
  "UAA": [
+  "UAA/2015/10-K/filing.html::2015",
+  "UAA/2016/10-K/filing.html::2016",
+  "UAA/2017/10-K/filing.html::2017",
   "UAA/2018/10-K/filing.html::2018",
   "UAA/2019/10-K/filing.html::2019",
+  "UAA/2020/10-K/filing.html::2020",
   "UAA/2021/10-K/filing.html::2021",
   "UAA/2022/10-K/filing.html::2021",
   "UAA/2023/10-K/filing.html::2023",
-  "UAA/2024/10-K/filing.html::2024"
+  "UAA/2024/10-K/filing.html::2024",
+  "UAA/2025/10-K/filing.html::2025",
+  "UAA/2026/10-K/filing.html::2026"
  ],
  "ULTA": [
   "ULTA/2016/10-K/filing.html::2016",
-  "ULTA/2017/10-K/filing.html::2017",
   "ULTA/2018/10-K/filing.html::2018",
   "ULTA/2019/10-K/filing.html::2019",
   "ULTA/2020/10-K/filing.html::2020",
@@ -1688,9 +2103,9 @@
  ],
  "UPBD": [
   "UPBD/2020/10-K/filing.html::2019",
-  "UPBD/2022/10-K/filing.html::2021",
-  "UPBD/2025/10-K/filing.html::2024",
-  "UPBD/2026/10-K/filing.html::2025"
+  "UPBD/2021/10-K/filing.html::2020",
+  "UPBD/2023/10-K/filing.html::2023",
+  "UPBD/2024/10-K/filing.html::2023"
  ],
  "URBN": [
   "URBN/2016/10-K/filing.html::2016",
@@ -1698,6 +2113,7 @@
   "URBN/2018/10-K/filing.html::2018",
   "URBN/2019/10-K/filing.html::2019",
   "URBN/2020/10-K/filing.html::2020",
+  "URBN/2021/10-K/filing.html::2021",
   "URBN/2022/10-K/filing.html::2022",
   "URBN/2023/10-K/filing.html::2023",
   "URBN/2024/10-K/filing.html::2024",
@@ -1713,6 +2129,10 @@
   "USFD/2026/10-K/filing.html::2025"
  ],
  "VFC": [
+  "VFC/2016/10-K/filing.html::2016",
+  "VFC/2017/10-K/filing.html::2017",
+  "VFC/2018/10-K/filing.html::2017",
+  "VFC/2019/10-K/filing.html::2019",
   "VFC/2020/10-K/filing.html::2020",
   "VFC/2021/10-K/filing.html::2021",
   "VFC/2022/10-K/filing.html::2022",
@@ -1720,10 +2140,6 @@
   "VFC/2024/10-K/filing.html::2024",
   "VFC/2025/10-K/filing.html::2025",
   "VFC/2026/10-K/filing.html::2026"
- ],
- "VITL": [
-  "VITL/2023/10-K/filing.html::2022",
-  "VITL/2024/10-K/filing.html::2023"
  ],
  "VLGE.A": [
   "VLGE.A/2016/10-K/filing.html::2016",
@@ -1744,10 +2160,9 @@
   "VNCE/2019/10-K/filing.html::2019",
   "VNCE/2020/10-K/filing.html::2020",
   "VNCE/2021/10-K/filing.html::2021",
+  "VNCE/2022/10-K/filing.html::2022",
   "VNCE/2023/10-K/filing.html::2023",
-  "VNCE/2024/10-K/filing.html::2024",
-  "VNCE/2025/10-K/filing.html::2025",
-  "VNCE/2026/10-K/filing.html::2026"
+  "VNCE/2024/10-K/filing.html::2024"
  ],
  "VRA": [
   "VRA/2016/10-K/filing.html::2016",
@@ -1762,25 +2177,23 @@
   "VRA/2025/10-K/filing.html::2025",
   "VRA/2026/10-K/filing.html::2026"
  ],
+ "VRSN": [
+  "VRSN/2016/10-K/filing.html::2015",
+  "VRSN/2017/10-K/filing.html::2016",
+  "VRSN/2018/10-K/filing.html::2017",
+  "VRSN/2019/10-K/filing.html::2018",
+  "VRSN/2020/10-K/filing.html::2019",
+  "VRSN/2021/10-K/filing.html::2020",
+  "VRSN/2022/10-K/filing.html::2021",
+  "VRSN/2023/10-K/filing.html::2022",
+  "VRSN/2024/10-K/filing.html::2023",
+  "VRSN/2025/10-K/filing.html::2024",
+  "VRSN/2026/10-K/filing.html::2025"
+ ],
  "VSCO": [
-  "VSCO/2022/10-K/filing.html::2022",
   "VSCO/2023/10-K/filing.html::2023",
   "VSCO/2024/10-K/filing.html::2024",
-  "VSCO/2025/10-K/filing.html::2025",
-  "VSCO/2026/10-K/filing.html::2026"
- ],
- "VSH": [
-  "VSH/2016/10-K/filing.html::2015",
-  "VSH/2017/10-K/filing.html::2016",
-  "VSH/2018/10-K/filing.html::2017",
-  "VSH/2019/10-K/filing.html::2018",
-  "VSH/2020/10-K/filing.html::2019",
-  "VSH/2021/10-K/filing.html::2020",
-  "VSH/2022/10-K/filing.html::2021",
-  "VSH/2023/10-K/filing.html::2022",
-  "VSH/2024/10-K/filing.html::2023",
-  "VSH/2025/10-K/filing.html::2024",
-  "VSH/2026/10-K/filing.html::2025"
+  "VSCO/2025/10-K/filing.html::2025"
  ],
  "VVV": [
   "VVV/2016/10-K/filing.html::2016",
@@ -1801,8 +2214,8 @@
   "WBA/2019/10-K/filing.html::2019",
   "WBA/2020/10-K/filing.html::2020",
   "WBA/2021/10-K/filing.html::2021",
-  "WBA/2022/10-K/filing.html::2022",
-  "WBA/2023/10-K/filing.html::2023"
+  "WBA/2023/10-K/filing.html::2023",
+  "WBA/2024/10-K/filing.html::2024"
  ],
  "WEN": [
   "WEN/2016/10-K/filing.html::2016",
@@ -1829,6 +2242,8 @@
   "WMK/2026/10-K/filing.html::2025"
  ],
  "WMT": [
+  "WMT/2016/10-K/filing.html::2016",
+  "WMT/2017/10-K/filing.html::2017",
   "WMT/2018/10-K/filing.html::2018",
   "WMT/2019/10-K/filing.html::2019",
   "WMT/2020/10-K/filing.html::2020",
@@ -1843,7 +2258,9 @@
   "WOOF/2021/10-K/filing.html::2021",
   "WOOF/2022/10-K/filing.html::2022",
   "WOOF/2023/10-K/filing.html::2023",
-  "WOOF/2024/10-K/filing.html::2024"
+  "WOOF/2024/10-K/filing.html::2024",
+  "WOOF/2025/10-K/filing.html::2025",
+  "WOOF/2026/10-K/filing.html::2026"
  ],
  "WRBY": [
   "WRBY/2021/10-K/filing.html::2021",
@@ -1869,25 +2286,26 @@
  "WWW": [
   "WWW/2018/10-K/filing.html::2017",
   "WWW/2019/10-K/filing.html::2018",
-  "WWW/2020/10-K/filing.html::2019"
+  "WWW/2020/10-K/filing.html::2019",
+  "WWW/2022/10-K/filing.html::2022",
+  "WWW/2023/10-K/filing.html::2022",
+  "WWW/2024/10-K/filing.html::2023"
  ],
  "W": [
   "W/2025/10-K/filing.html::2025",
   "W/2026/10-K/filing.html::2025"
  ],
- "YETI": [
-  "YETI/2024/10-K/filing.html::2023",
-  "YETI/2026/10-K/filing.html::2026"
- ],
- "YEXT": [
-  "YEXT/2023/10-K/filing.html::2023",
-  "YEXT/2024/10-K/filing.html::2024",
-  "YEXT/2025/10-K/filing.html::2025",
-  "YEXT/2026/10-K/filing.html::2026"
- ],
  "YUM": [
   "YUM/2016/10-K/filing.html::2016",
-  "YUM/2017/10-K/filing.html::2017"
+  "YUM/2018/10-K/filing.html::2018",
+  "YUM/2019/10-K/filing.html::2018",
+  "YUM/2020/10-K/filing.html::2019",
+  "YUM/2021/10-K/filing.html::2020",
+  "YUM/2022/10-K/filing.html::2021",
+  "YUM/2023/10-K/filing.html::2023",
+  "YUM/2024/10-K/filing.html::2024",
+  "YUM/2025/10-K/filing.html::2025",
+  "YUM/2026/10-K/filing.html::2026"
  ],
  "ZUMZ": [
   "ZUMZ/2016/10-K/filing.html::2016",

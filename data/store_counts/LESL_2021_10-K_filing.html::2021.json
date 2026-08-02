@@ -4,11 +4,11 @@
  "value": 952,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "Contents Item 1B. Unresolve d Staff Comments. None. Item 2. Pr operties. Properties As of October 2, 2021, we had 952 locations, two manufacturing facilities, eight Company-operated distr",
+ "evidence": "| Number of locations open at end of period | | | 952 | | | | 936 | | | | 952 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LESL/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

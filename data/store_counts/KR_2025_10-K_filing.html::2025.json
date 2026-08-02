@@ -1,14 +1,14 @@
 {
  "ticker": "KR",
  "fiscal_year": 2025,
- "value": 2800,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "As of February 1, 2025, we operated approximately 2,800 owned or leased supermarkets, distribution warehouses, customer fulfillment centers and food production plants through divisions, subsidiaries or affiliates.",
+ "value": 2731,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "des the following: Stores As of February 1, 2025, Kroger operates supermarkets under a variety of local banner names in 35 states and the District of Columbia. As of February 1, 2025, Kroger operated, either directly or through its subsidiaries, 2,731 supermarkets, of which 2,273 had pharmacies and 1,70",
  "by_country": {},
  "by_continent": {},
  "db_value": 2731,
  "needs_review": false,
  "accession": "KR/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

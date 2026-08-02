@@ -1,14 +1,18 @@
 {
  "ticker": "ANDE",
  "fiscal_year": 2017,
+ "accession": "ANDE/2018/10-K/filing.html::2017",
+ "fye_date": "2017-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 12,
+ "l3_value": null,
  "value": 12,
+ "source_rule": "L2_prose",
  "confidence": "medium",
- "basis": "filing (10-K)",
  "evidence": "along with LTG, also established joint ventures and purchased a grain and food-bean handler and agronomy input provider with 12 locations across Ontario, Canada and Minnesota. These investments are",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "ANDE/2018/10-K/filing.html::2017",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

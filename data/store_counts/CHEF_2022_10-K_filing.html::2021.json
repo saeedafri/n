@@ -1,14 +1,18 @@
 {
  "ticker": "CHEF",
  "fiscal_year": 2021,
+ "accession": "CHEF/2022/10-K/filing.html::2021",
+ "fye_date": "2021-12-24",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 40,
+ "l3_value": null,
  "value": 40,
+ "source_rule": "L2_prose",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "with thousands of chefs while also acting as a critical marketing arm and route-to-market for many of our suppliers. We operate 40 distribution centers and provide service six days a week in many of our service",
+ "evidence": "hat can be acted upon at stockholder meetings. Item 1B. UNRESOLVED STAFF COMMENTS None. 28 Item 2. PROPERTIES We operate 40 distributions centers located in the United States and Canada totaling approximat",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CHEF/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

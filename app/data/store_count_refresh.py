@@ -63,15 +63,15 @@ def _pending_filings(limit: int) -> List[Dict[str, Any]]:
     from data.store_count_extractor import NON_RETAIL_TICKERS
     from utils.azure_blob import get_container_client
 
-    known = set()
-    index_file = cache.cache_dir() / "_index.json"
-    if index_file.is_file():
-        try:
-            import json
-            for accessions in json.loads(index_file.read_text()).values():
-                known.update(accessions)
-        except Exception:
-            pass
+    # What counts as "already done" is an entry written by the CURRENT parser.
+    # Reading _index.json instead listed every accession ever cached, including
+    # ones written by an older extractor — so bumping EXTRACTOR_VERSION
+    # invalidated those entries for readers while this worker went on treating
+    # them as finished, and no filing was ever re-parsed after a fix shipped.
+    done = set()
+    for entry in cache.all_entries():
+        if entry.get("extractor_version") == cache.EXTRACTOR_VERSION:
+            done.add(str(entry.get("accession", "")).split("::")[0])
 
     pending: List[Dict[str, Any]] = []
     try:
@@ -79,25 +79,24 @@ def _pending_filings(limit: int) -> List[Dict[str, Any]]:
     except Exception:
         return pending
 
-    # Only companies the portal actually lists — the container holds more.
-    from core.database import db_manager
-    tickers = [row["ticker"] for row in db_manager.execute_query_readonly(
-        "SELECT DISTINCT ticker FROM coreiq_companies WHERE ticker IS NOT NULL", {})]
+    # Every 10-K in the container, not only the tickers coreiq_companies knows
+    # about. 190 of the 504 tickers holding filings are absent from that table
+    # — Grocery Outlet, Lovesac, Arhaus and Mister Car Wash among them — so
+    # driving this from the database meant their new filings would never be
+    # picked up at all.
+    try:
+        blobs = [b.name for b in container.list_blobs()
+                 if b.name.endswith("/10-K/filing.html")]
+    except Exception:
+        return pending
 
-    for ticker in tickers:
-        if ticker.upper() in NON_RETAIL_TICKERS:
+    for blob in sorted(blobs, reverse=True):     # newest archive year first
+        ticker = blob.split("/")[0]
+        if ticker.upper() in NON_RETAIL_TICKERS or blob in done:
             continue
-        try:
-            blobs = [b.name for b in container.list_blobs(name_starts_with=f"{ticker}/")
-                     if b.name.endswith("/10-K/filing.html")]
-        except Exception:
-            continue
-        for blob in sorted(blobs, reverse=True):
-            if any(blob in accession for accession in known):
-                continue
-            pending.append({"ticker": ticker, "blob": blob})
-            if len(pending) >= limit:
-                return pending
+        pending.append({"ticker": ticker, "blob": blob})
+        if len(pending) >= limit:
+            break
     return pending
 
 
@@ -163,6 +162,10 @@ def _extract_one(filing: Dict[str, Any], container, cursor, budget: Dict[str, fl
                 OpenAI(api_key=os.environ["OPENAI_API_KEY"]),
                 filing["ticker"], year, fye, llm_windows(text))
             budget["spent"] += llm_call_cost(prompt_tokens, completion_tokens)
+            # Refuse a self-declared subset: 'domestic' or 'company_operated'
+            # is not the worldwide fleet, whatever the number looks like.
+            if parsed and parsed.get("scope") not in (None, "worldwide"):
+                parsed = None
             proposed = int(parsed["value"]) if (
                 parsed and parsed.get("found") and parsed.get("value")) else None
             if proposed and believable(proposed):

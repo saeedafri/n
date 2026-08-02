@@ -1,0 +1,14 @@
+{
+ "ticker": "CRMT",
+ "fiscal_year": 2023,
+ "value": 156,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "’s customers have limited financial resources and would not qualify for conventional financing as a result of limited credit histories or past credit problems. As of April 30, 2023, the Company operated 156 dealerships located primarily in small cities throu",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 156,
+ "needs_review": false,
+ "accession": "CRMT/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

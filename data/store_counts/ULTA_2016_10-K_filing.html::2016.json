@@ -1,14 +1,14 @@
 {
  "ticker": "ULTA",
  "fiscal_year": 2016,
- "value": 874,
+ "value": 974,
  "confidence": "medium",
- "basis": "filing (10-K)",
+ "basis": "fits the company's own range",
  "evidence": "XBRL us-gaap:NumberOfStores (105 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "ULTA/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

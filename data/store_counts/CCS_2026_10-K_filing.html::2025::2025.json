@@ -1,0 +1,14 @@
+{
+ "ticker": "CCS",
+ "fiscal_year": 2025,
+ "value": 305,
+ "confidence": "low",
+ "basis": "single source (l2), unverified",
+ "evidence": "| Total | | 305 | | 322 | | 318 | | 281",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": true,
+ "accession": "CCS/2026/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

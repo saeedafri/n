@@ -1,14 +1,18 @@
 {
  "ticker": "BNED",
  "fiscal_year": 2026,
- "value": 647,
- "confidence": "medium",
- "basis": "fits series (l3)",
+ "accession": "BNED/2026/10-K/filing.html::2026",
+ "fye_date": "2026-05-02",
+ "db_value": 1116,
+ "l1_value": 1128,
+ "l2_value": null,
+ "l3_value": null,
+ "value": 1128,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": 1116,
- "needs_review": false,
- "accession": "BNED/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

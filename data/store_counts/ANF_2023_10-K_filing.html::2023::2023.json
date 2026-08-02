@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2023,
+ "value": 762,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | | 529 | | | 233 | | | 762 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 762,
+ "needs_review": false,
+ "accession": "ANF/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

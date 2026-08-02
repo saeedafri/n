@@ -1,0 +1,18 @@
+{
+ "ticker": "CLSK",
+ "fiscal_year": 2021,
+ "accession": "CLSK/2021/10-K/filing.html::2021",
+ "fye_date": "2021-09-30",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 3471,
+ "l3_value": null,
+ "value": 3471,
+ "source_rule": "L2_prose",
+ "confidence": "medium",
+ "evidence": "e many months after initial orders are placed. At the time the Company acquired ATL in December 2020, the Company had approximately 3,471 bitcoin mining units with application-specific integrated circuits (“ASICs”) in",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

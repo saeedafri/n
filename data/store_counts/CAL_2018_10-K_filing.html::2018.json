@@ -1,14 +1,22 @@
 {
  "ticker": "CAL",
  "fiscal_year": 2018,
- "value": 1026,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "CAL/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "fye_date": "2018-02-03",
+ "db_value": null,
+ "l1_value": 1262,
+ "l2_value": 1262,
+ "l3_value": null,
+ "value": 1262,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (6 facts)",
+ "by_country": {
+  "Brand Portfolio": 151
+ },
+ "by_continent": {
+  "Other": 151
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

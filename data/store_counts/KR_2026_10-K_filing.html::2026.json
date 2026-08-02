@@ -4,11 +4,11 @@
  "value": 2697,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "As of January 31, 2026, Kroger operated, either directly or through its subsidiaries, 2,697 supermarkets, of which 2,250 had pharmacies and 1,731 had fuel centers.",
+ "evidence": "des the following: Stores As of January 31, 2026, Kroger operates supermarkets under a variety of local banner names in 35 states and the District of Columbia. As of January 31, 2026, Kroger operated, either directly or through its subsidiaries, 2,697 supermarkets, of which 2,250 had pharmacies and 1,73",
  "by_country": {},
  "by_continent": {},
  "db_value": 2697,
  "needs_review": false,
  "accession": "KR/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

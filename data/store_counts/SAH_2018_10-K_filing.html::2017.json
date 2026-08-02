@@ -1,14 +1,14 @@
 {
  "ticker": "SAH",
  "fiscal_year": 2017,
- "value": 103,
+ "value": 114,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ses together that share management and inventory (principally used vehicles) into “stores.” As of December 31, 2017, we operated 103 stores in the Franchised Dealerships Segment and nine stores in th",
+ "evidence": "onic Automotive, Inc. was incorporated in Delaware in 1997. We are one of the largest automotive retailers in the United States (as measured by total revenue). As of December 31, 2017, we operated 114 new vehicle franchises in 13 states (representing 23 different",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SAH/2018/10-K/filing.html::2017",
- "extractor_version": 1
+ "extractor_version": 5
 }

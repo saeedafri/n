@@ -4,11 +4,11 @@
  "value": 203,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "uit City through a tax-free transaction, becoming an independent, publicly traded company. As of February 28, 2019 , we operated 203 used car stores in 100 U.S. television markets. Our home office is located",
+ "evidence": "| Michigan | 1 | | | Washington | 5 | | Minnesota | 2 | | | Wisconsin | 4 | | Mississippi | 2 | | | Total | 203 | 17 Of the 203 used car stores open as of February 28, 2019, 126 were located on owned sites and 77",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "KMX/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

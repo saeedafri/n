@@ -1,0 +1,14 @@
+{
+ "ticker": "CASY",
+ "fiscal_year": 2025,
+ "value": 2921,
+ "confidence": "medium",
+ "basis": "fits series (l1)",
+ "evidence": "XBRL us-gaap:NumberOfStores (9 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CASY/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

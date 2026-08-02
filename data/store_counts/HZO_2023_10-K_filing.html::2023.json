@@ -1,14 +1,14 @@
 {
  "ticker": "HZO",
  "fiscal_year": 2023,
- "value": 35,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "value": 130,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (24 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 79,
  "needs_review": false,
  "accession": "HZO/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

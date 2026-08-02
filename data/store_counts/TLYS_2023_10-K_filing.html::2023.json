@@ -3,12 +3,12 @@
  "fiscal_year": 2023,
  "value": 249,
  "confidence": "high",
- "basis": "two sources agree",
+ "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 249,
  "needs_review": false,
  "accession": "TLYS/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2025,
+ "value": 789,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | | 278 | | | 511 | | | 789 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 789,
+ "needs_review": false,
+ "accession": "ANF/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

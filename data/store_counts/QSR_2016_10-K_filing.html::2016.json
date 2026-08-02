@@ -1,7 +1,7 @@
 {
  "ticker": "QSR",
  "fiscal_year": 2016,
- "value": 20000,
+ "value": 20351,
  "confidence": "medium",
  "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (25 facts)",
@@ -10,5 +10,5 @@
  "db_value": null,
  "needs_review": false,
  "accession": "QSR/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

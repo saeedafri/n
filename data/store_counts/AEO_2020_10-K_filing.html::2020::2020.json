@@ -1,0 +1,14 @@
+{
+ "ticker": "AEO",
+ "fiscal_year": 2020,
+ "value": 940,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (10 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AEO/2020/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

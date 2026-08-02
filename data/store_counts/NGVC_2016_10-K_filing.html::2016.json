@@ -4,11 +4,11 @@
  "value": 126,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "Staff Comments. None. 33 Table Of Contents I tem 2. Properties . As of September 30, 2016, we had 126 stores located in 19 states, as shown in the following chart:",
+ "evidence": "| Number of stores at end of period | | | 126 | | | | 103 | | | | 87 | | | | 72 | | | | 59 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "NGVC/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

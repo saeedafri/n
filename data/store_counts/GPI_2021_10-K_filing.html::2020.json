@@ -2,13 +2,13 @@
  "ticker": "GPI",
  "fiscal_year": 2020,
  "value": 184,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "s well as our regional headquarters in Brazil. We own our regional headquarters in the U.K. As of December 31, 2020, we had 184 dealerships as shown below by region and by whether the associated real",
+ "confidence": "medium",
+ "basis": "fits the company's own range",
+ "evidence": "| Total | | 111 | | | 73 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 184,
  "needs_review": false,
  "accession": "GPI/2021/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

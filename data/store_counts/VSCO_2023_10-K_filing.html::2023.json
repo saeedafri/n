@@ -1,14 +1,14 @@
 {
  "ticker": "VSCO",
  "fiscal_year": 2023,
- "value": 843,
+ "value": 443,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "s in our North American physical retail locations and accounted for $3.909 billion, or 62%, of our revenues in 2022. We operate 843 physical locations as of the end of 2022, including a range of full assortment",
+ "evidence": "| Total | 443 | | | 463 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "VSCO/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

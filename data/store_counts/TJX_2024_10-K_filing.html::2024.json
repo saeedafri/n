@@ -1,14 +1,14 @@
 {
  "ticker": "TJX",
  "fiscal_year": 2024,
- "value": 3585,
+ "value": 4954,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total Stores | 2,516 | | 95 | | 974 | | 3,585 |",
+ "evidence": "'total stores' repeated per table: 80 + 566 + 723 + 3,585 = 4,954, a figure stated in the filing",
  "by_country": {},
  "by_continent": {},
  "db_value": 4585,
  "needs_review": false,
  "accession": "TJX/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

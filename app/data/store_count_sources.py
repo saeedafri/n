@@ -201,36 +201,93 @@ def geography_from_filing(text: str, total: Optional[int]) -> Dict[str, int]:
 
 LLM_MODEL = "gpt-4o-mini"
 LLM_SYSTEM = (
-    "You read SEC 10-K filings and report the total number of retail units the "
-    "company OPERATED at its fiscal year end. Return only JSON."
+    "You read SEC 10-K filings and report the WORLDWIDE total number of retail "
+    "units a company had open at its fiscal year end. You are precise about "
+    "scope: a domestic, company-operated or single-segment figure is NOT the "
+    "worldwide total. You would rather report nothing than report a subset. "
+    "Return only JSON."
 )
 _WINDOW_CHARS = 1400
 
 
-def llm_windows(text: str, limit: int = 3) -> str:
+def _candidate_spans(body: str) -> List[Tuple[int, int]]:
+    """Where the filing parser found something, in reading order.
+
+    Measured on 50 filings with a known answer, ranking windows purely by
+    unit-word density sent the model the wrong passages: it declined on 28 of
+    them and offered a segment subtotal on 10 more, including Walmart's
+    'Walmart US 5,306' in place of the 10,623 total. The parser knows where the
+    real rows are — its candidate evidence is a far better seed than density,
+    so those passages go in first and density only fills what is left over.
+    """
+    from data.store_count_extractor import extract_from_filing, rank_candidates
+
+    spans: List[Tuple[int, int]] = []
+    for candidate in rank_candidates(extract_from_filing(body)):
+        # Evidence is the row or sentence itself; its leading words are enough
+        # to find it again once the parser's whitespace tidying is undone.
+        anchor = " ".join((candidate.evidence or "").split())[:60]
+        if not anchor:
+            continue
+        # The evidence has had its whitespace collapsed and the body has not,
+        # so a literal find misses. Matching each word with flexible gaps in
+        # between is what actually locates the row again — a plain find() put
+        # Walmart's 'Total retail units' row out of reach.
+        loose = re.compile(r"\s*".join(re.escape(word) for word in anchor.split()))
+        found = loose.search(body) or re.search(
+            r"\s*".join(re.escape(w) for w in anchor.split(" | ")[0].split()), body)
+        if found:
+            spans.append((max(0, found.start() - 500),
+                          min(len(body), found.start() + 900)))
+    return spans
+
+
+def llm_windows(text: str, limit: int = 5) -> str:
     """The few passages worth paying for.
 
-    Keeps only places where a unit word, a totalling cue and a number appear
-    together, densest first. Measured at ~1,381 tokens versus 106,492 for the
-    whole filing.
+    Two sources of spans, in priority order: wherever the filing parser found a
+    candidate row, then places where a unit word, a totalling cue and a number
+    appear together. Still a few thousand tokens against ~106,000 for the whole
+    filing — but now they are the RIGHT few thousand.
     """
     body = front_section(text)
     cue = re.compile(r"(?i)\b(total|as of|we operated|we had|number of|at year end)\b")
     unit = re.compile(rf"(?i)\b{UNIT_RE}\b")
-    spans: List[Tuple[int, int]] = []
+    dense: List[Tuple[int, int]] = []
     for match in unit.finditer(body):
         start, end = max(0, match.start() - 700), min(len(body), match.start() + 700)
         chunk = body[start:end]
         if cue.search(chunk) and re.search(r"\b\d[\d,]{1,6}\b", chunk):
-            spans.append((start, end))
-    merged: List[List[int]] = []
-    for start, end in sorted(spans):
-        if merged and start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], end)
-        else:
-            merged.append([start, end])
-    merged.sort(key=lambda s: -len(unit.findall(body[s[0]:s[1]])))
-    return "\n---\n".join(body[s:min(e, s + _WINDOW_CHARS)] for s, e in merged[:limit])
+            dense.append((start, end))
+
+    def merge(spans: List[Tuple[int, int]]) -> List[List[int]]:
+        merged: List[List[int]] = []
+        for start, end in sorted(spans):
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        return merged
+
+    # Seeds are better but not infallible, so they never take every slot: two
+    # stay reserved for the density windows. Letting seeds fill all of them
+    # pushed Costco's 914 out of the prompt entirely.
+    # Seed spans are kept whole and unmerged. Merging them and then truncating
+    # each result to _WINDOW_CHARS silently cut the tail off, which is where the
+    # anchor row sits — Walmart's 'Total retail units | 11,501' was ranked first
+    # by the parser and still never reached the model.
+    chosen = [list(span) for span in _candidate_spans(body)[:max(limit - 2, 1)]]
+    if len(chosen) < limit:
+        packed = merge(dense)
+        packed.sort(key=lambda s: -len(unit.findall(body[s[0]:s[1]])))
+        for span in packed:
+            if any(span[0] < seen[1] and seen[0] < span[1] for seen in chosen):
+                continue
+            chosen.append(span)
+            if len(chosen) >= limit:
+                break
+    chosen.sort()
+    return "\n---\n".join(body[s:min(e, s + _WINDOW_CHARS)] for s, e in chosen)
 
 
 def ask_llm(client, ticker: str, fiscal_year: int, fye_date: Optional[str],
@@ -239,26 +296,48 @@ def ask_llm(client, ticker: str, fiscal_year: int, fye_date: Optional[str],
     prompt = f"""Company: {ticker}. Fiscal year: {fiscal_year}.
 {f"Fiscal year ends: {fye_date}." if fye_date else ""}
 
-From the excerpts below, report the TOTAL number of retail units the company
-operated worldwide as of its fiscal year end.
+From the excerpts below, report the WORLDWIDE total number of retail units this
+company had OPEN at that fiscal year end.
 
-Rules:
-- Count retail units only: stores, warehouses, clubs, restaurants, shacks,
-  galleries, dealerships. NEVER distribution centres, offices, plants or
-  franchise agreements.
-- If the excerpt gives a breakdown that sums to a total, report the total.
-- Use only a number that literally appears in the excerpts, or the exact sum of
-  numbers that appear. Never estimate or round.
-- If the excerpts do not state it, return found=false.
+What counts
+- Retail units the public visits: stores, warehouses, clubs, restaurants,
+  shacks, galleries, showrooms, dealerships.
+- Include franchised, licensed and international units — the system-wide fleet,
+  not just the ones the company operates itself.
+- NEVER distribution centres, offices, plants, or a count of states/countries.
+
+Scope is the thing people get wrong
+- "Total Domestic stores 5,772" is NOT the answer when the filing also shows
+  "Total stores 6,411". The unqualified, larger, worldwide figure is.
+- "Company-operated restaurants 666" is NOT the answer when "system-wide 784"
+  is present.
+- If the excerpts only give you a segment, a region, or a company-operated
+  subset, that is a MISS: return found=false. Do not offer the subset.
+
+Sanity
+- Use a number that literally appears, or the exact sum of numbers that appear.
+  Never estimate, never round to a marketing figure like "over 29,000".
+- A national chain does not have 1, 5 or 12 units. If your candidate is tiny,
+  you have almost certainly picked up a count of something else — return
+  found=false.
+- Report the count at the END of the fiscal year, not openings or closures
+  during it.
 
 Excerpts:
 ---
 {windows}
 ---
 
-JSON: {{"found": true|false, "value": <int|null>,
-"quote": "<the exact sentence or table row the number came from>",
-"unit_word": "<stores|warehouses|...|null>"}}"""
+JSON:
+{{"found": true|false,
+  "value": <int|null>,
+  "scope": "worldwide" | "domestic" | "company_operated" | "segment" | "unknown",
+  "quote": "<the exact sentence or table row the number came from>",
+  "unit_word": "<stores|warehouses|restaurants|...|null>"}}
+
+`scope` must describe what the number you found actually covers. Answer
+truthfully — a "domestic" answer is rejected, so do not label a subset as
+worldwide to make it pass."""
 
     response = client.chat.completions.create(
         model=LLM_MODEL,

@@ -1,0 +1,14 @@
+{
+ "ticker": "AAP",
+ "fiscal_year": 2024,
+ "value": 4788,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "onsolidated Financial Statements included herein for further details. Stores During 2024, 42 stores were opened and 40 were closed, resulting in a total of 4,788 stores as of December 28, 2024 compared with a total of 4,786 stores a",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 4788,
+ "needs_review": false,
+ "accession": "AAP/2025/10-K/filing.html::2024::2024",
+ "extractor_version": 5
+}

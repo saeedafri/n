@@ -1,0 +1,14 @@
+{
+ "ticker": "MHO",
+ "fiscal_year": 2023,
+ "value": 24374,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 8,724 | | 5,278 | | 10,372 | | 24,374 | | 21,286 | | 45,660 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MHO/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

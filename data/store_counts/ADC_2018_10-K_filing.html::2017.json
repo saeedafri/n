@@ -1,0 +1,18 @@
+{
+ "ticker": "ADC",
+ "fiscal_year": 2017,
+ "accession": "ADC/2018/10-K/filing.html::2017",
+ "fye_date": "2017-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 8100,
+ "l3_value": null,
+ "value": 8100,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "d total assets of approximately $66.0 billion, annual net sales of $118.2 billion, annual net income of $4.1 billion and shareholders’ equity of $28.3 billion. As of August 31, 2017, WBA operated 8,100 locations in 50 states, the District of Columbia,",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

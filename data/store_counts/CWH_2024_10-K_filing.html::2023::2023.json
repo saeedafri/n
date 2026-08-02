@@ -1,0 +1,14 @@
+{
+ "ticker": "CWH",
+ "fiscal_year": 2023,
+ "value": 202,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Number of store locations as of December 31, 2023 | | 198 | | 4 | | — | | 202 | | 166",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 202,
+ "needs_review": false,
+ "accession": "CWH/2024/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

@@ -1,19 +1,14 @@
 {
  "ticker": "MOV",
  "fiscal_year": 2019,
- "value": 44,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "value": 40,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
- "by_country": {
-  "United States": 43,
-  "Canada": 1
- },
- "by_continent": {
-  "North America": 44
- },
+ "by_country": {},
+ "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "MOV/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "DRVN",
+ "fiscal_year": 2024,
+ "value": 5179,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 5,179 | | | 4,988 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DRVN/2025/10-K/filing.html::2024::2024",
+ "extractor_version": 5
+}

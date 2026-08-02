@@ -1,0 +1,14 @@
+{
+ "ticker": "BBY",
+ "fiscal_year": 2025,
+ "value": 1117,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total stores | | 1,117 | | | | 1,125 | | | | 1,138 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1117,
+ "needs_review": false,
+ "accession": "BBY/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "CVGW",
+ "fiscal_year": 2021,
+ "value": 3672,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| TOTAL | | 549 | | 3,123 | | 3,672",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVGW/2021/10-K/filing.html::2021::2021",
+ "extractor_version": 5
+}

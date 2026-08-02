@@ -4,11 +4,11 @@
  "value": 565,
  "confidence": "medium",
  "basis": "fits series (db)",
- "evidence": "As of December 31, 2025, our U.S. DTC brick-and-mortar business operated 173 retail stores and 8 temporary clearance locations",
+ "evidence": "",
  "by_country": {},
  "by_continent": {},
  "db_value": 565,
  "needs_review": false,
  "accession": "COLM/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

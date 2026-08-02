@@ -1,14 +1,18 @@
 {
  "ticker": "CRMT",
  "fiscal_year": 2019,
+ "accession": "CRMT/2019/10-K/filing.html::2019",
+ "fye_date": "2019-04-30",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 144,
+ "l3_value": null,
  "value": 144,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "nventional financing as a result of limited credit histories or past credit problems. As of April 30, 2019, the Company operated 144 dealerships located primarily in small cities throughout the South-Cent",
+ "evidence": "’s customers have limited financial resources and would not qualify for conventional financing as a result of limited credit histories or past credit problems. As of April 30, 2019, the Company operated 144 dealerships located primarily in small cities throu",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CRMT/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

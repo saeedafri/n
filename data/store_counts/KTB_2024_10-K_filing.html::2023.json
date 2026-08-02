@@ -1,0 +1,14 @@
+{
+ "ticker": "KTB",
+ "fiscal_year": 2023,
+ "value": 80,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Nicaragua | | 129,000 | | | Manufacturing Facility | | Leased | San Marcos, Nicaragua | | 145,000 | | | Manufacturing Facility | | Leased | | | | | | | As of December 30, 2023, we operated 80 retail stores across the Americas, EMEA and APAC regi",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "KTB/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "LGIH",
+ "fiscal_year": 2021,
+ "value": 1139,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "klog is valued at the contract amount. (4)As of December 31, 2021, we had 481 units related to bulk sales agreements associated with our wholesale business. (5)As of December 31, 2020, we had 1,139 units related to bulk sales agreements associ",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "LGIH/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

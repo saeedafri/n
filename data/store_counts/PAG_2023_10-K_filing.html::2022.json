@@ -1,14 +1,14 @@
 {
  "ticker": "PAG",
  "fiscal_year": 2022,
- "value": 338,
+ "value": 359,
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "2 generated from premium brands, such as Audi, BMW, Land Rover, Mercedes-Benz, and Porsche. As of December 31, 2022, we operated 338 retail automotive franchised dealerships, of which 151 are located in the U.S. and 187 are located o",
+ "basis": "fits series (db)",
+ "evidence": "| Total | | 21 |",
  "by_country": {},
  "by_continent": {},
  "db_value": 359,
  "needs_review": false,
  "accession": "PAG/2023/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

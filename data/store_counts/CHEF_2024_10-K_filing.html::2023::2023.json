@@ -1,0 +1,14 @@
+{
+ "ticker": "CHEF",
+ "fiscal_year": 2023,
+ "value": 52,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ty and data privacy incidents (if any) and status on key information security initiatives. 29 Item 2. PROPERTIES We operate 52 distributions centers located in the United States, Canada, Qatar, Oman, and Unit",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CHEF/2024/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

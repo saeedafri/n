@@ -1,0 +1,18 @@
+{
+ "ticker": "AAC",
+ "fiscal_year": 2025,
+ "accession": "AAC/2025/10-K/filing.html::2025",
+ "fye_date": "2025-02-22",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 2270,
+ "l3_value": null,
+ "value": 2270,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "siness Retail Operations Albertsons is one of the largest food and drug retailers in the United States, with both strong local presence and national scale. As of February 22, 2025, we operated 2,270 stores across 34 states and the District of Co",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

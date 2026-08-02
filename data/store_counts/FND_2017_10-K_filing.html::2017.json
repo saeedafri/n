@@ -1,0 +1,14 @@
+{
+ "ticker": "FND",
+ "fiscal_year": 2017,
+ "value": 83,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "ufacturers’ dollars, an estimated $20 billion after the retail markup), provides us with an opportunity to significantly expand our store base in the U.S. from 83 warehouse format stores as of December 28, 2017 to approximately 400 stores nationwide",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "FND/2017/10-K/filing.html::2017",
+ "extractor_version": 5
+}

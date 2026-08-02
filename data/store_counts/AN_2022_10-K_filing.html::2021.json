@@ -1,14 +1,18 @@
 {
  "ticker": "AN",
  "fiscal_year": 2021,
- "value": 247,
+ "accession": "AN/2022/10-K/filing.html::2021",
+ "fye_date": "2021-12-31",
+ "db_value": 247,
+ "l1_value": null,
+ "l2_value": 339,
+ "l3_value": null,
+ "value": 339,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "| Total | $ | 2,876.2 | | | $ | 2,422.0 | | | $ | (454.2) | | | (18.8) | | | $ | 2,558.6 | | | $ | 136.6 | | | 5.3 |",
+ "evidence": "Table of Contents PART I ITEM 1. BUSINESS General AutoNation, Inc., through its subsidiaries, is the largest automotive retailer in the United States. As of December 31, 2021, we owned and operated 339 new vehicle franchises from 247 stores located in the United S",
  "by_country": {},
  "by_continent": {},
- "db_value": 247,
- "needs_review": false,
- "accession": "AN/2022/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

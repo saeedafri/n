@@ -1,0 +1,14 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2025,
+ "value": 914,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (45 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 914,
+ "needs_review": false,
+ "accession": "COST/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

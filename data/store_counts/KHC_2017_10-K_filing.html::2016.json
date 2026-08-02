@@ -1,0 +1,14 @@
+{
+ "ticker": "KHC",
+ "fiscal_year": 2016,
+ "value": 55908,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 5,420 | | | 6,563 | | | 5,925 | | | 38,000 | | | 55,908 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "KHC/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

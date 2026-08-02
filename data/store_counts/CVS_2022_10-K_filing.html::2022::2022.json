@@ -1,0 +1,14 @@
+{
+ "ticker": "CVS",
+ "fiscal_year": 2022,
+ "value": 9674,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total stores (end of year) | 9,674 | | | 9,939 | | | 9,962 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVS/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

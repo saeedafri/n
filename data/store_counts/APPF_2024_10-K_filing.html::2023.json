@@ -1,0 +1,18 @@
+{
+ "ticker": "APPF",
+ "fiscal_year": 2023,
+ "accession": "APPF/2024/10-K/filing.html::2023",
+ "fye_date": "2023-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 3,
+ "l3_value": null,
+ "value": 3,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ortunities. We define property management units under management as active or committed units under management at the period end date. We had 8.2 million and 7.3 million property management units under management, as of December 31, 2023 and 2022, respectively. Seasonality W",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "AAP",
+ "fiscal_year": 2026,
+ "value": 4788,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "2025, 39 stores were opened and 522 were closed, resulting in a total of 4,305 stores as of January 3, 2026 compared with a total of 2 Table of Contents 4,788 stores as of December 28, 2024. During fiscal year 2025, the Company c",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 4305,
+ "needs_review": false,
+ "accession": "AAP/2026/10-K/filing.html::2026::2026",
+ "extractor_version": 5
+}

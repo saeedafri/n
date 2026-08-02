@@ -1,0 +1,14 @@
+{
+ "ticker": "MCW",
+ "fiscal_year": 2023,
+ "value": 476,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Inc. is the largest national car wash brand, primarily offering express exterior cleaning services, with interior cleaning services at select locations, across 476 car wash locations in 21 states, as of December 31, 2023. Founded in 1996, we employ an efficien",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MCW/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

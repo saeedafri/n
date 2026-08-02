@@ -1,14 +1,18 @@
 {
  "ticker": "CRMT",
  "fiscal_year": 2023,
+ "accession": "CRMT/2023/10-K/filing.html::2023",
+ "fye_date": "2023-04-30",
+ "db_value": 156,
+ "l1_value": null,
+ "l2_value": 156,
+ "l3_value": null,
  "value": 156,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "| The probability of default (“PD”) or the number of units repossessed or charged-off divided by the number of units financed over the last five fiscal years (based on increments of 1, 1.5, 2, 3, 4, and 5 years).",
+ "evidence": "’s customers have limited financial resources and would not qualify for conventional financing as a result of limited credit histories or past credit problems. As of April 30, 2023, the Company operated 156 dealerships located primarily in small cities throu",
  "by_country": {},
  "by_continent": {},
- "db_value": 156,
- "needs_review": false,
- "accession": "CRMT/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

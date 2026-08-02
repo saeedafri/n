@@ -1,14 +1,18 @@
 {
  "ticker": "DECK",
  "fiscal_year": 2022,
- "value": 149,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "As of March 31, 2022, we have 50 retail stores in the US ranging from approximately 1,000 to 13,000 square feet. Internationally, we have 99 retail stores in Austria, Belgium, Canada, China, France, Germany, Japan, the Netherlands, Switzerland, and the UK.",
+ "accession": "DECK/2022/10-K/filing.html::2022",
+ "fye_date": "2022-03-31",
+ "db_value": 149,
+ "l1_value": null,
+ "l2_value": 43095,
+ "l3_value": null,
+ "value": 43095,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| Total | 43,095 | | | 41,840 | | | 1,255 | | | 3.0 |",
  "by_country": {},
  "by_continent": {},
- "db_value": 149,
- "needs_review": false,
- "accession": "DECK/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

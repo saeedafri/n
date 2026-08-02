@@ -1,14 +1,14 @@
 {
  "ticker": "SVV",
  "fiscal_year": 2026,
- "value": 10930,
+ "value": 367,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total | 10,930 |",
+ "evidence": "nnual Report. Overview We are the largest for-profit thrift operator in the United States (“U.S.”) and Canada based on number of stores and operated a total of 367 stores as of January 3, 2026 under the Savers®, Value Village®, Valu",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SVV/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

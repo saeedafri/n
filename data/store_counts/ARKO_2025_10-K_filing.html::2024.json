@@ -1,14 +1,18 @@
 {
  "ticker": "ARKO",
  "fiscal_year": 2024,
- "value": 10328,
+ "accession": "ARKO/2025/10-K/filing.html::2024",
+ "fye_date": "2024-12-31",
+ "db_value": 1630,
+ "l1_value": null,
+ "l2_value": 1389,
+ "l3_value": null,
+ "value": 1389,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits neighbouring years (l2)",
- "evidence": "le upholding our commitment to sustainability. Human Capital As of December 31, 2024, we employed 11,772 employees, with 10,328 employed in our stores and 1,444 in corporate and field management positions. To b",
+ "evidence": "orp. is a leading independent convenience store operator and one of the largest convenience store chains in the United States (“U.S.”) ranked by store count. As of December 31, 2024, we operated 1,389 retail convenience stores under more than 25 regional store brand",
  "by_country": {},
  "by_continent": {},
- "db_value": 1630,
- "needs_review": false,
- "accession": "ARKO/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,0 +1,23 @@
+{
+ "ticker": "DLTR",
+ "fiscal_year": 2026,
+ "accession": "DLTR/2026/10-K/filing.html::2026",
+ "fye_date": "2026-01-31",
+ "db_value": null,
+ "l1_value": 9385,
+ "l2_value": 1426,
+ "l3_value": null,
+ "value": 9385,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {
+  "United States": 9100,
+  "Canada": 285
+ },
+ "by_continent": {
+  "North America": 9385
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

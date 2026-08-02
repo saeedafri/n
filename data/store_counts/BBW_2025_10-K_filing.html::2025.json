@@ -1,14 +1,18 @@
 {
  "ticker": "BBW",
  "fiscal_year": 2025,
- "value": 368,
+ "accession": "BBW/2025/10-K/filing.html::2025",
+ "fye_date": "2025-02-01",
+ "db_value": 368,
+ "l1_value": null,
+ "l2_value": 83,
+ "l3_value": null,
+ "value": 83,
+ "source_rule": "L2_table",
  "confidence": "medium",
- "basis": "fits the company's own range",
- "evidence": "ith entertainment and sports licensing, plus collectible and gifting offerings. As of February 1, 2025, the Company had 589 global locations through a combination of its corporately-managed, partner-o",
+ "evidence": "| Total | | | 83 |",
  "by_country": {},
  "by_continent": {},
- "db_value": 368,
- "needs_review": false,
- "accession": "BBW/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

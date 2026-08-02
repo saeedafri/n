@@ -4,11 +4,11 @@
  "value": 600,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "As of January 3, 2026, the Company operated 600 Sleep Number ® stores, with locations in all 50 states.",
+ "evidence": "ain retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of Sleep Number’s 600 retail stores as of January 3, 2026: | | | | | | | | | | Retail Stores |",
  "by_country": {},
  "by_continent": {},
  "db_value": 600,
  "needs_review": false,
  "accession": "SNBR/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

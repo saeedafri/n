@@ -4,11 +4,11 @@
  "value": 159,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "None. 40 Table of Contents Item 2. Properties. As of September 30, 2020, we had 159 stores located in 20 states, as shown in the following chart:",
+ "evidence": "| Number of stores at end of period | | | 159 | | | | 153 | | | | 148 | | | | 140 | | | | 126 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "NGVC/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

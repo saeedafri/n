@@ -1,14 +1,14 @@
 {
  "ticker": "WSM",
  "fiscal_year": 2026,
- "value": 506,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "erve as billboards for our brands, which we believe inspire new and existing customers to shop in stores and online. We operate 506 stores, which include 473 stores in 41 states, Washington, D.C. an",
+ "value": 512,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "gross leased store space as of February 1, 2026 totaled approximately 5,762,000 square feet for 506 stores compared to approximately 5,833,000 square feet for 512 stores as of February 2, 2025. Leased Properties The following table",
  "by_country": {},
  "by_continent": {},
  "db_value": 506,
  "needs_review": false,
  "accession": "WSM/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

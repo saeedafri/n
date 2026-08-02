@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2022,
+ "value": 86,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "table, such as economic downturns in the area, changes in demographics and customer preferences, and the closing or decline in popularity of adjacent stores. As of January 29, 2022, we operated 86 stores, including 49 company-operated Vince fu",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 86,
+ "needs_review": false,
+ "accession": "VNCE/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

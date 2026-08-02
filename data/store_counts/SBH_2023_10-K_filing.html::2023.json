@@ -1,0 +1,14 @@
+{
+ "ticker": "SBH",
+ "fiscal_year": 2023,
+ "value": 3148,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Store Count | | | 3,148 | | | | 1,206 | | | | 132 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SBH/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

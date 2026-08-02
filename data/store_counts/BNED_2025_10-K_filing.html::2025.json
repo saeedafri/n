@@ -1,14 +1,18 @@
 {
  "ticker": "BNED",
  "fiscal_year": 2025,
- "value": 653,
- "confidence": "medium",
- "basis": "fits series (l3)",
+ "accession": "BNED/2025/10-K/filing.html::2025",
+ "fye_date": "2025-05-03",
+ "db_value": 1146,
+ "l1_value": 1164,
+ "l2_value": null,
+ "l3_value": null,
+ "value": 1164,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": 1146,
- "needs_review": false,
- "accession": "BNED/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

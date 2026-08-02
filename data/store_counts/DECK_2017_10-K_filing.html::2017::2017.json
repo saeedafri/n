@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2017,
+ "value": 160,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "easons, full price in-line products, as well as products made specifically for the outlet stores. At March 31, 2017, we had a total of 160 retail stores worldwide, which includes 96 concept stores and 64 outlet s",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DECK/2017/10-K/filing.html::2017::2017",
+ "extractor_version": 5
+}

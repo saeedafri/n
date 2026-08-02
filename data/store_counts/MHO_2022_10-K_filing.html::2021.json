@@ -1,0 +1,14 @@
+{
+ "ticker": "MHO",
+ "fiscal_year": 2021,
+ "value": 24593,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 5,700 | | 5,875 | | 13,018 | | 24,593 | | 19,364 | | 43,957 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MHO/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

@@ -1,0 +1,20 @@
+{
+ "ticker": "CMG",
+ "fiscal_year": 2017,
+ "value": 2408,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (10 facts)",
+ "by_country": {
+  "United States": 2363,
+  "International": 37
+ },
+ "by_continent": {
+  "North America": 2363,
+  "Other": 37
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CMG/2018/10-K/filing.html::2017::2017",
+ "extractor_version": 5
+}

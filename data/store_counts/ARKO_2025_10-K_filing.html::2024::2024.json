@@ -1,0 +1,14 @@
+{
+ "ticker": "ARKO",
+ "fiscal_year": 2024,
+ "value": 1389,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "orp. is a leading independent convenience store operator and one of the largest convenience store chains in the United States (“U.S.”) ranked by store count. As of December 31, 2024, we operated 1,389 retail convenience stores under more than 25 regional store brand",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 1630,
+ "needs_review": false,
+ "accession": "ARKO/2025/10-K/filing.html::2024::2024",
+ "extractor_version": 5
+}

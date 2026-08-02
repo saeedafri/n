@@ -2,13 +2,13 @@
  "ticker": "HD",
  "fiscal_year": 2026,
  "value": 2359,
- "confidence": "medium",
- "basis": "fits the company's own range",
- "evidence": "1, 2026. A total of 324 of our stores, or 13.7%, were located in Canada and Mexico. At the end of fiscal 2025, we also operated over 1,250 locations within our SRS non-reportable operating segments throughout",
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "ties MRO products, in stores and online. We also provide a number of services, including home improvement installation services, and tool and equipment rental. As of the end of fiscal 2025, we operated 2,359 stores located throughout the U.S. (including",
  "by_country": {},
  "by_continent": {},
  "db_value": 2359,
  "needs_review": false,
  "accession": "HD/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "extractor_version": 5
 }

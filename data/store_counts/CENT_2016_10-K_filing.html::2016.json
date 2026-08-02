@@ -1,14 +1,18 @@
 {
  "ticker": "CENT",
  "fiscal_year": 2016,
+ "accession": "CENT/2016/10-K/filing.html::2016",
+ "fye_date": "2016-09-24",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1,
+ "l3_value": null,
  "value": 1,
- "confidence": "low",
- "basis": "single source (l2), unverified",
+ "source_rule": "L2_prose",
+ "confidence": "medium",
  "evidence": "of increased competition in the marketplace and an expected decline in the volume of sales. Our goodwill is associated with one of the reporting units within our Pet segment. In connection with our annual goodw",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": true,
- "accession": "CENT/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

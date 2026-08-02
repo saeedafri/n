@@ -1,0 +1,14 @@
+{
+ "ticker": "AVO",
+ "fiscal_year": 2023,
+ "value": 13100,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 5,700 | | 1,000 | | 6,400 | | 13,100 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AVO/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

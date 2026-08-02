@@ -1,0 +1,18 @@
+{
+ "ticker": "CXT",
+ "fiscal_year": 2025,
+ "accession": "CXT/2026/10-K/filing.html::2025",
+ "fye_date": "2025-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 3,
+ "l3_value": null,
+ "value": 3,
+ "source_rule": "L2_prose",
+ "confidence": "medium",
+ "evidence": "operating segment (a “component”), in which case the component would be the reporting unit. As of December 31, 2025, we had three reporting units. When performing our annual impairment assessment, we compa",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

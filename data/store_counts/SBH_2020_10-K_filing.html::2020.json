@@ -1,14 +1,14 @@
 {
  "ticker": "SBH",
  "fiscal_year": 2020,
- "value": 4895,
+ "value": 3644,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "At September 30, 2020, we operated two business segments, Sally Beauty Supply (“SBS”) and Beauty Systems Group (“BSG”), with 4,895 company-operated stores, 143 franchised stores and e-commerce platforms. SBS target",
+ "evidence": "ic areas and store sites on the basis of demographic information, the quality and nature of neighboring tenants, store visibility and location accessibility. As of September 30, 2020, SBS had 3,644 company-operated retail stores, 2,753 of which are located in the U.S.",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SBH/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

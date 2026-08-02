@@ -1,14 +1,14 @@
 {
  "ticker": "SCVL",
  "fiscal_year": 2023,
- "value": 400,
+ "value": 397,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "2022, ending Fiscal 2022 with 397 total stores, 373 Shoe Carnival stores and 24 Shoe Station stores. We are on track to operate 400 stores in the third quarter of Fiscal 2023. Results of Operation",
+ "evidence": "| Total Stores | | 397 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SCVL/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

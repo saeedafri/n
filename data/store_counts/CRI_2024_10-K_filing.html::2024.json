@@ -1,14 +1,18 @@
 {
  "ticker": "CRI",
  "fiscal_year": 2024,
- "value": 1057,
+ "accession": "CRI/2024/10-K/filing.html::2024",
+ "fye_date": "2024-12-28",
+ "db_value": 1057,
+ "l1_value": null,
+ "l2_value": 804,
+ "l3_value": null,
+ "value": 804,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "| Total | 15,350 | | 100.0 | %",
+ "evidence": "e Planet branded products, depending on the store and location. As of the end of fiscal 2024, our stores averaged approximately 5,100 square feet per location. As of the end of fiscal 2024, we operated 804 stores in the United States. In the fourth qua",
  "by_country": {},
  "by_continent": {},
- "db_value": 1057,
- "needs_review": false,
- "accession": "CRI/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

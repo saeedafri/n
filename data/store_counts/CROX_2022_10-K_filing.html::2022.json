@@ -1,0 +1,34 @@
+{
+ "ticker": "CROX",
+ "fiscal_year": 2022,
+ "accession": "CROX/2022/10-K/filing.html::2022",
+ "fye_date": "2022-12-31",
+ "db_value": 345,
+ "l1_value": null,
+ "l2_value": 373,
+ "l3_value": null,
+ "value": 373,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| Total | 373 | | 22 | | 50 | | 345",
+ "by_country": {
+  "United States": 162,
+  "Canada": 8,
+  "Puerto Rico": 3,
+  "Korea": 89,
+  "China": 34,
+  "Japan": 13,
+  "Singapore": 17,
+  "Russia": 26,
+  "Germany": 14,
+  "France": 2,
+  "Austria": 3
+ },
+ "by_continent": {
+  "North America": 173,
+  "Asia": 153,
+  "Europe": 45
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

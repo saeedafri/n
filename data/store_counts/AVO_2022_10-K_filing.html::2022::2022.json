@@ -1,0 +1,14 @@
+{
+ "ticker": "AVO",
+ "fiscal_year": 2022,
+ "value": 12000,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 5,300 | | 400 | | 6,300 | | 12,000 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AVO/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

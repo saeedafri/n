@@ -4,11 +4,11 @@
  "value": 2410,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "s a leading footwear and apparel retailer that unlocks the \"inner sneakerhead\" in all of us. As of February 1, 2025, we operated 2,410 stores in 26 countries across North America, Europe, Australia, Ne",
+ "evidence": "| Number of stores at year end | | 2,410 | | | 2,523 | | | 2,714 | | | 2,858 | | | 2,998",
  "by_country": {},
  "by_continent": {},
  "db_value": 2410,
  "needs_review": false,
  "accession": "FL/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

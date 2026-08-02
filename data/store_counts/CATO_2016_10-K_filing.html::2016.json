@@ -1,14 +1,18 @@
 {
  "ticker": "CATO",
  "fiscal_year": 2016,
+ "accession": "CATO/2016/10-K/filing.html::2016",
+ "fye_date": "2016-01-30",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1372,
+ "l3_value": null,
  "value": 1372,
+ "source_rule": "L2_prose",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "r furnished to the SEC. 3 PART I Item 1. Business: General The Company, founded in 1946, operated 1,372 fashion specialty stores at January 30, 2016, in 32 states, principally in the south",
+ "evidence": "or furnished to the SEC. 3 PART I Item 1. Business: General The Company, founded in 1946, operated 1,372 fashion specialty stores at January 30, 2016, in 32 states, principally in the south",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "CATO/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

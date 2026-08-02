@@ -1,14 +1,23 @@
 {
  "ticker": "CAL",
  "fiscal_year": 2026,
- "value": 1009,
- "confidence": "high",
- "basis": "two sources agree",
- "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": 1009,
- "needs_review": false,
  "accession": "CAL/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "fye_date": "2026-01-31",
+ "db_value": 1009,
+ "l1_value": 1009,
+ "l2_value": 188,
+ "l3_value": null,
+ "value": 1009,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
+ "by_country": {
+  "North America": 85,
+  "Non-US": 103
+ },
+ "by_continent": {
+  "Other": 188
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

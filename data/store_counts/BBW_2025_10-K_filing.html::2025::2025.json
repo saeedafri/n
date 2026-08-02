@@ -1,0 +1,14 @@
+{
+ "ticker": "BBW",
+ "fiscal_year": 2025,
+ "value": 368,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total | | | 83 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 368,
+ "needs_review": false,
+ "accession": "BBW/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

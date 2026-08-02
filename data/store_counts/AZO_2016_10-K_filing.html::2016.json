@@ -1,14 +1,25 @@
 {
  "ticker": "AZO",
  "fiscal_year": 2016,
- "value": 5297,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "XBRL us-gaap:NumberOfStores (5 facts) | llm value unsupported, rejected",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "AZO/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "fye_date": "2016-08-27",
+ "db_value": null,
+ "l1_value": 5717,
+ "l2_value": 5814,
+ "l3_value": null,
+ "value": 5717,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "Brazil": 8,
+  "Mexico": 483,
+  "Stores in the United States Including Puerto Rico": 5297
+ },
+ "by_continent": {
+  "South America": 8,
+  "North America": 5780
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

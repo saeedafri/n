@@ -1,0 +1,14 @@
+{
+ "ticker": "AN",
+ "fiscal_year": 2023,
+ "value": 252,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total | 63.4 | | | 57.5 | | | (590) | | | bps | | 58.1 | | | 60 | | | bps",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 252,
+ "needs_review": false,
+ "accession": "AN/2024/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

@@ -2,13 +2,13 @@
  "ticker": "LULU",
  "fiscal_year": 2023,
  "value": 655,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfStores (18 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 694,
  "needs_review": false,
  "accession": "LULU/2022/10-K/filing.html::2023",
- "extractor_version": 1
+ "extractor_version": 5
 }

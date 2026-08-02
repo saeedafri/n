@@ -1,14 +1,14 @@
 {
  "ticker": "URBN",
  "fiscal_year": 2022,
- "value": 261,
+ "value": 700,
  "confidence": "medium",
- "basis": "filing (10-K)",
+ "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (14 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "URBN/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

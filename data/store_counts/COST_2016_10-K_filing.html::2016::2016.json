@@ -1,0 +1,29 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2016,
+ "value": 715,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (24 facts)",
+ "by_country": {
+  "AUSTRALIA": 8,
+  "CANADA": 91,
+  "SPAIN": 2,
+  "UNITED KINGDOM": 28,
+  "JAPAN": 25,
+  "KOREA, REPUBLIC OF": 12,
+  "MEXICO": 36,
+  "TAIWAN": 12,
+  "UNITED STATES": 501
+ },
+ "by_continent": {
+  "Oceania": 8,
+  "North America": 628,
+  "Europe": 30,
+  "Asia": 49
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "COST/2016/10-K/filing.html::2016::2016",
+ "extractor_version": 5
+}

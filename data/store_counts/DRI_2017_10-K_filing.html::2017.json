@@ -1,0 +1,26 @@
+{
+ "ticker": "DRI",
+ "fiscal_year": 2017,
+ "accession": "DRI/2017/10-K/filing.html::2017",
+ "fye_date": "2017-05-28",
+ "db_value": null,
+ "l1_value": 94,
+ "l2_value": 1695,
+ "l3_value": null,
+ "value": 94,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (16 facts)",
+ "by_country": {
+  "LongHorn Steakhouse": 6,
+  "Latin America, the Middle East and Malaysia": 34,
+  "Entity Operated Units": 9,
+  "Franchised Units": 45
+ },
+ "by_continent": {
+  "Other": 60,
+  "Asia": 34
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

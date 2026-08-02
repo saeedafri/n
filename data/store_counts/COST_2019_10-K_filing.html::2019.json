@@ -1,14 +1,38 @@
 {
  "ticker": "COST",
  "fiscal_year": 2019,
- "value": 782,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "XBRL us-gaap:NumberOfStores (41 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "COST/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "fye_date": "2019-09-01",
+ "db_value": null,
+ "l1_value": 795,
+ "l2_value": 782,
+ "l3_value": null,
+ "value": 795,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (41 facts)",
+ "by_country": {
+  "AUSTRALIA": 11,
+  "Canadian Operations": 100,
+  "CHINA": 1,
+  "SPAIN": 2,
+  "FRANCE": 1,
+  "UNITED KINGDOM": 29,
+  "ICELAND": 1,
+  "JAPAN": 26,
+  "KOREA": 16,
+  "MEXICO": 39,
+  "TAIWAN": 13,
+  "United States Operations": 543,
+  "Canada Operations": 100
+ },
+ "by_continent": {
+  "Oceania": 11,
+  "Other": 101,
+  "Asia": 56,
+  "Europe": 32,
+  "North America": 682
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

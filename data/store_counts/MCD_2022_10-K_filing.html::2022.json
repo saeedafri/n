@@ -3,12 +3,12 @@
  "fiscal_year": 2022,
  "value": 40275,
  "confidence": "medium",
- "basis": "fits series (l3)",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (63 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "MCD/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

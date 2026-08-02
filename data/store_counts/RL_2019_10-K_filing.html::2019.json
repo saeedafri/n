@@ -4,11 +4,11 @@
  "value": 1154,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total stores | | 1,154 |",
+ "evidence": "| Total stores | | 1,154 | | | 1,104 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "RL/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

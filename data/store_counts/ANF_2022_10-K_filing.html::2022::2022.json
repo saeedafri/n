@@ -1,0 +1,14 @@
+{
+ "ticker": "ANF",
+ "fiscal_year": 2022,
+ "value": 729,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "| Total | | 505 | | | 224 | | | 729 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 729,
+ "needs_review": false,
+ "accession": "ANF/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

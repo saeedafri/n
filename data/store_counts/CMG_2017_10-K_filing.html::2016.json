@@ -1,0 +1,29 @@
+{
+ "ticker": "CMG",
+ "fiscal_year": 2016,
+ "accession": "CMG/2017/10-K/filing.html::2016",
+ "fye_date": "2016-12-31",
+ "db_value": null,
+ "l1_value": 2254,
+ "l2_value": 2250,
+ "l3_value": null,
+ "value": 2254,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (17 facts)",
+ "by_country": {
+  "Canada": 14,
+  "Germany": 1,
+  "France": 5,
+  "England": 7,
+  "United States": 2198,
+  "International": 29
+ },
+ "by_continent": {
+  "North America": 2212,
+  "Europe": 6,
+  "Other": 36
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

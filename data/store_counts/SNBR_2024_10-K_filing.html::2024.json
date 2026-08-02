@@ -4,11 +4,11 @@
  "value": 640,
  "confidence": "high",
  "basis": "filing (10-K), corroborated",
- "evidence": "640 retail stores in 50 U.S. states as of the end of 2024",
+ "evidence": "ain retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of Sleep Number’s 640 retail stores as of December 28, 2024: | | | | | | | | | | Retail Stores |",
  "by_country": {},
  "by_continent": {},
  "db_value": 640,
  "needs_review": false,
  "accession": "SNBR/2024/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

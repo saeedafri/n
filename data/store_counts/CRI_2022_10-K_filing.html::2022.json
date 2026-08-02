@@ -1,14 +1,18 @@
 {
  "ticker": "CRI",
  "fiscal_year": 2022,
- "value": 980,
+ "accession": "CRI/2022/10-K/filing.html::2022",
+ "fye_date": "2022-01-01",
+ "db_value": 980,
+ "l1_value": null,
+ "l2_value": 751,
+ "l3_value": null,
+ "value": 751,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "fits neighbouring years (db)",
- "evidence": "at consist of adjacent and connected Carter’s and OshKosh stores. As of the end of fiscal 2021, in the United States we operated 751 stores. We regularly assess potential new retail store locations a",
+ "evidence": "d net sales through our eCommerce channel. The 53rd week in fiscal 2020 contributed approximately $18.2 million in additional sales to the U.S. Retail segment. As of January 1, 2022, we operated 751 retail stores in the U.S. compared to 864 in fiscal 2",
  "by_country": {},
  "by_continent": {},
- "db_value": 980,
- "needs_review": false,
- "accession": "CRI/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

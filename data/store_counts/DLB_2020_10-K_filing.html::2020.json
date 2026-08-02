@@ -1,14 +1,18 @@
 {
  "ticker": "DLB",
  "fiscal_year": 2020,
+ "accession": "DLB/2020/10-K/filing.html::2020",
+ "fye_date": "2020-09-25",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 250,
+ "l3_value": null,
  "value": 250,
+ "source_rule": "L2_prose",
  "confidence": "medium",
- "basis": "filing (10-K)",
  "evidence": "Korea and Saudi Arabia, and we established more partnerships with global exhibitors. At the end of the fiscal year, we had over 250 Dolby Cinema locations established across 13 countries. The breadth of motion pict",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "DLB/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,14 +1,14 @@
 {
  "ticker": "UPBD",
  "fiscal_year": 2019,
- "value": 998,
+ "value": 495,
  "confidence": "medium",
- "basis": "fits series (l3)",
+ "basis": "fits neighbouring years (db)",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 495,
  "needs_review": false,
  "accession": "UPBD/2020/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

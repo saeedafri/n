@@ -1,0 +1,14 @@
+{
+ "ticker": "VFC",
+ "fiscal_year": 2016,
+ "value": 1520,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "to the principal properties described above, we lease many offices worldwide for sales and administrative purposes. We operate 1,520 retail stores across the Americas, European and Asia Pacific regions. Ret",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "VFC/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

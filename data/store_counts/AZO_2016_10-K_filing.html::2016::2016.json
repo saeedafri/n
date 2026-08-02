@@ -1,0 +1,21 @@
+{
+ "ticker": "AZO",
+ "fiscal_year": 2016,
+ "value": 5814,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (5 facts)",
+ "by_country": {
+  "Brazil": 8,
+  "Mexico": 483,
+  "Stores in the United States Including Puerto Rico": 5297
+ },
+ "by_continent": {
+  "South America": 8,
+  "North America": 5780
+ },
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AZO/2016/10-K/filing.html::2016::2016",
+ "extractor_version": 5
+}

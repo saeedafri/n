@@ -4,11 +4,11 @@
  "value": 1540,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Total stores open at fiscal year-end | 1,540 |",
+ "evidence": "| Total stores open at fiscal year-end | 1,540 | | | 1,432 | | | 1,043 | | | 1,029 | | | 1,019 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "TPR/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

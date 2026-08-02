@@ -1,0 +1,14 @@
+{
+ "ticker": "CXT",
+ "fiscal_year": 2018,
+ "value": 8,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "operating segment (a “component”), in which case the component would be the reporting unit. As of December 31, 2018, we had eight reporting units. When performing our annual impairment assessment, we compa",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CXT/2019/10-K/filing.html::2018::2018",
+ "extractor_version": 5
+}

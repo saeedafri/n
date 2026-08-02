@@ -1,14 +1,14 @@
 {
  "ticker": "QSR",
  "fiscal_year": 2020,
- "value": 27109,
+ "value": 27025,
  "confidence": "medium",
- "basis": "fits series (l1)",
+ "basis": "fits the company's own range",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (20 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 27025,
  "needs_review": false,
  "accession": "QSR/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

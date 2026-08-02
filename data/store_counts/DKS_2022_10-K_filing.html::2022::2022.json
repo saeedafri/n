@@ -1,0 +1,14 @@
+{
+ "ticker": "DKS",
+ "fiscal_year": 2022,
+ "value": 861,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 861,
+ "needs_review": false,
+ "accession": "DKS/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

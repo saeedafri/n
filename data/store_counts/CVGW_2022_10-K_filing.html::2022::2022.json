@@ -1,0 +1,14 @@
+{
+ "ticker": "CVGW",
+ "fiscal_year": 2022,
+ "value": 3266,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| TOTAL | | 548 | | 2,718 | | 3,266",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVGW/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

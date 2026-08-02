@@ -1,0 +1,14 @@
+{
+ "ticker": "DRVN",
+ "fiscal_year": 2022,
+ "value": 4805,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 4,805 | | | 4,412 | | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DRVN/2023/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

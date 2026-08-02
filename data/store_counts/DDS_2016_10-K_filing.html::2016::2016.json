@@ -1,0 +1,14 @@
+{
+ "ticker": "DDS",
+ "fiscal_year": 2016,
+ "value": 297,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total retail store count at end of period | 297 | | | 297 | | | 296 | |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DDS/2016/10-K/filing.html::2016::2016",
+ "extractor_version": 5
+}

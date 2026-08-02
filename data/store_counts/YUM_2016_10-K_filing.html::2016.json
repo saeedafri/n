@@ -1,14 +1,14 @@
 {
  "ticker": "YUM",
  "fiscal_year": 2016,
- "value": 20604,
+ "value": 43500,
  "confidence": "medium",
- "basis": "fits series (l3)",
+ "basis": "fits the company's own range",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (7 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "YUM/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

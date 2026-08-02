@@ -1,0 +1,14 @@
+{
+ "ticker": "TPH",
+ "fiscal_year": 2020,
+ "value": 29,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "dition our current year expansion into the Carolinas contributed 15 units, along with further traction into Sacramento which was a new market in 2019 with only 29 units in backlog as of December 31, 2019 compared to 93 as of December 31, 2020.",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "TPH/2021/10-K/filing.html::2020",
+ "extractor_version": 5
+}

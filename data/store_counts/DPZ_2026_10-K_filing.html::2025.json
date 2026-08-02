@@ -1,0 +1,18 @@
+{
+ "ticker": "DPZ",
+ "fiscal_year": 2025,
+ "accession": "DPZ/2026/10-K/filing.html::2025",
+ "fye_date": "2025-12-28",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 14956,
+ "l3_value": null,
+ "value": 14956,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ounted for $338.7 million, or 6.9%, of our consolidated revenues. This segment is comprised of a network of franchised stores in over 90 international markets. As of December 28, 2025, we had 14,956 international franchised stores. The principal sources of revenues from",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

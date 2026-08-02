@@ -1,0 +1,21 @@
+{
+ "ticker": "AZO",
+ "fiscal_year": 2022,
+ "value": 6943,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "Stores in the United States Including Puerto Rico": 6168,
+  "Mexico": 703,
+  "Brazil": 72
+ },
+ "by_continent": {
+  "North America": 6871,
+  "South America": 72
+ },
+ "db_value": 6943,
+ "needs_review": false,
+ "accession": "AZO/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

@@ -1,14 +1,14 @@
 {
  "ticker": "SCVL",
  "fiscal_year": 2022,
- "value": 372,
+ "value": 393,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ted an average of $3.5 million in annual sales in fiscal 2021 and over $300 per square foot. As of January 29, 2022, we operated 372 stores in 35 states and Puerto Rico under the Shoe Carnival banner",
+ "evidence": "| Total Stores | | 393 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SCVL/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

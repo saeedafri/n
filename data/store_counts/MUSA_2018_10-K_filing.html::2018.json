@@ -2,13 +2,13 @@
  "ticker": "MUSA",
  "fiscal_year": 2018,
  "value": 1472,
- "confidence": "high",
- "basis": "two sources agree",
+ "confidence": "medium",
+ "basis": "fits series (l1)",
  "evidence": "XBRL us-gaap:NumberOfStores (14 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "MUSA/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

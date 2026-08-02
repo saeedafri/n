@@ -1,14 +1,18 @@
 {
  "ticker": "BRLT",
  "fiscal_year": 2025,
+ "accession": "BRLT/2026/10-K/filing.html::2025",
+ "fye_date": "2025-12-31",
+ "db_value": 43,
+ "l1_value": null,
+ "l2_value": 42,
+ "l3_value": null,
  "value": 42,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "| Total Retail Showrooms and Office Locations | | 42 | | 129,256 |",
+ "evidence": "r showrooms, which we believe drives strong engagement and high customer satisfaction. These consultants strive to create lasting connections with customers. As of December 31, 2025, we had 42 showrooms across the United States. Our showrooms",
  "by_country": {},
  "by_continent": {},
- "db_value": 43,
- "needs_review": false,
- "accession": "BRLT/2026/10-K/filing.html::2025",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

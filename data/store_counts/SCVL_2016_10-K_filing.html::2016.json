@@ -4,11 +4,11 @@
  "value": 405,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ion in annual sales and carry inventory of approximately 27,100 pairs of shoes per location. As of January 30, 2016, we operated 405 stores in 34 states and Puerto Rico and offered online shopping at",
+ "evidence": "| Total Stores | 405",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "SCVL/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "extractor_version": 5
 }

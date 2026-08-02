@@ -1,0 +1,14 @@
+{
+ "ticker": "MHO",
+ "fiscal_year": 2019,
+ "value": 14666,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 6,220 | | 2,385 | | 6,061 | | 14,666 | | 18,593 | | 33,259 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MHO/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

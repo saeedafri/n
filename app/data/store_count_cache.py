@@ -22,7 +22,15 @@ from typing import Any, Dict, Iterator, List, Optional
 
 # Bump only when the extraction logic changes in a way that should invalidate
 # previously written values. Entries written by an older version are re-run.
-EXTRACTOR_VERSION = 1
+#
+# 2: support-site and geography-noun vetoes, decimal and footnote-marker
+#    rejection, 'opened' dropped as a fleet verb, third-party statistics
+#    excluded, unnamed-total ceiling, roll-forward sanity, aspirational prose
+#    demoted a tier, unclassified companies no longer treated as non-retail.
+#    Leaving this at 1 meant every one of those fixes was masked by a cache
+#    entry the old parser had written — TJX kept publishing a US-only 3,790
+#    while the parser in front of it was returning the correct 5,214.
+EXTRACTOR_VERSION = 5
 
 
 def cache_dir() -> Path:

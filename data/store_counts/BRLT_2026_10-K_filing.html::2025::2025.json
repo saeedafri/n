@@ -1,0 +1,14 @@
+{
+ "ticker": "BRLT",
+ "fiscal_year": 2025,
+ "value": 42,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "r showrooms, which we believe drives strong engagement and high customer satisfaction. These consultants strive to create lasting connections with customers. As of December 31, 2025, we had 42 showrooms across the United States. Our showrooms",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 43,
+ "needs_review": false,
+ "accession": "BRLT/2026/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "BRX",
+ "fiscal_year": 2016,
+ "value": 512,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "e own and operate the second largest open air retail portfolio by GLA in the United States, comprised primarily of community and neighborhood shopping centers. As of December 31, 2016, we owned interests in 512 shopping centers (the “Portfolio”) with approximately 86",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BRX/2017/10-K/filing.html::2016::2016",
+ "extractor_version": 5
+}

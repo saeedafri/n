@@ -1,14 +1,14 @@
 {
  "ticker": "LOVE",
  "fiscal_year": 2019,
- "value": 75,
+ "value": 66,
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "adverse effect on our business, financial condition, operating results and prospects. As of February 3, 2019, we had 75 showrooms, but our growth strategy requires us to increase our showro",
+ "basis": "fits neighbouring years (l2)",
+ "evidence": "by approximately 26.3%. The fiscal 2019 average net sales per showroom is $1,568,581, which reflects a higher average order volume per customer. We had 75 and 66 showrooms open as of February 3, 2019, and February 4, 2018, respectively. We",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LOVE/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "CRMT",
+ "fiscal_year": 2022,
+ "value": 154,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "’s customers have limited financial resources and would not qualify for conventional financing as a result of limited credit histories or past credit problems. As of April 30, 2022, the Company operated 154 dealerships located primarily in small cities throu",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CRMT/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

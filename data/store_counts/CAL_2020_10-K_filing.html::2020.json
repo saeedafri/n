@@ -1,14 +1,29 @@
 {
  "ticker": "CAL",
  "fiscal_year": 2020,
- "value": 949,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "CAL/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "fye_date": "2020-02-01",
+ "db_value": null,
+ "l1_value": 1177,
+ "l2_value": 1177,
+ "l3_value": null,
+ "value": 1177,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (8 facts)",
+ "by_country": {
+  "CHINA": 6,
+  "GUAM": 1,
+  "ITALY": 1,
+  "UNITED STATES": 141,
+  "CANADA": 79
+ },
+ "by_continent": {
+  "Asia": 6,
+  "Other": 1,
+  "Europe": 1,
+  "North America": 220
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

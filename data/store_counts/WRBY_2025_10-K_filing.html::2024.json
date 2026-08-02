@@ -1,14 +1,14 @@
 {
  "ticker": "WRBY",
  "fiscal_year": 2024,
- "value": 271,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "lease approximately 69,580 square feet of space under a lease that expires in August 2031. As of December 31, 2024, we operated 271 retail stores across the United States and five retail stores in Canada.",
+ "value": 276,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": ". •We’ve built a seamless shopping experience that meets customers where and how they want to shop, whether that’s on our website, on our mobile app, or in our 276 retail stores as of December 31, 2024. •We’ve crafted a holistic vision car",
  "by_country": {},
  "by_continent": {},
  "db_value": 276,
  "needs_review": false,
  "accession": "WRBY/2025/10-K/filing.html::2024",
- "extractor_version": 1
+ "extractor_version": 5
 }

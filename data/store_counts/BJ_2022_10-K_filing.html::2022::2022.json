@@ -1,0 +1,14 @@
+{
+ "ticker": "BJ",
+ "fiscal_year": 2022,
+ "value": 226,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (7 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 226,
+ "needs_review": false,
+ "accession": "BJ/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

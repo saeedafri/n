@@ -1,0 +1,18 @@
+{
+ "ticker": "DLB",
+ "fiscal_year": 2018,
+ "accession": "DLB/2018/10-K/filing.html::2018",
+ "fye_date": "2018-09-28",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 170,
+ "l3_value": null,
+ "value": 170,
+ "source_rule": "L2_prose",
+ "confidence": "medium",
+ "evidence": "or Dolby Cinema by adding several new exhibitor partnerships in Europe, Japan, and China. At the end of fiscal 2018, we had approximately 170 Dolby Cinema locations in operation, compared to approximately 115 a year ago. We",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

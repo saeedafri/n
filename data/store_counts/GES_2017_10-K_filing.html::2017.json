@@ -4,11 +4,11 @@
  "value": 1680,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "dle East, 15 stores in the U.S., 11 stores in Central and South America and nine stores in Canada. We ended fiscal 2017 with 1,680 stores worldwide, comprised as follows: | | | | | | | | | | |",
+ "evidence": "| Total | | 1,680 | | | 945 | | | 735 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GES/2017/10-K/filing.html::2017",
- "extractor_version": 1
+ "extractor_version": 5
 }

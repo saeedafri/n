@@ -1,0 +1,18 @@
+{
+ "ticker": "CROX",
+ "fiscal_year": 2015,
+ "accession": "CROX/2015/10-K/filing.html::2015",
+ "fye_date": "2015-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 170,
+ "l3_value": null,
+ "value": 170,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "enerally located within outlet shopping locations. During the year ended December 31, 2015, we closed four outlet locations and opened 16 new outlet locations. As of December 31, 2015, 2014, and 2013, we operated 186, 174, and 170 global outlet stores, respectively. • Kiosk / Store-i",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

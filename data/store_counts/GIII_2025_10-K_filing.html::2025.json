@@ -1,14 +1,14 @@
 {
  "ticker": "GIII",
  "fiscal_year": 2025,
- "value": 107,
+ "value": 221,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "third-party service providers for which we do not enter into lease agreements. Retail Stores As of January 31, 2025, we operated 107 Vilebrequin retail stores, 49 DKNY and Karl Lagerfeld Paris stores, 64 Karl Lagerfeld",
+ "evidence": "| Total | | 221",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "GIII/2025/10-K/filing.html::2025",
- "extractor_version": 1
+ "extractor_version": 5
 }

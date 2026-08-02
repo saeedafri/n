@@ -4,11 +4,11 @@
  "value": 129,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "ased | Masatepe City, Nicaragua | | 108,000 | | | Manufacturing Facility | | Leased As of December 28, 2019 , we operated 129 retail stores across the Americas, EMEA and APAC regions. Retail stores a",
+ "evidence": "n Marcos, Nicaragua | | 118,000 | | | Manufacturing Facility | | Leased | Masatepe City, Nicaragua | | 108,000 | | | Manufacturing Facility | | Leased As of December 28, 2019, we operated 129 retail stores across the Americas, EMEA and APAC regi",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "KTB/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "CFR",
+ "fiscal_year": 2015,
+ "value": 16579,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 16,579 | | | 0.1 | | | 15,426 | | | 0.1 | | | 16,398 | | | 0.2 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CFR/2015/10-K/filing.html::2015::2015",
+ "extractor_version": 5
+}

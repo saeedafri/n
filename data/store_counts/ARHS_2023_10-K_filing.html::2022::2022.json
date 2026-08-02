@@ -1,0 +1,14 @@
+{
+ "ticker": "ARHS",
+ "fiscal_year": 2022,
+ "value": 81,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Showrooms at end of period | 81 | | 79",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "ARHS/2023/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

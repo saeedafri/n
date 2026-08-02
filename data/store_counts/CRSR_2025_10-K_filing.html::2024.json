@@ -1,0 +1,18 @@
+{
+ "ticker": "CRSR",
+ "fiscal_year": 2024,
+ "accession": "CRSR/2025/10-K/filing.html::2024",
+ "fye_date": "2024-12-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 304,
+ "l3_value": null,
+ "value": 304,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "wing competitive strengths: • Leading brand recognition for performance drives strong customer loyalty. Since our founding in 1994, we have shipped more than 304 million units of gaming and creator products as of December 31, 2024 and actively nurtured a passionate and",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

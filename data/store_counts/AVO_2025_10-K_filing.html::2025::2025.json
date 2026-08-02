@@ -1,0 +1,14 @@
+{
+ "ticker": "AVO",
+ "fiscal_year": 2025,
+ "value": 11200,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 1,100 | | 3,700 | | 6,400 | | 11,200 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "AVO/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

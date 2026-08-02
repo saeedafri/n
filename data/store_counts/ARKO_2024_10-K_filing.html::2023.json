@@ -1,0 +1,18 @@
+{
+ "ticker": "ARKO",
+ "fiscal_year": 2023,
+ "accession": "ARKO/2024/10-K/filing.html::2023",
+ "fye_date": "2023-12-31",
+ "db_value": 1543,
+ "l1_value": null,
+ "l2_value": 298,
+ "l3_value": null,
+ "value": 298,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ins that are higher than those in our wholesale segment. The lack of on-site labor required to run these sites also generally offers us compelling economics. As of December 31, 2023, we operated 298 cardlock locations, and, for the year ended December 31, 2",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

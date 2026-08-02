@@ -1,14 +1,28 @@
 {
  "ticker": "CASY",
  "fiscal_year": 2022,
- "value": 2452,
- "confidence": "medium",
- "basis": "fits series (l3)",
- "evidence": "XBRL us-gaap:NumberOfStores (19 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "CASY/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "fye_date": "2022-04-30",
+ "db_value": null,
+ "l1_value": 2521,
+ "l2_value": 551,
+ "l3_value": null,
+ "value": 2521,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (19 facts)",
+ "by_country": {
+  "Nebraska": 24,
+  "Illinois": 56,
+  "Iowa": 5,
+  "Missouri": 3,
+  "Texas": 4,
+  "Tennessee": 39,
+  "Kentucky": 1
+ },
+ "by_continent": {
+  "Other": 132
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

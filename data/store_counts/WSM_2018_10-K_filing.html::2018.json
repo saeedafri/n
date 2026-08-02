@@ -3,12 +3,12 @@
  "fiscal_year": 2018,
  "value": 631,
  "confidence": "high",
- "basis": "two sources agree",
+ "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "WSM/2018/10-K/filing.html::2018",
- "extractor_version": 1
+ "extractor_version": 5
 }

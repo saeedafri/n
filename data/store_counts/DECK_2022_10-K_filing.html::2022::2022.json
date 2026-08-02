@@ -1,0 +1,14 @@
+{
+ "ticker": "DECK",
+ "fiscal_year": 2022,
+ "value": 149,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "| Total | 43,095 | | | 41,840 | | | 1,255 | | | 3.0 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 149,
+ "needs_review": false,
+ "accession": "DECK/2022/10-K/filing.html::2022::2022",
+ "extractor_version": 5
+}

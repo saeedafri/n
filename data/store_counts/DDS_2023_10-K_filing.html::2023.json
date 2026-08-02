@@ -1,14 +1,18 @@
 {
  "ticker": "DDS",
  "fiscal_year": 2023,
+ "accession": "DDS/2023/10-K/filing.html::2023",
+ "fye_date": "2023-01-28",
+ "db_value": 277,
+ "l1_value": null,
+ "l2_value": 277,
+ "l3_value": null,
  "value": 277,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "source_rule": "L2_table",
+ "confidence": "medium",
  "evidence": "| Total retail store count at end of period | | | 277 | | | 280 | | | 282 |",
  "by_country": {},
  "by_continent": {},
- "db_value": 277,
- "needs_review": false,
- "accession": "DDS/2023/10-K/filing.html::2023",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

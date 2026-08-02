@@ -1,14 +1,14 @@
 {
  "ticker": "HZO",
  "fiscal_year": 2020,
- "value": 35,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "value": 59,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (4 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 77,
  "needs_review": false,
  "accession": "HZO/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

@@ -1,0 +1,18 @@
+{
+ "ticker": "DLTH",
+ "fiscal_year": 2020,
+ "accession": "DLTH/2020/10-K/filing.html::2020",
+ "fye_date": "2020-02-02",
+ "db_value": null,
+ "l1_value": 59,
+ "l2_value": 58,
+ "l3_value": null,
+ "value": 59,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

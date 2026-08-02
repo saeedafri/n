@@ -1,9 +1,15 @@
 {
  "ticker": "AZO",
  "fiscal_year": 2022,
+ "accession": "AZO/2022/10-K/filing.html::2022",
+ "fye_date": "2022-08-27",
+ "db_value": 6943,
+ "l1_value": 6943,
+ "l2_value": 6943,
+ "l3_value": null,
  "value": 6943,
+ "source_rule": "L1_xbrl_geo_sum",
  "confidence": "high",
- "basis": "filing (10-K), corroborated",
  "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
  "by_country": {
   "Stores in the United States Including Puerto Rico": 6168,
@@ -14,8 +20,6 @@
   "North America": 6871,
   "South America": 72
  },
- "db_value": 6943,
- "needs_review": false,
- "accession": "AZO/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "SVV",
+ "fiscal_year": 2023,
+ "value": 326,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "Item 2. Properties All of our stores are occupied under operating leases. As of December 30, 2023, our total consolidated selling square feet was 6.7 million. As of December 30, 2023, we operated 326 retail stores in the United States, Canada and Austra",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SVV/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

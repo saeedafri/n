@@ -1,0 +1,14 @@
+{
+ "ticker": "COST",
+ "fiscal_year": 2023,
+ "value": 861,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (49 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 861,
+ "needs_review": false,
+ "accession": "COST/2023/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SAM",
+ "fiscal_year": 2016,
+ "value": 8,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "in United States hops are in tight supply until the next crop or beyond. The Company enters into purchase commitments with eight primary hop dealers, based on the Company’s projected future volumes and brewin",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "SAM/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

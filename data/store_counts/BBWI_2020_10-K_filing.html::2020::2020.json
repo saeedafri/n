@@ -1,0 +1,14 @@
+{
+ "ticker": "BBWI",
+ "fiscal_year": 2020,
+ "value": 3075,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total L Brands Stores | 3,075 | | | 88 | | | (90 | ) | | (130 | ) | | 2,943 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "BBWI/2020/10-K/filing.html::2020::2020",
+ "extractor_version": 5
+}

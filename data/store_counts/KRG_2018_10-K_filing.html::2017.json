@@ -1,0 +1,14 @@
+{
+ "ticker": "KRG",
+ "fiscal_year": 2017,
+ "value": 151,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | 151 | | | 11,119,508 | | | 109 | | | 3,240,120 | | | 1,837,985 | | | 42 | | | 6,041,403 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "KRG/2018/10-K/filing.html::2017",
+ "extractor_version": 5
+}

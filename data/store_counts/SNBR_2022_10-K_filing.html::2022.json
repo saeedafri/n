@@ -2,13 +2,13 @@
  "ticker": "SNBR",
  "fiscal_year": 2022,
  "value": 648,
- "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "d reach, deepens our brand relevance and magnifies the benefits of our proprietary innovations. Additional partnerships with four clubs — Super Bowl LVI Champion Los Angeles Rams, Dallas Cowboys,",
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "lds. Certain retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of our 648 retail stores as of January 1, 2022: | | | | | | | | | | | | | | | | | | |",
  "by_country": {},
  "by_continent": {},
  "db_value": 648,
  "needs_review": false,
  "accession": "SNBR/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

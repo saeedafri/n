@@ -1,14 +1,18 @@
 {
  "ticker": "DECK",
  "fiscal_year": 2026,
- "value": 203,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
- "evidence": "As of March 31, 2026 , we have 49 US retail stores and 154 international retail stores",
+ "accession": "DECK/2026/10-K/filing.html::2026",
+ "fye_date": "2026-03-31",
+ "db_value": 203,
+ "l1_value": null,
+ "l2_value": 54,
+ "l3_value": null,
+ "value": 54,
+ "source_rule": "L2_prose_asof",
+ "confidence": "medium",
+ "evidence": "ics, and drives consumers to our retail stores. Our e‑commerce websites provide consumers with access to the broadest selection and assortment of our products. As of March 31, 2026, we operate Company-owned e-commerce websites in 54 different countries. Retail Stores. Retail stores enable us to expose cons",
  "by_country": {},
  "by_continent": {},
- "db_value": 203,
- "needs_review": false,
- "accession": "DECK/2026/10-K/filing.html::2026",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

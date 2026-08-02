@@ -1,0 +1,14 @@
+{
+ "ticker": "OXM",
+ "fiscal_year": 2019,
+ "value": 229,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total Oxford Retail Locations | 229 | 223 | 208 | 198",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "OXM/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

@@ -1,14 +1,18 @@
 {
  "ticker": "BOOT",
  "fiscal_year": 2022,
- "value": 300,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "BOOT/2022/10-K/filing.html::2022",
+ "fye_date": "2022-03-26",
+ "db_value": null,
+ "l1_value": 345,
+ "l2_value": 300,
+ "l3_value": null,
+ "value": 345,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (17 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BOOT/2022/10-K/filing.html::2022",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

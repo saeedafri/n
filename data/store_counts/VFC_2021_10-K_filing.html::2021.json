@@ -2,13 +2,13 @@
  "ticker": "VFC",
  "fiscal_year": 2021,
  "value": 1374,
- "confidence": "medium",
- "basis": "fits series (db)",
- "evidence": "er-digital business model transformation. In addition to our direct-to-consumer operations, independent parties own and operate approximately 2,900 partnership stores. These are primarily mono-brand retail locations selling VF",
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "to the principal properties described above, we lease many offices worldwide for sales and administrative purposes. We operate 1,374 retail stores across the Americas, Europe and Asia-Pacific regions. Retai",
  "by_country": {},
  "by_continent": {},
  "db_value": 1374,
  "needs_review": false,
  "accession": "VFC/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "extractor_version": 5
 }

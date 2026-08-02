@@ -1,0 +1,14 @@
+{
+ "ticker": "DG",
+ "fiscal_year": 2025,
+ "value": 20662,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DG/2025/10-K/filing.html::2025::2025",
+ "extractor_version": 5
+}

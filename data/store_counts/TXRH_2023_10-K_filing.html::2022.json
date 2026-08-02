@@ -2,13 +2,13 @@
  "ticker": "TXRH",
  "fiscal_year": 2022,
  "value": 697,
- "confidence": "high",
- "basis": "filing (10-K), corroborated",
+ "confidence": "medium",
+ "basis": "filing (10-K)",
  "evidence": "XBRL us-gaap:NumberOfRestaurants (78 facts)",
  "by_country": {},
  "by_continent": {},
  "db_value": 597,
  "needs_review": false,
  "accession": "TXRH/2023/10-K/filing.html::2022",
- "extractor_version": 1
+ "extractor_version": 5
 }

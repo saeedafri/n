@@ -1,14 +1,18 @@
 {
  "ticker": "BBBY",
  "fiscal_year": 2021,
+ "accession": "BBBY/2021/10-K/filing.html::2021",
+ "fye_date": "2021-02-27",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1020,
+ "l3_value": null,
  "value": 1020,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "d.com, bedbathandbeyond.ca, harmondiscount.com, facevalues.com, buybuybaby.com, buybuybaby.ca and decorist.com. We also operate 1,020 retail stores, as of February 27, 2021 , consisting of 834 BBB stores in",
+ "evidence": "latforms include bedbathandbeyond.com, bedbathandbeyond.ca, harmondiscount.com, facevalues.com, buybuybaby.com, buybuybaby.ca and decorist.com. We also operate 1,020 retail stores, as of February 27, 2021, consisting of 834 BBB stores in all 50",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "BBBY/2021/10-K/filing.html::2021",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

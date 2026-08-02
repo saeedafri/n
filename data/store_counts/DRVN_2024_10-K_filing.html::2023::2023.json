@@ -1,0 +1,14 @@
+{
+ "ticker": "DRVN",
+ "fiscal_year": 2023,
+ "value": 4988,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | | | | | | 4,988 | | | 4,805 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "DRVN/2024/10-K/filing.html::2023::2023",
+ "extractor_version": 5
+}

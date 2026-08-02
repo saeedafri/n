@@ -1,0 +1,14 @@
+{
+ "ticker": "CVCO",
+ "fiscal_year": 2018,
+ "value": 39,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "he Company sold 14,537, 13,820 and 12,339 homes in fiscal years 2018, 2017 and 2016, respectively, through Company-owned and independent distribution channels. As of March 31, 2018, we had a total of 39 Company-owned retail centers, located in Oregon, Arizona, New Mexico",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "CVCO/2018/10-K/filing.html::2018::2018",
+ "extractor_version": 5
+}

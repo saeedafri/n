@@ -1,14 +1,18 @@
 {
  "ticker": "EL",
  "fiscal_year": 2019,
+ "accession": "EL/2019/10-K/filing.html::2019",
+ "fye_date": "2019-06-30",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 1500,
+ "l3_value": null,
  "value": 1500,
+ "source_rule": "L2_prose_asof",
  "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "ly open new points of distribution globally, and exited certain locations when appropriate. As of June 30, 2019, we operated approximately 1,500 freestanding stores. Most are operated under a single brand name, such as M ž A",
+ "evidence": "ed and approved. In fiscal 2019, we continued to strategically open new points of distribution globally, and exited certain locations when appropriate. As of June 30, 2019, we operated approximately 1,500 freestanding stores. Most are operated under a single brand",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "EL/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

@@ -1,0 +1,14 @@
+{
+ "ticker": "MHO",
+ "fiscal_year": 2015,
+ "value": 11399,
+ "confidence": "medium",
+ "basis": "filing (10-K)",
+ "evidence": "| Total | 4,559 | | 1,312 | | 5,528 | | 11,399 | | 11,023 | | 22,422 |",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": null,
+ "needs_review": false,
+ "accession": "MHO/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

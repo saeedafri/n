@@ -1,0 +1,14 @@
+{
+ "ticker": "CTRN",
+ "fiscal_year": 2021,
+ "value": 585,
+ "confidence": "high",
+ "basis": "filing (10-K), corroborated",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 585,
+ "needs_review": false,
+ "accession": "CTRN/2021/10-K/filing.html::2021::2021",
+ "extractor_version": 5
+}

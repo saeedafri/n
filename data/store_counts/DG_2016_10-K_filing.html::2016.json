@@ -1,14 +1,18 @@
 {
  "ticker": "DG",
  "fiscal_year": 2016,
- "value": 12575,
- "confidence": "medium",
- "basis": "filing (10-K)",
+ "accession": "DG/2016/10-K/filing.html::2016",
+ "fye_date": "2016-01-29",
+ "db_value": null,
+ "l1_value": 13320,
+ "l2_value": 12483,
+ "l3_value": null,
+ "value": 13320,
+ "source_rule": "L1_xbrl",
+ "confidence": "high",
  "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
  "by_country": {},
  "by_continent": {},
- "db_value": null,
- "needs_review": false,
- "accession": "DG/2016/10-K/filing.html::2016",
- "extractor_version": 1
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

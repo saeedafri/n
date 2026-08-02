@@ -1,0 +1,14 @@
+{
+ "ticker": "BBW",
+ "fiscal_year": 2021,
+ "value": 354,
+ "confidence": "medium",
+ "basis": "fits series (db)",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "by_country": {},
+ "by_continent": {},
+ "db_value": 354,
+ "needs_review": false,
+ "accession": "BBW/2021/10-K/filing.html::2021::2021",
+ "extractor_version": 5
+}

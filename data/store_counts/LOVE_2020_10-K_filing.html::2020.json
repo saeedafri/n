@@ -1,14 +1,14 @@
 {
  "ticker": "LOVE",
  "fiscal_year": 2020,
- "value": 91,
+ "value": 75,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "adverse effect on our business, financial condition, operating results and prospects. As of February 2, 2020, we had 91 showrooms, but our growth strategy requires us to increase our showro",
+ "evidence": "oint of transactions per showroom is $1,825,773 compared to $1,569,809 in fiscal 2019, which reflects a higher average order volume per customer. We had 91 and 75 showrooms open as of February 2, 2020, and February 3, 2019, respectively. We",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "LOVE/2020/10-K/filing.html::2020",
- "extractor_version": 1
+ "extractor_version": 5
 }

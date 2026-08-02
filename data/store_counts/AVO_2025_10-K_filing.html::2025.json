@@ -1,0 +1,18 @@
+{
+ "ticker": "AVO",
+ "fiscal_year": 2025,
+ "accession": "AVO/2025/10-K/filing.html::2025",
+ "fye_date": "2025-10-31",
+ "db_value": null,
+ "l1_value": null,
+ "l2_value": 11200,
+ "l3_value": null,
+ "value": 11200,
+ "source_rule": "L2_table",
+ "confidence": "medium",
+ "evidence": "| Total | 1,100 | | 3,700 | | 6,400 | | 11,200 |",
+ "by_country": {},
+ "by_continent": {},
+ "llm_cost": 0.0,
+ "extractor_version": 5
+}

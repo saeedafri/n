@@ -1,14 +1,25 @@
 {
  "ticker": "AZO",
  "fiscal_year": 2019,
- "value": 5772,
- "confidence": "medium",
- "basis": "filing (10-K)",
- "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
- "by_country": {},
- "by_continent": {},
- "db_value": null,
- "needs_review": false,
  "accession": "AZO/2019/10-K/filing.html::2019",
- "extractor_version": 1
+ "fye_date": "2019-08-31",
+ "db_value": null,
+ "l1_value": 6411,
+ "l2_value": 6411,
+ "l3_value": null,
+ "value": 6411,
+ "source_rule": "L1_xbrl_geo_sum",
+ "confidence": "high",
+ "evidence": "XBRL us-gaap:NumberOfStores (3 facts)",
+ "by_country": {
+  "Stores in the United States Including Puerto Rico": 5772,
+  "Brazil": 35,
+  "Mexico": 604
+ },
+ "by_continent": {
+  "North America": 6376,
+  "South America": 35
+ },
+ "llm_cost": 0.0,
+ "extractor_version": 5
 }

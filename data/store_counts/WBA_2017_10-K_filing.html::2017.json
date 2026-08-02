@@ -4,11 +4,11 @@
  "value": 8109,
  "confidence": "medium",
  "basis": "filing (10-K)",
- "evidence": "| Number of locations at period end | | 8,109 |",
+ "evidence": "| Number of locations at period end | | 8,109 | | | 8,184 | | | 8,182 |",
  "by_country": {},
  "by_continent": {},
  "db_value": null,
  "needs_review": false,
  "accession": "WBA/2017/10-K/filing.html::2017",
- "extractor_version": 1
+ "extractor_version": 5
 }
