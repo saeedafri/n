@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import calendar
 import datetime
+import os
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -26,7 +27,22 @@ import pandas as pd
 from core.database import db_manager
 from utils.server_logger import log_structured_error, log_info
 
+def _writes_disabled() -> bool:
+    """True when this process must not write to the forecast store.
+
+    A developer running the app locally points at the staging database. Every
+    page view that computes a fresh forecast fires a background upsert, so
+    simply browsing /forecasting from a laptop rewrites staging rows. Set
+    FORECAST_STORE_READONLY=1 (run_local.sh does) to keep local runs read-only.
+    """
+    return os.getenv("FORECAST_STORE_READONLY", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 _METRIC_TOTAL_REVENUE = "total_revenue"
+
+# Keep in step with forecast_store._MODEL_REVISION_DATE: forecasts computed by
+# an earlier revision of the engine are stale even when the actuals match.
+_MODEL_REVISION_DATE = datetime.date(2026, 8, 15)
 _ENSEMBLE_KEY = "ensemble"
 
 # Revenue series fed to the engine is in billions; the store keeps millions.
@@ -68,10 +84,21 @@ CREATE TABLE IF NOT EXISTS coreiq_model_forecasts_quarterly (
 # Schema management
 # ---------------------------------------------------------------------------
 
+_TABLE_READY = False
+
+
 def ensure_quarterly_forecast_table() -> None:
-    """Create coreiq_model_forecasts_quarterly if it does not yet exist (idempotent)."""
+    """Create coreiq_model_forecasts_quarterly if it does not yet exist (idempotent).
+
+    The table cannot disappear underneath a running process, so the DDL round
+    trip is worth paying once per process rather than on every page render.
+    """
+    global _TABLE_READY
+    if _TABLE_READY:
+        return
     try:
         db_manager.execute_insert(_CREATE_TABLE_SQL, {})
+        _TABLE_READY = True
         log_info("[quarterly_forecast_store] ensured coreiq_model_forecasts_quarterly")
     except Exception as exc:
         log_structured_error(
@@ -124,17 +151,31 @@ def needs_update(
     try:
         rows = db_manager.execute_query_readonly(
             """
-            SELECT MAX(last_actual_date) AS stored_date
+            SELECT MAX(last_actual_date) AS stored_date,
+                   MAX(computed_at)      AS computed_at
             FROM   coreiq_model_forecasts_quarterly
             WHERE  ticker = :ticker
               AND  metric = :metric
             """,
             {"ticker": ticker, "metric": metric},
         )
-        stored = rows[0]["stored_date"] if rows else None
+        row = rows[0] if rows else None
+        stored = row["stored_date"] if row else None
         if stored and hasattr(stored, "date"):
             stored = stored.date()
-        return stored != last_actual_date
+        if stored != last_actual_date:
+            return True
+
+        # Recompute anything produced by an earlier revision of the engine —
+        # matching actuals alone does not mean the stored number is current.
+        computed_at = row["computed_at"] if row else None
+        if computed_at:
+            computed_date = computed_at.date() if hasattr(computed_at, "date") else computed_at
+            if isinstance(computed_date, str):
+                computed_date = datetime.date.fromisoformat(computed_date[:10])
+            if computed_date < _MODEL_REVISION_DATE:
+                return True
+        return False
     except Exception as exc:
         log_structured_error(
             exc,
@@ -167,6 +208,8 @@ def upsert_forecasts(
 
     `forecast_df` carries `fiscal_year`, `fiscal_quarter`, and one column per model.
     """
+    if _writes_disabled():
+        return 0
     if forecast_df is None or forecast_df.empty:
         return 0
     if "fiscal_year" not in forecast_df.columns or "fiscal_quarter" not in forecast_df.columns:
@@ -274,7 +317,18 @@ def upsert_forecasts(
     """
 
     try:
-        return db_manager.execute_insert(upsert_sql, flat_params)
+        affected = db_manager.execute_insert(upsert_sql, flat_params)
+        # Same orphan cleanup as the annual store: rows this computation did not
+        # write are left over from a run with a longer horizon and are stale
+        # model output.
+        db_manager.execute_delete(
+            """
+            DELETE FROM coreiq_model_forecasts_quarterly
+            WHERE  ticker = :ticker AND metric = :metric AND computed_at < :computed_at
+            """,
+            {"ticker": ticker, "metric": metric, "computed_at": computed_at},
+        )
+        return affected
     except Exception as exc:
         log_structured_error(
             exc,

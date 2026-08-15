@@ -106,12 +106,22 @@ def _yf_fqe_date_for_earnings_date(earnings_date: date, fye_month: int) -> Optio
 
 # ─── Schema management ────────────────────────────────────────────────────────
 
+_COLUMNS_READY = False
+
+
 def ensure_forecast_columns() -> None:
     """
     Add company_name and exchange columns to coreiq_model_forecasts if absent.
     MySQL 8.0 does not support ALTER TABLE ADD COLUMN IF NOT EXISTS, so we
     check INFORMATION_SCHEMA first.
+
+    Guarded by a process-level flag: the columns cannot vanish while the process
+    is alive, so the INFORMATION_SCHEMA round trip is paid once per process
+    rather than on every new session.
     """
+    global _COLUMNS_READY
+    if _COLUMNS_READY:
+        return
     _cols_to_add = [
         ("company_name", "VARCHAR(255) DEFAULT NULL"),
         ("exchange",     "VARCHAR(100) DEFAULT NULL"),
@@ -135,6 +145,7 @@ def ensure_forecast_columns() -> None:
                     {},
                 )
                 log_info(f"[forecast_refresh] Added column {col_name} to coreiq_model_forecasts")
+        _COLUMNS_READY = True
     except Exception as exc:
         log_structured_error(
             exc,
@@ -471,14 +482,18 @@ def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
                 "fye_month": fye_m,
             })
 
-        for tk, candidates in ticker_q4_candidates.items():
+        def _choose(candidates):
             upcoming = [c for c in candidates if c["date"] >= today]
             past     = [c for c in candidates if c["date"] <  today]
-            chosen = (min(upcoming, key=lambda c: c["date"]) if upcoming
-                      else max(past, key=lambda c: c["date"]) if past
-                      else None)
+            return (min(upcoming, key=lambda c: c["date"]) if upcoming
+                    else max(past, key=lambda c: c["date"]) if past
+                    else None)
+
+        for tk, candidates in ticker_q4_candidates.items():
+            chosen = _choose(candidates)
             if chosen:
                 nasdaq_result[tk] = {**chosen, "source": "nasdaq", "fiscal_q": 4}
+
 
         # Every company that failed a gate is counted and named, so "why is this
         # one On hold?" is answerable from the log instead of a DB investigation.
@@ -1105,7 +1120,13 @@ def _get_quarterly_refresh_table_data() -> List[Dict[str, Any]]:
     return result
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+# The popup's contents change only when a refresh actually runs, and both sync
+# paths call get_refresh_table_data.clear() explicitly. A 2-minute TTL therefore
+# bought nothing and made the dialog re-run a ~4s (cold: ~24s) query for anyone
+# who opened it more than two minutes after the last one — which is the normal
+# case. Long TTL + explicit invalidation keeps the data exactly as fresh while
+# making the dialog open instantly.
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
     """
     Return assembled row data for the Refresh popup table.

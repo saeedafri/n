@@ -1730,30 +1730,23 @@ def _segment_cache_universe() -> List[str]:
     raise RuntimeError(SEGMENT_CACHE_UNAVAILABLE_MESSAGE)
 
 
-def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 12) -> Dict[str, int]:
-    """Rebuild the screening segment values cache from the SAME classification
-    logic the market-data Segments tab uses.
+def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=None,
+                                 raise_on_timeout: bool = True):
+    """Scan v5 and replay the Segments-tab classifier for `tickers`.
 
-    Replays ``SegmentDataRepository._classify_segment_rows`` (wrapper-unwrap +
-    geo-routing + canonicalisation + first-wins) over every SEC ticker, so the
-    screener can never drift from the Segments tab. Unlike the old pure-SQL
-    ``REPLACE INTO ... SELECT`` build, this correctly:
-      • unwraps multi-axis 'Operating Segments' wrapper facts (Costco geo,
-        Honeywell/AMD business segments that live only on the wrapper),
-      • routes business-tagged geographies to the geo table,
-      • canonicalises geo drift ('United States Operations' → 'United States'),
-      • drops aggregate/elimination/pension members that polluted the cache
-        (e.g. the 114 tickers previously cached under member 'Operating Segments').
+    The scan+classify pass shared by the full rebuild and the incremental
+    refresh, so the two can never drift apart in how a segment is classified.
+    Returns (entries, skipped_tickers). Each entry is
+    (ticker, segment_type, metric_key, member, year, value_mm).
 
-    The whole table is replaced (not upserted) so stale members are removed, then
-    the member cache is refreshed. Returns {'tickers','rows','entries'} counts.
+    With `raise_on_timeout` (the full rebuild) any timed-out chunk aborts the run,
+    because that build republishes the whole table and a partial result would drop
+    good data. The incremental path clears the flag instead: it writes per ticker,
+    so the tickers that succeeded are safe to publish and the ones that timed out
+    are reported back so the caller can retry them rather than lose them.
     """
     from utils.constants import SEGMENT_ALL_AXES
 
-    ensure_segment_values_cache_table()
-    ensure_segment_member_cache_table()
-
-    tickers = _segment_cache_universe()
     total_t = len(tickers)
     clause, base_params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
 
@@ -1837,18 +1830,173 @@ def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 12) -> Dict
         # Yield between chunks — the whole point of the crash fix.
         _seg_time.sleep(0.4)
 
-    if skipped:
+    if skipped and raise_on_timeout:
         # ABORT before the whole-table swap. The zero-downtime publish REPLACES the
         # live cache, so publishing a build that skipped chunks would drop those
         # tickers' existing (good) segment data. Raise instead: callers catch it,
         # leave the live cache untouched, and last_built_max_id is not advanced, so
-        # it simply retries on the next poll. Once the v5 (ticker,is_dimensioned,
-        # doc_type) index lands, no chunk times out and the build completes normally.
+        # it simply retries on the next poll.
         raise RuntimeError(
-            f"segment cache build aborted: {len(skipped)} tickers timed out "
-            f"(add the v5 (ticker,is_dimensioned,doc_type) index) — "
+            f"segment cache build aborted: {len(skipped)} tickers timed out — "
             f"first few: {', '.join(skipped[:10])}"
         )
+
+    return entries, skipped
+
+
+# Incremental refresh guardrails. Past these, a whole-table staging swap is both
+# faster than thousands of per-ticker statements and safer (atomic publish).
+_SEGMENT_INCREMENTAL_MAX_TICKERS = 60
+_SEGMENT_INCREMENTAL_MAX_SHARE = 0.25
+
+
+def _tickers_changed_since(last_max_id: int, cur_max_id: int) -> List[str]:
+    """Tickers with dimensioned 10-K rows added since the last cache build.
+
+    A primary-key range scan over the delta only, so cost tracks how much new
+    data arrived, not how big the table is (16.7M rows and growing).
+    """
+    if cur_max_id <= last_max_id:
+        return []
+    rows = db_manager.execute_query_readonly(
+        """
+        SELECT DISTINCT ticker
+        FROM   coreiq_filing_metrics_v5
+        WHERE  id > :last_id AND id <= :cur_id
+          AND  is_dimensioned = 1
+          AND  doc_type = '10-K'
+          AND  ticker IS NOT NULL AND TRIM(ticker) <> ''
+        """,
+        {"last_id": last_max_id, "cur_id": cur_max_id},
+    ) or []
+    return sorted({r["ticker"] for r in rows if r.get("ticker")})
+
+
+def _refresh_segment_member_cache() -> int:
+    """Recompute the member dropdown cache from the live values table.
+
+    Aggregate-only (one GROUP BY over ~57K rows), published by rename so the
+    dropdown is never observed empty mid-refresh.
+    """
+    member_stg = f"{SEGMENT_MEMBER_CACHE_TABLE}_staging"
+    for _t in (member_stg, f"{member_stg}_old"):
+        db_manager.execute_delete(f"DROP TABLE IF EXISTS {_t}")
+    db_manager.execute_insert(f"CREATE TABLE {member_stg} LIKE {SEGMENT_MEMBER_CACHE_TABLE}")
+    rows = db_manager.execute_insert(
+        f"""
+        INSERT INTO {member_stg}
+            (segment_type, member_label, member_label_normalized, company_count)
+        SELECT segment_type, member_label, LOWER(TRIM(member_label)),
+               COUNT(DISTINCT ticker)
+        FROM {SEGMENT_VALUES_CACHE_TABLE}
+        WHERE metric_key = 'Revenues'
+        GROUP BY segment_type, member_label
+        ON DUPLICATE KEY UPDATE
+            company_count = GREATEST(company_count, VALUES(company_count)),
+            updated_at = CURRENT_TIMESTAMP
+        """
+    )
+    db_manager.execute_insert(
+        f"RENAME TABLE {SEGMENT_MEMBER_CACHE_TABLE} TO {member_stg}_old, "
+        f"{member_stg} TO {SEGMENT_MEMBER_CACHE_TABLE}"
+    )
+    db_manager.execute_delete(f"DROP TABLE IF EXISTS {member_stg}_old")
+    return int(rows or 0)
+
+
+def build_segment_values_cache_for_tickers(tickers: List[str]) -> Dict[str, int]:
+    """Refresh the segment cache for just `tickers`, leaving every other row alone.
+
+    The full rebuild replays all ~400 tickers and swaps the whole 57K-row table.
+    When one new 10-K lands, that is almost entirely wasted work: the incremental
+    path reclassifies only the companies whose source rows actually changed and
+    replaces those tickers' rows in place.
+
+    Per ticker the old rows are deleted and the fresh ones inserted, so members
+    that disappeared from a restated filing are removed rather than lingering.
+    A ticker that legitimately yields no entries still has its stale rows cleared.
+    """
+    if not tickers:
+        return {"tickers": 0, "rows": 0, "entries": 0}
+
+    ensure_segment_values_cache_table()
+    ensure_segment_member_cache_table()
+
+    # Small chunks: a changed-ticker set is tiny, and narrower queries are far
+    # less likely to hit the 20s server-side ceiling on data-heavy filers.
+    entries, skipped = _segment_entries_for_tickers(
+        tickers, ticker_chunk=4, raise_on_timeout=False)
+    done = [t for t in tickers if t not in set(skipped)]
+
+    # Only tickers whose scan completed are rewritten. A ticker that timed out
+    # keeps its existing (good) rows and is reported back for retry — deleting
+    # them and inserting nothing would silently blank a company's segments.
+    by_ticker: Dict[str, List[tuple]] = {t: [] for t in done}
+    for entry in entries:
+        if entry[0] in by_ticker:
+            by_ticker[entry[0]].append(entry)
+
+    written = 0
+    for ticker, rows in by_ticker.items():
+        db_manager.execute_delete(
+            f"DELETE FROM {SEGMENT_VALUES_CACHE_TABLE} WHERE ticker = :tk", {"tk": ticker}
+        )
+        ch = _SEGMENT_VALUES_CACHE_CHUNK
+        for off in range(0, len(rows), ch):
+            block = rows[off:off + ch]
+            vals, params = [], {}
+            for i, (tk, seg_type, metric_key, member, year, value) in enumerate(block):
+                vals.append(f"(:tk{i}, :st{i}, :mk{i}, :mem{i}, :yr{i}, :val{i})")
+                params.update({f"tk{i}": tk, f"st{i}": seg_type, f"mk{i}": metric_key,
+                               f"mem{i}": member, f"yr{i}": year, f"val{i}": value})
+            db_manager.execute_insert(
+                f"""
+                INSERT INTO {SEGMENT_VALUES_CACHE_TABLE}
+                    (ticker, segment_type, metric_key, member_label, report_fiscal_year, value_mm)
+                VALUES {", ".join(vals)}
+                ON DUPLICATE KEY UPDATE value_mm = VALUES(value_mm), updated_at = CURRENT_TIMESTAMP
+                """,
+                params,
+            )
+            written += len(block)
+
+    members = _refresh_segment_member_cache()
+    log_info(
+        f"[SCREENING] incremental segment cache: {len(done)}/{len(tickers)} ticker(s) → "
+        f"{written} rows, {members} member rows refreshed"
+        + (f"; {len(skipped)} timed out, will retry: {', '.join(skipped[:10])}" if skipped else "")
+    )
+    return {"tickers": len(done), "rows": written, "entries": len(entries),
+            "members": members, "mode": "incremental", "skipped": skipped}
+
+
+def build_segment_values_cache(progress_cb=None, ticker_chunk: int = 12) -> Dict[str, int]:
+    """Rebuild the screening segment values cache from the SAME classification
+    logic the market-data Segments tab uses.
+
+    Replays ``SegmentDataRepository._classify_segment_rows`` (wrapper-unwrap +
+    geo-routing + canonicalisation + first-wins) over every SEC ticker, so the
+    screener can never drift from the Segments tab. Unlike the old pure-SQL
+    ``REPLACE INTO ... SELECT`` build, this correctly:
+      • unwraps multi-axis 'Operating Segments' wrapper facts (Costco geo,
+        Honeywell/AMD business segments that live only on the wrapper),
+      • routes business-tagged geographies to the geo table,
+      • canonicalises geo drift ('United States Operations' → 'United States'),
+      • drops aggregate/elimination/pension members that polluted the cache
+        (e.g. the 114 tickers previously cached under member 'Operating Segments').
+
+    The whole table is replaced (not upserted) so stale members are removed, then
+    the member cache is refreshed. Returns {'tickers','rows','entries'} counts.
+    """
+    from utils.constants import SEGMENT_ALL_AXES
+
+    ensure_segment_values_cache_table()
+    ensure_segment_member_cache_table()
+
+    tickers = _segment_cache_universe()
+    total_t = len(tickers)
+    entries, _skipped = _segment_entries_for_tickers(
+        tickers, ticker_chunk=ticker_chunk, progress_cb=progress_cb)
 
     # Completeness guard (19-Jul-2026). Never PUBLISH a build that covers far fewer
     # tickers than the live cache — that signals a partial/failed run (e.g. silent
@@ -2077,11 +2225,30 @@ def refresh_segment_cache_if_stale(force: bool = False) -> dict:
                 out["action"] = "claimed_elsewhere"
                 return out
 
+            # Incremental by default: reclassify only the companies whose source
+            # rows actually changed. Fall back to a full rebuild when there is no
+            # usable baseline (first ever build) or when so much changed that the
+            # whole-table staging swap is both cheaper and safer.
+            changed = [] if last_max <= 0 else _tickers_changed_since(last_max, cur_max)
+            universe_size = len(_segment_cache_universe())
+            full_rebuild = (
+                force
+                or last_max <= 0
+                or not changed
+                or len(changed) > _SEGMENT_INCREMENTAL_MAX_TICKERS
+                or len(changed) > universe_size * _SEGMENT_INCREMENTAL_MAX_SHARE
+            )
             log_info(
-                f"[SEG_REFRESH] building — v5 max_id {last_max}→{cur_max} force={force}"
+                f"[SEG_REFRESH] building — v5 max_id {last_max}→{cur_max} force={force} "
+                f"changed_tickers={len(changed)} mode={'full' if full_rebuild else 'incremental'}"
             )
             t0 = time.perf_counter()
-            stats = build_segment_values_cache()
+            if full_rebuild:
+                stats = build_segment_values_cache()
+                stats["mode"] = "full"
+            else:
+                stats = build_segment_values_cache_for_tickers(changed)
+                stats["changed_tickers"] = ", ".join(changed[:20])
             # Same freshness gate rebuilds the additional-data cache (credit
             # ratings / store counts) — both derive from coreiq_filing_metrics_v5.
             try:
@@ -2091,13 +2258,20 @@ def refresh_segment_cache_if_stale(force: bool = False) -> dict:
                 log_error(f"[SEG_REFRESH] additional-data cache build failed: {_ae}")
             elapsed = time.perf_counter() - t0
 
+            # Only advance the high-water mark when every changed ticker was
+            # actually rebuilt. If some timed out, leaving the mark where it is
+            # means the next tick re-derives the same delta and retries them —
+            # advancing would skip past their new filings permanently.
+            retry_pending = bool(stats.get("skipped"))
             db_manager.execute_update(
                 f"""
                 UPDATE {SEGMENT_REFRESH_STATE_TABLE}
-                   SET building = 0, last_built_max_id = :mx, last_built_at = UTC_TIMESTAMP()
+                   SET building = 0,
+                       last_built_max_id = :mx,
+                       last_built_at = UTC_TIMESTAMP()
                  WHERE id = 1
                 """,
-                {"mx": cur_max},
+                {"mx": last_max if retry_pending else cur_max},
             )
             log_timing(
                 "SEGMENT_CACHE_REFRESH", elapsed * 1000,
@@ -2227,8 +2401,18 @@ def _selected_segments_sql(selected_segments: List[str]) -> Tuple[str, Dict]:
     return " AND (" + " OR ".join(safe) + ") ", params
 
 
+_SEGMENT_MEMBER_TABLE_READY = False
+
+
 def ensure_segment_member_cache_table() -> bool:
-    """Create cache table if missing (idempotent)."""
+    """Create cache table if missing (idempotent).
+
+    Process-guarded: the screening page calls this on every rerun, and the table
+    cannot vanish while the process lives, so the DDL round trip is paid once.
+    """
+    global _SEGMENT_MEMBER_TABLE_READY
+    if _SEGMENT_MEMBER_TABLE_READY:
+        return True
     ddl = f"""
         CREATE TABLE IF NOT EXISTS {SEGMENT_MEMBER_CACHE_TABLE} (
             segment_type VARCHAR(32) NOT NULL,
@@ -2243,6 +2427,7 @@ def ensure_segment_member_cache_table() -> bool:
     """
     try:
         db_manager.execute_insert(ddl)
+        globals()['_SEGMENT_MEMBER_TABLE_READY'] = True
         return True
     except Exception as exc:
         log_error(f"[SCREENING] ensure_segment_member_cache_table failed: {exc}")
@@ -2351,8 +2536,17 @@ def _collapse_geo_canonical_options(
     return result
 
 
+_SEGMENT_VALUES_TABLE_READY = False
+
+
 def ensure_segment_values_cache_table() -> bool:
-    """Create screening-ready segment value cache (idempotent)."""
+    """Create screening-ready segment value cache (idempotent).
+
+    Process-guarded for the same reason as the member cache table above.
+    """
+    global _SEGMENT_VALUES_TABLE_READY
+    if _SEGMENT_VALUES_TABLE_READY:
+        return True
     ddl = f"""
         CREATE TABLE IF NOT EXISTS {SEGMENT_VALUES_CACHE_TABLE} (
             ticker VARCHAR(32) NOT NULL,
@@ -2371,6 +2565,7 @@ def ensure_segment_values_cache_table() -> bool:
     """
     try:
         db_manager.execute_insert(ddl)
+        globals()['_SEGMENT_VALUES_TABLE_READY'] = True
         return True
     except Exception as exc:
         log_error(f"[SCREENING] ensure_segment_values_cache_table failed: {exc}")

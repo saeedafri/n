@@ -25,15 +25,22 @@ SEC_SQSP = {
     "primary_industry_coresight": "Technology",
 }
 
+# Yahoo's Euronext Paris suffix is ".PA" — VusionGroup is VU.PA. ("EPA:" is
+# Google Finance notation and is NOT a Yahoo suffix; see the rejection test
+# below, which pins that distinction.)
 YF_VUSION = {
     "ticker": "VU",
     "name": "VusionGroup S.A.",
     "name_coresight": "VusionGroup",
     "exchange": "Euronext Paris",
     "source": "YFinance",
-    "exchange_acronym": "EPA",
+    "exchange_acronym": "PA",
     "primary_industry_coresight": "Technology",
 }
+
+# Same company as the source data actually holds it on STG: an exchange label
+# where a Yahoo suffix belongs. No composite may be minted from this.
+YF_VUSION_BAD_ACRONYM = {**YF_VUSION, "exchange_acronym": "EPA"}
 
 
 def _uncached(function):
@@ -49,16 +56,16 @@ def test_company_map_only_builds_exchange_composites_for_yfinance(monkeypatch):
 
     companies = _uncached(CompanyRepository.get_companies_map)()
 
-    assert set(companies) == {"SQSP", "VU", "VU.EPA"}
+    assert set(companies) == {"SQSP", "VU", "VU.PA"}
     assert companies["SQSP"]["ticker"] == "SQSP"
-    assert companies["VU.EPA"]["ticker"] == "VU.EPA"
+    assert companies["VU.PA"]["ticker"] == "VU.PA"
 
 
 def test_company_dropdown_keeps_sec_base_and_yfinance_composite(monkeypatch):
     companies_map = {
         "SQSP": SEC_SQSP,
         "VU": YF_VUSION,
-        "VU.EPA": {**YF_VUSION, "ticker": "VU.EPA"},
+        "VU.PA": {**YF_VUSION, "ticker": "VU.PA"},
     }
     monkeypatch.setattr(
         CompanyRepository,
@@ -70,8 +77,29 @@ def test_company_dropdown_keeps_sec_base_and_yfinance_composite(monkeypatch):
 
     assert companies == [
         {"ticker": "SQSP", "name": "Squarespace"},
-        {"ticker": "VU.EPA", "name": "VusionGroup"},
+        {"ticker": "VU.PA", "name": "VusionGroup"},
     ]
+
+
+def test_exchange_name_acronym_never_mints_a_composite(monkeypatch):
+    """An exchange label in `exchange_acronym` must not become a ticker.
+
+    `coreiq_companies.exchange_acronym` is contractually a Yahoo suffix, but some
+    rows hold an exchange name instead ("EPA", "NYSE", "TSX", "NasdaqGS").
+    Appending one invents a symbol no vendor and no table knows (VU.EPA), which
+    hides the company from every financial view. The plain ticker must survive.
+    """
+    monkeypatch.setattr(
+        CompanyRepository,
+        "get_companies_rows",
+        staticmethod(lambda: [YF_VUSION_BAD_ACRONYM]),
+    )
+
+    companies = _uncached(CompanyRepository.get_companies_map)()
+
+    assert set(companies) == {"VU"}
+    assert "VU.EPA" not in companies
+    assert companies["VU"]["ticker"] == "VU"
 
 
 def test_legacy_sec_composite_resolves_to_canonical_base_ticker(monkeypatch):

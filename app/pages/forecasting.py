@@ -140,6 +140,8 @@ MODEL_FULL_LABELS = {
     'holt': "Holt's Linear Trend",
     'ma_trend': 'Moving Average Trend',
     'weighted_avg': 'Weighted Average Growth',
+    'seasonal_naive': 'Seasonal Naive',
+    'flat_carry': 'Flat Carry-Forward',
     'ensemble': 'Ensemble',
 }
 
@@ -421,7 +423,7 @@ ensemble_h = (model_a_h + model_b_h + model_c_h) / 3
 ```
 
 **Why blend instead of just using the winner?**
-Even the best model can be overfit to the holdout period. Blending reduces variance — one model pulling high is offset by another pulling low.
+Even the best model can be overfit to the periods it was scored on. Blending reduces variance — one model pulling high is offset by another pulling low.
 
 **Worked example (ANF):**
 Top 3 models: MA Trend (MAPE 2.25%), Weighted Avg (12.87%), CAGR (13.07%)
@@ -663,6 +665,92 @@ def _available_model_keys(forecast_df: pd.DataFrame) -> List[str]:
     extras = [col for col in forecast_df.columns
               if col not in ordered and col not in ('year', 'period_label') and not col.startswith('scenario_')]
     return ordered + extras
+
+
+def _ensure_forecast_schema() -> None:
+    """Bootstrap forecast-store columns and the quarterly table.
+
+    Streamlit re-executes a page file on every rerun, so a module global *here*
+    would reset each time — each of these three calls carries its own
+    process-level guard in its own (imported, therefore cached) data module.
+    """
+    _schema_t = perf_counter()
+    try:
+        ensure_forecast_columns()
+        backfill_company_info()
+        from data.quarterly_forecast_store import ensure_quarterly_forecast_table
+        ensure_quarterly_forecast_table()
+    except Exception as exc:
+        log_structured_error(exc, page="forecasting", component="_ensure_forecast_schema",
+                             operation="schema_init")
+    log_timing("FORECASTING_schema_init", (perf_counter() - _schema_t) * 1000,
+               "once_per_process", level="INFO")
+
+
+_TIER_NOTES = {
+    'NO_DATA': 'No usable revenue history for this company.',
+    'FLAT': 'Only one reported period — there is no growth rate to estimate, so the forecast simply carries the last actual forward.',
+    'MINIMAL': 'Very short history — a single growth rate with no backtest behind it.',
+    'LIMITED': 'Short history — the backtest has few validation points, so treat the accuracy figure loosely.',
+}
+
+
+def _explain_flag(reason: str) -> str:
+    """Turn an engine flag into something a reader can act on."""
+    if reason.startswith('structural_break'):
+        parts = reason.split('_')
+        when = parts[2] if len(parts) > 2 else 'an earlier period'
+        return (f'A large, lasting drop around {when} suggests a corporate action such as a spinoff or '
+                f'divestiture; only post-{when} history is used to fit the model.')
+    if reason.startswith('implied_cagr'):
+        return (f'The forecast implies a compounded {reason.replace("implied_cagr_", "")}/yr rate — '
+                f'treat this as a failed sanity check, not a usable number.')
+    if reason == 'forecast_non_positive':
+        return 'The fitted trend runs revenue to zero or below — the decline has been extrapolated too far.'
+    if reason.startswith('high_outlier_rate'):
+        detail = reason.replace('high_outlier_rate_', '').replace('_quarters_excluded', '')
+        return (f'An unusually large share of quarters ({detail}) was excluded as statistical outliers, which '
+                f'points at an inconsistent reporting basis in the source data rather than a few odd quarters.')
+    if reason.startswith('long_horizon_extrapolation'):
+        return ('The forecast compounds many periods beyond a very short usable history — treat its absolute '
+                'size with scepticism even though the annualised rate looks reasonable.')
+    return reason
+
+
+def _render_review_notice(summary: Dict[str, Any], is_quarterly: bool) -> None:
+    """Say plainly when a forecast should not be read at face value.
+
+    A number always comes out of the model; this is what distinguishes 'the
+    model produced output' from 'the output can be relied on'.
+    """
+    if not summary.get('needs_review'):
+        return
+
+    notes = []
+    tier_note = _TIER_NOTES.get(summary.get('tier'))
+    if tier_note:
+        notes.append(tier_note)
+    mape = summary.get('best_mape')
+    if mape is not None and mape > 25:
+        notes.append(f'The selected model missed by {mape:.0f}% on average when replayed against this '
+                     f"company's own history.")
+    notes.extend(_explain_flag(reason) for reason in (summary.get('flag_reasons') or []))
+    if not notes:
+        return
+
+    body = ''.join(f'<li>{note}</li>' for note in notes)
+    if summary.get('plausible') is False:
+        headline, colour, background = 'Forecast failed its plausibility check', '#B3261E', '#FCEDEC'
+    else:
+        headline, colour, background = 'Treat this forecast with caution', '#8A6100', '#FFF6E0'
+    st.markdown(
+        f'<div style="border-left:4px solid {colour};background:{background};color:#1F2328;'
+        f'padding:12px 16px;border-radius:6px;margin:8px 0 16px 0;font-size:0.9rem;">'
+        f'<strong style="color:{colour};">{headline}</strong>'
+        f'<ul style="margin:6px 0 0 0;padding-left:20px;">{body}</ul>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _available_scenario_keys(forecast_df: pd.DataFrame) -> List[str]:
@@ -1953,11 +2041,11 @@ def _render_documentation_tab(summary: Dict[str, Any]) -> None:
 
 **weight** — Importance assigned to a value. In Weighted Average Growth, weights are 1, 2, 3, …, n — so older growth rates get less influence and the newest gets the most.
 
-**backtest** — A simulation of past forecasting. The engine hides the most recent 2 years, trains each model on earlier history, and checks how well each model predicted those hidden years.
+**backtest** — A simulation of past forecasting. The engine walks forward through history: train on everything up to a given period, predict the next one, compare against what actually happened, then step forward and repeat.
 
-**holdout** — The hidden years used in backtesting. Default: 2 years. If history is short (≤ 4 years), falls back to 1 holdout year.
+**rolling origin** — Each point in history that the walk-forward can predict from. Every viable origin is scored, so a model is judged on many predictions rather than one lucky window.
 
-**MAPE** — Mean Absolute Percentage Error. Average percentage miss across holdout years. Lower = better. `MAPE = mean(|predicted − actual| / actual) × 100`.
+**MAPE** — Mean Absolute Percentage Error. Average percentage miss across every rolling origin. Lower = better. `MAPE = mean(|predicted − actual| / actual) × 100`.
 
 **Bias** — Whether a model tended to over- or under-predict. `Bias = mean(predicted − actual)`. Positive = over-predicted; negative = under-predicted.
 
@@ -2161,15 +2249,15 @@ weighted_growth = Σ(weight_i × growth_i) / Σ(weight_i)
 
 ### Backtesting — how accuracy is measured
 
-The engine runs a simulation:
+The engine runs a walk-forward simulation:
 1. Take all cleaned history
-2. Hide the last 2 years (holdout)
-3. Train each model on the remaining history
-4. Ask each model to predict the 2 hidden years
-5. Compare predictions to the real hidden values
-6. Rank by MAPE (lowest = best)
+2. Train each model on everything up to a given year
+3. Ask each model to predict the very next year
+4. Compare the prediction to what actually happened
+5. Step the origin forward one year and repeat, across every viable origin
+6. Rank by MAPE averaged over all those predictions (lowest = best)
 
-This tells you not which model fits the training data best, but which model would have been most useful if you had run it 2 years ago.
+This tells you not which model fits the training data best, but which model would have been most useful *every* time you could have run it — not just once.
             """,
         )
 
@@ -2191,17 +2279,17 @@ MAPE = mean(|predicted − actual| / actual) × 100
 
 | MAPE | What it means | Practical implication |
 |---|---|---|
-| **< 5%** | Excellent | Model closely matched both holdout years. Safe to weight heavily in the ensemble. |
+| **< 5%** | Excellent | Model tracked actuals closely across every tested origin. Safe to weight heavily in the ensemble. |
 | **5–10%** | Good | Model is a solid performer for annual data. Worth including. |
 | **10–15%** | Acceptable | Some error, but still useful. May be dragged by one bad year. |
-| **15–25%** | Weak | Model missed by a meaningful margin. Check if the holdout years were unusual. |
+| **15–25%** | Weak | Model missed by a meaningful margin. Check whether the history contains a structural shift. |
 | **> 25%** | Poor | Model should not be trusted on its own for this company. |
 
 ---
 
 ### Why MAPE can look high even for a good forecast
 
-Annual revenue forecasting has only 2 holdout years by default. If one of those years was unusual (post-pandemic rebound, acquisition, regulatory change), MAPE will spike for every model — not because the model is wrong, but because the holdout period was abnormal.
+A company with a short history offers few origins to test against, so one unusual year (post-pandemic rebound, acquisition, regulatory change) still moves the average a lot. MAPE will spike for every model — not because the models are wrong, but because that year was. The tier shown next to the forecast tells you how much history stood behind the number.
 
 That is why the page also shows:
 - **Bias** — did the model miss consistently in one direction?
@@ -2292,7 +2380,7 @@ def _render_method_notes() -> None:
         3. Normalize the actual series into `year` and `sales` in billions.
         4. Detect outliers using annual growth z-scores.
         5. Run the six forecasting methods in `RetailerForecaster`.
-        6. Backtest each model against the holdout years.
+        6. Backtest each model with rolling-origin (walk-forward) validation.
         7. Build the ensemble from the best backtested models.
         8. Build pessimistic, baseline, and optimistic scenarios from historical growth percentiles.
         9. Render the charts and tables in Streamlit.
@@ -2470,7 +2558,7 @@ def _build_forecast_excel_single(
     ws2.merge_cells("A1:F1")
     ws2.cell(1, 1, f"Backtest Results — {company_name} ({ticker})").font = Font(name="Calibri", bold=True, size=13, color=_GREY_DARK)
     ws2.merge_cells("A2:F2")
-    ws2.cell(2, 1, "Engine holds out the last 2 years, trains on earlier history, compares predicted vs actual. Lowest MAPE = Best model.").font = Font(name="Calibri", size=9, italic=True, color=_GREY_MID)
+    ws2.cell(2, 1, "Engine walks forward through history: trains on data up to each origin, predicts the next period, compares predicted vs actual. MAPE is averaged over every origin. Lowest MAPE = Best model.").font = Font(name="Calibri", size=9, italic=True, color=_GREY_MID)
 
     bt_headers = ["Rank", "Model Name", "MAPE (%)", "Bias ($B)", "RMSE ($B)", "Role"]
     for ci, h in enumerate(bt_headers, 1):
@@ -3067,19 +3155,7 @@ def main() -> None:
     page_start = perf_counter()
     _tracker = PageLoadTracker("forecasting")
 
-    # Lazy schema init — runs once per session
-    if not st.session_state.get("_forecast_schema_inited"):
-        _schema_t = perf_counter()
-        try:
-            ensure_forecast_columns()
-            backfill_company_info()
-            from data.quarterly_forecast_store import ensure_quarterly_forecast_table
-            ensure_quarterly_forecast_table()
-        except Exception as _exc:
-            log_structured_error(_exc, page="forecasting", component="main", operation="schema_init")
-        st.session_state["_forecast_schema_inited"] = True
-        log_timing("FORECASTING_schema_init", (perf_counter() - _schema_t) * 1000,
-                   "once_per_session", level="INFO")
+    _ensure_forecast_schema()
 
     user_email: Optional[str] = get_current_user()
 
@@ -3297,6 +3373,26 @@ def main() -> None:
     )
 
     summary = payload.get('summary', {})
+
+    # Companies that report semi-annually (most non-US listings: adidas, LVMH,
+    # Fast Retailing…) have no quarterly revenue series at all. Rendering the
+    # dashboard anyway fills every card with an em-dash, which reads as a broken
+    # page rather than "this company does not report quarterly". Say so, and
+    # point at the Annual view, which does have data.
+    if _is_quarterly and not payload.get('forecast_rows'):
+        st.markdown(
+            f'<div class="rev-hero">'
+            f'<span class="rev-hero-company">{payload.get("company_name", selected_ticker)} '
+            f'({selected_ticker})</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.info(
+            f"**No quarterly revenue history for {selected_ticker}.** "
+            f"{summary.get('note') or 'This company does not report on a quarterly basis.'} "
+            f"Switch **Period** to *Annual* for this company's forecast."
+        )
+        return
+
     global _EST_DISPLAY_CURRENCY
     _EST_DISPLAY_CURRENCY = (
         payload.get("reported_currency")
@@ -3351,6 +3447,8 @@ def main() -> None:
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    _render_review_notice(summary, _is_quarterly)
 
     metric_cols = st.columns(5)
     with metric_cols[0]:
@@ -3456,7 +3554,7 @@ def main() -> None:
     with tabs[2]:
         st.markdown('<h3 class="rev-section-title">Backtesting</h3>', unsafe_allow_html=True)
         st.markdown(
-            '<p class="rev-section-copy">The engine holds out the most recent 2 years, trains each model on the earlier history, then checks how closely each model predicted those hidden years. The lowest MAPE wins and becomes the best model. The top-3 become the ensemble.</p>',
+            '<p class="rev-section-copy">The engine walks forward through history: it trains each model on the data up to a point, asks it to predict the very next period, then steps forward and repeats across every viable starting point. MAPE is the average miss over all of those predictions, so a model has to earn its ranking repeatedly rather than on one lucky window. The lowest MAPE wins and becomes the best model. The top-3 become the ensemble.</p>',
             unsafe_allow_html=True,
         )
         if backtest_df.empty:
@@ -3545,7 +3643,7 @@ MAPE = mean(|predicted − actual| / actual) × 100
                 """
 **Bias** = mean(predicted − actual)
 
-- Positive bias → model consistently over-predicted the holdout years
+- Positive bias → model consistently over-predicted across the tested origins
 - Negative bias → model consistently under-predicted
 - Bias close to 0 → model predictions were centered around the truth
 
@@ -3560,7 +3658,7 @@ RMSE = sqrt(mean((predicted − actual)²))
 - Units are in the same currency as revenue (billions here)
 - Use RMSE alongside MAPE — a model with low MAPE but high RMSE had one very large miss
 
-**Example:** A model with MAPE 2.3% and RMSE 0.1B is excellent. A model with MAPE 10% and RMSE 2.7B missed by a consistent margin across both holdout years.
+**Example:** A model with MAPE 2.3% and RMSE 0.1B is excellent. A model with MAPE 10% and RMSE 2.7B missed by a consistent margin across the tested origins.
                 """,
             )
             st.markdown('</div>', unsafe_allow_html=True)

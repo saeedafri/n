@@ -20,7 +20,8 @@ from data.revenue_forecast_service import (
     _yf_reported_currency,
 )
 from data.source_router import get_company_source
-from utils.retailer_forecaster import RetailerForecaster
+from utils.retailer_forecaster import RetailerForecaster, drop_partial_periods
+from data.forecast_store import _writes_disabled as forecast_writes_disabled
 from utils.retailer_quarterly_forecaster import RetailerQuarterlyForecaster
 from utils.constants import yahoo_symbol
 from utils.server_logger import log_structured_error
@@ -127,8 +128,9 @@ def sync_forecast_for_ticker(
             .reset_index(drop=True)
         )
         if not _deduped.empty:
-            _threshold = _deduped["sales"].max() * 0.10
-            _deduped = _deduped[_deduped["sales"] >= _threshold].reset_index(drop=True)
+            # Same stub-period rule the engines apply — kept identical so the
+            # service never hands the engine a differently-truncated history.
+            _deduped = drop_partial_periods(_deduped)
         if len(_deduped) < 3:
             out["status"] = "skipped"
             out["message"] = f"After cleaning, only {len(_deduped)} years (need ≥3)."
@@ -189,7 +191,8 @@ def sync_forecast_for_ticker(
         from data.forecast_store import prune_stale_years
         rows_pruned = prune_stale_years(store_ticker, last_actual_date)
         out["status"] = "updated"
-        out["message"] = "Upserted model rows."
+        out["message"] = ("Store writes are disabled (FORECAST_STORE_READONLY) — nothing was saved."
+                          if forecast_writes_disabled() else "Upserted model rows.")
         out["rows_upserted"] = int(rows_affected or 0)
         out["rows_pruned"] = int(rows_pruned or 0)
         return out
@@ -314,8 +317,9 @@ def sync_quarterly_forecast_for_ticker(
             .reset_index(drop=True)
         )
         if not _deduped.empty:
-            _threshold = _deduped["sales"].max() * 0.10
-            _deduped = _deduped[_deduped["sales"] >= _threshold].reset_index(drop=True)
+            # Same stub-period rule the engines apply — kept identical so the
+            # service never hands the engine a differently-truncated history.
+            _deduped = drop_partial_periods(_deduped)
         if len(_deduped) < 8:
             out["status"] = "skipped"
             out["message"] = f"Need >=8 quarters; got {len(_deduped)}."
@@ -364,7 +368,8 @@ def sync_quarterly_forecast_for_ticker(
         # Drop forecast rows that have aged into the past (quarters now reported).
         rows_pruned = q_prune_stale(store_ticker, last_actual_date)
         out["status"] = "updated"
-        out["message"] = "Upserted quarterly model rows."
+        out["message"] = ("Store writes are disabled (FORECAST_STORE_READONLY) — nothing was saved."
+                          if forecast_writes_disabled() else "Upserted quarterly model rows.")
         out["rows_upserted"] = int(rows_affected or 0)
         out["rows_pruned"] = int(rows_pruned or 0)
         return out

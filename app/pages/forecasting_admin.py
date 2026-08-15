@@ -20,11 +20,14 @@ from components.navigation import render_header, render_coresight_footer
 from components.styles import hide_sidebar, render_styles, set_page_layout
 from core.auth_manager import get_current_user, require_auth
 from core.access_control import AccessControlManager
+from utils.constants import QUARTERLY_FORECASTING_ENABLED
 from data.forecast_admin_service import (
     clear_revenue_forecast_caches,
     is_forecast_admin,
     sync_all_eligible,
+    sync_all_eligible_quarterly,
     sync_forecast_for_ticker,
+    sync_quarterly_forecast_for_ticker,
 )
 from data.revenue_forecast_service import RevenueForecastService
 from utils.server_logger import log_structured_error
@@ -348,14 +351,26 @@ def main() -> None:
     run_one = False
     one = ""
 
+    period_type = "Annual"
     if has_access:
         st.markdown("<br>", unsafe_allow_html=True)
+        # Cadence selector — quarterly forecasts have their own store and sync
+        # functions, and without this the page could only ever refresh Annual.
+        if QUARTERLY_FORECASTING_ENABLED:
+            _pcol, _ = st.columns([1.4, 4])
+            with _pcol:
+                period_type = st.radio(
+                    "Period", ["Annual", "Quarterly"], index=0,
+                    horizontal=True, key="fc_admin_period_type",
+                )
         c1, c2 = st.columns(2)
         with c1:
-            run_all = st.button("Sync all stale tickers", type="primary", use_container_width=True, key="fc_sync_all")
+            run_all = st.button(f"Sync all stale tickers ({period_type})", type="primary",
+                                use_container_width=True, key="fc_sync_all")
         with c2:
             one = st.text_input("Single ticker (e.g. TSCO)", placeholder="TSCO", key="fc_one_ticker")
-            run_one = st.button("Sync this ticker only", use_container_width=True, key="fc_sync_one")
+            run_one = st.button(f"Sync this ticker only ({period_type})",
+                                use_container_width=True, key="fc_sync_one")
     else:
         st.warning("🔒 Your access to run forecasting sync has been revoked. Contact an admin to restore access.")
 
@@ -370,7 +385,8 @@ def main() -> None:
             _companies = []
         name_map = {row.get("ticker"): row.get("name") or "" for row in _companies}
         with st.spinner(f"Processing {ticker}…"):
-            row = sync_forecast_for_ticker(ticker)
+            row = (sync_quarterly_forecast_for_ticker(ticker)
+                   if period_type == "Quarterly" else sync_forecast_for_ticker(ticker))
             row["company_name"] = name_map.get(ticker, "")
             results = [row]
         clear_revenue_forecast_caches()
@@ -382,7 +398,9 @@ def main() -> None:
             progress.progress(min(1.0, frac), text=f"{cur}/{total} — {disp}")
 
         try:
-            results = sync_all_eligible(force=False, periods=5, progress_callback=_cb)
+            results = (sync_all_eligible_quarterly(force=False, periods=20, progress_callback=_cb)
+                       if period_type == "Quarterly"
+                       else sync_all_eligible(force=False, periods=5, progress_callback=_cb))
         finally:
             progress.progress(1.0, text="Done")
         clear_revenue_forecast_caches()

@@ -319,6 +319,42 @@ def warm_caches(include_earnings: bool = True) -> Dict[str, Any]:
         }
 
 
+def _warm_forecast_schema() -> None:
+    """Run the forecast-store schema bootstrap so /forecasting starts warm."""
+    from data.forecast_refresh_service import ensure_forecast_columns, backfill_company_info
+    from data.quarterly_forecast_store import ensure_quarterly_forecast_table
+
+    ensure_forecast_columns()
+    backfill_company_info()
+    ensure_quarterly_forecast_table()
+
+
+def _warm_refresh_dialog() -> None:
+    """Precompute the forecast Refresh dialog for both cadences.
+
+    The dialog's query is ~4s warm and ~24s on a cold process. Users experience
+    that as "the popup takes forever to open". Building it here means the first
+    click is served from cache. Quarterly was never pre-warmed at all.
+    """
+    from data.forecast_refresh_service import get_refresh_table_data
+
+    get_refresh_table_data("annual")
+    get_refresh_table_data("quarterly")
+
+
+def _warm_screening_segment_options() -> None:
+    """Populate the screening segment dropdowns before a user opens /screening.
+
+    The queries themselves are ~300ms, but the first one in a fresh process also
+    pays the Azure connection handshake (~5s measured). Paying that here rather
+    than in the first user's page load is the whole point of this thread.
+    """
+    from data.screening_service import read_segment_member_options_cache
+
+    read_segment_member_options_cache("business")
+    read_segment_member_options_cache("geographical")
+
+
 def _background_warmup_thread():
     """
     Background thread function for cache warming.
@@ -402,6 +438,12 @@ def _background_warmup_thread():
                 NewsRepository.get_news_date_range,
                 CompanyRepository.get_companies_rows,
                 RevenueForecastService.get_companies,
+                # Forecast schema bootstrap: idempotent DDL guarded by process
+                # flags, ~5s cold. Warming it here means the first user to open
+                # /forecasting after a deploy is a hit, not the one who pays it.
+                _warm_forecast_schema,
+                _warm_screening_segment_options,
+                _warm_refresh_dialog,
             ):
                 try:
                     _warm_fn()

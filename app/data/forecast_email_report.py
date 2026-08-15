@@ -50,6 +50,8 @@ _MODEL_LABEL = {
     "cagr": "CAGR",
     "weighted_avg": "Weighted average",
     "ma_trend": "Moving-average trend",
+    "seasonal_naive": "Seasonal naive",
+    "flat_carry": "Flat carry-forward",
     "ensemble": "Ensemble",
     "scenario_baseline": "Scenario · baseline",
     "scenario_optimistic": "Scenario · optimistic",

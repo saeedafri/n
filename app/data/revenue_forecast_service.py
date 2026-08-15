@@ -19,7 +19,7 @@ from utils.constants import yahoo_symbol
 
 from core.database import db_manager
 from data.source_router import get_company_source
-from utils.retailer_forecaster import RetailerForecaster
+from utils.retailer_forecaster import RetailerForecaster, drop_partial_periods
 from utils.retailer_quarterly_forecaster import RetailerQuarterlyForecaster
 from utils.server_logger import log_structured_error, log_timing
 
@@ -425,8 +425,9 @@ class RevenueForecastService:
             .reset_index(drop=True)
         )
         if not _deduped.empty:
-            _threshold = _deduped["sales"].max() * 0.10
-            _deduped = _deduped[_deduped["sales"] >= _threshold].reset_index(drop=True)
+            # Same stub-period rule the engines apply — kept identical so the
+            # service never hands the engine a differently-truncated history.
+            _deduped = drop_partial_periods(_deduped)
         model_df = _deduped
 
         # ── Always run lightweight engine for summary stats + historical ───
@@ -666,6 +667,14 @@ class RevenueForecastService:
                 "historical_rows": len(historical_rows),
                 "actual_rows": len(actual_rows),
                 "outliers_excluded": len(engine.outliers),
+                # Trust signals from the engine — how much history backs this
+                # number and whether it survived the plausibility check.
+                "tier": engine.tier,
+                "confidence": engine.confidence,
+                "plausible": engine.plausible,
+                "flag_reasons": list(engine.flag_reasons),
+                "needs_review": engine.needs_review(),
+                "structural_break": engine.structural_break,
                 "cagr_pct": summary_stats.get("cagr_pct"),
                 "avg_annual_growth_pct": summary_stats.get("avg_annual_growth_pct"),
                 "median_annual_growth_pct": summary_stats.get("median_annual_growth_pct"),
@@ -825,8 +834,9 @@ class RevenueForecastService:
             .reset_index(drop=True)
         )
         if not _deduped.empty:
-            _threshold = _deduped["sales"].max() * 0.10
-            _deduped = _deduped[_deduped["sales"] >= _threshold].reset_index(drop=True)
+            # Same stub-period rule the engines apply — kept identical so the
+            # service never hands the engine a differently-truncated history.
+            _deduped = drop_partial_periods(_deduped)
         if len(_deduped) < 8:
             empty["summary"] = {"actual_rows": len(actual_rows),
                                 "note": "Need >=8 quarters of revenue for a quarterly forecast."}
@@ -1052,6 +1062,14 @@ class RevenueForecastService:
                 "historical_rows": len(historical_rows),
                 "actual_rows": len(actual_rows),
                 "outliers_excluded": len(outlier_qidx),
+                # Trust signals from the engine — how much history backs this
+                # number and whether it survived the plausibility check.
+                "tier": engine.tier,
+                "confidence": engine.confidence,
+                "plausible": engine.plausible,
+                "flag_reasons": list(engine.flag_reasons),
+                "needs_review": engine.needs_review(),
+                "structural_break": summary_stats.get("structural_break"),
                 "best_mape": best_mape,
                 "best_method_display": best_method_display,
                 "cagr_pct": summary_stats.get("annual_cagr_pct"),

@@ -1516,13 +1516,19 @@ def _load_company_names_from_db():
         _query_start = _perf_time.time()
         company_rows = CompanyRepository.get_companies_rows()
         _process_start = _perf_time.time()
+        # A ticker can exist twice (e.g. TSCO = Tractor Supply on NasdaqGS/SEC and
+        # Tesco PLC on LSE/YFinance). This page shows SEC filings, so the SEC row
+        # wins; non-SEC rows only fill tickers the SEC set doesn't cover.
         result = {}
         for row in company_rows:
             ticker = row.get("ticker")
             name = row.get("name_coresight") or row.get("name")
-            if ticker and name and name.upper() != ticker.upper():
-                formatted_name = _format_company_name(name)
-                result[ticker] = formatted_name
+            if not ticker or not name or name.upper() == ticker.upper():
+                continue
+            is_sec = (row.get("source") or "").strip() == "SEC"
+            if ticker in result and not is_sec:
+                continue
+            result[ticker] = _format_company_name(name)
 
         return result
     except Exception as e:

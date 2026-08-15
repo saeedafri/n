@@ -16,6 +16,7 @@ Responsibilities:
 from __future__ import annotations
 
 import datetime
+import os
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -23,12 +24,27 @@ import pandas as pd
 from core.database import db_manager
 from utils.server_logger import log_structured_error, log_error
 
+def _writes_disabled() -> bool:
+    """True when this process must not write to the forecast store.
+
+    A developer running the app locally points at the staging database. Every
+    page view that computes a fresh forecast fires a background upsert, so
+    simply browsing /forecasting from a laptop rewrites staging rows. Set
+    FORECAST_STORE_READONLY=1 (run_local.sh does) to keep local runs read-only.
+    """
+    return os.getenv("FORECAST_STORE_READONLY", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 _METRIC_TOTAL_REVENUE = "total_revenue"
 _ENSEMBLE_KEY = "ensemble"
 
 # Any forecast computed before this date used keep="first" dedup (wrong).
 # Force recompute for all rows older than this date.
-_DEDUP_FIX_DATE = datetime.date(2026, 5, 11)
+# Any forecast computed before this date came from an earlier revision of the
+# forecasting engine and is not comparable with what the engine produces now.
+# Bump it whenever the model changes, or stored rows keep being served until the
+# company happens to report again.
+_MODEL_REVISION_DATE = datetime.date(2026, 8, 15)
 
 
 # ---------------------------------------------------------------------------
@@ -70,12 +86,12 @@ def needs_update(
             stored = stored.date()
         if stored != last_actual_date:
             return True
-        # Recompute any forecast built before the dedup fix
+        # Recompute anything produced by an earlier revision of the engine.
         if computed_at:
             computed_date = computed_at.date() if hasattr(computed_at, "date") else computed_at
             if isinstance(computed_date, str):
                 computed_date = datetime.date.fromisoformat(computed_date[:10])
-            if computed_date < _DEDUP_FIX_DATE:
+            if computed_date < _MODEL_REVISION_DATE:
                 return True
         return False
     except Exception as exc:
@@ -116,6 +132,8 @@ def upsert_forecasts(
 
     Returns rows affected (inserts + updates × 2 per MySQL convention).
     """
+    if _writes_disabled():
+        return 0
     if forecast_df is None or forecast_df.empty:
         return 0
 
@@ -212,6 +230,19 @@ def upsert_forecasts(
 
     try:
         affected = db_manager.execute_insert(upsert_sql, flat_params)
+        # Drop this ticker's rows that the current computation did not write.
+        # Every row the forecast owns was just stamped with `computed_at`, so an
+        # older stamp means the row is left over from a previous run whose
+        # horizon reached further out (e.g. a 2030-31 tail from a forecast made
+        # when the last actual was older). Those rows are stale model output and
+        # would resurface if the horizon ever widened.
+        db_manager.execute_delete(
+            """
+            DELETE FROM coreiq_model_forecasts
+            WHERE  ticker = :ticker AND metric = :metric AND computed_at < :computed_at
+            """,
+            {"ticker": ticker, "metric": metric, "computed_at": computed_at},
+        )
         return affected
     except Exception as exc:
         log_structured_error(

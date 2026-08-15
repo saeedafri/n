@@ -419,6 +419,14 @@ class CompanyRepository:
                 if ticker not in companies_map:
                     companies_map[ticker] = base_entry
             else:
+                # Two real companies can share a plain ticker (JD, LULU, TSCO).
+                # Without a Yahoo suffix there is no composite key to separate
+                # them, so the last row read would silently win. The SEC listing
+                # is the primary one across this app (filings, market data,
+                # screening), so it keeps the plain ticker.
+                existing = companies_map.get(ticker)
+                if existing and existing.get('source') == 'SEC' and source != 'SEC':
+                    continue
                 companies_map[ticker] = base_entry
         return companies_map
 

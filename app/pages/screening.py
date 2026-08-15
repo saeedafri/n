@@ -750,8 +750,14 @@ def _start_edit_criterion(idx: int):
 # These DDLs are idempotent (CREATE TABLE IF NOT EXISTS) and identical for every
 # user, so bootstrapping is a PROCESS-level concern, not a per-session one. Gating
 # on st.session_state made every NEW browser session pay ~5 table round-trips on
-# its first screening landing (painful over a high-latency link / VPN). A module
-# global runs it once per server process instead.
+# its first screening landing (painful over a high-latency link / VPN).
+#
+# NOTE: Streamlit re-executes a page file on every rerun, so this module global
+# resets each time and does NOT actually make the work once-per-process — the
+# real guards live in the imported data modules (`*_service.ensure_tables`,
+# `ensure_segment_*_cache_table`), which are cached in sys.modules and therefore
+# do persist. Keep this flag only as a cheap same-run short-circuit; never rely
+# on it to skip a round trip across reruns.
 _DB_TABLES_READY = False
 
 

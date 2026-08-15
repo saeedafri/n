@@ -50,12 +50,13 @@ def _first_delay_s() -> int:
 
 
 def _poll_s() -> int:
-    """Check cadence. The MAX(id) gate is O(1), so a frequent poll is cheap — a
-    real rebuild only fires when v5 grew. Default 6h; floored at 10 min."""
+    """Check cadence. The MAX(id) gate is O(1), so polling is cheap — a real
+    refresh only fires when v5 grew, and then touches only the changed tickers.
+    Default 24h (segment data comes from annual 10-Ks); floored at 10 min."""
     try:
-        return max(600, int(os.getenv("SEGMENT_CACHE_REFRESH_POLL_SEC", str(6 * 3600))))
+        return max(600, int(os.getenv("SEGMENT_CACHE_REFRESH_POLL_SEC", str(24 * 3600))))
     except ValueError:
-        return 6 * 3600
+        return 24 * 3600
 
 
 def run_segment_cache_refresh_tick(force: bool = False):

@@ -11,13 +11,14 @@ from utils.server_logger import log_structured_error
 # FEATURE FLAGS
 # =============================================================================
 
-# Quarterly revenue forecasting is paused at the Data team's request (2026-07-13).
+# Quarterly revenue forecasting was paused at the Data team's request (2026-07-13)
+# and re-enabled on 2026-08-15 alongside the revised quarterly model.
 # When False, every quarterly-forecasting surface falls back to its Annual-only
 # behavior: the /forecasting Quarterly toggle, the /market_data Forecasting-tab
 # Quarterly view, and the twice-daily background quarterly refresh are all hidden
 # or skipped. Annual forecasting is unaffected and does not read this flag.
-# To fully restore quarterly forecasting, flip this to True — one-line revert.
-QUARTERLY_FORECASTING_ENABLED = False
+# Flip to False to pause quarterly again — one-line revert.
+QUARTERLY_FORECASTING_ENABLED = True
 
 # =============================================================================
 # YAHOO FINANCE TICKER SUFFIXES
