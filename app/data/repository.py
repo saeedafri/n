@@ -10879,8 +10879,13 @@ class SegmentDataRepository:
         if not filings:
             return None
 
-        # Take last 6 filings
-        filing_list = list(filings[:6])
+        # Take last 6 filings.
+        # NOTE: list(filings)[:6], not list(filings[:6]) — EntityFilings does not
+        # support slice indexing on edgartools >=5.x. A slice reaches
+        # get_filing_at(), where self.data['form'][slice] yields a pyarrow
+        # ChunkedArray instead of a Scalar and .as_py() raises AttributeError.
+        # That surfaced as "Something went wrong" on the market-data Segment tab.
+        filing_list = list(filings)[:6]
         if not filing_list:
             return None
 

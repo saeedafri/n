@@ -311,6 +311,12 @@ def _next_reporting_dates_bulk() -> Dict[str, Optional[date]]:
         return {}
 
 
+# Cached: derived purely from the earnings calendar, which is ingested at most
+# daily (last fetch observed 2026-08-15). Recomputing it cost 1.9-2.9s on STG and
+# was ~92% of the Refresh dialog's open time, because the dialog's own cache could
+# miss while this ran again underneath. Both sync paths call
+# get_refresh_table_data.clear(); this TTL bounds staleness independently.
+@st.cache_data(ttl=3600, show_spinner=False)
 def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     """
     Canonical Q4/full-year annual reporting date per ticker.
@@ -650,6 +656,12 @@ def _fiscal_q_from_months(fqe_month: int, fye_month: int) -> int:
     return (months_into_fy + 2) // 3
 
 
+# Cached: derived purely from the earnings calendar, which is ingested at most
+# daily (last fetch observed 2026-08-15). Recomputing it cost 1.9-2.9s on STG and
+# was ~92% of the Refresh dialog's open time, because the dialog's own cache could
+# miss while this ran again underneath. Both sync paths call
+# get_refresh_table_data.clear(); this TTL bounds staleness independently.
+@st.cache_data(ttl=3600, show_spinner=False)
 def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     """
     Reporting date for the *relevant* fiscal quarter per ticker — Q1/Q2/Q3/Q4 all

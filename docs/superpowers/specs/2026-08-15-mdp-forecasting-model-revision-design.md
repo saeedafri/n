@@ -837,3 +837,197 @@ An earlier version of the benchmark reported `/calendar` at 22 ms and
 instantly. Markers must be page-body content. The corrected benchmark is what
 §23 reports.
 
+---
+
+## 27. Every forecast surface, tested in both cadences
+
+The earlier rounds tested `/forecasting` exhaustively and the market_data
+Forecasting tab on a single ticker. That was not full coverage. All surfaces that
+read the forecast stores were enumerated from the code and tested.
+
+| Surface | Annual | Quarterly | Result |
+|---|---|---|---|
+| `/forecasting` | 396 tickers | 396 tickers | 0 problems (§17) |
+| market_data → **Forecasting tab** | 40 tickers | 40 tickers | 0 problems |
+| market_data → **Key Stats (F- columns)** | 7 tickers | 7 tickers | 0 problems |
+| `/screening` → Forecasting criterion | 6 tickers | n/a (annual-only) | values correct |
+| `/forecasting` → Refresh dialog | yes | yes | 2.4–2.6 s (§21) |
+| `/forecasting_admin` | yes | **added this round** | toggle verified |
+
+### Key Stats was a real consumer and had never been tested
+
+`forecast_store.get_forecasts()` is dead code — referenced only in docstrings.
+Key Stats actually reads both stores through raw SQL in `KeyStatsRepository`
+(`repository.py:4743` annual "next 5 years", `:4791` quarterly "next 8 quarters"),
+rendering `F` columns beside `A` (actual) and `E` (analyst estimate).
+
+Verified for M, and the numbers cross-check exactly across three independent
+surfaces:
+
+```
+Annual   header  … Jan-31-2026A | 2027E | 2027E | 2028E | Jan-31-2027F …
+Annual   revenue … 22,233.11  21,857.71  21,494.33  21,142.57  20,801.99
+                   ^ identical to /forecasting ensemble and the Forecasting tab
+
+Quarterly revenue … 4,954.90  4,768.80  7,372.20  4,835.00  4,850.60
+                                        ^ Macy's holiday quarter — seasonality applied
+```
+
+Swept across M, FLWS, NVDA, COTY, BBWI, TGT, AAPL in both cadences: the
+`F Forecasted (Revenue Model)` legend and populated revenue rows render in all 14
+combinations.
+
+### Screening forecast criterion is annual-only — by design, and unchanged
+
+`apply_forecast_criterion` reads `coreiq_model_forecasts` and offers six model
+keys (ensemble, three scenarios, linear, cagr). There is **no quarterly forecast
+criterion**, and none was added — that would be a new screening feature, not part
+of enabling quarterly. Verified the annual path returns the new model's numbers
+(M = 22,233.11, matching every other surface).
+
+### Gap found and fixed: forecasting_admin had no quarterly at all
+
+`/forecasting_admin` imported only `sync_all_eligible` and
+`sync_forecast_for_ticker` — both annual. With quarterly enabled, an administrator
+had no way to sync quarterly forecasts from the admin page (only from the
+`/forecasting` Refresh dialog, which does carry a cadence toggle).
+
+Added a Period selector, gated on `QUARTERLY_FORECASTING_ENABLED`, routing to the
+existing `sync_all_eligible_quarterly` / `sync_quarterly_forecast_for_ticker`
+(both already exercised by the full re-sync in §15). Verified in the browser:
+
+```
+BEFORE: 'Sync all stale tickers (Annual)'    'Sync this ticker only (Annual)'
+click Quarterly ->
+AFTER : 'Sync all stale tickers (Quarterly)' 'Sync this ticker only (Quarterly)'
+```
+
+### Non-US companies: correct behaviour, not a defect
+
+The market_data sweep initially reported 6 failures — all Quarterly, all non-US
+(ADS.DE, ATD.TO, 2020.HK, ATZ.TO, 7936.T, ABF.L). These have **0 rows** in the
+quarterly store because they report semi-annually, and
+`get_available_period_types` correctly returns `['Annual']` for them, so the UI
+never offers Quarterly. The sweep had forced `period_type=Quarterly` through the
+URL — a state a user cannot reach — and the page correctly fell back to Annual.
+Real problem count: **0**.
+
+---
+
+## 28. Segment tab crash (CRITICAL) — fixed
+
+**Symptom:** "Something went wrong. Please try again." on market-data → Segment
+(reported for TSCO; affected every ticker).
+
+**From the STG log:**
+
+```
+type=AttributeError  msg='pyarrow.lib.ChunkedArray' object has no attribute 'as_py'
+  repository.py:10884  _fetch_from_edgartools -> filing_list = list(filings[:6])
+  edgar/entity/filings.py:198  __getitem__ -> get_filing_at()
+```
+
+**Root cause.** `EntityFilings.__getitem__` forwards straight to
+`get_filing_at(item)`, which does `self.data['form'][item].as_py()`. An **int**
+index yields a pyarrow `Scalar` (has `.as_py()`); a **slice** yields a
+`ChunkedArray` (does not). `filings[:6]` passes a slice, so it raises.
+
+This was already a known trap — the codebase carries the fix and an explanatory
+comment in three other places (`repository.py:11915, 12056, 12382`):
+
+```python
+# NOTE: list(filings)[:6], not list(filings[:6]) — EntityFilings does not
+# support slice indexing on edgartools >=5.x (pyarrow ChunkedArray error).
+```
+
+Line 10883 was simply missed. Fixed to `list(filings)[:6]`, matching the existing
+convention. Reproduced the failure and verified the fix against live EDGAR
+(TSCO, 29 10-K filings), then confirmed in the browser: no error banner and
+"Business Segments" renders for TSCO, M, TGT and AAPL.
+
+---
+
+## 29. Refresh dialog on STG — second round
+
+STG timings (in-region, so far below the local numbers in §21):
+
+```
+DIALOG_Q3_annual_q4_dates          1,900 ms
+DIALOG_TOTAL_get_refresh_table_data 2,624 ms   (annual)
+DIALOG_TOTAL ..._quarterly          4,522 ms
+```
+
+The §21 fix cached the dialog's *outer* function, but on a cache miss the
+underlying date lookup still ran. Both bulk lookups are now cached directly
+(`_annual_q4_report_dates_bulk`, `_quarterly_report_dates_bulk`, ttl 1h) — they
+derive purely from the earnings calendar, which is ingested at most daily.
+
+Verified the cached output is **identical** to the uncached (373 entries), then
+measured the worst case (outer cache bypassed):
+
+| | Before | After |
+|---|---|---|
+| annual dialog data | 4,239 ms | **1,045 ms** |
+| quarterly dialog data | 5,336 ms | 1,636 ms → 1,029 ms repeat |
+
+With the outer cache and boot warmup, an open now does no database work at all.
+
+---
+
+## 30. Quarterly vs annual reporting date — mostly correct, data gap for 36
+
+**Observation:** the Refresh dialog shows the same Reporting Date for Annual and
+Quarterly.
+
+**Measured:** of 355 tickers in both, **294 (83%) already differ** — e.g. AAPL
+annual `Oct 30, 2025` vs quarterly `Jul 30, 2026`. The quarterly helper
+(`_quarterly_report_dates_bulk`) correctly accepts any quarter and picks the
+nearest upcoming, else most recent past.
+
+**The 56 that match are a source-data gap, not a logic bug.** Today is
+2026-08-16; ABBV's entire recent calendar is:
+
+```
+2026-02-04  Dec/2025      <- newest row
+2025-10-31  Sep/2025
+2025-07-31  Jun/2025
+2025-04-25  Mar/2025
+```
+
+There is no Q1-2026 or Q2-2026 row, so "most recent past" *is* the annual date.
+Same for ABT (`2026-01-22`) and BAC (`2026-01-14`).
+
+Calendar coverage overall (`coreiq_nasdaq_earnings_calendar`, 355 tickers, last
+fetched 2026-08-15):
+
+| | Tickers |
+|---|---|
+| newest row is upcoming | 114 (32%) |
+| newest row within 3 months | 316 (89%) |
+| **newest row older than 6 months** | **36 (10%)** |
+| newest row older than 12 months | 2 (1%) |
+
+The ingestion is running; it is just not producing recent quarters for ~10% of
+companies. That belongs with the data team.
+
+---
+
+## 31. The 37 "On hold" — genuinely missing dates, not a bug
+
+Checked the raw calendar rows for the category-B companies from §22:
+
+| Ticker | FYE | Rows in calendar | Quarters present |
+|---|---|---|---|
+| KVUE | December | **1** | Jun/2026 |
+| MDB | January | 2 | Jul/2026 |
+| HPE | October | 4 | Jul/2026 + three from **2016** |
+| DXC | March | 1 | Jun/2026 |
+| USFD | December | 2 | Jun/2026, Jun/2016 |
+| GTM | December | 1 | Jun/2026 |
+
+The annual (FYE-month) quarter row does not exist in the source table for any of
+them, so no annual reporting date can be derived. The selection logic is correct;
+the rows are absent. The only genuine *bug* among the 37 is the 9 corrupt
+composite tickers (§22 group A), and that corruption lives upstream in
+`coreiq_companies.exchange_acronym`.
+
