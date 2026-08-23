@@ -4,6 +4,7 @@ Data repository for fetching market data from database.
 from typing import List, Optional, Tuple, Dict, Any, Set
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import collections
 import calendar
 import json
 import os
@@ -10064,6 +10065,199 @@ class SegmentDataRepository:
         return False
 
     @staticmethod
+    def _classify_member(row, geo_member_set: set) -> Optional[Tuple[str, str]]:
+        """(section, display label) for one dimensioned fact, or None when the fact
+        names no real segment. Single source of truth for the annual builder, the
+        quarterly builder and the screening cache, so member routing cannot drift
+        between the Segments tab and the screener."""
+        from utils.constants import SEGMENT_SKIP_MEMBERS, SEGMENT_RECONCILIATION_MEMBERS
+        from data.segment_aliases import canonicalize_geo_label
+
+        member_raw = row.get('dimension_member_label') or ''
+        forced_section = None
+        # Multi-dimensional operating-segment facts: the primary member is a generic
+        # wrapper ("Operating Segments") while the REAL segment sits on a second axis
+        # in dimension_label — Costco geo revenue (ConsolidationItems=Operating
+        # Segments + Segments=United States), AMD segment profit (+ BusinessSegments=
+        # Datacenter). Recover the inner member whatever it names; recovering only
+        # geographies dropped AMD's four segments and left the tab showing nothing but
+        # its reconciliation line. A wrapper with no inner member is the roll-up
+        # itself, redundant with the 1-D facts, so it goes.
+        if member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
+            inner = (row.get('dimension_label') or '').strip()
+            if not inner or inner.lower() == member_raw.lower().strip():
+                return None
+            member_raw = inner
+            if (inner.lower() in geo_member_set
+                    and SegmentDataRepository._looks_geographic(inner)):
+                forced_section = "geo"
+        # Compare on a dash/whitespace-normalised name so one spelling of each rule
+        # covers a filer's variants ("Corporate, Non -Segment" vs "Corporate Non-Segment").
+        low = SegmentDataRepository._normalize_member_text(member_raw)
+        if low in SEGMENT_SKIP_MEMBERS or low in SEGMENT_RECONCILIATION_MEMBERS:
+            return None
+        # Aggregate XBRL "operating segment" roll-up members ("Operating segment",
+        # "Total for operating segments", …) are totals, never a real segment.
+        if "operating segment" in low:
+            return None
+        # Reconciliation lines ("Segment Reconciling Items", "Segment Reporting,
+        # Reconciling Item, Excluding Corporate Nonsegment") and roll-ups ("Total
+        # Wholesale", "Total Segment") are not segments either. The prefix needs the
+        # trailing space so a company whose name starts with "Total" survives.
+        if "reconciling item" in low or low.startswith("total "):
+            return None
+        member = SegmentDataRepository._title_case_member(member_raw)
+        if not member:
+            return None
+        if forced_section:
+            section = forced_section
+        else:
+            heading = SegmentDataRepository._get_heading(row.get('full_dimension_label') or '')
+            section = SegmentDataRepository._classify_heading(heading)
+        # Canonicalise geographic labels so filing-to-filing drift collapses to one
+        # member ("United States Operations" → "United States").
+        if section == "geo":
+            member = canonicalize_geo_label(member)
+        return section, member
+
+    @staticmethod
+    def _normalize_member_text(member: str) -> str:
+        """Lower-cased name with dash variants unified, spacing around dashes removed
+        and whitespace collapsed — enough to match rules without merging segments."""
+        text = member.lower()
+        # PriceSmart files "Central \u200eAmerican \u200eOperations" with bidi marks
+        # embedded; they are invisible on screen but split one member into two.
+        for invisible in ('\u200b', '\u200c', '\u200d', '\u200e', '\u200f', '\ufeff'):
+            text = text.replace(invisible, '')
+        for dash in ('\u2010', '\u2011', '\u2012', '\u2013', '\u2014', '\u2212'):
+            text = text.replace(dash, '-')
+        text = re.sub(r'\s*-\s*', '-', text)
+        return re.sub(r'\s+', ' ', text).strip()
+
+    @staticmethod
+    def _member_key(member: str) -> str:
+        """Identity of a segment across filings, ignoring label drift. Ingredion files
+        one segment as "Asia Pacific Segment", "Asia- Pacific" and "Asia-Pacific", and
+        another as "F&II - LATAM" then "F&II–LATAM"; without this they list three and
+        two times over. Punctuation and spacing carry no meaning here, so the key drops
+        them entirely and then drops a trailing "Segment".
+
+        Deliberately literal: it never merges names that differ by a real word, so
+        "Client" and "Client and Gaming" stay the two separate segments they are.
+        """
+        text = SegmentDataRepository._normalize_member_text(member)
+        text = text.replace('&', ' and ')   # "Apparel, Gear & Other" == "…Gear and Other"
+        key = re.sub(r'[^a-z0-9]+', '', text)
+        return re.sub(r'segments?$', '', key) or key
+
+    @staticmethod
+    def _member_display_map(rows, geo_member_set: set) -> Dict[str, str]:
+        """key → the label to show for it: the one from the most recent filing, so a
+        renamed segment reads the way its latest 10-K names it."""
+        chosen: Dict[str, Tuple[str, str]] = {}
+        for row in rows:
+            if row.get('_is_ndim'):
+                continue
+            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            if classified is None:
+                continue
+            _, member = classified
+            key = SegmentDataRepository._member_key(member)
+            filing_date = row.get('filing_date')
+            filed = filing_date.isoformat()[:10] if hasattr(filing_date, 'isoformat') else ''
+            if key not in chosen or filed > chosen[key][0]:
+                chosen[key] = (filed, member)
+        return {key: member for key, (_, member) in chosen.items()}
+
+    @staticmethod
+    def _drop_offmeasure_members(biz_data, geo_data, member_concepts, total_concepts) -> None:
+        """Blank out member values that measure something other than what the metric's
+        Total measures. Roper files segment "assets" three ways — us-gaap:Noncurrent
+        Assets plus two Roper-defined elements — so the table listed $577.6m of
+        operating assets under a $187.1m long-lived-assets Total.
+
+        Values are judged per period, not per member: Asbury tags its TCA segment
+        with the standard D&A element in some years and a deferred-acquisition-cost
+        element in others, so dropping the whole member would lose good years.
+
+        Only filer-defined elements go, and only when the Total settled on a standard
+        element that some member also uses. A company that reports a metric
+        exclusively with its own elements keeps everything, because then the Total is
+        filer-defined too and the rule does not apply.
+        """
+        for section, data in (("business", biz_data), ("geo", geo_data)):
+            for metric_name, members in list(data.items()):
+                counts = total_concepts.get((section, metric_name))
+                if not counts:
+                    continue
+                total_concept = counts.most_common(1)[0][0]
+                if not total_concept.startswith(("us-gaap:", "srt:")):
+                    continue
+                if not any(total_concept in concepts
+                           for (sec, met, _m, _p), concepts in member_concepts.items()
+                           if sec == section and met == metric_name):
+                    continue
+                for member, by_period in list(members.items()):
+                    for period in list(by_period):
+                        if by_period[period] is None:
+                            continue
+                        concepts = member_concepts.get((section, metric_name, member, period))
+                        if concepts and not any(c.startswith(("us-gaap:", "srt:")) for c in concepts):
+                            by_period[period] = None
+                    if not any(v is not None for v in by_period.values()):
+                        del members[member]
+                if not members:
+                    del data[metric_name]
+
+    @staticmethod
+    def _suppress_impossible_totals(biz_data, geo_data, metric_totals, member_concepts,
+                                    total_concept_by_period) -> None:
+        """Drop a Total that its own members prove cannot be right.
+
+        Corning's consolidated long-lived assets are stored as $68m against $44.7bn
+        of its own geographic members — a scale error in `coreiq_filing_metrics_v5`
+        that no selection rule can see, because the fact carries the right concept
+        and the right period. A consolidated figure is never smaller than one of its
+        parts, so the row is withheld rather than printed.
+
+        The comparison is like for like: only members tagged with the concept the
+        Total itself came from. A metric whose members carry several concepts is
+        measuring several things, and Asbury's correct $69m D&A Total must not be
+        hidden because a member holds $165m of deferred acquisition cost
+        amortisation — a different measure that is nobody's part of it.
+
+        Two conditions stay because each can be violated honestly:
+          * not Operating Profit — a segment can out-earn the company once
+            unallocated corporate costs come out;
+          * every comparable member non-negative — eliminations legitimately pull a
+            consolidated figure below a segment.
+        """
+        for section, data in (("business", biz_data), ("geo", geo_data)):
+            totals = metric_totals.get(section) or {}
+            for metric_name, members in data.items():
+                if metric_name == "Operating Profit Before Tax":
+                    continue
+                by_period = totals.get(metric_name)
+                if not by_period:
+                    continue
+                for period, total in list(by_period.items()):
+                    if total is None:
+                        continue
+                    total_concept = total_concept_by_period.get((section, metric_name, period))
+                    if not total_concept:
+                        continue
+                    peers = [
+                        members[member][period] for member in members
+                        if members[member].get(period) is not None
+                        and total_concept in member_concepts.get(
+                            (section, metric_name, member, period), set())
+                    ]
+                    if not peers or min(peers) < 0:
+                        continue
+                    if total < max(peers):
+                        by_period[period] = None
+
+    @staticmethod
     def _period_key(row) -> Tuple:
         """The context a fact covers: an instant date, or a start→end span."""
         if (row.get('period_type') or '').lower() == 'instant':
@@ -10072,7 +10266,10 @@ class SegmentDataRepository:
 
     @staticmethod
     def _rank_total_candidate(row, concept: str, member_concepts: Set[str],
-                              metric_name: str, member_periods: Set[Tuple]) -> Optional[Tuple]:
+                              metric_name: str, member_periods: Set[Tuple],
+                              dominant_concept: Optional[str] = None,
+                              largest_member: Optional[float] = None,
+                              member_sum: Optional[float] = None) -> Optional[Tuple]:
         """Score a non-dimensioned fact as the Total for one metric, or None if it
         is not a candidate at all. Higher wins; compared as a tuple, so each rule
         only breaks ties left by the one before it:
@@ -10081,10 +10278,26 @@ class SegmentDataRepository:
            (AMD tags a member "Operating income related to licensed IP" with
            amd:GainLossOnLicensingAgreement, so the members' concepts alone would
            let a $102m licensing gain outrank $1,264m of operating income)
-        2. the members' own concept — the plain case, and the only evidence when a
+        2. covers a period the members cover. This outranks every value test
+           because a 10-K carries the same label for the year and for each quarter:
+           Kohl's files nine "Total revenue" facts, and only one is the year.
+        3. for Revenues only, a fact that can actually contain the segments:
+           consolidated revenue is never less than one segment's revenue, so a
+           candidate below the largest member is not the top line. The Andersons
+           tags 150 product-detail rows RevenueFromContractWithCustomer… and only
+           33 segment rows Revenues, so counting alone picks $2,211m against a
+           $9,304m segment.
+        4. of those, the one nearest what the segments add up to — Goldman files
+           both net revenues ($58.3bn, exactly its segments) and a $44.7bn subtotal,
+           and both clear rule 3.
+        5. the concept most of the members are tagged with
+        6. the members' own concept — the plain case, and the only evidence when a
            filer uses an element the metric never declared (TJX: NoncurrentAssets)
-        3. covers a period the members cover — never a stray context
-        4. newest filing, so a restatement supersedes the original
+        7. newest filing, so a restatement supersedes the original
+
+        Rule 2 is confined to Revenues on purpose: a segment can out-earn the whole
+        company once unallocated corporate costs are taken out, so the same
+        reasoning would be wrong for Operating Profit.
         """
         declared = SegmentDataRepository._is_declared_concept(concept, metric_name)
         in_members = concept in member_concepts
@@ -10097,10 +10310,16 @@ class SegmentDataRepository:
                 return None
         filing_date = row.get('filing_date')
         filed = filing_date.isoformat()[:10] if hasattr(filing_date, 'isoformat') else ''
+        value = (row.get('numeric_value') or 0) / 1_000_000
+        covers_members = (metric_name == "Revenues" and largest_member is not None
+                          and value >= largest_member)
         return (
             in_members and declared,
-            in_members,
             SegmentDataRepository._period_key(row) in member_periods,
+            covers_members,
+            -abs(value - member_sum) if (covers_members and member_sum is not None) else 0.0,
+            in_members and concept == dominant_concept,
+            in_members,
             filed,
         )
 
@@ -10131,6 +10350,12 @@ class SegmentDataRepository:
         key = raw_heading.lower().strip()
         return SEGMENT_HEADING_MAP.get(key, raw_heading.title())
 
+    # All-caps region/organisation acronyms that str.title() would turn into words.
+    _MEMBER_ACRONYMS = frozenset({
+        "EMEA", "EMEIA", "APAC", "LATAM", "MENA", "ASEAN", "ANZ", "NAFTA",
+        "UK", "USA", "US", "EU", "DACH", "CEE", "SEA", "ROW", "RoW",
+    })
+
     @staticmethod
     def _title_case_member(member: str) -> str:
         if not member:
@@ -10138,6 +10363,13 @@ class SegmentDataRepository:
         # Normalize unicode quotes → ASCII
         member = member.replace('\u2019', "'").replace('\u2018', "'").replace('\u201c', '"').replace('\u201d', '"')
         if member != member.upper() and member != member.lower():
+            return member
+        # str.title() mangles acronyms — Ingredion's "F&II-LATAM" becomes "F&Ii-Latam"
+        # and "T&HS" becomes "T&Hs". An ampersand marks a label that is not plain
+        # words, and the region acronyms below would otherwise read as words
+        # ("EMEA" → "Emea"). Everything else still title-cases, so "UNITED STATES"
+        # and "JAPAN" read normally.
+        if '&' in member or member.upper() in SegmentDataRepository._MEMBER_ACRONYMS:
             return member
         return member.title()
 
@@ -10445,7 +10677,16 @@ class SegmentDataRepository:
         # ties a Total row back to the exact fact its members split up — and the
         # periods those members cover, so a Total cannot come from another context.
         section_concepts: Dict[Tuple[str, str], Set[str]] = {}
+        # How many member rows use each concept: the most-used one is what a Total
+        # for this metric should be tagged with.
+        concept_counts: Dict[Tuple[str, str], "collections.Counter"] = {}
         member_periods: Dict[Tuple[str, str, int], Set[Tuple]] = {}
+        # Biggest single member per metric per period — a consolidated revenue below
+        # it cannot be the top line (see _rank_total_candidate rule 2).
+        largest_member: Dict[Tuple[str, str, int], float] = {}
+        member_sum: Dict[Tuple[str, str, int], float] = {}
+        member_concepts: Dict[Tuple[str, str, str], Set[str]] = {}
+        member_display = SegmentDataRepository._member_display_map(filtered, geo_member_set)
 
         for row in filtered:
             if row.get('_is_ndim'):
@@ -10460,46 +10701,11 @@ class SegmentDataRepository:
             scaled = raw_val / 1_000_000
 
             # Dimensioned rows → segment members
-            fdl = row.get('full_dimension_label') or ''
-            member_raw = row.get('dimension_member_label') or ''
-            _forced_section = None
-            # Multi-dimensional operating-segment facts: the primary member is a generic wrapper
-            # ("Operating Segments") while the REAL segment is the second axis, surfaced in
-            # dimension_label (e.g. Costco geo revenue: ConsolidationItems=Operating Segments +
-            # Segments=United States). Recover the inner member; when it is a geography the company
-            # also reports on a geographic axis, route it to the Geographic table. Otherwise skip —
-            # the wrapper total is redundant with the 1-D segment facts captured above.
-            if member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
-                _inner = (row.get('dimension_label') or '').strip()
-                if (_inner and _inner.lower() != member_raw.lower().strip()
-                        and _inner.lower() in geo_member_set
-                        and SegmentDataRepository._looks_geographic(_inner)):
-                    member_raw = _inner
-                    _forced_section = "geo"
-                else:
-                    continue
-            if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            if classified is None:
                 continue
-            # Aggregate XBRL "operating segment" roll-up members ("Operating
-            # segment", "Total for operating segments", "Reportable Operating
-            # Segments", …) are totals/wrappers, never a real product or geo
-            # segment — they double-count, so drop them.
-            if "operating segment" in member_raw.lower():
-                continue
-            member = SegmentDataRepository._title_case_member(member_raw)
-            if not member:
-                continue
-            if _forced_section:
-                section = _forced_section
-            else:
-                heading = SegmentDataRepository._get_heading(fdl)
-                section = SegmentDataRepository._classify_heading(heading)
-            # Canonicalise geographic labels so filing-to-filing drift collapses
-            # to one member (e.g. "United States Operations" → "United States",
-            # "Canadian Operations" → "Canada") — keeps the Segments tab and the
-            # screening cache from listing the same geography twice.
-            if section == "geo":
-                member = canonicalize_geo_label(member)
+            section, member = classified
+            member = member_display.get(SegmentDataRepository._member_key(member), member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
@@ -10513,8 +10719,15 @@ class SegmentDataRepository:
                     concept = (row.get('concept') or '').strip()
                     if concept:
                         section_concepts.setdefault((section, metric_name), set()).add(concept)
+                        concept_counts.setdefault((section, metric_name), collections.Counter())[concept] += 1
+                        member_concepts.setdefault(
+                            (section, metric_name, member, row_year), set()).add(concept)
                     member_periods.setdefault((section, metric_name, row_year), set()).add(
                         SegmentDataRepository._period_key(row))
+                    slot = (section, metric_name, row_year)
+                    if scaled > largest_member.get(slot, float('-inf')):
+                        largest_member[slot] = scaled
+                    member_sum[slot] = member_sum.get(slot, 0.0) + scaled
                     break
 
         # ── Second pass: non-dimensioned rows → per-section Total rows ────────
@@ -10536,20 +10749,33 @@ class SegmentDataRepository:
             if raw_val is None or row_year not in years:
                 continue
             for (section, metric_name), concepts in section_concepts.items():
+                counts = concept_counts.get((section, metric_name))
                 rank = SegmentDataRepository._rank_total_candidate(
                     row, concept, concepts, metric_name,
-                    member_periods.get((section, metric_name, row_year)) or set())
+                    member_periods.get((section, metric_name, row_year)) or set(),
+                    counts.most_common(1)[0][0] if counts else None,
+                    largest_member.get((section, metric_name, row_year)),
+                    member_sum.get((section, metric_name, row_year)))
                 if rank is None:
                     continue
                 key = (section, metric_name, row_year)
                 if key not in best_total or rank > best_total[key][0]:
-                    best_total[key] = (rank, raw_val / 1_000_000)
+                    best_total[key] = (rank, raw_val / 1_000_000, concept)
 
-        for (section, metric_name, row_year), (_, value) in best_total.items():
+        total_concepts: Dict[Tuple[str, str], "collections.Counter"] = {}
+        total_concept_by_period: Dict[Tuple[str, str, int], str] = {}
+        for (section, metric_name, row_year), (_, value, won_with) in best_total.items():
             bucket = metric_totals["geo" if section == "geo" else "business"]
             if metric_name not in bucket:
                 bucket[metric_name] = {y: None for y in years}
             bucket[metric_name][row_year] = value
+            total_concepts.setdefault((section, metric_name), collections.Counter())[won_with] += 1
+            total_concept_by_period[(section, metric_name, row_year)] = won_with
+
+        SegmentDataRepository._drop_offmeasure_members(
+            biz_data, geo_data, member_concepts, total_concepts)
+        SegmentDataRepository._suppress_impossible_totals(
+            biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
 
         return biz_data, geo_data, metric_totals
 
@@ -10745,14 +10971,20 @@ class SegmentDataRepository:
         except Exception:
             pass  # Non-fatal
 
-        # IS revenue takes precedence over XBRL non-dim; merge into both sections'
-        # totals — business and geographic revenue both roll up to the same top line.
+        # Income-statement revenue fills the years the filing itself does not carry a
+        # consolidated revenue fact for. It used to override the filing outright —
+        # a workaround from when the XBRL total was label-matched and unreliable —
+        # but that let a partial-year ingest win: Coherent's FY2026 row reads
+        # $2,045.5m against $7,118.2m in its own 10-K, under members totalling
+        # $7.1bn. The filing the segments come from is the better source; this is
+        # the fallback.
         for _yr, _rv in revenue_totals.items():
             if _rv is not None:
                 for _bucket in metric_totals.values():
                     if "Revenues" not in _bucket:
                         _bucket["Revenues"] = {y: None for y in years}
-                    _bucket["Revenues"][_yr] = _rv
+                    if _bucket["Revenues"].get(_yr) is None:
+                        _bucket["Revenues"][_yr] = _rv
 
         return {
             "years": years,
@@ -10813,7 +11045,15 @@ class SegmentDataRepository:
         # Exact filed totals per section per metric per period (non-dimensioned rows)
         metric_totals: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {"business": {}, "geo": {}}
         section_concepts: Dict[Tuple[str, str], Set[str]] = {}
+        # How many member rows use each concept: the most-used one is what a Total
+        # for this metric should be tagged with.
+        concept_counts: Dict[Tuple[str, str], "collections.Counter"] = {}
         member_periods: Dict[Tuple[str, str, int], Set[Tuple]] = {}
+        # Biggest single member per metric per period — a consolidated revenue below
+        # it cannot be the top line (see _rank_total_candidate rule 2).
+        largest_member: Dict[Tuple[str, str, int], float] = {}
+        member_sum: Dict[Tuple[str, str, int], float] = {}
+        member_display = SegmentDataRepository._member_display_map(all_rows, geo_member_set)
 
         for row in all_rows:
             if row.get('_is_ndim'):
@@ -10835,30 +11075,11 @@ class SegmentDataRepository:
             scaled = raw_val / 1_000_000
 
             # Dimensioned rows → segment members
-            fdl = row.get('full_dimension_label') or ''
-            member_raw = row.get('dimension_member_label') or ''
-            _forced_section = None
-            # Recover the real geographic member from multi-dimensional operating-segment facts
-            # (see annual builder for the full rationale, e.g. Costco geo revenue).
-            if member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
-                _inner = (row.get('dimension_label') or '').strip()
-                if (_inner and _inner.lower() != member_raw.lower().strip()
-                        and _inner.lower() in geo_member_set
-                        and SegmentDataRepository._looks_geographic(_inner)):
-                    member_raw = _inner
-                    _forced_section = "geo"
-                else:
-                    continue
-            if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            if classified is None:
                 continue
-            member = SegmentDataRepository._title_case_member(member_raw)
-            if not member:
-                continue
-            if _forced_section:
-                section = _forced_section
-            else:
-                heading = SegmentDataRepository._get_heading(fdl)
-                section = SegmentDataRepository._classify_heading(heading)
+            section, member = classified
+            member = member_display.get(SegmentDataRepository._member_key(member), member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
@@ -10872,8 +11093,13 @@ class SegmentDataRepository:
                     concept = (row.get('concept') or '').strip()
                     if concept:
                         section_concepts.setdefault((section, metric_name), set()).add(concept)
+                        concept_counts.setdefault((section, metric_name), collections.Counter())[concept] += 1
                     member_periods.setdefault((section, metric_name, pkey), set()).add(
                         SegmentDataRepository._period_key(row))
+                    slot = (section, metric_name, pkey)
+                    if scaled > largest_member.get(slot, float('-inf')):
+                        largest_member[slot] = scaled
+                    member_sum[slot] = member_sum.get(slot, 0.0) + scaled
                     break
 
         # Second pass: non-dimensioned rows → Total rows, ranked exactly as the
@@ -10895,20 +11121,33 @@ class SegmentDataRepository:
             if pkey not in key_set or raw_val is None:
                 continue
             for (section, metric_name), concepts in section_concepts.items():
+                counts = concept_counts.get((section, metric_name))
                 rank = SegmentDataRepository._rank_total_candidate(
                     row, concept, concepts, metric_name,
-                    member_periods.get((section, metric_name, pkey)) or set())
+                    member_periods.get((section, metric_name, pkey)) or set(),
+                    counts.most_common(1)[0][0] if counts else None,
+                    largest_member.get((section, metric_name, pkey)),
+                    member_sum.get((section, metric_name, pkey)))
                 if rank is None:
                     continue
                 key = (section, metric_name, pkey)
                 if key not in best_total or rank > best_total[key][0]:
-                    best_total[key] = (rank, raw_val / 1_000_000)
+                    best_total[key] = (rank, raw_val / 1_000_000, concept)
 
-        for (section, metric_name, pkey), (_, value) in best_total.items():
+        total_concepts: Dict[Tuple[str, str], "collections.Counter"] = {}
+        total_concept_by_period: Dict[Tuple[str, str, int], str] = {}
+        for (section, metric_name, pkey), (_, value, won_with) in best_total.items():
             bucket = metric_totals["geo" if section == "geo" else "business"]
             if metric_name not in bucket:
                 bucket[metric_name] = {k: None for k in period_keys}
             bucket[metric_name][pkey] = value
+            total_concepts.setdefault((section, metric_name), collections.Counter())[won_with] += 1
+            total_concept_by_period[(section, metric_name, pkey)] = won_with
+
+        SegmentDataRepository._drop_offmeasure_members(
+            biz_data, geo_data, member_concepts, total_concepts)
+        SegmentDataRepository._suppress_impossible_totals(
+            biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
 
         if not biz_data and not geo_data:
             return None
@@ -10955,14 +11194,15 @@ class SegmentDataRepository:
         except Exception:
             pass
 
-        # Income-statement revenue takes precedence over XBRL non-dim revenue
-        # (IS is deduplicated and more reliable); merge into metric_totals
+        # Income-statement revenue fills periods the filing carries no consolidated
+        # revenue fact for (see the annual builder for why it is no longer an override)
         for _pk, _rv in revenue_totals.items():
             if _rv is not None:
                 for _bucket in metric_totals.values():
                     if "Revenues" not in _bucket:
                         _bucket["Revenues"] = {k: None for k in period_keys}
-                    _bucket["Revenues"][_pk] = _rv
+                    if _bucket["Revenues"].get(_pk) is None:
+                        _bucket["Revenues"][_pk] = _rv
 
         return {
             "years": period_keys,

@@ -1156,6 +1156,20 @@ SEGMENT_SKIP_MEMBERS = {
     'international plans', 'international plan',
 }
 
+# Reconciliation lines filed on the consolidation axis. They bridge the segment
+# rows to the consolidated figure, so they are not segments — and the Total row
+# is the filed consolidated fact, which already accounts for them. Matched after
+# dash/whitespace normalisation, which is why only one spelling of each is needed.
+# (Extends the same policy SEGMENT_SKIP_MEMBERS already applies to 'eliminations',
+# 'corporate and other' and 'unallocated corporate'.)
+SEGMENT_RECONCILIATION_MEMBERS = {
+    'corporate nonsegment', 'corporate, non-segment', 'corporate non-segment',
+    'excluding corporate nonsegment', 'corporate, other and eliminations',
+    'inter-segment sales', 'intersegment sales', 'inter-segment revenue',
+    'segment reporting, reconciling item', 'unallocated amounts',
+    'comparable adjustments',   # Constellation's non-GAAP bridge, not a segment
+}
+
 # --- Metric groups: CapIQ section name → matching rules ---
 # Each metric: display_label, db_include (label keywords), db_exclude, edgar concepts/labels
 SEGMENT_METRIC_GROUPS = {
@@ -1188,15 +1202,29 @@ SEGMENT_METRIC_GROUPS = {
     "Assets": {
         "display": "Assets",
         "db_include": ["total assets", "assets"],
+        # "assets" alone matches any label containing the word, including flows and
+        # P&L items that are not a balance of anything: Jack in the Box's segment
+        # "assets" were "Assets held for sale", Darling's were "Gain on sale of
+        # assets", and Constellation's Total came from a tax reconciliation on asset
+        # disposals. Everything below is a movement, a valuation or a charge.
         "db_exclude": ["net assets", "total current assets", "intangible assets",
-                       "deferred tax", "other assets", "operating lease"],
+                       "deferred tax", "other assets", "operating lease",
+                       "held for sale", "amortization", "gain on", "loss on",
+                       "impairment", "proceeds from", "disposition", "sale of",
+                       "return on", "right-of-use", "right of use", "derivative",
+                       "debt issued", "fair value", "income tax"],
         "edgar_concepts": ["Assets"],
         "edgar_labels": ["total assets", "assets"],
     },
     "Depreciation & Amortization": {
         "display": "Depreciation & Amortization",
         "db_include": ["depreciation", "amortization"],
-        "db_exclude": ["accumulated", "less:", "net of"],
+        # "exclusive of"/"cost of" catch income-statement cost lines that merely
+        # mention D&A — EPAM and Steve Madden both file "Cost of revenues
+        # (exclusive of depreciation and amortization)", which is cost, not D&A.
+        # The Revenues group has excluded "cost of" all along; this matches it.
+        "db_exclude": ["accumulated", "less:", "net of", "exclusive of",
+                       "excluding", "cost of"],
         "edgar_concepts": [
             "DepreciationDepletionAndAmortization",
             "DepreciationAndAmortization",

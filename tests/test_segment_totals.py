@@ -201,6 +201,308 @@ def test_a_fact_from_another_period_never_becomes_the_total():
     _, _, totals = classify(rows)
     assert totals["geo"]["Operating Profit Before Tax"][2025] == 1000.0
 
+# ── Member rows: which facts are segments at all, and what they are called ──────
+
+def wrapper_row(inner, concept, member_label, year, value, axis="us-gaap:StatementBusinessSegmentsAxis"):
+    """A multi-dimensional operating-segment fact: the primary member is the generic
+    wrapper, the real segment sits on a second axis in dimension_label."""
+    row = duration_member("Operating income (loss)", concept, member_label, year, value)
+    row.update(dimension="srt:ConsolidationItemsAxis", dimension_member_label=member_label,
+               dimension_label=inner,
+               full_dimension_label=f"Consolidation Items: {member_label}, Segments: {inner}")
+    return row
+
+
+def test_real_segment_recovered_from_the_operating_segments_wrapper():
+    """AMD shape: every segment fact is tagged ConsolidationItems=Operating Segments
+    plus BusinessSegments=<segment>. Recovering only geographies left the tab showing
+    nothing but the reconciliation line."""
+    rows = [wrapper_row(seg, "us-gaap:OperatingIncomeLoss", "Operating Segments", 2025, v)
+            for seg, v in (("Datacenter", 3_482e6), ("Client", 897e6), ("Gaming", 290e6))]
+    rows.append(consolidated_duration("Operating income", "us-gaap:OperatingIncomeLoss",
+                                      2025, 1_900e6))
+    biz, _, totals = classify(rows)
+    assert sorted(biz["Operating Profit Before Tax"]) == ["Client", "Datacenter", "Gaming"]
+    assert totals["business"]["Operating Profit Before Tax"][2025] == 1900.0
+
+
+def test_wrapper_with_no_inner_member_is_the_rollup_and_is_dropped():
+    rows = [wrapper_row("Datacenter", "us-gaap:OperatingIncomeLoss", "Operating Segments", 2025, 10e6),
+            wrapper_row("Operating Segments", "us-gaap:OperatingIncomeLoss", "Operating Segments",
+                        2025, -4_979e6)]
+    biz, _, _ = classify(rows)
+    assert sorted(biz["Operating Profit Before Tax"]) == ["Datacenter"]
+
+
+def test_reconciliation_rows_are_not_segments():
+    """"Segment Reconciling Items" and "…Reconciling Item, Excluding Corporate
+    Nonsegment" are the bridge to the consolidated figure, not segments — the same
+    policy SEGMENT_SKIP_MEMBERS already applies to eliminations and corporate."""
+    rows = [duration_member("Operating income (loss)", "us-gaap:OperatingIncomeLoss", m, 2025, v)
+            for m, v in (("Datacenter", 3_482e6), ("Client", 897e6),
+                         ("Segment Reconciling Items", 4_190e6),
+                         ("Segment Reporting, Reconciling Item, Excluding Corporate Nonsegment", 4_190e6),
+                         ("Corporate, Non -Segment", -133e6),
+                         ("Total Wholesale", 11e6))]
+    for r in rows:
+        r["dimension"] = "us-gaap:StatementBusinessSegmentsAxis"
+        r["full_dimension_label"] = f"Segments: {r['dimension_member_label']}"
+    biz, _, _ = classify(rows)
+    assert sorted(biz["Operating Profit Before Tax"]) == ["Client", "Datacenter"]
+
+
+def test_label_drift_collapses_to_one_member():
+    """Ingredion files one segment three ways across filings."""
+    keys = {SegmentDataRepository._member_key(m) for m in
+            ("Asia Pacific Segment", "Asia- Pacific", "Asia-Pacific")}
+    assert len(keys) == 1
+    assert SegmentDataRepository._member_key("F&II - LATAM") == SegmentDataRepository._member_key("F&II\u2013LATAM")
+    assert SegmentDataRepository._member_key("North America Segment") == SegmentDataRepository._member_key("North America")
+
+
+def test_member_key_never_merges_genuinely_different_segments():
+    distinct = ["Client", "Client and Gaming", "Wholesale Footwear", "Wholesale Accessories",
+                "North America", "South America", "China", "China (including Hong Kong)"]
+    assert len({SegmentDataRepository._member_key(m) for m in distinct}) == len(distinct)
+
+
+def test_newest_filings_label_is_the_one_displayed():
+    old = duration_member("Net sales", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                          "F&II - LATAM", 2024, 2_450e6)
+    old["filing_date"] = date(2024, 2, 20)
+    new = duration_member("Net sales", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                          "F&II\u2013LATAM", 2025, 2_341e6)
+    new["filing_date"] = date(2025, 2, 20)
+    other = duration_member("Net sales", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                            "T&HS", 2025, 2_397e6)
+    _, geo, _ = classify([old, new, other])
+    assert "F&II\u2013LATAM" in geo["Revenues"]
+    assert "F&II - LATAM" not in geo["Revenues"]
+
+
+def test_acronyms_survive_title_casing():
+    assert SegmentDataRepository._title_case_member("F&II-LATAM") == "F&II-LATAM"
+    assert SegmentDataRepository._title_case_member("T&HS") == "T&HS"
+    assert SegmentDataRepository._title_case_member("EMEA") == "EMEA"
+    # …while ordinary all-caps labels still read as words
+    assert SegmentDataRepository._title_case_member("UNITED STATES") == "United States"
+    assert SegmentDataRepository._title_case_member("NORTH AMERICA") == "North America"
+    assert SegmentDataRepository._title_case_member("JAPAN") == "Japan"
+
+def test_invisible_characters_do_not_split_a_member():
+    """PriceSmart files bidi marks inside its member names — invisible on screen,
+    but they made one segment render as two."""
+    assert (SegmentDataRepository._member_key("United \u200eStates \u200eOperations")
+            == SegmentDataRepository._member_key("United States Operations"))
+
+
+def test_ampersand_and_the_word_and_are_the_same_member():
+    assert (SegmentDataRepository._member_key("Apparel, Gear & Other")
+            == SegmentDataRepository._member_key("Apparel, Gear and Other"))
+
+
+def test_cost_lines_that_merely_mention_depreciation_are_not_da():
+    """EPAM and Steve Madden file "Cost of revenues (exclusive of depreciation and
+    amortization)" — a cost line whose value dwarfs real D&A."""
+    from utils.constants import SEGMENT_METRIC_GROUPS
+    cfg = SEGMENT_METRIC_GROUPS["Depreciation & Amortization"]
+    assert not SegmentDataRepository._matches_metric(
+        "Cost of revenues (exclusive of depreciation and amortization)", cfg)
+    assert not SegmentDataRepository._matches_metric(
+        "Cost of goods sold, excluding depreciation and amortization", cfg)
+    # …while the real lines still match
+    assert SegmentDataRepository._matches_metric("Depreciation and amortization", cfg)
+    assert SegmentDataRepository._matches_metric("Depreciation and amortization expense", cfg)
+
+
+def test_total_prefers_the_concept_most_members_use():
+    """Under Armour shape: the members are long-lived assets (NoncurrentAssets), and
+    a minor fact sharing the metric must not win just by being filed later."""
+    rows = []
+    for m, v in (("United States", 801e6), ("Canada", 21e6), ("EMEA", 100e6)):
+        rows.append(geo_member("Long-lived assets", "us-gaap:NoncurrentAssets", m, 2025, v))
+    stray = geo_member("Assets held for sale", "us-gaap:AssetsHeldForSaleNotPartOfDisposalGroup",
+                       "United States", 2025, 2e6)
+    rows.append(stray)
+    rows.append(consolidated("Long-lived assets", "us-gaap:NoncurrentAssets", 2025, 1_055e6))
+    late = consolidated("Assets held for sale",
+                        "us-gaap:AssetsHeldForSaleNotPartOfDisposalGroup", 2025, 2e6)
+    late["filing_date"] = date(2026, 5, 1)
+    rows.append(late)
+    _, _, totals = classify(rows)
+    assert totals["geo"]["Assets"][2025] == 1055.0
+
+def test_assets_metric_ignores_held_for_sale_and_amortization_lines():
+    """Jack in the Box's segment "assets" were "Assets held for sale" and
+    "Amortization of favorable and unfavorable lease assets"."""
+    from utils.constants import SEGMENT_METRIC_GROUPS
+    cfg = SEGMENT_METRIC_GROUPS["Assets"]
+    assert not SegmentDataRepository._matches_metric("Assets held for sale", cfg)
+    assert not SegmentDataRepository._matches_metric(
+        "Amortization of favorable and unfavorable lease assets", cfg)
+    assert not SegmentDataRepository._matches_metric("Reclassified to assets held for sale", cfg)
+    assert SegmentDataRepository._matches_metric("Total assets", cfg)
+    assert SegmentDataRepository._matches_metric("Carrying values of long-lived assets", cfg)
+
+def test_revenue_total_is_never_smaller_than_one_segment():
+    """The Andersons shape: 150 product-detail rows are tagged
+    RevenueFromContractWithCustomerExcludingAssessedTax and only the segment rows
+    us-gaap:Revenues, so the most-used concept is the wrong one. A $2,211m
+    candidate cannot be the top line when one segment alone booked $9,304m."""
+    rows = [duration_member("Sales and merchandising revenues", "us-gaap:Revenues", m, 2025, v)
+            for m, v in (("Trade", 9_304e6), ("Renewables", 2_440e6), ("Nutrient", 866e6))]
+    for i in range(6):   # the product-detail rows that dominate by count
+        rows.append(duration_member("Revenue from contract with customers",
+                                    "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                                    f"Product {i}", 2025, 300e6))
+    rows.append(consolidated_duration("Revenue from contract with customers",
+                                      "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                                      2025, 2_211e6))
+    rows.append(consolidated_duration("Sales and merchandising revenues", "us-gaap:Revenues",
+                                      2025, 12_612e6))
+    _, geo, totals = classify(rows)
+    assert totals["geo"]["Revenues"][2025] == 12612.0
+
+
+def test_the_covering_revenue_nearest_the_segments_wins():
+    """Goldman files both net revenues — exactly its segments — and a smaller
+    subtotal; both clear the largest-segment rule, so nearness decides."""
+    rows = [duration_member("Revenues", "us-gaap:Revenues", m, 2025, v)
+            for m, v in (("Markets", 30_000e6), ("Banking", 20_000e6))]
+    rows.append(consolidated_duration("Total net revenues", "us-gaap:Revenues", 2025, 50_000e6))
+    subtotal = consolidated_duration("Total non-interest revenues", "us-gaap:Revenues",
+                                     2025, 38_000e6)
+    subtotal["filing_date"] = date(2026, 3, 1)   # newer, so only rules 2-3 can stop it
+    rows.append(subtotal)
+    _, geo, totals = classify(rows)
+    assert totals["geo"]["Revenues"][2025] == 50000.0
+
+
+def test_a_segment_may_out_earn_the_company_on_profit():
+    """The revenue invariant must not leak into Operating Profit: unallocated
+    corporate costs legitimately put the total below a segment (AMD FY2025)."""
+    rows = [duration_member("Operating income (loss)", "us-gaap:OperatingIncomeLoss", m, 2025, v)
+            for m, v in (("Datacenter", 3_482e6), ("Client", 897e6))]
+    rows.append(consolidated_duration("Operating income", "us-gaap:OperatingIncomeLoss",
+                                      2025, 1_900e6))
+    _, geo, totals = classify(rows)
+    assert totals["geo"]["Operating Profit Before Tax"][2025] == 1900.0
+
+def test_the_year_beats_the_quarters_that_share_its_label():
+    """Kohl's files nine facts labelled "Total revenue" in one 10-K — the year and
+    each quarter, all the same concept. Only the one covering the members' period
+    is the Total, whatever the quarterly values happen to be worth."""
+    rows = [duration_member("Other revenue",
+                            "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                            m, 2025, v) for m, v in (("Gift Card", 149e6), ("Other Revenue", 924e6))]
+    rows.append(consolidated_duration("Total revenue",
+                                      "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                                      2025, 15_955e6))
+    for i, qv in enumerate((2_428e6, 3_979e6, 4_087e6)):
+        q = consolidated_duration("Total revenue",
+                                  "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                                  2025, qv)
+        q["period_start"], q["period_end"] = date(2025, 1 + i * 3, 1), date(2025, 3 + i * 3, 28)
+        rows.append(q)
+    _, geo, totals = classify(rows)
+    assert totals["geo"]["Revenues"][2025] == 15955.0
+
+def test_members_measuring_something_else_are_dropped():
+    """Roper files segment assets three ways: us-gaap:NoncurrentAssets plus two
+    Roper-defined elements. The tab listed $577.6m of "operating assets" under a
+    $187.1m long-lived-assets Total."""
+    rows = [geo_member("Long-lived assets", "us-gaap:NoncurrentAssets", m, 2025, v)
+            for m, v in (("Network Software", 120e6), ("Process Technologies", 60e6))]
+    rows.append(geo_member("Operating assets", "rop:SegmentReportingOperatingAssets",
+                           "Application Software", 2025, 577e6))
+    rows.append(consolidated("Long-lived assets", "us-gaap:NoncurrentAssets", 2025, 187e6))
+    _, geo, totals = classify(rows)
+    assert sorted(geo["Assets"]) == ["Network Software", "Process Technologies"]
+    assert totals["geo"]["Assets"][2025] == 187.0
+
+
+def test_a_filer_using_only_its_own_elements_keeps_every_member():
+    """The guard: when the Total itself is filer-defined there is no standard
+    measure to hold members to, so nothing is dropped."""
+    rows = [geo_member("Operating assets", "rop:SegmentReportingOperatingAssets", m, 2025, v)
+            for m, v in (("Application Software", 577e6), ("Network Software", 215e6))]
+    rows.append(consolidated("Operating assets", "rop:SegmentReportingOperatingAssets",
+                             2025, 1_356e6))
+    _, geo, totals = classify(rows)
+    assert sorted(geo["Assets"]) == ["Application Software", "Network Software"]
+    assert totals["geo"]["Assets"][2025] == 1356.0
+
+def test_a_total_its_own_members_disprove_is_withheld():
+    """Corning's consolidated long-lived assets are stored as $68m against $44.7bn
+    of its own geographic members — a scale error no selection rule can see, since
+    the fact has the right concept and period. Show nothing, not $68m."""
+    rows = [geo_member("Long-lived assets", "us-gaap:NoncurrentAssets", m, 2025, v)
+            for m, v in (("Asia Pacific", 10_948e6), ("North America", 9_003e6))]
+    rows.append(consolidated("Long-lived assets", "us-gaap:NoncurrentAssets", 2025, 68e6))
+    _, geo, totals = classify(rows)
+    assert sorted(geo["Assets"]) == ["Asia Pacific", "North America"]   # members still shown
+    assert totals["geo"]["Assets"][2025] is None                        # the impossible Total is not
+
+
+def test_the_guard_stays_off_operating_profit():
+    rows = [duration_member("Operating income (loss)", "us-gaap:OperatingIncomeLoss", m, 2025, v)
+            for m, v in (("Datacenter", 3_482e6), ("Client", 897e6))]
+    rows.append(consolidated_duration("Operating income", "us-gaap:OperatingIncomeLoss",
+                                      2025, 1_900e6))
+    _, _, totals = classify(rows)
+    assert totals["geo"]["Operating Profit Before Tax"][2025] == 1900.0
+
+
+def test_the_total_is_only_compared_with_members_of_its_own_measure():
+    """Asbury shape: a correct $69m D&A Total must not be hidden because a member
+    carries a different measure worth $165m — that member is not part of it."""
+    rows = [geo_member("Depreciation and amortization",
+                       "us-gaap:DepreciationDepletionAndAmortization", "Dealerships", 2025, 68.2e6)]
+    odd = geo_member("Amortization of deferred acquisition costs",
+                     "abg:BusinessAcquisitionDeferredAcquisitionCostsAmortization",
+                     "TCA", 2025, 165.7e6)
+    rows.append(odd)
+    rows.append(consolidated("Depreciation and amortization",
+                             "us-gaap:DepreciationDepletionAndAmortization", 2025, 69e6))
+    _, _, totals = classify(rows)
+    assert totals["geo"]["Depreciation & Amortization"][2025] == 69.0
+
+
+def test_the_guard_stays_off_when_a_member_is_negative():
+    """Eliminations legitimately pull a consolidated figure below a segment."""
+    rows = [geo_member("Total assets", "us-gaap:Assets", m, 2025, v)
+            for m, v in (("Retail", 900e6), ("Eliminations, net", -400e6))]
+    rows.append(consolidated("Total assets", "us-gaap:Assets", 2025, 500e6))
+    _, _, totals = classify(rows)
+    assert totals["geo"]["Assets"][2025] == 500.0
+
+def test_an_impossible_total_is_withheld_even_when_members_are_mixed():
+    """Constellation shape: the members carry two measures, and the Total is below
+    the one it shares a concept with, so it is still impossible."""
+    rows = [geo_member("Total assets", "us-gaap:Assets", "Wine and Spirits", 2025, 6_865e6),
+            geo_member("Operating assets", "stz:SegmentOperatingAssets",
+                       "Craft Beer Business", 2025, 120e6)]
+    rows.append(consolidated("Total assets", "us-gaap:Assets", 2025, 0.0))
+    _, _, totals = classify(rows)
+    assert totals["geo"]["Assets"][2025] is None
+
+def test_assets_is_a_balance_not_a_flow():
+    """Darling's entire segment "Assets" table was "Gain on sale of assets", and
+    Constellation's Total came from a tax reconciliation on asset disposals."""
+    from utils.constants import SEGMENT_METRIC_GROUPS
+    cfg = SEGMENT_METRIC_GROUPS["Assets"]
+    for flow in ("Gain on sale of assets", "Impairment of long-lived assets",
+                 "Proceeds from sale of assets", "Long-lived assets, estimated fair value",
+                 "Net income tax provision (benefit) on disposition of assets",
+                 "Right-of-use assets obtained in exchange for finance lease liabilities",
+                 "Derivative assets", "Debt issued for assets",
+                 "Actual return on plan assets"):
+        assert not SegmentDataRepository._matches_metric(flow, cfg), flow
+    for balance in ("Total assets", "Assets", "Long-lived tangible assets",
+                    "Carrying values of long-lived assets", "Operating assets",
+                    "Long-lived assets"):
+        assert SegmentDataRepository._matches_metric(balance, cfg), balance
+
 
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):

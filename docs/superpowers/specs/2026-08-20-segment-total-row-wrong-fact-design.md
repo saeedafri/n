@@ -170,7 +170,98 @@ renders (metric with ≥2 members). Results in §6.
   in every year.
 - UI verification with `.claude/dev/ui_test.py` on `/market_data`.
 
-## 6. Results of the full sweep
+## 6. Member rows — three further defects fixed 2026-08-23
+
+Auditing the Totals fleet-wide exposed defects in the *member* rows they sit under.
+
+**6.1 Real segments were being discarded.** Facts tagged
+`ConsolidationItems=Operating Segments` + `BusinessSegments=<segment>` were only
+unwrapped when the inner member was a *geography*. AMD's Datacenter, Client,
+Gaming and Embedded were thrown away, leaving a table whose only "segments" were
+reconciliation lines — and TJX had **no Business Segments table at all**
+(Marmaxx, HomeGoods, TJX Canada, TJX International all dropped). Now the inner
+member is recovered whatever it names; a wrapper with no inner member is still
+the roll-up and is still dropped.
+
+**6.2 Reconciliation rows listed as segments.** "Segment Reconciling Items",
+"Segment Reporting, Reconciling Item, Excluding Corporate Nonsegment",
+"Corporate, Non-Segment" and roll-ups like "Total Wholesale" were rendered as
+members. They bridge segments to the consolidated figure — which is what the
+Total already shows. Dropped, extending the policy `SEGMENT_SKIP_MEMBERS` already
+applied to eliminations and corporate.
+
+**6.3 One segment listed two or three times.** Labels drift between filings:
+Ingredion files "Asia Pacific Segment", "Asia- Pacific" and "Asia-Pacific" for
+one segment, and "F&II - LATAM" then "F&II–LATAM" for another; O'Reilly files
+"Automotive Aftermarket Parts Segment" and "…parts segment"; PriceSmart embeds
+invisible bidi marks. `_member_key` collapses punctuation, spacing, `&`/"and",
+invisible characters and a trailing "Segment"; the newest filing's spelling is
+displayed. It is deliberately literal — "Client" and "Client and Gaming" remain
+two segments.
+
+Related: `str.title()` was mangling acronyms ("F&II–LATAM" → "F&Ii–Latam", "EMEA"
+→ "Emea"). Fixed without disturbing "UNITED STATES" → "United States".
+
+## 7. Metric matching — two leaks fixed
+
+- **D&A absorbed cost lines.** EPAM and Steve Madden file "Cost of revenues
+  (exclusive of depreciation and amortization)"; matching on "depreciation"
+  pulled a cost line worth 20× real D&A into the metric. `db_exclude` now carries
+  "exclusive of", "excluding" and "cost of" — the Revenues group has excluded
+  "cost of" all along.
+- **Assets absorbed anything containing the word.** Jack in the Box's segment
+  "assets" were "Assets held for sale" and "Amortization of favorable and
+  unfavorable lease assets". `db_exclude` now carries "held for sale" and
+  "amortization".
+
+## 8. Assets is a balance, not a flow
+
+`"assets"` matched any label containing the word, so flows were rendered as
+balances: Darling's entire segment "Assets" table was "Gain on sale of assets",
+and Constellation's Total came from "Net income tax provision (benefit) on
+disposition of assets". Gains, losses, impairments, proceeds, disposals,
+right-of-use additions, derivative and fair-value lines are now excluded, while
+"Total assets", "Long-lived tangible assets" and "Operating assets" still match.
+
+## 9. Revenue: the income statement is a fallback, not an override
+
+`coreiq_av_financials_income_statement` used to overwrite the Revenues Total. That
+was a workaround from when the XBRL total was label-matched and unreliable — the
+very bug §2 fixes — and it let a partial-year ingest win: Coherent's FY2026 row
+reads $2,045.5m against $7,118.2m in its own 10-K, under members totalling $7.1bn.
+The filing the segments come from now wins; the income statement fills years the
+filing has no consolidated revenue fact for.
+
+This corrected 259 revenue cells across 86 tickers, verifiably: GE FY2021
+74,196 (was 56,469), JNJ FY2022 94,943 (was 78,740), Dollar Tree FY2024 30,581.6
+(was 16,770.3), and the banks now reconcile to their segments — Goldman 58,283
+(net revenues, exactly its segments) instead of 126,853 (gross interest income).
+
+## 10. When the members disprove the Total
+
+Two guards run after selection, both in `repository.py`:
+
+**`_drop_offmeasure_members`** blanks member values that measure something other
+than the Total. Roper files segment assets three ways — `us-gaap:NoncurrentAssets`
+plus two Roper-defined elements — so $577.6m of *operating* assets sat under a
+$187.1m *long-lived* assets Total. Values are judged per period, not per member:
+Asbury tags its TCA segment with the standard D&A element in some years and a
+deferred-acquisition-cost element in others, so dropping the whole member would
+lose good years. Only filer-defined elements go, and only when the Total settled
+on a standard element that some member also uses — a company reporting a metric
+exclusively with its own elements keeps everything.
+
+**`_suppress_impossible_totals`** withholds a Total its own members disprove.
+Corning's consolidated long-lived assets are stored as $68m against $44.7bn of
+its own geographic members — a scale error in `coreiq_filing_metrics_v5` that no
+selection rule can see, because the fact carries the right concept and the right
+period. A consolidated figure is never smaller than one of its parts, so the row
+is withheld and the members stay on screen. The comparison is like for like —
+only members tagged with the Total's own concept — and it never runs on Operating
+Profit (a segment can out-earn the company once unallocated corporate costs come
+out) or where a comparable member is negative (eliminations).
+
+## 11. Results of the full sweep
 
 Universe check first — no ticker with segment data sits outside the sweep:
 
@@ -180,67 +271,43 @@ Universe check first — no ticker with segment data sits outside the sweep:
 | Tickers swept (`coreiq_companies`) | 428 |
 | Tickers with segment data **not** swept | **0** |
 
-Every Total cell the tab renders (ticker × table × metric × year, metrics with ≥2
-members), old label-matched value vs new ranked value:
-
 | | |
 |---|---|
-| Total cells rendered | 4,423 across 326 tickers |
-| Cells whose Total changed | **1,568 across 216 tickers** |
-| — corrected to the filed value | 1,494 |
-| — Total row removed (never filed) | 74 |
-| Cells unchanged | 2,855 |
+| Total cells rendered | 5,733 across 341 tickers |
+| Cells whose Total changed | **2,573 across 267 tickers** |
+| — corrected to the filed value | 2,425 |
+| — row withheld (never filed, de-duplicated to one member, or disproved) | 148 |
 | Builder errors | **0** |
+| Tests | 32 for this behaviour, 119 in the suite |
 
-Changed cells by metric and table:
-
-| Metric | Geographic | Business |
-|---|---:|---:|
-| Assets | 559 | 302 |
-| Depreciation & Amortization | 64 | 384 |
-| Operating Profit Before Tax | 55 | 127 |
-| Capital Expenditure | 6 | 56 |
-| Revenues | 4 | 11 |
-
-Samples of what users were seeing:
+Verified against the filings:
 
 | Ticker | Table | Metric | Year | Was shown | Now |
 |---|---|---|---|---:|---:|
 | TJX | Geographic | Assets | 2025 | 31.00 | 7,346.00 |
-| INGR | Geographic | Operating Profit | 2025 | 1,028.0 | 31.0 |
-| PLCE | Business | D&A | 2024 | 1,157.2 | 47.2 |
-| CAT | Business | Assets | 2021 | 4,407.0 | 82,793.0 |
+| TJX | Business | — | all | *table absent* | Marmaxx, HomeGoods, TJX Canada, TJX International |
 | AMD | Business | Operating Profit | 2022 | 1,031.0 | 1,264.0 |
-| MNST | Business | Operating Profit | 2022 | 19.9 | 1,584.7 |
+| INGR | Geographic | Operating Profit | 2025 | 1,028.0 | 31.0 |
+| CAT | Business | Assets | 2021 | 4,407.0 | 82,793.0 |
+| ANDE | Business | Revenues | 2021 | 2,211.5 | 12,612.0 |
+| GS | Business | Revenues | 2025 | 126,853.0 | 58,283.0 |
+| GE | Business | Revenues | 2021 | 56,469.0 | 74,196.0 |
+| UAA | Geographic | Assets | 2021 | 2.0 | 1,055.6 |
+| GLW | Geographic | Assets | 2021 | 30,154.0 | *withheld — filed value is corrupt* |
 
-The 74 removed rows were wrong before, not lost coverage — e.g. Tyson's
-geographic assets Total read **60.0** against members of **26,500**. Each was
-confirmed against the database: no non-dimensioned fact exists carrying the
-concept its members split.
+### Residual
 
-## 7. Two defects found alongside this one — NOT fixed here
+Of 5,733 cells, 52 (0.9%) show a Total below the largest member and **all 52 are
+Operating Profit**, where that is correct — AMD FY2025 (segments 3,482 + 897, total
+1,900), AEO FY2021's real -271.3 COVID operating loss. **No non-profit metric is
+left flagged.**
 
-Both are member-side and pre-existing; they change what rows appear, so they need
-their own change and their own verification.
+Two source-data faults remain in `coreiq_filing_metrics_v5` and still want an
+ingestion fix, even though the app no longer prints them: **GLW** stores
+consolidated `us-gaap:NoncurrentAssets` as $67–83m for FY2022 where the FY2016/17
+filings hold $16–18bn, and **COHR** carries a geographic "asset" of $737,151m.
 
-1. **Duplicate and wrapper member rows.** Members are matched to a metric by
-   label substring, and business-segment labels are never canonicalised the way
-   geographic ones are (`segment_aliases.py`). Ingredion therefore lists
-   "Asia Pacific Segment", "Asia- Pacific" and "Asia-Pacific" as three separate
-   members of the same metric; AMD's only two "segments" for operating profit are
-   "Segment Reconciling Items" and "Segment Reporting, Reconciling Item,
-   Excluding Corporate Nonsegment" — reconciliation wrappers, not segments.
-   **238 cells across 34 tickers** carry at least one such wrapper row. This is
-   why a member sum can differ wildly from a correct Total.
-
-2. **Corrupt source rows for GLW.** `coreiq_filing_metrics_v5` holds Corning's
-   consolidated `us-gaap:NoncurrentAssets` for FY2022 as **$67–83m** where the
-   FY2016/FY2017 filings record **$16–18bn**, and its own geographic members for
-   the same year total ~$11bn. The Total row now faithfully shows the filed fact,
-   so it shows 68.0. This is a data-ingestion bug for the data team — the app
-   must not paper over it, and this repo does not write to the database.
-
-## 8. Rollout
+## 12. Rollout
 
 Code-only change — no schema change, no data migration, no writes. The Segments
 tab caches (`@st.cache_data(ttl=3600)` on `get_segment_data`, `ttl=21600` on

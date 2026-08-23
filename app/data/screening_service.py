@@ -3805,28 +3805,197 @@ def _fetch_forecast_bulk(
         return {}
 
 
+def _forecast_db_ticker_map(tickers: List[str]) -> Dict[str, str]:
+    """{db_ticker: base_ticker} covering both bare and composite YF forms."""
+    companies_map = CompanyRepository.get_companies_map()
+    db_to_base: Dict[str, str] = {}
+    for t in tickers:
+        db_to_base[t] = t
+        info = companies_map.get(t, {})
+        if info.get("source") == "YFinance":
+            exch = info.get("exchange_acronym")
+            if exch:
+                db_to_base[f"{t}.{exch}"] = t
+    return db_to_base
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _fetch_quarterly_forecast_bulk(
+    ticker_tuple: tuple,
+    model_key: str,
+    period_type: str,
+    quarter: int,
+    year: Optional[int],
+) -> Dict[str, float]:
+    """Bulk-fetch ONE quarter's revenue forecast from the quarterly store.
+
+    FQ matches the company's own fiscal quarter; CQ matches the calendar
+    quarter of `forecast_date` (the period-end date), so the two agree only for
+    calendar-year filers. year=None → each ticker's nearest matching quarter.
+    """
+    tickers = list(ticker_tuple)
+    if not tickers or not model_key or not quarter:
+        return {}
+
+    db_to_base = _forecast_db_ticker_map(tickers)
+    db_sql = _build_ticker_in_list(list(db_to_base.keys()))
+    is_fq = (period_type or "FQ").upper() == "FQ"
+    quarter_expr = "fiscal_quarter" if is_fq else "QUARTER(forecast_date)"
+    year_expr = "fiscal_year" if is_fq else "YEAR(forecast_date)"
+
+    where = (f"ticker IN ({db_sql}) AND metric = 'total_revenue' "
+             f"AND model_key = '{model_key}' AND value_millions IS NOT NULL "
+             f"AND {quarter_expr} = {int(quarter)}")
+    try:
+        if year:
+            rows = db_manager.execute_query_readonly(
+                f"SELECT ticker, value_millions AS val "
+                f"FROM coreiq_model_forecasts_quarterly "
+                f"WHERE {where} AND {year_expr} = {int(year)}")
+        else:
+            # Nearest matching quarter per ticker.
+            rows = db_manager.execute_query_readonly(f"""
+                SELECT q.ticker, q.value_millions AS val
+                FROM coreiq_model_forecasts_quarterly q
+                INNER JOIN (
+                    SELECT ticker, MIN(periods_ahead) AS pa
+                    FROM coreiq_model_forecasts_quarterly
+                    WHERE {where}
+                    GROUP BY ticker
+                ) nearest
+                  ON q.ticker = nearest.ticker AND q.periods_ahead = nearest.pa
+                WHERE q.metric = 'total_revenue'
+                  AND q.model_key = '{model_key}'
+                  AND q.value_millions IS NOT NULL
+            """)
+        out: Dict[str, float] = {}
+        for r in (rows or []):
+            base = db_to_base.get(r["ticker"], r["ticker"])
+            try:
+                out[base] = float(r["val"])
+            except (TypeError, ValueError):
+                pass
+        return out
+    except Exception as exc:
+        log_error(f"[SCREENING] quarterly forecast bulk failed: {exc}")
+        return {}
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _fetch_quarterly_forecast_range_bulk(
+    ticker_tuple: tuple,
+    model_key: str,
+    period_type: str,
+    labels_tuple: tuple,
+) -> Dict[str, Dict[str, float]]:
+    """Bulk-fetch a span of quarters → {base_ticker: {label: value}}.
+
+    Labels are the same 'Q{n} {year}' / 'FQ{n} {year}' strings the financial
+    quarter-range path produces, so the render + Excel pipeline is unchanged.
+    """
+    tickers = list(ticker_tuple)
+    labels = list(labels_tuple)
+    if not tickers or not model_key or not labels:
+        return {}
+
+    db_to_base = _forecast_db_ticker_map(tickers)
+    db_sql = _build_ticker_in_list(list(db_to_base.keys()))
+    is_fq = (period_type or "FQ").upper() == "FQ"
+    prefix = "FQ" if is_fq else "Q"
+    quarter_expr = "fiscal_quarter" if is_fq else "QUARTER(forecast_date)"
+    year_expr = "fiscal_year" if is_fq else "YEAR(forecast_date)"
+
+    wanted = set(labels)
+    try:
+        rows = db_manager.execute_query_readonly(f"""
+            SELECT ticker, {year_expr} AS y, {quarter_expr} AS q, value_millions AS val
+            FROM coreiq_model_forecasts_quarterly
+            WHERE ticker IN ({db_sql}) AND metric = 'total_revenue'
+              AND model_key = '{model_key}' AND value_millions IS NOT NULL
+        """)
+    except Exception as exc:
+        log_error(f"[SCREENING] quarterly forecast range bulk failed: {exc}")
+        return {}
+
+    out: Dict[str, Dict[str, float]] = {}
+    for r in (rows or []):
+        label = f"{prefix}{int(r['q'])} {int(r['y'])}"
+        if label not in wanted:
+            continue
+        base = db_to_base.get(r["ticker"], r["ticker"])
+        try:
+            out.setdefault(base, {})[label] = float(r["val"])
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
 def apply_forecast_criterion(
     criterion: Dict, working_df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, Dict]:
-    """Annotate working_df with a revenue forecast metric (non-filtering)."""
+    """Annotate working_df with a revenue forecast metric (non-filtering).
+
+    FY reads the annual store; CQ/FQ read the quarterly store. Routing on the
+    criterion's period type matters: before this, a column labelled "FQ3 2027"
+    carried the FULL-YEAR figure, roughly 4x the quarter it claimed to show.
+    """
     t_total = time.perf_counter()
     rows_in = len(working_df)
     mi = criterion["metric_info"]
+    model_key = mi.get("model_key", "")
     display_col = criterion.get("display_col", mi["label"])
     year_str = criterion.get("year", "Latest")
     year = None if (not year_str or year_str == "Latest") else int(year_str)
+    period_type = (criterion.get("period_type") or "FY").upper()
+    is_quarterly = period_type in ("CQ", "FQ")
+    quarter_range = criterion.get("quarter_range") or {}
 
     tickers = list(working_df["ticker"].values)
     if not tickers:
         out = working_df.copy(); out[display_col] = None
         return out, {"type": "financial", "rows_in": 0, "rows_out": 0, "elapsed_ms": 0}
 
-    vals = _fetch_forecast_bulk(tuple(sorted(tickers)), mi.get("model_key", ""), year)
+    ticker_key = tuple(sorted(tickers))
     out = working_df.copy()
+
+    if is_quarterly and quarter_range:
+        labels = _quarter_range_labels(
+            quarter_range.get("from_q", 1), quarter_range.get("from_y"),
+            quarter_range.get("to_q", 4), quarter_range.get("to_y"),
+            prefix=("FQ" if period_type == "FQ" else "Q"),
+        )
+        per_ticker = _fetch_quarterly_forecast_range_bulk(
+            ticker_key, model_key, period_type, tuple(labels))
+        unit = mi.get("unit", "$mm") or "$mm"
+        col_names = [f"{mi['label']} ({unit}) [{lbl}]" for lbl in labels]
+        for lbl, col in zip(labels, col_names):
+            out[col] = out["ticker"].map(
+                lambda t, _l=lbl: round(per_ticker[t][_l], 4)
+                if _l in per_ticker.get(t, {}) else None
+            )
+        criterion["quarter_cols"] = col_names
+        with_data = int(sum(1 for t in tickers if per_ticker.get(t)))
+        return out, {
+            "type": "financial", "statement": "Forecasting", "metric": mi["label"],
+            "period_type": period_type, "quarter_range": quarter_range,
+            "quarter_cols": col_names,
+            "rows_in": rows_in, "rows_out": rows_in, "with_data": with_data,
+            "elapsed_ms": (time.perf_counter() - t_total) * 1000,
+        }
+
+    if is_quarterly:
+        q_raw = str(criterion.get("quarter") or "").replace("Q", "").strip()
+        quarter = int(q_raw) if q_raw.isdigit() else 0
+        vals = _fetch_quarterly_forecast_bulk(
+            ticker_key, model_key, period_type, quarter, year)
+    else:
+        vals = _fetch_forecast_bulk(ticker_key, model_key, year)
+
     out[display_col] = out["ticker"].map(lambda t: round(vals[t], 4) if t in vals else None)
     with_data = int(out[display_col].notna().sum())
     return out, {
         "type": "financial", "statement": "Forecasting", "metric": mi["label"],
+        "period_type": period_type,
         "rows_in": rows_in, "rows_out": rows_in, "with_data": with_data,
         "elapsed_ms": (time.perf_counter() - t_total) * 1000,
     }

@@ -1,0 +1,27 @@
+
+===== ANDE business Revenues 2021 =====
+  members: [('Ag Supply Chain', None), ('Agribusiness', None), ('Engineered Granules', None), ('Nutrient & Industrial', 866.895), ('Other', 141.794), ('Plant Nutrient', 866.895), ('Primary nutrients', 500.891), ('Products and co-products', 1027.315), ('Propane', 246.002), ('Propane and frac sand', 270.695), ('Renewables', 2440.798), ('Specialty Liquids', None), ('Specialty nutrients', 270.842), ('Trade Segment', 9304.357)]
+  member concepts: {'us-gaap:Revenues': 33, 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax': 150}
+    cand v=     2,211.5 us-gaap:RevenueFromContractWithCustomerExcludingAsse   Revenue from contract with customers   rank=(True, True, True, False, '2022-02-24')
+    cand v=     2,998.8 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     2,508.3 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     1,885.6 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     3,235.8 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     3,782.7 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     2,594.7 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=    12,612.0 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     1,854.7 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     1,816.0 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2022-02-24')
+    cand v=     2,211.5 us-gaap:RevenueFromContractWithCustomerExcludingAsse   Revenue from contract with customers   rank=(True, True, True, False, '2023-02-23')
+    cand v=    12,612.0 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2023-02-23')
+    cand v=     2,211.5 us-gaap:RevenueFromContractWithCustomerExcludingAsse   Revenue from contract with customers   rank=(True, True, True, False, '2024-02-21')
+    cand v=    12,612.0 us-gaap:Revenues                                       Sales and merchandising revenues       rank=(True, False, True, False, '2024-02-21')
+
+===== ANDE business Revenues 2022 =====
+  members: [('Ag Supply Chain', 691.696), ('Agribusiness', None), ('Engineered Granules', 145.648), ('Nutrient & Industrial', 1099.308), ('Other', 175.425), ('Plant Nutrient', 1099.308), ('Primary nutrients', 625.134), ('Products and co-products', 1616.585), ('Propane', 264.072), ('Propane and frac sand', None), ('Renewables', 3178.539), ('Specialty Liquids', 261.964), ('Specialty nutrients', 355.636), ('Trade Segment', 13047.537)]
+  member concepts: {'us-gaap:Revenues': 33, 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax': 150}
+    cand v=     3,036.9 us-gaap:RevenueFromContractWithCustomerExcludingAsse   Revenue from contract with customers   rank=(True, True, True, False, '2023-02-23')
+    cand v=    17,325.4 us-gaap:Revenues                                       Revenues                               rank=(True, False, True, False, '2023-02-23')
+    cand v=     3,036.9 us-gaap:RevenueFromContractWithCustomerExcludingAsse   Revenue from contract with customers   rank=(True, True, True, False, '2024-02-21')
+    cand v=    17,325.4 us-gaap:Revenues                                       Sales and merchandising revenues       rank=(True, False, True, False, '2024-02-21')
+    cand v=    17,325.4 us-gaap:Revenues                                       Sales and merchandising revenues       rank=(True, False, True, False, '2025-02-19')

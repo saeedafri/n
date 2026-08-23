@@ -1138,6 +1138,24 @@ div[data-testid="stRadio"] [role="radiogroup"] {
   align-items: center;
   justify-content: center;
 }
+/* The overlay is emitted inside a Streamlit markdown container, and styles.py
+   animates EVERY stMarkdownContainer with `cs-rise` — fill-mode `both`, starting
+   at opacity:0. The results rerun replaces the element before that animation can
+   play, so the container stayed at opacity:0: the overlay was in the DOM (measured
+   at t+0.39s) but invisible, and pressing Show Results looked like nothing had
+   happened at all. Same root cause loading.py already neutralises for `.cs-al-ov`.
+   will-change/transform are cleared too — either one makes the ancestor the
+   containing block for a position:fixed child, which off-centres the card. */
+[data-testid="stMarkdownContainer"]:has(.scr-loading-overlay),
+[data-testid="stElementContainer"]:has(.scr-loading-overlay),
+[data-testid="element-container"]:has(.scr-loading-overlay),
+[data-testid="stVerticalBlock"] > div:has(.scr-loading-overlay) {
+  animation: none !important;
+  opacity: 1 !important;
+  will-change: auto !important;
+  transform: none !important;
+  filter: none !important;
+}
 .scr-loading-card {
   display: flex;
   flex-direction: column;
