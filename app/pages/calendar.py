@@ -837,6 +837,34 @@ def _get_calendar_css() -> str:
             }}
             .fc-event.ec-no-badge .fc-event-title::after {{ display:none !important; }}
 
+            /* ── "+N more" popover ──────────────────────────────────────────────
+               Two FullCalendar defaults break inside a Streamlit component iframe:
+               (1) .fc-popover has no max-height, so a day with 20+ events renders
+                   a popover taller than the iframe; (2) Popover.updateSize() only
+                   clamps the TOP (Math.max(top,10)) — it never clamps the bottom,
+                   because on a normal page you just scroll the document down. The
+                   iframe is sized once at mount and does NOT scroll, so anything
+                   past its bottom edge is clipped and unreachable.
+               Fix: cap the height, scroll the body, and pin the popover to the top
+               of the grid (`top` beats FullCalendar's inline style via !important)
+               so it is always fully inside the iframe, whichever week was clicked. */
+            .fc-popover {{
+                display:flex !important; flex-direction:column !important;
+                top:10px !important;
+                max-height:min(560px, calc(100vh - 80px)) !important;
+                border-radius:8px !important; border-color:#E2E8F0 !important;
+                box-shadow:0 8px 24px rgba(15,23,42,0.16) !important;
+            }}
+            .fc-popover-header {{ flex:0 0 auto !important; }}
+            .fc-popover-body {{
+                flex:1 1 auto !important; min-height:0 !important;
+                overflow-y:auto !important; overscroll-behavior:contain !important;
+            }}
+            .fc-popover-body::-webkit-scrollbar {{ width:8px; }}
+            .fc-popover-body::-webkit-scrollbar-thumb {{
+                background:#CAD5E2; border-radius:4px;
+            }}
+
             /* ── List view rows ── */
             .fc-list-event.ec-card {{
                 border-left:3px solid #0084D1 !important; margin-bottom:2px !important;

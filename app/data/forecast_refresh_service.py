@@ -104,6 +104,15 @@ def _yf_fqe_date_for_earnings_date(earnings_date: date, fye_month: int) -> Optio
     return max(candidates)
 
 
+# Every cache in this module is derived from data that is ingested at most daily
+# (earnings calendars, AV/YF overviews, the nightly model run), so a 1-hour TTL
+# only guaranteed that some user paid the full rebuild every hour. The model-run
+# paths call get_refresh_table_data.clear() explicitly, so freshness after a
+# refresh does not depend on this at all — it only bounds staleness of the
+# vendor-side data. 6 hours cuts the scheduled cold rebuilds 6x.
+_DIALOG_CACHE_TTL_S = 6 * 3600
+
+
 # ─── Schema management ────────────────────────────────────────────────────────
 
 _COLUMNS_READY = False
@@ -316,7 +325,7 @@ def _next_reporting_dates_bulk() -> Dict[str, Optional[date]]:
 # was ~92% of the Refresh dialog's open time, because the dialog's own cache could
 # miss while this ran again underneath. Both sync paths call
 # get_refresh_table_data.clear(); this TTL bounds staleness independently.
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=_DIALOG_CACHE_TTL_S, show_spinner=False)
 def _annual_q4_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     """
     Canonical Q4/full-year annual reporting date per ticker.
@@ -661,7 +670,7 @@ def _fiscal_q_from_months(fqe_month: int, fye_month: int) -> int:
 # was ~92% of the Refresh dialog's open time, because the dialog's own cache could
 # miss while this ran again underneath. Both sync paths call
 # get_refresh_table_data.clear(); this TTL bounds staleness independently.
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=_DIALOG_CACHE_TTL_S, show_spinner=False)
 def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     """
     Reporting date for the *relevant* fiscal quarter per ticker — Q1/Q2/Q3/Q4 all
@@ -842,7 +851,7 @@ def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
     return result
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=_DIALOG_CACHE_TTL_S, show_spinner=False)
 def _fiscal_year_end_bulk() -> Dict[str, Optional[str]]:
     """ticker → fiscal_year_end string (month name), one row per ticker using latest fetch.
 
@@ -958,26 +967,36 @@ def _fiscal_year_end_bulk() -> Dict[str, Optional[str]]:
     # ── Source 4: YFinance — latest ingested_at per ticker ───────────────────
     # payload_json $.info.lastFiscalYearEnd is a Unix epoch timestamp.
     # Only fills tickers not already resolved by AV (composite / non-US tickers).
+    #
+    # payload_json must never appear in a WHERE or in a derived table here: the
+    # column holds ~50 MB across 6,834 rows, and any predicate on it forces MySQL
+    # to read every blob. The original ROW_NUMBER() version selected payload_json
+    # inside the derived table and cost 59-119s on a cold buffer pool — 85% of the
+    # Refresh dialog's cold open — to return 45 rows.
+    #
+    # This shape keeps the blob out of every access path but the final projection:
+    #   inner  → "Using index for group-by" on idx_ticker_ingested (no blob read)
+    #   outer  → ref lookup, one row per ticker, so only ~56 blobs are ever read
+    # Measured 280ms, cold or warm. Verified identical output to the old query.
+    # Ties on ingested_at can yield two rows for a ticker; harmless — the loop
+    # below keeps the first and skips tickers already resolved. Rows whose payload
+    # lacks $.info.lastFiscalYearEnd come back with fye_epoch NULL and are skipped
+    # in Python (coreiq_yf_company_overview has no NULL payload_json rows at all).
     try:
         yf_rows = db_manager.execute_query_readonly(
             """
-            SELECT ticker,
-                   CAST(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.info.lastFiscalYearEnd'))
+            SELECT o.ticker,
+                   CAST(JSON_UNQUOTE(JSON_EXTRACT(o.payload_json, '$.info.lastFiscalYearEnd'))
                         AS UNSIGNED) AS fye_epoch
             FROM (
-                SELECT
-                    ticker,
-                    payload_json,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY ticker
-                        ORDER BY ingested_at DESC
-                    ) AS rn
+                SELECT ticker, MAX(ingested_at) AS latest_ingested_at
                 FROM coreiq_yf_company_overview
                 WHERE ticker IS NOT NULL
-                  AND payload_json IS NOT NULL
-            ) x
-            WHERE rn = 1
-              AND JSON_EXTRACT(payload_json, '$.info.lastFiscalYearEnd') IS NOT NULL
+                GROUP BY ticker
+            ) latest
+            JOIN coreiq_yf_company_overview o
+              ON o.ticker = latest.ticker
+             AND o.ingested_at = latest.latest_ingested_at
             """,
             {},
         )
@@ -1067,6 +1086,7 @@ def _get_quarterly_refresh_table_data() -> List[Dict[str, Any]]:
         """,
         {},
     )
+    rows = drop_retired_tickers(rows or [])
     if not rows:
         return []
 
@@ -1132,13 +1152,70 @@ def _get_quarterly_refresh_table_data() -> List[Dict[str, Any]]:
     return result
 
 
+@st.cache_data(ttl=_DIALOG_CACHE_TTL_S, show_spinner=False)
+def live_forecast_tickers() -> Set[str]:
+    """
+    Ticker keys the forecast engine can still produce, built from the current
+    company universe: plain ticker when exchange_acronym is empty, composite
+    'TICKER.ACRONYM' when it is set.
+
+    The forecast tables keep every key they have ever written. When a company's
+    exchange_acronym changes — e.g. the bogus 'NASDAQ'/'NYSE' values being cleaned
+    off US listings — the engine starts writing the new key and the old one is
+    left behind forever, so the Refresh popup shows the same company twice
+    (ZBRA + ZBRA.NASDAQ). Keys this set cannot reproduce are graveyard rows.
+
+    Returns an empty set on failure, which the callers treat as "filter off"
+    rather than blanking the popup.
+    """
+    try:
+        rows = db_manager.execute_query_readonly(
+            """
+            SELECT ticker, COALESCE(TRIM(exchange_acronym), '') AS acronym
+            FROM coreiq_companies
+            WHERE ticker IS NOT NULL AND TRIM(ticker) <> ''
+            """,
+            {},
+        )
+    except Exception as exc:
+        log_structured_error(
+            exc,
+            page="forecast_refresh_service",
+            component="live_forecast_tickers",
+            operation="SELECT",
+        )
+        return set()
+
+    keys: Set[str] = set()
+    for r in (rows or []):
+        ticker = (r.get("ticker") or "").strip()
+        acronym = (r.get("acronym") or "").strip()
+        if ticker:
+            keys.add(f"{ticker}.{acronym}" if acronym else ticker)
+    return keys
+
+
+def drop_retired_tickers(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep only forecast rows whose ticker the current company universe can produce."""
+    live = live_forecast_tickers()
+    if not live:
+        return rows
+    kept = [r for r in rows if (r.get("ticker") or "").strip() in live]
+    if len(kept) != len(rows):
+        log_info(
+            f"[forecast_refresh] hid {len(rows) - len(kept)} retired ticker keys "
+            f"(no longer produced by coreiq_companies)"
+        )
+    return kept
+
+
 # The popup's contents change only when a refresh actually runs, and both sync
 # paths call get_refresh_table_data.clear() explicitly. A 2-minute TTL therefore
 # bought nothing and made the dialog re-run a ~4s (cold: ~24s) query for anyone
 # who opened it more than two minutes after the last one — which is the normal
 # case. Long TTL + explicit invalidation keeps the data exactly as fresh while
 # making the dialog open instantly.
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=_DIALOG_CACHE_TTL_S, show_spinner=False)
 def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
     """
     Return assembled row data for the Refresh popup table.
@@ -1177,6 +1254,7 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
     log_timing("DIALOG_Q1_ticker_max_computed_at", (_t1 - _t0) * 1000,
                f"rows={len(rows or [])}", level="INFO")
 
+    rows = drop_retired_tickers(rows or [])
     if not rows:
         return []
 
@@ -1349,7 +1427,37 @@ def send_model_refresh_email(
     ``period_type`` selects the reporting-date source: 'annual' (Q4 only) or
     'quarterly' (the relevant fiscal quarter). To: all admin + super_user accounts.
     Cc: dataautomation@coresight.com.
+
+    ALL forecast refresh mail is ON HOLD since 2026-08-19, annual included. The
+    forecast data itself still has open issues (duplicate ticker keys, reporting
+    dates on hold) and we are fixing them one at a time; mailing admins a report
+    built on data we already know is wrong just spreads the confusion. Refresh
+    runs are unaffected — only the notification is withheld.
+
+    To resume, set FORECAST_REFRESH_EMAIL=1 as an App Setting (no code change).
+    Quarterly then still obeys its own older switch below: quarterly was suppressed
+    2026-08-16 because its per-period series were keyed by fiscal_year alone,
+    collapsing 3-4 quarters onto one x-value (14 of 20 points lost for FLWS). Fixed
+    2026-08-19 — periods are keyed by (fiscal_year, quarter) throughout — so
+    FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY=0 is the way to hold quarterly alone
+    once the global hold is lifted.
+
+    Both gates sit at this single choke point, which every caller routes through:
+    the per-ticker "Refresh Now" button, "Refresh All", and the scheduled
+    utils/forecast_auto_refresh.py worker.
     """
+    if os.getenv("FORECAST_REFRESH_EMAIL", "0").strip().lower() not in ("1", "true", "yes", "on"):
+        log_info(f"[forecast_email] SUPPRESSED: all forecast refresh mail is on hold "
+                 f"(set FORECAST_REFRESH_EMAIL=1 to resume) | period_type={period_type} "
+                 f"triggered_by={triggered_by} results={len(results or [])}")
+        return False
+
+    if (period_type or "").lower() == "quarterly" and \
+            os.getenv("FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY", "1").strip() in ("0", "false", "False", "no", "off"):
+        log_info("[forecast_email] SUPPRESSED: quarterly refresh mail is disabled "
+                 "(FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY=0)")
+        return False
+
     if not results:
         return False
     _is_quarterly = period_type.lower() == "quarterly"

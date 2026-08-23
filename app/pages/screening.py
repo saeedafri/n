@@ -279,6 +279,9 @@ from data.screening_service import (
     build_additional_summary,
     get_base_company_universe,
     filter_universe_to_members,
+    keep_working_set_companies,
+    merge_company_columns,
+    KeydevsQueryError,
     get_keydevs_events_for_tickers,
     get_keydevs_events_count,
     fetch_all_keydevs_events,
@@ -950,6 +953,40 @@ def _build_results_display_df(
             )
 
     return display_df
+
+
+def _criteria_display_cols(
+    criteria: List[dict],
+    available,
+    include_keydevs: bool = True,
+) -> List[str]:
+    """Ordered result columns contributed by the active criteria.
+
+    One definition for every mode, so Companies / Key Devs / People cannot drift
+    on which criterion is visible — Key Devs used to show none of them.
+    Industry and Geography are non-filtering selectors: they annotate the working
+    set rather than narrowing it, so their column IS the whole result of adding
+    the criterion and must be shown.
+
+    `include_keydevs` is False in Key Devs mode, where every row already IS a key
+    development and a per-company summary column repeated down the grid is noise.
+    """
+    cols = []
+    if any(c.get("type") == "industry" for c in criteria):
+        cols.append("Industry")
+    if any(c.get("type") == "geography" for c in criteria):
+        cols.append("Country")
+    cols += _get_financial_metric_cols(criteria)
+    if include_keydevs:
+        cols += _get_keydevs_cols(criteria)
+    cols += _get_biz_segments_cols(criteria)
+    cols += _get_geo_segments_cols(criteria)
+    cols += _get_additional_cols(criteria)
+
+    available = set(available)
+    seen = set()
+    return [c for c in cols
+            if c in available and not (c in seen or seen.add(c))]
 
 
 def _get_financial_metric_cols(criteria: List[dict]) -> List[str]:
@@ -4816,7 +4853,12 @@ def _render_keydevs_results():
             )
             if show_clicked:
                 if criteria:
-                    if st.session_state.scr_working_df is None:
+                    # Same guard Companies mode uses. `is None` alone recomputed only
+                    # on the very first run, so editing or removing a criterion left a
+                    # stale working set and the results were built for the wrong
+                    # companies — one of the "sometimes it works" cases.
+                    _sync_criteria_fingerprint()
+                    if _needs_results_recompute():
                         _trigger_recompute()
                 else:
                     wl_members = st.session_state.get("scr_watchlist_members")
@@ -4842,6 +4884,11 @@ def _render_keydevs_results():
             st.info("No companies match the current criteria. Try relaxing a filter.")
             return
 
+        # Criterion columns to carry onto the event rows. Resolved here because the
+        # Excel button below is built before the grid and must export the same set.
+        _kd_criteria_cols = _criteria_display_cols(
+            criteria, df.columns, include_keydevs=False)
+
         # Gather keydevs criterion params (categories + days) for event query.
         # STICKY branded loader: stays up through the (uncached) event query AND until
         # the AgGrid results grid actually paints client-side — previously the spinner
@@ -4866,20 +4913,46 @@ def _render_keydevs_results():
         _KD_PAGE = 500
         _kd_sig = (_tickers, _cats, _window.get("days"),
                    _window.get("start_date"), _window.get("end_date"))
-        if st.session_state.get("kd_sig") != _kd_sig:
+        # Publish the signature LAST, and only together with the rows it describes.
+        # It used to be stamped BEFORE the two queries, which take ~9s together on a
+        # broad screen (count 4s + first page 5s). Any rerun in that window — and
+        # Streamlit reruns on every widget interaction — left the signature pointing
+        # at rows that were never written, so the next run treated it as a cache HIT,
+        # skipped the fetch, and reported "No key development events found" for a
+        # query that really has 428. That is the intermittent empty grid.
+        # `kd_df not in session_state` is also a miss, so a half-finished run heals.
+        if (st.session_state.get("kd_sig") != _kd_sig
+                or "kd_df" not in st.session_state):
             render_sticky_loader("Loading Key Developments")
-            st.session_state["kd_sig"] = _kd_sig
-            st.session_state["kd_total"] = get_keydevs_events_count(
-                _tickers, _cats, days=_window.get("days"),
-                start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-            )
-            _df0, _cur0 = get_keydevs_events_for_tickers(
-                _tickers, _cats, days=_window.get("days"),
-                start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                limit=_KD_PAGE,
-            )
+            try:
+                _kd_count = get_keydevs_events_count(
+                    _tickers, _cats, days=_window.get("days"),
+                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                )
+                _df0, _cur0 = get_keydevs_events_for_tickers(
+                    _tickers, _cats, days=_window.get("days"),
+                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                    limit=_KD_PAGE,
+                )
+            except KeydevsQueryError as _kd_exc:
+                # A failed query is NOT an empty result. Leave the cache untouched so
+                # the next click retries instead of serving a poisoned empty answer.
+                log_structured_error(_kd_exc, page="screening",
+                                     component="_render_keydevs_results",
+                                     operation="fetch_keydev_events",
+                                     context=f"tickers={len(_tickers)} cats={len(_cats)}")
+                st.session_state.pop("kd_sig", None)
+                st.warning(
+                    "This screen was too large for the database to return in time. "
+                    "Narrow it — a shorter timeframe, fewer categories, or an "
+                    "Industry / Geographic Locations criterion — then press "
+                    "**Show Results** again."
+                )
+                return
+            st.session_state["kd_total"] = _kd_count
             st.session_state["kd_df"] = _df0
             st.session_state["kd_cursor"] = _cur0
+            st.session_state["kd_sig"] = _kd_sig
 
         events_df = st.session_state.get("kd_df", pd.DataFrame())
         _kd_total = int(st.session_state.get("kd_total", len(events_df)))
@@ -4910,7 +4983,8 @@ def _render_keydevs_results():
             from datetime import datetime as _kd_dt
             _render_excel_js_download(
                 lambda: _build_full_keydevs_workbook(
-                    _tickers, _cats, _window, len(criteria)),
+                    _tickers, _cats, _window, len(criteria),
+                    working_df=df, criteria_cols=_kd_criteria_cols),
                 f"KeyDev_Screening_{_kd_dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 label="Excel",
             )
@@ -4935,27 +5009,27 @@ def _render_keydevs_results():
         # Hidden identity columns so checkbox-selected event rows can be saved as
         # a watchlist (the watchlist stores the companies behind the events).
         # Ticker is parsed from the "Company Name(s)" label: "Name (EXCH:TICKER)".
-        _kd_hidden = ["_source_url"] if "_source_url" in grid_df.columns else []
+        _kd_hidden = [c for c in ("_source_url", "_event_id") if c in grid_df.columns]
         try:
             if "Company Name(s)" in grid_df.columns:
                 grid_df = grid_df.copy()
-
-                def _kd_ticker(lbl: str) -> str:
-                    s = str(lbl or "")
-                    if "(" in s and s.rstrip().endswith(")"):
-                        inside = s[s.rfind("(") + 1:s.rfind(")")]
-                        return inside.split(":")[-1].strip()
-                    return ""
-
-                def _kd_name(lbl: str) -> str:
-                    s = str(lbl or "")
-                    return s[:s.rfind("(")].strip() if "(" in s else s.strip()
-
-                grid_df["Ticker"] = grid_df["Company Name(s)"].apply(_kd_ticker)
-                grid_df["_CompanyName"] = grid_df["Company Name(s)"].apply(_kd_name)
+                grid_df["Ticker"] = grid_df["Company Name(s)"].apply(keydev_label_ticker)
+                grid_df["_CompanyName"] = grid_df["Company Name(s)"].apply(keydev_label_name)
                 _kd_hidden += ["Ticker", "_CompanyName"]
         except Exception:
             pass
+
+        # Columns the user's own criteria contributed (Industry, Country, financial
+        # metrics, segments, additional data). They are computed per COMPANY on the
+        # working set, so they have to be joined onto these per-EVENT rows — adding
+        # an Industry criterion here used to change nothing visible at all. They
+        # inherit the Excel-style distinct-values header filter from the grid's
+        # configure_default_column, like every other column.
+        # One event per company, not one per company that happens to share the
+        # ticker — see keep_working_set_companies.
+        grid_df = keep_working_set_companies(grid_df, df)
+        grid_df = merge_company_columns(grid_df, df, _kd_criteria_cols,
+                                        after="Company Name(s)")
 
         _kd_resp = _render_filterable_results_grid(
             grid_df,
@@ -4982,11 +5056,15 @@ def _render_keydevs_results():
                 unsafe_allow_html=True,
             )
             if st.button("⬇ Load more events", key="kd_load_older"):
-                _df_next, _cur_next = get_keydevs_events_for_tickers(
-                    _tickers, _cats, days=_window.get("days"),
-                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                    limit=_KD_PAGE, before_date=_kd_cursor[0], before_id=_kd_cursor[1],
-                )
+                try:
+                    _df_next, _cur_next = get_keydevs_events_for_tickers(
+                        _tickers, _cats, days=_window.get("days"),
+                        start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                        limit=_KD_PAGE, before_date=_kd_cursor[0], before_id=_kd_cursor[1],
+                    )
+                except KeydevsQueryError:
+                    st.warning("Could not load more events just now — please try again.")
+                    return
                 if not _df_next.empty:
                     st.session_state["kd_df"] = pd.concat(
                         [events_df, _df_next], ignore_index=True)
@@ -5112,8 +5190,13 @@ def _render_excel_js_download(excel_bytes, filename: str, label: str = "Excel") 
         log_structured_error(e, page="screening", component="_render_excel_js_download", operation="render_excel_download_button")
 
 
-def _build_full_keydevs_workbook(tickers, categories, window, criteria_count) -> bytes:
+def _build_full_keydevs_workbook(tickers, categories, window, criteria_count,
+                                 working_df=None, criteria_cols=None) -> bytes:
     """Assemble the COMPLETE key-dev export for one query. Called on click only.
+
+    ``working_df`` / ``criteria_cols`` carry the same criterion columns the grid
+    shows (Industry, Country, financial metrics, …) into the workbook, so the
+    file a user downloads matches the table they were looking at.
 
     Passed to ``st.download_button`` as a callable so Streamlit defers it until the
     user actually clicks Excel, and runs it in a worker thread. Building it eagerly
@@ -5152,6 +5235,19 @@ def _build_full_keydevs_workbook(tickers, categories, window, criteria_count) ->
         full = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
         if full.empty:
             return b""
+        if working_df is not None and "Company Name(s)" in full.columns:
+            full["Ticker"] = full["Company Name(s)"].apply(keydev_label_ticker)
+            full["_CompanyName"] = full["Company Name(s)"].apply(keydev_label_name)
+            # Dedupe ALWAYS, criterion columns or not. Gating it on `criteria_cols`
+            # meant a screen with no Industry/Geography criterion exported the
+            # shared-ticker duplicates: 10,773 rows for 10,708 events, because
+            # JD/LULU/TSCO events are listed once per same-ticker company.
+            full = keep_working_set_companies(full, working_df)
+            if criteria_cols:
+                full = merge_company_columns(full, working_df, criteria_cols,
+                                             after="Company Name(s)")
+            full = full.drop(columns=["Ticker", "_CompanyName"])
+        full = full.drop(columns=[c for c in ("_event_id",) if c in full.columns])
         return _build_keydevs_excel_fast(full, criteria_count,
                                         title="Coresight Key Developments")
     except Exception as exc:
@@ -5371,7 +5467,12 @@ def _render_people_results():
             )
             if show_clicked:
                 if criteria:
-                    if st.session_state.scr_working_df is None:
+                    # Same guard Companies mode uses. `is None` alone recomputed only
+                    # on the very first run, so editing or removing a criterion left a
+                    # stale working set and the results were built for the wrong
+                    # companies — one of the "sometimes it works" cases.
+                    _sync_criteria_fingerprint()
+                    if _needs_results_recompute():
                         _trigger_recompute()
                 else:
                     wl_members = st.session_state.get("scr_watchlist_members")
@@ -5913,6 +6014,24 @@ def _extract_source_url(value) -> str:
     return text
 
 
+def keydev_label_ticker(label: str) -> str:
+    """Ticker out of a key-dev "Company Name(s)" label: "Name (EXCH:TICKER)".
+
+    The events frame carries the company as one display string, so both the
+    watchlist save and the criterion-column join recover the ticker from it.
+    """
+    s = str(label or "")
+    if "(" in s and s.rstrip().endswith(")"):
+        return s[s.rfind("(") + 1:s.rfind(")")].split(":")[-1].strip()
+    return ""
+
+
+def keydev_label_name(label: str) -> str:
+    """Company name out of the same label, without the "(EXCH:TICKER)" suffix."""
+    s = str(label or "")
+    return s[:s.rfind("(")].strip() if "(" in s else s.strip()
+
+
 def _prepare_keydevs_grid_df(events_df: pd.DataFrame) -> pd.DataFrame:
     """Prepare Key Devs grid data: clean URLs + hidden _source_url for link renderer."""
     if events_df is None or events_df.empty or "Source Reference" not in events_df.columns:
@@ -6379,18 +6498,7 @@ def _render_results():
         biz_seg_cols    = _get_biz_segments_cols(criteria)
         geo_seg_cols    = _get_geo_segments_cols(criteria)
         additional_cols = _get_additional_cols(criteria)
-        # Industry / Geography annotation columns (non-filtering selectors)
-        selector_cols = []
-        if any(c.get("type") == "industry" for c in criteria) and "Industry" in df.columns:
-            selector_cols.append("Industry")
-        if any(c.get("type") == "geography" for c in criteria) and "Country" in df.columns:
-            selector_cols.append("Country")
-
-        metric_cols = [
-            c for c in selector_cols + financial_cols + keydevs_cols
-                       + biz_seg_cols + geo_seg_cols + additional_cols
-            if c in df.columns
-        ]
+        metric_cols = _criteria_display_cols(criteria, df.columns)
 
         for _crit in criteria:
             _dcol = _crit.get("display_col")

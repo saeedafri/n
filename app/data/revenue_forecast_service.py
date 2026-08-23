@@ -508,6 +508,23 @@ class RevenueForecastService:
             except Exception:
                 pass  # fall through to full engine run
 
+        # The plausibility verdict is produced inside engine.forecast(). On the
+        # store fast path that never runs, so `plausible` stayed True and the
+        # implied-CAGR / non-positive flags stayed empty — the red "failed its
+        # plausibility check" banner silently stopped appearing for every ticker
+        # served from the store (i.e. nearly all of them once the store is warm).
+        # Re-run the same check against the stored ensemble instead; it is pure
+        # arithmetic on values we already have, so the fast path stays fast.
+        if _store_hit and not forecast_df.empty and "ensemble" in forecast_df.columns:
+            try:
+                _fit = engine.data_excluding_outliers
+                if _fit is not None and not _fit.empty:
+                    engine._check_plausibility(
+                        forecast_df, float(_fit["sales"].iloc[-1]), int(_fit["year"].iloc[-1])
+                    )
+            except Exception:
+                pass
+
         if not _store_hit:
             backtest_start = perf_counter()
             backtest_df = engine.backtest()
@@ -886,6 +903,16 @@ class RevenueForecastService:
                         _store_hit = True
             except Exception:
                 pass  # fall through to a full engine run
+
+        # Same fast-path gap as the annual branch above: re-run the plausibility
+        # check against the stored ensemble so the trust banner keeps working.
+        if _store_hit and not forecast_df.empty and "ensemble" in forecast_df.columns:
+            try:
+                _fit = engine.data_excl_outliers
+                if _fit is not None and not _fit.empty:
+                    engine._check_plausibility(forecast_df, _fit)
+            except Exception:
+                pass
 
         if not _store_hit:
             backtest_df = engine.backtest(holdout_quarters=4)

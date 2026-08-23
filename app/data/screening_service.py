@@ -264,15 +264,42 @@ def get_base_company_universe() -> pd.DataFrame:
 # CRITERION APPLICATIONS
 # =============================================================================
 
+# Criterion types that NARROW the universe rather than only annotating it.
+# Both of these forms tell the user they filter ("Filter companies to those in
+# selected industries" / "Filter companies by country of incorporation"), and the
+# pipeline below honours that. Financial, key-dev and segment criteria remain
+# annotate-only — unchanged.
+FILTERING_CRITERION_TYPES = frozenset({"industry", "geography"})
+
+
+class KeydevsQueryError(RuntimeError):
+    """The key-dev event query failed — this is NOT "no events".
+
+    Both fetches used to swallow the DB exception and hand back an empty result,
+    so a query that timed out looked exactly like a company with no news and the
+    page printed "No key development events found". Measured cause on STG: the
+    unfiltered All-History screen pulls 0.59 MB of `situation` (Summary) text for
+    500 rows and takes ~80s over the VPN, past the read timeout — which is why the
+    screen "worked sometimes". Callers must tell the user to retry, never cache
+    the empty result as an answer.
+    """
+
+
 def apply_industry_criterion(
     industries: List[str],
     working_df: pd.DataFrame,
     display_col: str = "Industry",
 ) -> Tuple[pd.DataFrame, Dict]:
-    """Annotate (non-filtering) each company with its sector.
+    """Keep only companies whose sector is in `industries`, and show that sector.
 
-    Keeps ALL companies. The annotation column shows the company's sector when it
-    matches the selected industries, else N/A. Zero DB overhead.
+    This criterion does what the form's own help text has always promised —
+    "Filter companies to those in selected industries". It used to keep all 431
+    companies and merely annotate them, so picking "Coffee & Beverage" still
+    reported "431 companies matched" and the results were full of unrelated
+    companies. Matching is exact against coreiq_companies.primary_industry_coresight,
+    which is where both the dropdown options and this column come from.
+
+    An empty selection is not a filter — every company is kept.
     """
     rows_in = len(working_df)
     out = working_df.copy()
@@ -286,20 +313,18 @@ def apply_industry_criterion(
 
     industry_set = set(industries)
     if "sector" in out.columns:
-        out[display_col] = out["sector"].apply(
-            lambda s: s if s in industry_set else None
-        )
-        with_data = int(out[display_col].notna().sum())
+        out = out[out["sector"].isin(industry_set)].copy()
+        out[display_col] = out["sector"]
     else:
+        out = out.iloc[0:0].copy()
         out[display_col] = None
-        with_data = 0
 
     return out, {
         "type":       "industry",
         "industries": industries,
         "rows_in":    rows_in,
-        "rows_out":   rows_in,   # non-filtering: never drops
-        "with_data":  with_data,
+        "rows_out":   len(out),
+        "with_data":  len(out),
         "elapsed_ms": 0,
     }
 
@@ -309,10 +334,13 @@ def apply_geography_criterion(
     working_df: pd.DataFrame,
     display_col: str = "Country",
 ) -> Tuple[pd.DataFrame, Dict]:
-    """Annotate (non-filtering) each company with its country.
+    """Keep only companies incorporated in `countries`, and show that country.
 
-    Keeps ALL companies. The annotation column shows the company's country when it
-    matches the selected countries, else N/A. Uses the in-memory 'country' column.
+    Same correction as apply_industry_criterion: the form promises "Filter
+    companies by country of incorporation" but this used to keep every company
+    and only annotate. Uses the in-memory 'country' column (no DB round-trip).
+
+    An empty selection is not a filter — every company is kept.
     """
     t_start = time.perf_counter()
     rows_in = len(working_df)
@@ -333,15 +361,15 @@ def apply_geography_criterion(
         }
 
     country_set = set(countries)
-    out[display_col] = out["country"].apply(lambda c: c if c in country_set else None)
-    with_data = int(out[display_col].notna().sum())
+    out = out[out["country"].isin(country_set)].copy()
+    out[display_col] = out["country"]
     elapsed  = (time.perf_counter() - t_start) * 1000
     return out, {
         "type":      "geography",
         "countries": countries,
         "rows_in":   rows_in,
-        "rows_out":  rows_in,   # non-filtering: never drops
-        "with_data": with_data,
+        "rows_out":  len(out),
+        "with_data": len(out),
         "source":    "in_memory",
         "elapsed_ms": elapsed,
     }
@@ -4113,7 +4141,7 @@ def get_keydevs_events_count(
         return int(rows[0]["c"]) if rows else 0
     except Exception as exc:
         log_error(f"[SCREENING] get_keydevs_events_count failed: {exc}")
-        return 0
+        raise KeydevsQueryError(str(exc)) from exc
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -4192,7 +4220,7 @@ def get_keydevs_events_for_tickers(
         rows = db_manager.execute_query_readonly(query)
     except Exception as exc:
         log_error(f"[SCREENING] get_keydevs_events_for_tickers failed: {exc}")
-        return pd.DataFrame(), None
+        raise KeydevsQueryError(str(exc)) from exc
 
     if not rows:
         return pd.DataFrame(), None
@@ -4232,6 +4260,9 @@ def _keydevs_records_from_rows(rows: list) -> list:
 
         source_ref = r.get("source_ref") or ""
         records.append({
+            # Hidden: lets the fan-out from the bare-ticker company JOIN be
+            # collapsed to one row per event. Never shown, never exported.
+            "_event_id": r.get("event_id"),
             "Key Developments By Date": date_str,
             "Key Developments by Type": subtype,
             "Company Name(s)": company_display,
@@ -4956,8 +4987,8 @@ def recompute_working_set(
                 if dbg.get("year_cols"):
                     criterion["year_cols"] = dbg["year_cols"]
 
-        # FULLY NON-FILTERING: every criterion type — including industry &
-        # geography — only ANNOTATES the full universe and never drops a company.
+        # Annotate-only for financial / key-dev / segment criteria; industry and
+        # geography additionally narrow the universe (see FILTERING_CRITERION_TYPES).
         if result_df is None:
             run_src = full_df.copy()
             # SAFETY NET — a single malformed/failing criterion must NEVER break
@@ -5003,10 +5034,26 @@ def recompute_working_set(
                 if y_cols:
                     with_data = int(full_df[y_cols].notna().any(axis=1).sum())
 
+        # Industry / Geography NARROW the universe. Merging their column onto the
+        # untouched 431-company universe and calling it done is why picking
+        # "Coffee & Beverage" still reported "431 companies matched" and listed
+        # every other company. Identity is (ticker, company_name), never ticker
+        # alone — TSCO is Tractor Supply AND Tesco.
+        if ctype in FILTERING_CRITERION_TYPES:
+            if result_df is None or result_df.empty or "ticker" not in result_df.columns:
+                full_df = full_df.iloc[0:0].copy()
+            else:
+                kept_names = (result_df["company_name"]
+                              if "company_name" in result_df.columns
+                              else result_df["ticker"])
+                full_df = filter_universe_to_members(
+                    full_df, list(zip(result_df["ticker"], kept_names)))
+            with_data = len(full_df)
+
         dbg = dict(dbg or {})
         dbg["criterion_idx"]     = i
         dbg["criterion_summary"] = criterion.get("summary", "")
-        dbg["rows_out"]   = len(full_df)      # always the full universe size
+        dbg["rows_out"]   = len(full_df)      # what the criterion card reports
         dbg["with_data"]  = with_data
         ms_crit = (time.perf_counter() - t_crit) * 1000
         dbg["elapsed_ms"] = ms_crit
@@ -5014,7 +5061,8 @@ def recompute_working_set(
 
         log_timing("SCREENING_CRITERION_APPLIED", ms_crit,
                    f"idx={i} type={ctype} universe={len(full_df)} "
-                   f"with_data={with_data} (non-filtering)")
+                   f"with_data={with_data} "
+                   f"({'filtering' if ctype in FILTERING_CRITERION_TYPES else 'non-filtering'})")
 
     working_df = full_df
     ms_pipeline = (time.perf_counter() - t_pipeline) * 1000
@@ -5047,6 +5095,145 @@ def _criterion_fingerprint(criterion: Dict) -> str:
     skip = {"summary", "display_col", "quarter_cols", "year_cols"}
     safe = {k: v for k, v in criterion.items() if k not in skip}
     return json.dumps(safe, sort_keys=True, default=str)
+
+
+def keep_working_set_companies(
+    grid_df: pd.DataFrame,
+    working_df: pd.DataFrame,
+    ticker_col: str = "Ticker",
+    name_col: str = "_CompanyName",
+) -> pd.DataFrame:
+    """Drop event rows whose company is not in the working set.
+
+    coreiq_company_events is keyed on the bare ticker and the events query joins
+    coreiq_companies on that ticker alone, so one TSCO event comes back TWICE —
+    once as Tractor Supply Company, once as Tesco PLC (4,366 joined rows for 2,183
+    distinct events across JD/LULU/TSCO). Harmless-looking until the Industry and
+    Geography criteria actually filter: screening for "Food Retail" then still
+    listed Tractor Supply rows, i.e. a company the user had just excluded.
+
+    Identity is (ticker, company_name) — the same composite `filter_universe_to_members`
+    uses for watchlists, and name_coresight is stored verbatim on both sides.
+    A ticker that appears under only ONE company name is never touched, so a name
+    that fails to parse can never empty the grid.
+
+    When NO criterion disambiguates (both same-ticker companies are legitimately in
+    scope) the filter cannot drop either, so the same event would still be listed
+    twice — 10,773 exported rows against a header of 10,708. `_event_id` collapses
+    those to one row each, keeping the first in the query's own newest-first order.
+    Which of the two companies an event belongs to is genuinely unknowable from the
+    data: coreiq_company_events stores only the bare ticker.
+    """
+    if grid_df is None or grid_df.empty:
+        return grid_df
+    if ticker_col not in grid_df.columns or name_col not in grid_df.columns:
+        return grid_df
+    if working_df is None or not {"ticker", "company_name"} <= set(working_df.columns):
+        return grid_df
+
+    try:
+        tickers = grid_df[ticker_col].astype(str).str.strip()
+        names = grid_df[name_col].astype(str).str.strip()
+        ambiguous = set(tickers[tickers.duplicated(keep=False)][
+            names.groupby(tickers).transform("nunique") > 1])
+        if not ambiguous:
+            return grid_df
+
+        allowed = set(zip(working_df["ticker"].astype(str).str.strip(),
+                          working_df["company_name"].astype(str).str.strip()))
+        keep = [t not in ambiguous or (t, n) in allowed
+                for t, n in zip(tickers, names)]
+        out = grid_df[keep]
+        dropped = len(grid_df) - len(out)
+        if "_event_id" in out.columns:
+            before = len(out)
+            out = out.drop_duplicates(subset=["_event_id"], keep="first")
+            dropped += before - len(out)
+        if dropped:
+            log_info(f"[SCREENING] collapsed {dropped} duplicate event rows from the "
+                     f"bare-ticker company JOIN (shared tickers: {sorted(ambiguous)})")
+        return out.reset_index(drop=True)
+    except Exception as exc:
+        log_error(f"[SCREENING] keep_working_set_companies failed: {exc}")
+        return grid_df
+
+
+def merge_company_columns(
+    grid_df: pd.DataFrame,
+    working_df: pd.DataFrame,
+    columns: List[str],
+    ticker_col: str = "Ticker",
+    name_col: str = "_CompanyName",
+    after: Optional[str] = None,
+) -> pd.DataFrame:
+    """Carry per-company criterion columns onto a per-event results grid.
+
+    Key Devs mode renders one row per EVENT, so the criterion annotations that
+    `apply_*_criterion` wrote onto the per-COMPANY working set never reached it —
+    an active "Industry Classifications" criterion showed no Industry column,
+    while Companies and People mode both showed one. The columns are joined here
+    instead of re-queried: the values are already computed and carry the
+    criterion's own semantics (a company outside the selection is blank, not
+    labelled with whatever sector it happens to have).
+
+    The ticker is NOT a unique key — JD, LULU and TSCO each name two different
+    companies in coreiq_companies (JD.com vs JD Sports, Lululemon vs Lulu Retail,
+    Tractor Supply vs Tesco). A plain merge would multiply every event row for
+    those three, so the right side is collapsed to one row per key first. Matching
+    is on (ticker, company name) where the grid carries a name, falling back to
+    ticker alone: the events table is keyed on the bare ticker, so its own company
+    JOIN already emits one row per candidate company, and the name is the only
+    thing that says which of the two a given row is about. Without it, a Tractor
+    Supply row would inherit Tesco's industry and country.
+
+    Per column the first NON-NULL value wins, so where one of two same-ticker
+    companies matched the criterion, that is the value shown.
+
+    ``after`` (the company column) is moved to the front and the new columns land
+    directly behind it, so they read as company attributes and are visible without
+    scrolling — with or without the grid's left-pinning, which reorders the display
+    but not the frame. Rows are never added or dropped.
+    """
+    wanted = [c for c in (columns or []) if c in working_df.columns]
+    if grid_df is None or grid_df.empty or not wanted:
+        return grid_df
+    if ticker_col not in grid_df.columns or "ticker" not in working_df.columns:
+        return grid_df
+
+    def clean(series):
+        return series.astype(str).str.strip()
+
+    try:
+        source = working_df.copy()
+        source["ticker"] = clean(source["ticker"])
+        by_ticker = source.groupby("ticker", sort=False)[wanted].first()
+
+        by_name = None
+        use_name = name_col in grid_df.columns and "company_name" in source.columns
+        if use_name:
+            source["_key"] = source["ticker"] + "\x00" + clean(source["company_name"])
+            by_name = source.groupby("_key", sort=False)[wanted].first()
+
+        out = grid_df.copy()
+        ticker_key = clean(out[ticker_col])
+        name_key = (ticker_key + "\x00" + clean(out[name_col])) if use_name else None
+        # A name that IS in the universe settles the row, blank value included —
+        # falling back to the ticker there would hand Tractor Supply whichever
+        # value Tesco happened to have. Only an unrecognised name falls back.
+        named_row_exists = name_key.isin(by_name.index) if use_name else None
+
+        for col in wanted:
+            values = ticker_key.map(by_ticker[col])
+            if use_name:
+                values = name_key.map(by_name[col]).where(named_row_exists, values)
+            out[col] = values.where(values.notna(), "N/A").values
+
+        anchor = after if (after and after in out.columns) else out.columns[0]
+        rest = [c for c in out.columns if c != anchor and c not in wanted]
+        return out[[anchor] + wanted + rest]
+    except Exception as exc:
+        log_error(f"[SCREENING] merge_company_columns failed: {exc}")
+        return grid_df
 
 
 def filter_universe_to_members(

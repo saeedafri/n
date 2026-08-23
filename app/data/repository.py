@@ -1,7 +1,7 @@
 """
 Data repository for fetching market data from database.
 """
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple, Dict, Any, Set
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import calendar
@@ -10024,7 +10024,7 @@ class SegmentDataRepository:
 
     # Non-dimensioned (consolidated) rows — used as exact totals per metric per period
     _QUARTER_TOTAL_SQL_TPL = """
-        SELECT original_label, numeric_value, unit_ref, period_end
+        SELECT original_label, numeric_value, unit_ref, period_end, concept
         FROM coreiq_filing_metrics_v5
         WHERE ticker = :ticker
           AND is_dimensioned = 0
@@ -10062,6 +10062,57 @@ class SegmentDataRepository:
         if val is not None and abs(val) >= 1000:
             return True
         return False
+
+    @staticmethod
+    def _period_key(row) -> Tuple:
+        """The context a fact covers: an instant date, or a start→end span."""
+        if (row.get('period_type') or '').lower() == 'instant':
+            return ('instant', row.get('period_instant'))
+        return ('duration', row.get('period_start'), row.get('period_end'))
+
+    @staticmethod
+    def _rank_total_candidate(row, concept: str, member_concepts: Set[str],
+                              metric_name: str, member_periods: Set[Tuple]) -> Optional[Tuple]:
+        """Score a non-dimensioned fact as the Total for one metric, or None if it
+        is not a candidate at all. Higher wins; compared as a tuple, so each rule
+        only breaks ties left by the one before it:
+
+        1. the members' own concept AND an element declared for this metric
+           (AMD tags a member "Operating income related to licensed IP" with
+           amd:GainLossOnLicensingAgreement, so the members' concepts alone would
+           let a $102m licensing gain outrank $1,264m of operating income)
+        2. the members' own concept — the plain case, and the only evidence when a
+           filer uses an element the metric never declared (TJX: NoncurrentAssets)
+        3. covers a period the members cover — never a stray context
+        4. newest filing, so a restatement supersedes the original
+        """
+        declared = SegmentDataRepository._is_declared_concept(concept, metric_name)
+        in_members = concept in member_concepts
+        if not in_members:
+            # Only bridge to another element when both sides are declared for this
+            # metric (DepreciationAndAmortization ↔ DepreciationDepletionAnd
+            # Amortization); never on label resemblance.
+            if not (declared and any(SegmentDataRepository._is_declared_concept(c, metric_name)
+                                     for c in member_concepts)):
+                return None
+        filing_date = row.get('filing_date')
+        filed = filing_date.isoformat()[:10] if hasattr(filing_date, 'isoformat') else ''
+        return (
+            in_members and declared,
+            in_members,
+            SegmentDataRepository._period_key(row) in member_periods,
+            filed,
+        )
+
+    @staticmethod
+    def _is_declared_concept(concept: str, metric_name: str) -> bool:
+        """True when `concept` is one of the XBRL elements SEGMENT_METRIC_GROUPS
+        names for this metric. Namespace-insensitive: `us-gaap:Assets` → `Assets`."""
+        from utils.constants import SEGMENT_METRIC_GROUPS
+        cfg = SEGMENT_METRIC_GROUPS.get(metric_name)
+        if not cfg:
+            return False
+        return concept.rsplit(':', 1)[-1] in cfg["edgar_concepts"]
 
     @staticmethod
     def _matches_metric(label: str, metric_cfg: dict) -> bool:
@@ -10140,7 +10191,7 @@ class SegmentDataRepository:
         dim_rows = db_manager.execute_query_readonly(sql, {"ticker": ticker, "year": year, **params}) or []
         ndim_sql = """
             SELECT original_label, numeric_value, unit_ref, report_fiscal_year,
-                   NULL AS dimension_label, NULL AS dimension_member_label, NULL AS concept,
+                   NULL AS dimension_label, NULL AS dimension_member_label, concept,
                    period_type, period_start, period_end, period_instant,
                    NULL AS dimension, NULL AS full_dimension_label, filing_date
             FROM coreiq_filing_metrics_v5
@@ -10197,7 +10248,7 @@ class SegmentDataRepository:
         ]
         ndim_sql = f"""
             SELECT original_label, numeric_value, unit_ref, report_fiscal_year,
-                   NULL AS dimension_label, NULL AS dimension_member_label, NULL AS concept,
+                   NULL AS dimension_label, NULL AS dimension_member_label, concept,
                    period_type, period_start, period_end, period_instant,
                    NULL AS dimension, NULL AS full_dimension_label, filing_date
             FROM coreiq_filing_metrics_v5
@@ -10365,6 +10416,11 @@ class SegmentDataRepository:
         whose derived year is not in ``years`` are skipped. Pass non-dimensioned
         rows (``_is_ndim=True``) to populate ``metric_totals``; omit them (the
         cache path does) to leave it empty.
+
+        ``metric_totals`` is keyed by section — ``{"business": {metric: {year: v}},
+        "geo": {...}}`` — because the two tables can split different facts under
+        one metric name (TJX geographic "Assets" are long-lived assets, its
+        business "Assets" are balance-sheet assets), so they need different totals.
         """
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
         from data.segment_aliases import canonicalize_geo_label
@@ -10384,9 +10440,16 @@ class SegmentDataRepository:
         # Classify each row into business or geo, and match to a metric group
         biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
         geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
+        metric_totals: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {"business": {}, "geo": {}}
+        # XBRL concepts each (section, metric) is actually built from — the key that
+        # ties a Total row back to the exact fact its members split up — and the
+        # periods those members cover, so a Total cannot come from another context.
+        section_concepts: Dict[Tuple[str, str], Set[str]] = {}
+        member_periods: Dict[Tuple[str, str, int], Set[Tuple]] = {}
 
         for row in filtered:
+            if row.get('_is_ndim'):
+                continue  # second pass — needs the member concepts collected below
             if not SegmentDataRepository._is_monetary_row(row):
                 continue
             orig_label = row.get('original_label') or ''
@@ -10395,17 +10458,6 @@ class SegmentDataRepository:
             if raw_val is None or row_year not in years:
                 continue
             scaled = raw_val / 1_000_000
-
-            # Non-dimensioned rows → metric_totals (exact consolidated totals)
-            if row.get('_is_ndim'):
-                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                    if SegmentDataRepository._matches_metric(orig_label, cfg):
-                        if metric_name not in metric_totals:
-                            metric_totals[metric_name] = {y: None for y in years}
-                        if metric_totals[metric_name].get(row_year) is None:
-                            metric_totals[metric_name][row_year] = scaled
-                        break
-                continue
 
             # Dimensioned rows → segment members
             fdl = row.get('full_dimension_label') or ''
@@ -10458,7 +10510,46 @@ class SegmentDataRepository:
                         target[metric_name][member] = {y: None for y in years}
                     if target[metric_name][member][row_year] is None:
                         target[metric_name][member][row_year] = scaled
+                    concept = (row.get('concept') or '').strip()
+                    if concept:
+                        section_concepts.setdefault((section, metric_name), set()).add(concept)
+                    member_periods.setdefault((section, metric_name, row_year), set()).add(
+                        SegmentDataRepository._period_key(row))
                     break
+
+        # ── Second pass: non-dimensioned rows → per-section Total rows ────────
+        # A Total is only a Total if it is the SAME XBRL concept the members are
+        # tagged with. Label matching alone cannot tell "Carrying values of
+        # long-lived assets" (TJX geo members, us-gaap:NoncurrentAssets) from
+        # "(Increase) decrease in prepaid expenses and other current assets" — both
+        # contain "assets", and the alphabetically-first one used to win, putting a
+        # $31m cash-flow movement under a $7.3b column of segment assets.
+        best_total: Dict[Tuple[str, str, int], Tuple[Tuple, float]] = {}
+        for row in filtered:
+            if not row.get('_is_ndim'):
+                continue
+            concept = (row.get('concept') or '').strip()
+            if not concept or not SegmentDataRepository._is_monetary_row(row):
+                continue
+            row_year = SegmentDataRepository._get_row_year(row)
+            raw_val = row.get('numeric_value')
+            if raw_val is None or row_year not in years:
+                continue
+            for (section, metric_name), concepts in section_concepts.items():
+                rank = SegmentDataRepository._rank_total_candidate(
+                    row, concept, concepts, metric_name,
+                    member_periods.get((section, metric_name, row_year)) or set())
+                if rank is None:
+                    continue
+                key = (section, metric_name, row_year)
+                if key not in best_total or rank > best_total[key][0]:
+                    best_total[key] = (rank, raw_val / 1_000_000)
+
+        for (section, metric_name, row_year), (_, value) in best_total.items():
+            bucket = metric_totals["geo" if section == "geo" else "business"]
+            if metric_name not in bucket:
+                bucket[metric_name] = {y: None for y in years}
+            bucket[metric_name][row_year] = value
 
         return biz_data, geo_data, metric_totals
 
@@ -10654,12 +10745,14 @@ class SegmentDataRepository:
         except Exception:
             pass  # Non-fatal
 
-        # IS revenue takes precedence over XBRL non-dim; merge into metric_totals
+        # IS revenue takes precedence over XBRL non-dim; merge into both sections'
+        # totals — business and geographic revenue both roll up to the same top line.
         for _yr, _rv in revenue_totals.items():
             if _rv is not None:
-                if "Revenues" not in metric_totals:
-                    metric_totals["Revenues"] = {y: None for y in years}
-                metric_totals["Revenues"][_yr] = _rv
+                for _bucket in metric_totals.values():
+                    if "Revenues" not in _bucket:
+                        _bucket["Revenues"] = {y: None for y in years}
+                    _bucket["Revenues"][_yr] = _rv
 
         return {
             "years": years,
@@ -10717,10 +10810,14 @@ class SegmentDataRepository:
 
         biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
         geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        # Exact filed totals per metric per period (from non-dimensioned rows)
-        metric_totals: Dict[str, Dict[int, Optional[float]]] = {}
+        # Exact filed totals per section per metric per period (non-dimensioned rows)
+        metric_totals: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {"business": {}, "geo": {}}
+        section_concepts: Dict[Tuple[str, str], Set[str]] = {}
+        member_periods: Dict[Tuple[str, str, int], Set[Tuple]] = {}
 
         for row in all_rows:
+            if row.get('_is_ndim'):
+                continue  # second pass — needs the member concepts collected below
             if not SegmentDataRepository._is_monetary_row(row):
                 continue
 
@@ -10736,17 +10833,6 @@ class SegmentDataRepository:
             if raw_val is None:
                 continue
             scaled = raw_val / 1_000_000
-
-            # Non-dimensioned rows → metric_totals (exact consolidated values)
-            if row.get('_is_ndim'):
-                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                    if SegmentDataRepository._matches_metric(orig_label, cfg):
-                        if metric_name not in metric_totals:
-                            metric_totals[metric_name] = {k: None for k in period_keys}
-                        if metric_totals[metric_name].get(pkey) is None:
-                            metric_totals[metric_name][pkey] = scaled
-                        break
-                continue
 
             # Dimensioned rows → segment members
             fdl = row.get('full_dimension_label') or ''
@@ -10783,7 +10869,46 @@ class SegmentDataRepository:
                         target[metric_name][member] = {k: None for k in period_keys}
                     if target[metric_name][member].get(pkey) is None:
                         target[metric_name][member][pkey] = scaled
+                    concept = (row.get('concept') or '').strip()
+                    if concept:
+                        section_concepts.setdefault((section, metric_name), set()).add(concept)
+                    member_periods.setdefault((section, metric_name, pkey), set()).add(
+                        SegmentDataRepository._period_key(row))
                     break
+
+        # Second pass: non-dimensioned rows → Total rows, ranked exactly as the
+        # annual builder ranks them (see _rank_total_candidate) — the members' own
+        # concept, never a label that merely shares a word with the metric.
+        best_total: Dict[Tuple[str, str, int], Tuple[Tuple, float]] = {}
+        for row in all_rows:
+            if not row.get('_is_ndim'):
+                continue
+            concept = (row.get('concept') or '').strip()
+            if not concept or not SegmentDataRepository._is_monetary_row(row):
+                continue
+            pe = row.get('period_end')
+            if pe is None:
+                continue
+            pe = pe.date() if hasattr(pe, 'date') else pe
+            pkey = _pe_key(pe)
+            raw_val = row.get('numeric_value')
+            if pkey not in key_set or raw_val is None:
+                continue
+            for (section, metric_name), concepts in section_concepts.items():
+                rank = SegmentDataRepository._rank_total_candidate(
+                    row, concept, concepts, metric_name,
+                    member_periods.get((section, metric_name, pkey)) or set())
+                if rank is None:
+                    continue
+                key = (section, metric_name, pkey)
+                if key not in best_total or rank > best_total[key][0]:
+                    best_total[key] = (rank, raw_val / 1_000_000)
+
+        for (section, metric_name, pkey), (_, value) in best_total.items():
+            bucket = metric_totals["geo" if section == "geo" else "business"]
+            if metric_name not in bucket:
+                bucket[metric_name] = {k: None for k in period_keys}
+            bucket[metric_name][pkey] = value
 
         if not biz_data and not geo_data:
             return None
@@ -10834,9 +10959,10 @@ class SegmentDataRepository:
         # (IS is deduplicated and more reliable); merge into metric_totals
         for _pk, _rv in revenue_totals.items():
             if _rv is not None:
-                if "Revenues" not in metric_totals:
-                    metric_totals["Revenues"] = {k: None for k in period_keys}
-                metric_totals["Revenues"][_pk] = _rv
+                for _bucket in metric_totals.values():
+                    if "Revenues" not in _bucket:
+                        _bucket["Revenues"] = {k: None for k in period_keys}
+                    _bucket["Revenues"][_pk] = _rv
 
         return {
             "years": period_keys,

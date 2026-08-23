@@ -1031,3 +1031,294 @@ the rows are absent. The only genuine *bug* among the 37 is the 9 corrupt
 composite tickers (§22 group A), and that corruption lives upstream in
 `coreiq_companies.exchange_acronym`.
 
+---
+
+## 32. Quarterly refresh email — suppressed, and why
+
+**Reported:** the quarterly refresh mail lists every model twice — same MAPE,
+different values:
+
+```
+Exponential smoothing   13.0%   $4.2M    ✅ best
+Exponential smoothing   13.0%   $10.0M   ✅ best
+Holt (linear trend)     13.7%   $4.4M
+Holt (linear trend)     13.7%   $10.8M
+```
+
+### Action taken: quarterly mail was gated, then re-enabled once fixed
+
+The gate is a single choke point inside `send_model_refresh_email`, not a check
+per call site — the scheduler and the manual Refresh dialog both route through it,
+so no caller (present or future) can bypass it.
+
+- **2026-08-16 → 2026-08-19:** quarterly suppressed while the six defects below
+  were fixed. Nothing went out.
+- **From 2026-08-19:** `FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY` defaults to on;
+  set it to `0` / `off` / `false` to stop quarterly mail again without touching
+  annual or the schedule.
+
+**Annual mail is unaffected by the switch in either direction** — verified by the
+truth table in §36.
+
+### Defect 1 — duplicate model rows (FIXED)
+
+`fetch_ticker_detail` pinned the model table to the next period with:
+
+```sql
+AND fiscal_year = (SELECT MIN(fiscal_year) ... WHERE is_best_model = 1)
+```
+
+The annual table is keyed by `fiscal_year`, so that is sufficient there. The
+quarterly table is keyed by `(ticker, fiscal_year, fiscal_quarter, metric,
+model_key)`, so pinning only the year returns **every model once per quarter in
+that year** — identical MAPE (it is per model) with different values (different
+quarters). FLWS returned **33 rows instead of 11**.
+
+Fixed by pinning the full period key for quarterly:
+
+```sql
+AND (fiscal_year, fiscal_quarter) = (
+      SELECT fiscal_year, fiscal_quarter FROM {table}
+      WHERE ticker = :t AND metric = :m AND is_best_model = 1
+      ORDER BY fiscal_year, fiscal_quarter LIMIT 1)
+```
+
+Verified: FLWS/M/TGT now return 11 quarterly rows and 10 annual rows, with zero
+duplicate model keys.
+
+### Defect 2 — series collapse (NOT fixed; the reason the mail stays off)
+
+Every series in the mail is keyed by `fiscal_year` alone:
+
+```python
+"series":          [(int(r["fiscal_year"]), float(r["value_millions"])) ...]
+"ensemble_series": [(int(r["fiscal_year"]), float(r["value_millions"])) ...]
+_scenario_bands(): out[k].append((int(r["fiscal_year"]), ...))
+```
+
+For quarterly that is 3–4 rows per year sharing one x-value. Measured on FLWS:
+
+```
+ensemble_series rows       : 20
+distinct fiscal_year keys  :  6
+dict(ensemble_series)      :  6   => 14 of 20 points silently lost
+```
+
+`draw_trajectory_png` and `_forecast_table` both consume these, so the quarterly
+chart stacks several points on the same x and the table repeats a year label.
+Fixing it means making the whole mail period-aware (labelling "Q3 2026" rather
+than 2026) across the chart drawing and both tables — a larger change than the
+one-line query fix, and not attempted here.
+
+Until that is done the quarterly mail should stay off. The annual mail is
+unaffected: the annual table has one row per fiscal year, so no collapse occurs.
+
+---
+
+## 33. Forecasting issue audit (2026-08-19)
+
+Re-confirmed first that the data scientist's folder is **unchanged** — all four
+files are sha256-identical to `tests/fixtures/mdp_forecasting/`. The parity suite
+passes all 5 tests: 347/347 annual, 97/98 quarterly (Coty by design), plus
+walk-forward backtest detail and seasonal indices.
+
+Then audited store-wide invariants (20,305 annual rows / 407 tickers; 78,020
+quarterly / 355). Clean on: NULL values, duplicate best-models, missing ensembles,
+scenario ordering (pessimistic <= baseline <= optimistic held everywhere).
+
+### CRITICAL — trust banners had silently stopped working (FIXED)
+
+`plausible`, `implied_cagr` and `forecast_non_positive` are set inside
+`engine.forecast()`. The **store fast path never calls it**, so the engine
+reported `plausible=True, flag_reasons=[]` for every ticker served from the store
+— which is nearly all of them once the store is warm. Structural-break flags
+survived only because `_build_fitting_frame` runs at construction.
+
+Effect: the red "Forecast failed its plausibility check" banner stopped appearing
+after the full re-sync. Measured before the fix:
+
+| Ticker | Before re-sync | After re-sync (broken) |
+|---|---|---|
+| EVGO | `flagged_implausible`, `implied_cagr_85%` | `plausible=True`, `flags=[]` |
+| SNDK (quarterly) | — | **no flag at all** on a $65T forecast |
+
+Fixed by re-running the same check against the **stored** ensemble on both fast
+paths (pure arithmetic on values already in hand, so the fast path stays fast).
+Verified in the browser afterwards:
+
+```
+EVGO          "Forecast failed its plausibility check" · implied 85%/yr
+SNDK quarterly "Forecast failed its plausibility check" · implied 492%/yr
+CVNA          "Treat this forecast with caution" · missed by 31%
+```
+
+### Open issue 1 — SNDK's source data is wrong
+
+SNDK's annual series is `9.75, 6.09, 6.66, 7.36, **20.25**` (FY2026). SanDisk's
+revenue is ~$7.4B, so the 20.25 row is bad source data — and the income-statement
+tables hold two conflicting rows for it (`ccy=NULL rev=20,248M` and
+`ccy=USD rev=7,355M`). Its quarterly ensemble compounds to **$65 trillion**. The
+forecast is now correctly flagged, but the underlying row belongs to the data team.
+
+### Open issue 2 — negative revenue in per-model columns
+
+`holt` and `exp_smoothing` are unbounded linear extrapolators; on a declining
+series they cross zero. Stored today: 12 rows / 4 tickers annual (worst SNDK
+−14,310), 93 rows / 14 tickers quarterly (worst SMFG −71,747).
+
+The DS reference publishes **only the ensemble** and contains zero negatives —
+our product additionally exposes per-model columns, which is why this is visible
+here and not there. Flooring the model output would change the maths and break
+parity, so the fix belongs in presentation (suppress or mark non-positive model
+values). **Not changed** — needs a product decision.
+
+### Open issue 3 — foreign-currency magnitudes are unlabelled in market_data
+
+`005930.KS` ($425,861,844M), `SMFG`, `3382.T`, `6752.T`, `9983.T` exceed $5T
+because they report in KRW/JPY and the app deliberately does not FX-convert.
+`/forecasting` labels the currency correctly; the market_data Forecasting tab and
+Key Stats both print "Millions of USD". Values are right, the label is not.
+
+### Carried forward (unchanged, previously documented)
+
+- quarterly refresh email suppressed — series collapse, §32
+- screening forecast criterion is annual-only, §27
+- 37 "On hold" tickers — genuinely missing calendar rows, §31
+- 36 tickers with earnings-calendar coverage >6 months stale, §30
+- 9 corrupt `exchange_acronym` composites, §22
+- `# require_auth(page="forecasting")` still commented out, §25
+
+---
+
+## 34. The quarterly mail, decoded from the actual message
+
+Source: `Mail - Mohd Saeed Afri - Outlook.pdf` — "Forecast Refresh — 1 Updated ·
+Aug 18, 2026 12:30 UTC", quarterly, BIRK, sent to 5 recipients + Cc.
+
+BIRK's first forecast year (FY2026) has **two quarters stored**:
+
+| model | Q3 | Q4 |
+|---|---|---|
+| linear | **604.1** | **590.1** |
+| ensemble | **620.5** | **557.4** |
+| seasonal_naive | 688.3 | 525.6 |
+| scenario_optimistic | 944.6 | 1,430.1 |
+
+Every figure in the mail is accounted for by those two rows:
+
+| Mail showed | Actually |
+|---|---|
+| `Linear regression 14.3% $604.1M ✅ best` and `… $590.1M ✅ best` | Q3 and Q4 of the same model |
+| Header `Ensemble (next yr) $620.5M` | Q3 ensemble |
+| Detail `Ensemble (FY2026) $557.4M` | Q4 ensemble — **a different number in the same mail** |
+| `Scenario · optimistic $944.6M` and `$1,430.1M` | Q3 and Q4 |
+| Detail rows `557.4, 655.5, 770.2, 906.6, 1071.3, 1688.9` | `dict(ensemble_series)` — 20 points collapsed to 6, 14 discarded |
+| `FY2031 ▲57.6%` | YoY between two arbitrary, unrelated quarters |
+| `0 historical actual years from reported financials` | `fetch_actuals()` returns `None` for quarterly *by design* |
+
+### Defect register for the quarterly mail
+
+| # | Defect | Status |
+|---|---|---|
+| 1 | Model table repeated every model once per quarter | **FIXED** (§32) — 33 rows → 11 |
+| 2 | `series`/`ensemble_series`/`scenarios` keyed by `fiscal_year` only → 14 of 20 points silently dropped | open |
+| 3 | Header ensemble ≠ detail ensemble (Q3 vs Q4) | open — same root cause as 2 |
+| 4 | Quarterly actuals never fetched → "0 historical actual years" | open — deliberate `return None` |
+| 5 | YoY computed between arbitrary quarters | open — consequence of 2 |
+| 6 | "Next-yr value" / "Fiscal Year" labels on a quarterly mail | open |
+
+All six are why the quarterly mail stays suppressed. **The annual mail is
+unaffected and verified clean** — BIRK/M/EVGO each return 10 model rows with no
+duplicates, real actuals (6/21/8 points) and zero collapse loss, because the
+annual table holds exactly one row per fiscal year.
+
+---
+
+## 35. Clean areas (audited, no action needed)
+
+- **Units round-trip** is exact: engine billions → store millions → UI, ratio
+  1000.0 for M, BIRK, TGT.
+- **Horizon** honours the request: annual 1/3/5 → 1/3/5 rows; quarterly 4/8/20 →
+  4/8/20 rows.
+- **Model keys** match exactly between engine output and stored rows (no drift in
+  either direction).
+- **Store invariants**: no NULL values, no ticker with two best models, no ticker
+  missing an ensemble, and scenario ordering (pess ≤ base ≤ opt) holds on every
+  period row in both tables.
+
+---
+
+## 36. Open items closed (2026-08-19)
+
+### SNDK — CORRECTION: the data is right, I was wrong
+
+I previously reported SNDK's FY2026 revenue of 20.248 as bad source data.
+**It is correct.** Verified against stockanalysis.com:
+
+| FY | Reported | Our DB |
+|---|---|---|
+| 2022 | $9.75B | 9.754 |
+| 2023 | $6.09B | 6.086 |
+| 2024 | $6.66B | 6.663 |
+| 2025 | $7.36B | 7.355 |
+| **2026** | **$20.25B (+175.3%)** | **20.248** |
+
+SanDisk genuinely grew 175% on the AI/datacenter memory cycle (Datacenter +437%,
+Q4 alone $8.97B). The "two conflicting rows" I flagged were simply FY2026 and
+FY2025 from two source tables — both correct. **Nothing to raise with the data
+team for SNDK.** The $65T quarterly figure is the model extrapolating a real boom
+year exponentially, which is exactly what the plausibility flag now catches
+(`implied_cagr_492%`).
+
+### Currency labelling — CORRECTION: not a defect
+
+I flagged JPY/KRW companies as being labelled "Millions of USD". Verified in the
+browser: SMFG renders **"Millions of JPY"** with JPY values (13,356,834 ≈ ¥13.4tn),
+M renders "Millions of USD". The page defaults the target currency to the
+company's reported currency and applies `conversion_rate`. No change needed.
+
+### Quarterly mail — all six defects now fixed
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | model repeated per quarter | pin `(fiscal_year, fiscal_quarter)` |
+| 2 | series keyed by year → 14/20 points lost | sortable `_period_key`; **20/20 retained** |
+| 3 | header ensemble ≠ detail ensemble | both now `$620.5M` (Q3 FY2026) |
+| 4 | "0 historical actual years" | `fetch_actuals` uses the quarterly fetch/normalise pair → **19 actual quarters** |
+| 5 | YoY between arbitrary quarters | QoQ, computed on adjacent periods |
+| 6 | "Fiscal Year"/"Next-yr" labels | `Fiscal Quarter`, `Q3 FY2026`, `Next-period value` |
+
+Verified for BIRK: quarterly rows run `Q4 FY2021 … Q2 FY2031` with 19 actual +
+20 forecast periods; annual is byte-for-byte unchanged (`FY2020 … FY2030`, YoY,
+6 actual years).
+
+### Negative per-model values
+
+`holt`/`exp_smoothing` extrapolate a declining series through zero (12 annual /
+93 quarterly rows). In the mail these now render as **n/m** with a tooltip rather
+than "-$14,310.5M", which reads as a broken system in a push notification. The
+model still appears with its MAPE, so the reader sees it was considered and
+rejected. The engine maths is untouched — flooring it would break parity with the
+reference.
+
+In-app the raw model columns are left as they are: the /forecasting Models tab is
+an exploration surface where a model diverging is informative, and the
+plausibility banner already governs the headline number.
+
+### Quarterly mail is back ON (2026-08-19)
+
+All six defects are fixed and the mail renders correctly, so quarterly sends
+again on the existing schedule. The kill switch remains: set
+`FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY=0` to stop it.
+
+Guard behaviour, verified offline with the DB stubbed:
+
+| period | switch | sends? |
+|---|---|---|
+| quarterly | unset / `1` / `on` | yes |
+| quarterly | `0` / `off` / `false` | no — suppressed at the choke point |
+| annual | unset / `0` | yes — the switch never touches annual |
+
+Live SMTP stays behind the separate, unchanged `FORECAST_EMAIL_TEST_MODE` gate
+(default `1` = build and log the mail, skip the send).
+

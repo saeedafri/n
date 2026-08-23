@@ -75,17 +75,70 @@ def _fmt_mm(v: Optional[float]) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Data
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Period identity
+#
+# Every series in this report used to be keyed by fiscal_year alone. That is
+# unique for the annual table but NOT for the quarterly one, where a year holds
+# up to four rows — so dict(series) silently kept whichever quarter came last
+# (14 of 20 points lost for BIRK) and the header could show one quarter's
+# ensemble while the table below showed another's. Key on a sortable period id
+# instead, and carry a label for display.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _period_key(row: Dict[str, Any], period_type: str) -> int:
+    fy = int(row["fiscal_year"])
+    if period_type == "quarterly":
+        return fy * 4 + int(row.get("fiscal_quarter") or 0)
+    return fy
+
+
+def _period_label(key: int, period_type: str) -> str:
+    if period_type == "quarterly":
+        q = key % 4 or 4
+        y = key // 4 if key % 4 else key // 4 - 1
+        return f"Q{q} FY{y}"
+    return f"FY{key}"
+
+
+def _period_heading(period_type: str) -> str:
+    return "Fiscal Quarter" if period_type == "quarterly" else "Fiscal Year"
+
+
+def _change_heading(period_type: str) -> str:
+    return "QoQ" if period_type == "quarterly" else "YoY"
+
+
+def _fmt_forecast_mm(v: Optional[float]) -> str:
+    """Format a MODEL forecast value.
+
+    Unbounded extrapolators (holt, exp_smoothing) can run a declining series
+    straight through zero — 12 annual and 93 quarterly rows are negative in the
+    store today, worst -14,310. A negative revenue is not a forecast, it is the
+    model breaking down, and printing "-$14,310.5M" in a push notification reads
+    as a broken system. Show it as not-meaningful instead; the model still appears
+    with its MAPE so the reader can see it was considered and rejected.
+    """
+    if v is None:
+        return "—"
+    try:
+        if float(v) <= 0:
+            return '<span title="Model extrapolated below zero — not a meaningful revenue forecast" style="color:#999;">n/m</span>'
+    except (TypeError, ValueError):
+        return "—"
+    return _fmt_mm(v)
+
+
 def fetch_actuals(ticker: str, period_type: str = "annual") -> Optional[List[Tuple[int, float]]]:
     """Historical actual revenue as [(fiscal_year, value_millions)], reported currency.
 
-    Reuses the exact ingest path the forecaster feeds on
-    (``RevenueForecastService._fetch_actual_rows`` → ``_normalize_actual_rows``) so the
-    units line up with the stored ``value_millions`` forecasts. Annual only for now —
-    quarterly returns None so the quarterly chart renders exactly as before.
+    Reuses the exact ingest path the forecaster feeds on so the units line up with
+    the stored ``value_millions`` forecasts. Returns [(period_key, value)] where the
+    key matches ``_period_key`` for the cadence — quarterly included, which is why
+    the quarterly mail no longer reports "0 historical actual years".
     Imports are lazy to avoid any import cycle; any failure returns None (email never lost).
     """
-    if period_type == "quarterly":
-        return None
     try:
         from data.source_router import get_company_source
         from data.revenue_forecast_service import (
@@ -94,7 +147,13 @@ def fetch_actuals(ticker: str, period_type: str = "annual") -> Optional[List[Tup
         source = get_company_source(ticker)
         if source not in ("SEC", "YFinance"):
             return None
-        raw = RevenueForecastService._fetch_actual_rows(ticker, source)
+        # Each cadence has its own fetch/normalise pair. Using the annual pair for a
+        # quarterly report returned one row per YEAR, which then rendered as
+        # "Q4 FY2019, Q4 FY2020, ..." — annual figures wearing quarterly labels.
+        if period_type == "quarterly":
+            raw = RevenueForecastService._fetch_quarterly_rows(ticker, source)
+        else:
+            raw = RevenueForecastService._fetch_actual_rows(ticker, source)
         if not raw:
             return None
         raw_dicts = [dict(r) for r in raw]
@@ -103,11 +162,16 @@ def fetch_actuals(ticker: str, period_type: str = "annual") -> Optional[List[Tup
         else:
             base = ticker.split(".")[0] if "." in ticker else ticker
             reported = _yf_reported_currency(base) or "USD"
-        rows = RevenueForecastService._normalize_actual_rows(
-            raw_rows=raw_dicts, source=source, source_table=_source_table(source),
-            reported_currency=reported, display_currency=reported,
-        )
-        out = [(int(r["fiscal_year"]), float(r["total_revenue_billions"]) * 1000.0)
+        if period_type == "quarterly":
+            rows = RevenueForecastService._normalize_quarterly_rows(
+                raw_rows=raw_dicts, source=source, reported_currency=reported,
+            )
+        else:
+            rows = RevenueForecastService._normalize_actual_rows(
+                raw_rows=raw_dicts, source=source, source_table=_source_table(source),
+                reported_currency=reported, display_currency=reported,
+            )
+        out = [(_period_key(r, period_type), float(r["total_revenue_billions"]) * 1000.0)
                for r in rows
                if r.get("fiscal_year") is not None and r.get("total_revenue_billions") is not None]
         out.sort()
@@ -121,38 +185,62 @@ def fetch_actuals(ticker: str, period_type: str = "annual") -> Optional[List[Tup
 def fetch_ticker_detail(ticker: str, period_type: str = "annual") -> Optional[Dict[str, Any]]:
     """Pull the stored forecast detail for one ticker. Returns None if nothing stored."""
     table = _QUARTERLY_TABLE if period_type == "quarterly" else _ANNUAL_TABLE
+    # Quarterly rows need the quarter to form a unique, ordered period key.
+    _qcol = "fiscal_quarter, " if period_type == "quarterly" else ""
+    _order = "fiscal_year, fiscal_quarter" if period_type == "quarterly" else "fiscal_year"
     try:
         best = db_manager.execute_query_readonly(
-            f"SELECT fiscal_year, model_key, metric, value_millions, mape, periods_ahead, "
+            f"SELECT fiscal_year, {_qcol}model_key, metric, value_millions, mape, periods_ahead, "
             f"       last_actual_date, company_name, exchange, computed_at "
-            f"FROM {table} WHERE ticker = :t AND is_best_model = 1 ORDER BY fiscal_year",
+            f"FROM {table} WHERE ticker = :t AND is_best_model = 1 ORDER BY {_order}",
             {"t": ticker},
         )
         if not best:
             return None
         metric = best[0].get("metric")
-        models = db_manager.execute_query_readonly(
-            f"SELECT model_key, is_best_model, is_ensemble, mape, value_millions "
-            f"FROM {table} "
-            f"WHERE ticker = :t AND metric = :m "
-            f"  AND fiscal_year = (SELECT MIN(fiscal_year) FROM {table} "
-            f"                     WHERE ticker = :t AND metric = :m AND is_best_model = 1) "
-            f"ORDER BY (mape IS NULL), mape",
-            {"t": ticker, "m": metric},
-        )
+        # One row per model for the NEXT forecast period.
+        #
+        # The annual table is keyed by fiscal_year, so pinning the year is enough.
+        # The quarterly table is keyed by (fiscal_year, fiscal_quarter), so pinning
+        # only the year returns every model once per quarter in that year — the
+        # duplicate "Exponential smoothing 13.0% $4.2M / 13.0% $10.0M" rows seen in
+        # the quarterly mail (same MAPE, because MAPE is per model; different
+        # values, because they were different quarters). Pin the full period key.
+        if period_type == "quarterly":
+            models = db_manager.execute_query_readonly(
+                f"SELECT model_key, is_best_model, is_ensemble, mape, value_millions "
+                f"FROM {table} "
+                f"WHERE ticker = :t AND metric = :m "
+                f"  AND (fiscal_year, fiscal_quarter) = ("
+                f"       SELECT fiscal_year, fiscal_quarter FROM {table} "
+                f"       WHERE ticker = :t AND metric = :m AND is_best_model = 1 "
+                f"       ORDER BY fiscal_year, fiscal_quarter LIMIT 1) "
+                f"ORDER BY (mape IS NULL), mape",
+                {"t": ticker, "m": metric},
+            )
+        else:
+            models = db_manager.execute_query_readonly(
+                f"SELECT model_key, is_best_model, is_ensemble, mape, value_millions "
+                f"FROM {table} "
+                f"WHERE ticker = :t AND metric = :m "
+                f"  AND fiscal_year = (SELECT MIN(fiscal_year) FROM {table} "
+                f"                     WHERE ticker = :t AND metric = :m AND is_best_model = 1) "
+                f"ORDER BY (mape IS NULL), mape",
+                {"t": ticker, "m": metric},
+            )
         scenarios = db_manager.execute_query_readonly(
-            f"SELECT fiscal_year, model_key, value_millions FROM {table} "
+            f"SELECT fiscal_year, {_qcol}model_key, value_millions FROM {table} "
             f"WHERE ticker = :t AND metric = :m "
             f"  AND model_key IN ('scenario_baseline','scenario_optimistic','scenario_pessimistic') "
-            f"ORDER BY fiscal_year",
+            f"ORDER BY {_order}",
             {"t": ticker, "m": metric},
         )
         # Ensemble is the team's final output — surface its full per-year series
         # (already stored with model_key='ensemble') alongside the best model.
         ensemble = db_manager.execute_query_readonly(
-            f"SELECT fiscal_year, value_millions FROM {table} "
+            f"SELECT fiscal_year, {_qcol}value_millions FROM {table} "
             f"WHERE ticker = :t AND metric = :m AND model_key = 'ensemble' "
-            f"ORDER BY fiscal_year",
+            f"ORDER BY {_order}",
             {"t": ticker, "m": metric},
         )
         return {
@@ -164,9 +252,10 @@ def fetch_ticker_detail(ticker: str, period_type: str = "annual") -> Optional[Di
             "best_mape": best[0].get("mape"),
             "last_actual_date": best[0].get("last_actual_date"),
             "computed_at": best[0].get("computed_at"),
-            "series": [(int(r["fiscal_year"]), float(r["value_millions"]))
+            "period_type": period_type,
+            "series": [(_period_key(r, period_type), float(r["value_millions"]))
                        for r in best if r.get("value_millions") is not None],
-            "ensemble_series": [(int(r["fiscal_year"]), float(r["value_millions"]))
+            "ensemble_series": [(_period_key(r, period_type), float(r["value_millions"]))
                                 for r in (ensemble or []) if r.get("value_millions") is not None],
             "actuals": fetch_actuals(ticker, period_type),
             "models": models or [],
@@ -200,12 +289,12 @@ def _font(size: int):
         return ImageFont.load_default()
 
 
-def _scenario_bands(scenarios: List[Dict[str, Any]]) -> Dict[str, List[Tuple[int, float]]]:
+def _scenario_bands(scenarios: List[Dict[str, Any]], period_type: str = "annual") -> Dict[str, List[Tuple[int, float]]]:
     out: Dict[str, List[Tuple[int, float]]] = {"scenario_baseline": [], "scenario_optimistic": [], "scenario_pessimistic": []}
     for r in scenarios:
         k = r.get("model_key")
         if k in out and r.get("value_millions") is not None:
-            out[k].append((int(r["fiscal_year"]), float(r["value_millions"])))
+            out[k].append((_period_key(r, period_type), float(r["value_millions"])))
     for k in out:
         out[k].sort()
     return out
@@ -226,7 +315,7 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
     if not ens and not best:
         return None
 
-    bands = _scenario_bands(detail.get("scenarios") or [])
+    bands = _scenario_bands(detail.get("scenarios") or [], detail.get("period_type", "annual"))
     opt  = dict(bands.get("scenario_optimistic") or [])
     pes  = dict(bands.get("scenario_pessimistic") or [])
     base = dict(bands.get("scenario_baseline") or [])
@@ -269,7 +358,7 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
     for i, y in enumerate(all_years):
         if i % step and i != len(all_years) - 1:
             continue
-        lab = f"FY{y}"
+        lab = _period_label(y, detail.get("period_type", "annual"))
         w = d.textlength(lab, font=f_lab)
         d.text((px(y) - w / 2, y1 + 10 * ss), lab, font=f_lab, fill=_TEXT)
 
@@ -397,24 +486,25 @@ def _forecast_table(detail: Dict[str, Any]) -> str:
     best = dict(detail.get("series") or [])
     ens  = dict(detail.get("ensemble_series") or [])
     model_lab = _label(detail.get("best_model", ""))
+    ptype = detail.get("period_type", "annual")
     if not ens:
         # Fallback: no ensemble stored — keep the original best-only layout.
-        head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Forecast</th>'
+        head = (f'<tr><th {_TH}>{_period_heading(ptype)}</th><th {_TH}>Forecast</th>'
                 f'<th {_TH}>Model</th><th {_TH}>Periods Ahead</th></tr>')
         body = "".join(
-            f'<tr><td {_TD}>FY{fy}</td><td {_TD}><strong>{_fmt_mm(v)}</strong></td>'
+            f'<tr><td {_TD}>{_period_label(fy, ptype)}</td><td {_TD}><strong>{_fmt_mm(v)}</strong></td>'
             f'<td {_TD}>{model_lab}</td><td {_TD}>{i}</td></tr>'
             for i, (fy, v) in enumerate(detail.get("series") or [], start=1)
         )
         return f'<table style="border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 14px;">{head}{body}</table>'
 
     years = sorted(set(best) | set(ens))
-    head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Ensemble Forecast</th>'
+    head = (f'<tr><th {_TH}>{_period_heading(ptype)}</th><th {_TH}>Ensemble Forecast</th>'
             f'<th {_TH}>Best-Model Forecast</th><th {_TH}>Best Model</th>'
             f'<th {_TH}>Periods Ahead</th></tr>')
     body = ""
     for i, fy in enumerate(years, start=1):
-        body += (f'<tr><td {_TD}>FY{fy}</td>'
+        body += (f'<tr><td {_TD}>{_period_label(fy, ptype)}</td>'
                  f'<td {_TD_ENS}>{_fmt_mm(ens.get(fy))}</td>'
                  f'<td {_TD}>{_fmt_mm(best.get(fy))}</td>'
                  f'<td {_TD}>{model_lab}</td><td {_TD}>{i}</td></tr>')
@@ -449,6 +539,7 @@ def _revenue_table(detail: Dict[str, Any]) -> str:
     actuals = detail.get("actuals") or []
     best = dict(detail.get("series") or [])
     ens  = dict(detail.get("ensemble_series") or [])
+    ptype = detail.get("period_type", "annual")
     if not actuals and not ens:
         return _forecast_table(detail)          # legacy fallback
 
@@ -457,9 +548,9 @@ def _revenue_table(detail: Dict[str, Any]) -> str:
     years = [y for y, _ in actuals] + [y for y in fc_years if y not in act]
     first_fc = fc_years[0] if fc_years else None
 
-    head = (f'<tr><th {_TH}>Fiscal Year</th><th {_TH}>Type</th>'
+    head = (f'<tr><th {_TH}>{_period_heading(ptype)}</th><th {_TH}>Type</th>'
             f'<th {_TH}>Actual Revenue</th><th {_TH}>Ensemble Forecast</th>'
-            f'<th {_TH}>Best-Model Forecast</th><th {_TH}>YoY</th></tr>')
+            f'<th {_TH}>Best-Model Forecast</th><th {_TH}>{_change_heading(ptype)}</th></tr>')
 
     body, prev = "", None
     for y in years:
@@ -474,8 +565,8 @@ def _revenue_table(detail: Dict[str, Any]) -> str:
         if is_fc:
             badge = ('<span style="background:#fdeef0;color:#C8102E;padding:1px 7px;'
                      'border-radius:3px;font-size:11px;font-weight:600;">Forecast</span>')
-            cells = (f'<td {td}>—</td><td {ens_td}>{_fmt_mm(ens.get(y))}</td>'
-                     f'<td {td}>{_fmt_mm(best.get(y))}</td>')
+            cells = (f'<td {td}>—</td><td {ens_td}>{_fmt_forecast_mm(ens.get(y))}</td>'
+                     f'<td {td}>{_fmt_forecast_mm(best.get(y))}</td>')
             rowbg = ' style="background:#fffbfb;"'
         else:
             badge = ('<span style="background:#eef2f7;color:#25375A;padding:1px 7px;'
@@ -483,21 +574,22 @@ def _revenue_table(detail: Dict[str, Any]) -> str:
             cells = (f'<td {td}><strong>{_fmt_mm(act.get(y))}</strong></td>'
                      f'<td {td}>—</td><td {td}>—</td>')
             rowbg = ""
-        body += (f'<tr{rowbg}><td {td}><strong>FY{y}</strong></td><td {td}>{badge}</td>'
+        body += (f'<tr{rowbg}><td {td}><strong>{_period_label(y, ptype)}</strong></td><td {td}>{badge}</td>'
                  f'{cells}{_yoy_cell(yoy, top)}</tr>')
 
     n_hist = len(actuals)
+    _unit = "quarter" if ptype == "quarterly" else "year"
     caption = ('<div style="font-size:11px;color:#888;margin:2px 0 5px;">'
-               f'{n_hist} historical actual year{"" if n_hist == 1 else "s"} from reported '
+               f'{n_hist} historical actual {_unit}{"" if n_hist == 1 else "s"} from reported '
                'financials, then the forecast · Ensemble = final output (mean of the '
-               'top-performing models) · YoY compares each year to the row above.</div>')
+               f'top-performing models) · {_change_heading(ptype)} compares each row to the one above.</div>')
     return (caption + '<table style="border-collapse:collapse;width:100%;font-size:13px;'
             f'margin:2px 0 16px;">{head}{body}</table>')
 
 
 def _model_table(detail: Dict[str, Any]) -> str:
     head = (f'<tr><th {_TH}>Model</th><th {_TH}>Backtest MAPE</th>'
-            f'<th {_TH}>Next-yr value</th><th {_TH}>Selected</th></tr>')
+            f'<th {_TH}>Next-period value</th><th {_TH}>Selected</th></tr>')
     body = ""
     for r in detail.get("models") or []:
         best = int(r.get("is_best_model") or 0) == 1
@@ -506,7 +598,7 @@ def _model_table(detail: Dict[str, Any]) -> str:
         star = "✅ best" if best else ("ensemble" if int(r.get("is_ensemble") or 0) == 1 else "")
         row_style = ' style="background:#fdeef0;"' if best else ""
         body += (f'<tr{row_style}><td {_TD}>{_label(r["model_key"])}</td>'
-                 f'<td {_TD}>{mape_s}</td><td {_TD}>{_fmt_mm(r.get("value_millions"))}</td>'
+                 f'<td {_TD}>{mape_s}</td><td {_TD}>{_fmt_forecast_mm(r.get("value_millions"))}</td>'
                  f'<td {_TD}>{star}</td></tr>')
     return f'<table style="border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 14px;">{head}{body}</table>'
 
@@ -547,14 +639,15 @@ def build_report_html(
     summary = (
         f'<table style="border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 20px;">'
         f'<tr><th {_TH}>Ticker</th><th {_TH}>Company</th><th {_TH}>Exchange</th>'
-        f'<th {_TH}>Ensemble (next yr)</th>'
+        f'<th {_TH}>Ensemble (next period)</th>'
         f'<th {_TH}>Best Model</th><th {_TH}>MAPE</th><th {_TH}>Last Actual</th></tr>{srows}</table>'
     )
 
     sections = ""
     for det in details:
         _ens = det.get("ensemble_series") or []
-        _ens_meta = (f' &nbsp;·&nbsp; Ensemble (FY{_ens[0][0]}): '
+        _pt = det.get("period_type", "annual")
+        _ens_meta = (f' &nbsp;·&nbsp; Ensemble ({_period_label(_ens[0][0], _pt)}): '
                      f'<strong style="color:#C8102E;">{_fmt_mm(_ens[0][1])}</strong>') if _ens else ""
         tk = det["ticker"].replace(".", "_")
         traj = chart_src.get(f"traj_{tk}")

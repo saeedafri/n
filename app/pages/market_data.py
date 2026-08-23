@@ -844,11 +844,15 @@ def render_segment_data(ticker: str, start_date: date, end_date: date, conversio
 
         # Build Business Segments table
         _t_biz = _time.perf_counter()
-        biz_html = _build_table("Business Segments", biz, rev_totals=revenue_totals, m_totals=metric_totals)
+        biz_html = _build_table("Business Segments", biz, rev_totals=revenue_totals,
+                                m_totals=metric_totals.get("business") or {})
         _biz_ms = (_time.perf_counter() - _t_biz) * 1000
-        # Build Geographic Segments table
+        # Build Geographic Segments table — its own totals: the two tables can split
+        # different XBRL facts under one metric name (e.g. TJX geographic "Assets"
+        # are long-lived assets, not the balance-sheet total).
         _t_geo = _time.perf_counter()
-        geo_html = _build_table("Geographic Segments", geo, rev_totals=revenue_totals, m_totals=metric_totals)
+        geo_html = _build_table("Geographic Segments", geo, rev_totals=revenue_totals,
+                                m_totals=metric_totals.get("geo") or {})
         _geo_ms = (_time.perf_counter() - _t_geo) * 1000
 
         html = biz_html + geo_html
@@ -4396,13 +4400,15 @@ def render_page():
                 _seg_geo = _seg_data.get("geo_segments", {})
                 _seg_period_dates = _seg_data.get("period_dates", {})
                 _seg_period_display = _seg_data.get("period_display_dates") or _seg_period_dates
+                _seg_m_totals = _seg_data.get("metric_totals", {})
+                _seg_rev_totals = _seg_data.get("revenue_totals", {})
                 if not sort_ascending:
                     _seg_years = list(reversed(_seg_years))
                 if not (_seg_years and (_seg_biz or _seg_geo)):
                     return None
                 _seg_rows = []
 
-                def _xl_add_section(title, seg_dict):
+                def _xl_add_section(title, seg_dict, m_totals):
                     if not seg_dict:
                         return
                     # Section title row
@@ -4428,11 +4434,24 @@ def render_page():
                                     totals[yr] += v
                                     has_total = True
                         if has_total and len(members_data) > 1:
-                            _t_vals = [totals[yr] * conversion_rate * units_scale if totals[yr] != 0 else None for yr in _seg_years]
+                            # Same Total as the on-screen table: the filed consolidated
+                            # value when the company reported one, member sum otherwise.
+                            if metric_name in m_totals:
+                                _filed = m_totals[metric_name]
+                            elif metric_name == "Revenues" and _seg_rev_totals:
+                                _filed = _seg_rev_totals
+                            else:
+                                _filed = {}
+                            _t_vals = []
+                            for yr in _seg_years:
+                                v = _filed.get(yr)
+                                if v is None:
+                                    v = totals[yr] if totals[yr] != 0 else None
+                                _t_vals.append(v * conversion_rate * units_scale if v is not None else None)
                             _seg_rows.append({"label": "Total", "values": _t_vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_seg_years)})
 
-                _xl_add_section("Business Segments", _seg_biz)
-                _xl_add_section("Geographic Segments", _seg_geo)
+                _xl_add_section("Business Segments", _seg_biz, _seg_m_totals.get("business") or {})
+                _xl_add_section("Geographic Segments", _seg_geo, _seg_m_totals.get("geo") or {})
 
                 # Format year headers
                 _seg_col_headers = []
