@@ -34,7 +34,7 @@ new_rerun_id("company_filings")
 
 from components.styles import hide_sidebar, set_page_layout
 from core.auth_manager import require_auth
-# require_auth(page="company_filings")
+require_auth(page="company_filings")
 hide_sidebar()
 from components.styles import render_styles
 from components.navigation import render_header, render_coresight_footer
@@ -1922,6 +1922,21 @@ def _get_available_doc_types_from_db(ticker: str):
     return [dt for dt in DOCUMENT_TYPES if dt not in _TRANSCRIPT_DOC_TYPES]
 
 
+def _quarter_label_from_value(value: Any) -> Optional[str]:
+    """Normalize quarter values like Q2, 2, or FYQ2 to Q2."""
+    if value in (None, ""):
+        return None
+    text = str(value).strip().upper()
+    match = re.fullmatch(r"Q?([1-5])", text) or re.search(r"Q([1-5])", text)
+    return f"Q{match.group(1)}" if match else None
+
+
+def _quarter_label_from_doc_type(doc_type: str) -> Optional[str]:
+    """Return the expected quarter label embedded in quarterly doc_type names."""
+    match = re.search(r"(?:^|-)Q([1-5])$", str(doc_type or ""), re.IGNORECASE)
+    return f"Q{match.group(1)}" if match else None
+
+
 @st.cache_data(ttl=21600, show_spinner=False)
 def _prefetch_ticker_filter_data(ticker: str):
     """Prefetch all doc_type + storage_year combos for a ticker in ONE DB query.
@@ -1933,7 +1948,8 @@ def _prefetch_ticker_filter_data(ticker: str):
     CACHE: @st.cache_data(ttl=300) - Cached for 5 minutes
     TABLE: coreiq_filing_metrics_v5 (DEI-correct fiscal_year; storage_year = physical bucket)
     INDEX: idx_ticker_fiscal_doctype (covering index on ticker, storage_year, doc_type)
-    QUERY: SELECT DISTINCT doc_type, storage_year, fiscal_year WHERE ticker = ? ORDER BY ...
+    QUERY: Aggregate doc_type, bucket year, display fiscal year, and quarter
+    metadata for the selected ticker.
     """
     _func_start = _perf_time.time()
 
@@ -1943,13 +1959,24 @@ def _prefetch_ticker_filter_data(ticker: str):
 
         _query_start = _perf_time.time()
         rows = db_manager.execute_query_readonly("""
-            SELECT DISTINCT
-                   doc_type,
-                   COALESCE(storage_year, report_fiscal_year, fiscal_year) AS bucket_year,
-                   COALESCE(fiscal_year, storage_year, report_fiscal_year)  AS display_year
-            FROM coreiq_filing_metrics_v5
-            WHERE ticker = :ticker
-            ORDER BY doc_type, bucket_year DESC
+            SELECT
+                doc_type,
+                bucket_year,
+                display_year,
+                fiscal_quarter,
+                COUNT(*) AS row_count
+            FROM (
+                SELECT
+                    doc_type,
+                    COALESCE(storage_year, report_fiscal_year, fiscal_year) AS bucket_year,
+                    COALESCE(fiscal_year, storage_year, report_fiscal_year) AS display_year,
+                    fiscal_quarter
+                FROM coreiq_filing_metrics_v5
+                WHERE ticker = :ticker
+            ) filing_periods
+            WHERE bucket_year IS NOT NULL
+            GROUP BY doc_type, bucket_year, display_year, fiscal_quarter
+            ORDER BY doc_type, bucket_year DESC, row_count DESC
         """, {"ticker": ticker})
         _query_elapsed = _perf_time.time() - _query_start
 
@@ -1970,10 +1997,24 @@ def _prefetch_ticker_filter_data(ticker: str):
         all_years = set()
         years_by_doc_type = {}
         fiscal_label_by_year = {}   # {doc_type: {bucket_year_str: display_year_str}}
+        seen_doc_buckets = set()
         for row in rows:
             dt = row["doc_type"]
             by = row["bucket_year"]
             dy = row["display_year"]
+            if not dt or by in (None, ""):
+                continue
+
+            pair_key = (dt, str(by))
+            if pair_key in seen_doc_buckets:
+                continue
+
+            expected_quarter = _quarter_label_from_doc_type(dt)
+            db_quarter = _quarter_label_from_value(row.get("fiscal_quarter"))
+            if expected_quarter and db_quarter and db_quarter != expected_quarter:
+                continue
+
+            seen_doc_buckets.add(pair_key)
             if dt and dt not in doc_types:
                 doc_types.append(dt)
             if by:
