@@ -4095,12 +4095,20 @@ def resolve_keydevs_event_window(keydev_criteria: List[Dict]) -> Dict:
 def apply_keydevs_criterion(
     criterion: Dict,
     working_df: pd.DataFrame,
+    detail_column: bool = True,
 ) -> Tuple[pd.DataFrame, Dict]:
     """Filter working_df to companies that have key development events
     matching the selected categories and timeframe.
 
     Reads from coreiq_company_events (canonical events table).
     Optionally attaches a CIQ-style result column with the latest event.
+
+    ``detail_column=False`` skips the per-company event detail entirely and asks
+    only WHICH tickers have a matching event. Key Devs mode renders one row per
+    event, so it never displays this column — building it there fetched ~3,450 rows
+    to throw them away. Profiled: 1.46s of the 1.37s call was pymysql
+    ``_read_packet`` (3,461 packets for 3,453 rows — one network round-trip per row
+    over the VPN), so cutting to 388 distinct tickers takes it to 0.36s.
     """
     rows_in = len(working_df)
 
@@ -4125,6 +4133,26 @@ def apply_keydevs_criterion(
     cat_sql = ", ".join(f"'{c}'" for c in query_cats)
 
     date_clause = _build_keydev_date_clause(criterion)
+
+    if not detail_column:
+        # Membership only — index-served on idx_ticker_cat, no headline TEXT.
+        display_col = criterion.get("display_col") or "Key Developments"
+        try:
+            rows = db_manager.execute_query_readonly(
+                f"SELECT DISTINCT ticker FROM coreiq_company_events "
+                f"WHERE ticker IN ({ticker_sql}) AND event_category IN ({cat_sql}) "
+                f"{date_clause}"
+            ) or []
+        except Exception as exc:
+            log_error(f"[SCREENING] apply_keydevs_criterion (membership) failed: {exc}")
+            rows = []
+        hits = {r["ticker"] for r in rows if r.get("ticker")}
+        out = working_df.copy()
+        out[display_col] = out["ticker"].map(lambda t: "Yes" if t in hits else None)
+        return out, {
+            "type": "keydevs", "rows_in": rows_in, "rows_out": rows_in,
+            "with_data": len(hits), "detail_column": False, "elapsed_ms": 0,
+        }
 
     # Step 1+2 merged: single ROW_NUMBER() query replaces filter + headline queries
     _MAX_EVENTS_PER_COMPANY = 10
@@ -5045,6 +5073,7 @@ def recompute_working_set(
     criterion_cache: Optional[Dict] = None,
     allowed_tickers: Optional[set] = None,
     allowed_members: Optional[set] = None,
+    keydev_details: bool = True,
 ) -> Tuple[pd.DataFrame, List[Dict]]:
     """Re-apply all criteria in order from the base universe.
 
@@ -5127,7 +5156,8 @@ def recompute_working_set(
                 return apply_forecast_criterion(crit, src_df)
             return apply_financial_criterion(crit, src_df)
         if ctype_ == "keydevs":
-            return apply_keydevs_criterion(crit, src_df)
+            return apply_keydevs_criterion(crit, src_df,
+                                           detail_column=keydev_details)
         if ctype_ == "biz_segments":
             return apply_biz_segments_criterion(crit, src_df)
         if ctype_ == "geo_segments":
@@ -5145,7 +5175,11 @@ def recompute_working_set(
         result_df = None
         dbg = None
         if criterion_cache is not None:
-            cache_key = (_criterion_fingerprint(criterion), universe_tickers)
+            # keydev_details is part of the key: the same criterion yields a
+            # different SHAPE in Key Devs mode (membership only, no detail column),
+            # and a mode switch must never serve the wrong one from cache.
+            cache_key = (_criterion_fingerprint(criterion), universe_tickers,
+                         keydev_details if ctype == "keydevs" else None)
             if cache_key in criterion_cache:
                 result_df, cached_dbg = criterion_cache[cache_key]
                 dbg = dict(cached_dbg)

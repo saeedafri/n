@@ -282,6 +282,7 @@ from data.screening_service import (
     keep_working_set_companies,
     merge_company_columns,
     KeydevsQueryError,
+    FILTERING_CRITERION_TYPES,
     get_keydevs_events_for_tickers,
     get_keydevs_events_count,
     fetch_all_keydevs_events,
@@ -624,8 +625,18 @@ def _needs_results_recompute() -> bool:
     )
 
 
-def _render_coresight_loading_overlay(message: str, subtext: str = "") -> None:
-    """Full-viewport branded loading overlay (shown before heavy recompute)."""
+def _render_coresight_loading_overlay(message: str, subtext: str = ""):
+    """Full-viewport branded loading overlay. Returns the placeholder holding it.
+
+    CALLERS MUST CLEAR IT (`slot.empty()`) once the work is done. The overlay is
+    `position: fixed` across the whole viewport, so one left behind keeps swallowing
+    every click — Playwright reports it plainly: ".scr-loading-overlay … subtree
+    intercepts pointer events" — while the finished results sit visible underneath.
+    It used to be emitted with a bare `st.markdown` that nothing ever removed; the
+    only reason this was not obvious before is that the wrapper's `cs-rise`
+    animation left it at opacity:0, so it was an INVISIBLE click-blocker. That is
+    the "I press the button and nothing happens" symptom.
+    """
     sub_html = (
         f"<p class='scr-ov-sub'>{subtext}</p>" if subtext else ""
     )
@@ -641,7 +652,9 @@ def _render_coresight_loading_overlay(message: str, subtext: str = "") -> None:
         </div>
         """
     ).strip()
-    st.markdown(overlay_html, unsafe_allow_html=True)
+    slot = st.empty()
+    slot.markdown(overlay_html, unsafe_allow_html=True)
+    return slot
 
 
 def _trigger_recompute():
@@ -654,9 +667,10 @@ def _trigger_recompute():
     # the blank-no-spinner screen the criterion-apply path used to show while the
     # additional-data / keydevs queries ran. The "Show Results" path renders its own
     # overlay first, so skip the duplicate there.
+    overlay_slot = None
     if criteria and not st.session_state.get("scr_results_loading"):
         try:
-            _render_coresight_loading_overlay(
+            overlay_slot = _render_coresight_loading_overlay(
                 "Applying criteria…", "Screening companies against your filters."
             )
         except Exception:
@@ -673,6 +687,9 @@ def _trigger_recompute():
             criterion_cache=cache,
             allowed_tickers=wl_tickers,
             allowed_members=wl_members,
+            # Key Devs mode renders one row per EVENT, so the per-company key-dev
+            # detail column is never displayed there — don't pay to build it.
+            keydev_details=(st.session_state.get("scr_screen_for") != "Key Devs"),
         )
         ms_rec = (time.perf_counter() - t_rec) * 1000
         log_timing(
@@ -710,6 +727,13 @@ def _trigger_recompute():
         )
         st.session_state.scr_results_error = str(e)
         raise
+    finally:
+        # Always, even on the error path — an orphaned overlay blocks every click.
+        if overlay_slot is not None:
+            try:
+                overlay_slot.empty()
+            except Exception:
+                pass
 
 
 def _add_criterion(criterion: dict):
@@ -1138,23 +1162,26 @@ div[data-testid="stRadio"] [role="radiogroup"] {
   align-items: center;
   justify-content: center;
 }
-/* The overlay is emitted inside a Streamlit markdown container, and styles.py
-   animates EVERY stMarkdownContainer with `cs-rise` — fill-mode `both`, starting
-   at opacity:0. The results rerun replaces the element before that animation can
-   play, so the container stayed at opacity:0: the overlay was in the DOM (measured
-   at t+0.39s) but invisible, and pressing Show Results looked like nothing had
-   happened at all. Same root cause loading.py already neutralises for `.cs-al-ov`.
-   will-change/transform are cleared too — either one makes the ancestor the
-   containing block for a position:fixed child, which off-centres the card. */
-[data-testid="stMarkdownContainer"]:has(.scr-loading-overlay),
-[data-testid="stElementContainer"]:has(.scr-loading-overlay),
-[data-testid="element-container"]:has(.scr-loading-overlay),
-[data-testid="stVerticalBlock"] > div:has(.scr-loading-overlay) {
+/* styles.py animates EVERY element-container / stMarkdownContainer / horizontal
+   column with `cs-rise` — fill-mode `both`, which both starts at opacity:0 AND
+   applies `transform: translateY(10px)`. That breaks this overlay two ways:
+     1. the rerun replaces the element before the animation plays, so the wrapper
+        stays at opacity:0 and the overlay is in the DOM but invisible;
+     2. a live transform makes that ancestor the CONTAINING BLOCK for a
+        position:fixed child, so `inset:0` resolves against the wrapper instead of
+        the viewport. `_trigger_recompute` renders "Applying criteria…" from inside
+        an st.columns() block, so the card was laid out inside a ~240px column —
+        squeezed against the left edge, one character per line.
+   Enumerating test-ids missed the column wrapper, so match EVERY div ancestor of
+   the overlay instead. Deliberately NOT forcing `opacity:1` here: `animation:none`
+   already restores the natural opacity, and leaving opacity alone lets Streamlit
+   dim and drop the stale overlay normally instead of pinning it on screen. */
+div:has(.scr-loading-overlay) {
   animation: none !important;
-  opacity: 1 !important;
   will-change: auto !important;
   transform: none !important;
   filter: none !important;
+  perspective: none !important;
 }
 .scr-loading-card {
   display: flex;
@@ -4752,11 +4779,22 @@ def _render_active_criteria():
             dbg      = trace_by_idx.get(i, {})
             rows_out = dbg.get("rows_out")
             details_html = _build_criterion_details_html(criterion)
-            count_html = (
-                f"<br><span class='criterion-card-count'>{rows_out} companies matched</span>"
-                if rows_out is not None
-                else ""
-            )
+            # Industry / Geography narrow the set, so rows_out IS the match count.
+            # Financial / Key-Dev / segment criteria deliberately keep every company
+            # (a non-reporting company must stay, showing N/A), so rows_out is always
+            # the whole universe — reporting "431 companies matched" for a Key-Dev
+            # category that only 213 companies have any event in was just wrong.
+            # For those, report what the criterion actually found.
+            with_data = dbg.get("with_data")
+            if rows_out is None:
+                count_html = ""
+            elif ctype in FILTERING_CRITERION_TYPES:
+                count_html = (f"<br><span class='criterion-card-count'>"
+                              f"{rows_out} companies matched</span>")
+            else:
+                found = rows_out if with_data is None else with_data
+                count_html = (f"<br><span class='criterion-card-count'>"
+                              f"{found} of {rows_out} companies have data</span>")
             card_html = textwrap.dedent(
                 f"""
                 <div class="criterion-card">

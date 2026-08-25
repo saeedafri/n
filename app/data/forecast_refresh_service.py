@@ -1428,27 +1428,30 @@ def send_model_refresh_email(
     'quarterly' (the relevant fiscal quarter). To: all admin + super_user accounts.
     Cc: dataautomation@coresight.com.
 
-    ALL forecast refresh mail is ON HOLD since 2026-08-19, annual included. The
-    forecast data itself still has open issues (duplicate ticker keys, reporting
-    dates on hold) and we are fixing them one at a time; mailing admins a report
-    built on data we already know is wrong just spreads the confusion. Refresh
-    runs are unaffected — only the notification is withheld.
+    Mail is ENABLED for both cadences as of 2026-08-24, on the owner's decision
+    after the 2026-08-24 parity review: 3,562 forecast values were compared
+    against the data scientist's reference report with zero mismatches, and the
+    remaining open items are source-data defects (see
+    docs/superpowers/specs/2026-08-19-forecasting-data-anomalies-for-data-team.md)
+    rather than faults in the report itself.
 
-    To resume, set FORECAST_REFRESH_EMAIL=1 as an App Setting (no code change).
-    Quarterly then still obeys its own older switch below: quarterly was suppressed
-    2026-08-16 because its per-period series were keyed by fiscal_year alone,
-    collapsing 3-4 quarters onto one x-value (14 of 20 points lost for FLWS). Fixed
-    2026-08-19 — periods are keyed by (fiscal_year, quarter) throughout — so
-    FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY=0 is the way to hold quarterly alone
-    once the global hold is lifted.
+    It was on hold from 2026-08-19 (all cadences) and, before that, quarterly
+    alone from 2026-08-16 — quarterly per-period series were keyed by fiscal_year
+    only, collapsing 3-4 quarters onto one x-value (14 of 20 points lost for
+    FLWS). Fixed 2026-08-19: periods are keyed by (fiscal_year, quarter)
+    throughout.
+
+    Two kill switches remain, both honoured here:
+      FORECAST_REFRESH_EMAIL=0                 stops every refresh mail
+      FORECAST_AUTO_REFRESH_EMAIL_QUARTERLY=0  stops quarterly alone, annual unaffected
 
     Both gates sit at this single choke point, which every caller routes through:
     the per-ticker "Refresh Now" button, "Refresh All", and the scheduled
     utils/forecast_auto_refresh.py worker.
     """
-    if os.getenv("FORECAST_REFRESH_EMAIL", "0").strip().lower() not in ("1", "true", "yes", "on"):
-        log_info(f"[forecast_email] SUPPRESSED: all forecast refresh mail is on hold "
-                 f"(set FORECAST_REFRESH_EMAIL=1 to resume) | period_type={period_type} "
+    if os.getenv("FORECAST_REFRESH_EMAIL", "1").strip().lower() in ("0", "false", "no", "off"):
+        log_info(f"[forecast_email] SUPPRESSED: forecast refresh mail is switched off "
+                 f"(FORECAST_REFRESH_EMAIL=0) | period_type={period_type} "
                  f"triggered_by={triggered_by} results={len(results or [])}")
         return False
 
@@ -1582,10 +1585,11 @@ def send_model_refresh_email(
                              component="send_model_refresh_email", operation="build_rich_html")
         inline_images = []
 
-    # Test mode: enrichment always runs (so it can be verified in logs), but SMTP
-    # send is skipped unless FORECAST_EMAIL_TEST_MODE is explicitly set to "0".
-    # Default "1" preserves the previous behaviour of not sending live emails.
-    if os.getenv("FORECAST_EMAIL_TEST_MODE", "1") == "1":
+    # Test mode: enrichment always runs (so it can be verified in logs) but the
+    # SMTP send is skipped. Default flipped to live sending on 2026-08-24; the
+    # local launcher (.claude/dev/run_local.sh) pins this back to "1" so a dev
+    # laptop with EMAIL_PASSWORD in .env can never mail the admin list.
+    if os.getenv("FORECAST_EMAIL_TEST_MODE", "0") == "1":
         log_info("[forecast_email] SMTP send skipped (FORECAST_EMAIL_TEST_MODE=1). "
                  "Set FORECAST_EMAIL_TEST_MODE=0 to enable live sends.")
         return True

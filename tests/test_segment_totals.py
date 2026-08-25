@@ -503,6 +503,107 @@ def test_assets_is_a_balance_not_a_flow():
                     "Long-lived assets"):
         assert SegmentDataRepository._matches_metric(balance, cfg), balance
 
+def test_a_trailing_full_stop_is_not_part_of_the_name_either():
+    """Caleres files both "Other" and "Other." — without this the tiebreak fell
+    through to alphabetical order, which prefers the full stop."""
+    a = duration_member("Net sales", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "Other", 2025, 10e6)
+    b = duration_member("Net sales", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "Other.", 2025, 10e6)
+    c = duration_member("Net sales", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "United States", 2025, 900e6)
+    _, geo, _ = classify([a, b, c])
+    assert "Other" in geo["Revenues"] and "Other." not in geo["Revenues"]
+
+
+def test_an_abbreviation_keeps_its_full_stop():
+    """Eli Lilly reports "Outside U.S." — the stop belongs to the abbreviation, so
+    the rule above must not rewrite it to "Outside US"."""
+    a = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "Outside U.S.", 2025, 20_000e6)
+    b = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "Outside US", 2024, 18_000e6)
+    c = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "United States", 2025, 25_000e6)
+    _, geo, _ = classify([a, b, c])
+    assert "Outside U.S." in geo["Revenues"]
+
+
+def test_the_segment_suffix_is_not_treated_as_part_of_the_name():
+    """lululemon's latest filing says "China Mainland Segment" where earlier ones
+    say "China Mainland" — the suffix is an XBRL artifact, so the clean spelling
+    is displayed even though it is older."""
+    older = duration_member("Net revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                            "China Mainland", 2024, 500e6)
+    older["filing_date"] = date(2024, 3, 20)
+    newer = duration_member("Net revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                            "China Mainland Segment", 2025, 700e6)
+    newer["filing_date"] = date(2025, 3, 20)
+    other = duration_member("Net revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                            "Americas", 2025, 8_000e6)
+    _, geo, _ = classify([older, newer, other])
+    assert "China Mainland" in geo["Revenues"]
+    assert "China Mainland Segment" not in geo["Revenues"]
+
+# ── The quarterly builder ──────────────────────────────────────────────────────
+# It is a parallel copy of the annual one, and every test above exercises only the
+# annual path. A NameError shipped to staging because a variable was declared in
+# one builder and used in the other, so these run the quarterly builder for real.
+
+def quarterly_rows():
+    """One 10-Q quarter: two geographic members plus the consolidated total."""
+    start, end = date(2025, 5, 4), date(2025, 8, 2)
+    rows = []
+    for member, value in (("United States", 9_000e6), ("Canada", 1_000e6)):
+        rows.append({
+            "original_label": "Net sales", "concept": "us-gaap:Revenues",
+            "numeric_value": value, "unit_ref": "usd",
+            "period_type": "duration", "period_start": start, "period_end": end,
+            "period_instant": None, "dimension": "srt:StatementGeographicalAxis",
+            "dimension_label": member, "dimension_member_label": member,
+            "full_dimension_label": f"Geographical: {member}",
+            "filing_date": date(2025, 9, 3),
+        })
+    rows.append({
+        "original_label": "Net sales", "concept": "us-gaap:Revenues",
+        "numeric_value": 10_000e6, "unit_ref": "usd",
+        "period_type": "duration", "period_start": start, "period_end": end,
+        "period_instant": None, "dimension": None, "dimension_label": None,
+        "dimension_member_label": None, "full_dimension_label": None,
+        "filing_date": date(2025, 9, 3), "_is_ndim": True,
+    })
+    return rows
+
+
+def test_the_quarterly_builder_runs_and_totals_correctly(monkeypatch):
+    monkeypatch.setattr(SegmentDataRepository, "_fetch_all_db_rows_quarterly",
+                        staticmethod(lambda *a, **k: quarterly_rows()))
+    monkeypatch.setattr("data.repository.db_manager.execute_query_readonly",
+                        lambda *a, **k: [])          # no income-statement override
+    monkeypatch.setattr(SegmentDataRepository, "_fye_month", staticmethod(lambda *a, **k: 1))
+    result = SegmentDataRepository._build_segment_tables_quarterly(
+        "TJX", date(2025, 1, 1), date(2025, 12, 31))
+    assert result is not None
+    pkey = result["years"][0]
+    geo = result["geo_segments"]["Revenues"]
+    assert sorted(geo) == ["Canada", "United States"]
+    assert result["metric_totals"]["geo"]["Revenues"][pkey] == 10000.0
+
+
+def test_both_builders_declare_everything_they_use():
+    """The NameError that reached staging was a variable declared in the annual
+    builder and used in the quarterly one. pyflakes catches exactly that."""
+    import subprocess, sys, pathlib
+    repo = pathlib.Path(__file__).resolve().parents[1]
+    try:
+        proc = subprocess.run([sys.executable, "-m", "pyflakes",
+                               str(repo / "app" / "data" / "repository.py")],
+                              capture_output=True, text=True, timeout=120)
+    except FileNotFoundError:                     # pyflakes not installed
+        return
+    undefined = [ln for ln in proc.stdout.splitlines() if "undefined name" in ln]
+    assert not undefined, "\n".join(undefined)
+
 
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):

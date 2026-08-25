@@ -413,6 +413,62 @@ def test_dedupe_does_not_touch_distinct_events():
     assert len(keep_working_set_companies(grid, working)) == 5
 
 
+def test_keydev_membership_path_skips_the_detail_fetch(monkeypatch):
+    """Key Devs mode never shows the per-company detail column, so it must not
+    pay to build it. Profiled: the detail query is one network packet per row
+    (3,461 packets for 3,453 rows); membership needs 388."""
+    import data.screening_service as svc
+    seen = {}
+
+    def fake_query(q, *a, **kw):
+        seen["sql"] = " ".join(q.split())
+        return [{"ticker": "SBUX"}]
+
+    monkeypatch.setattr(svc.db_manager, "execute_query_readonly", fake_query)
+
+    out, dbg = svc.apply_keydevs_criterion(
+        {"type": "keydevs", "categories": ["M&A Activity"],
+         "display_col": "Key Developments"},
+        COMPANIES, detail_column=False)
+
+    assert "SELECT DISTINCT ticker" in seen["sql"]
+    assert "headline" not in seen["sql"].lower()
+    assert "ROW_NUMBER" not in seen["sql"]
+    assert dbg["with_data"] == 1
+    assert dbg["rows_out"] == 3            # still non-filtering
+    assert list(out["Key Developments"]) == ["Yes", None, None]
+
+
+def test_keydev_detail_path_still_fetches_headlines(monkeypatch):
+    """Companies mode DOES display the detail column — don't break it."""
+    import data.screening_service as svc
+    seen = {}
+    monkeypatch.setattr(svc.db_manager, "execute_query_readonly",
+                        lambda q, *a, **kw: (seen.__setitem__("sql", " ".join(q.split())), [])[1])
+
+    svc.apply_keydevs_criterion(
+        {"type": "keydevs", "categories": ["M&A Activity"],
+         "display_col": "Key Developments"},
+        COMPANIES, detail_column=True)
+
+    assert "headline" in seen["sql"].lower()
+    assert "ROW_NUMBER" in seen["sql"]
+
+
+def test_criterion_cache_key_separates_the_two_keydev_shapes(monkeypatch):
+    """A mode switch must not serve a membership result to Companies mode."""
+    import data.screening_service as svc
+    monkeypatch.setattr(svc, "get_base_company_universe", lambda: COMPANIES.copy())
+    monkeypatch.setattr(svc.db_manager, "execute_query_readonly",
+                        lambda q, *a, **kw: [{"ticker": "SBUX"}])
+    crit = [{"type": "keydevs", "categories": ["M&A Activity"],
+             "display_col": "Key Developments"}]
+    cache = {}
+    svc.recompute_working_set(crit, criterion_cache=cache, keydev_details=False)
+    svc.recompute_working_set(crit, criterion_cache=cache, keydev_details=True)
+    assert len(cache) == 2, "both shapes must cache separately"
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))

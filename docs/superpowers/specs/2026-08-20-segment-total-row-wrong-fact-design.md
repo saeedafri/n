@@ -307,6 +307,36 @@ ingestion fix, even though the app no longer prints them: **GLW** stores
 consolidated `us-gaap:NoncurrentAssets` as $67–83m for FY2022 where the FY2016/17
 filings hold $16–18bn, and **COHR** carries a geographic "asset" of $737,151m.
 
+## 12. Incident 2026-08-24 — NameError on the Quarterly tab
+
+`?ticker=TJX&tab=segment_data&period_type=Quarterly` showed "Something went
+wrong. Please try again." on staging at 11:22.
+
+```
+NameError: name 'member_concepts' is not defined
+repository.py:_build_segment_tables_quarterly:11163
+```
+
+**Cause.** The tab has two parallel builders. `member_concepts` was declared in
+the annual builder and used in both, so the quarterly path raised on every render.
+
+**Why the tests missed it.** All 36 tests exercised `_classify_segment_rows`, the
+annual path. The quarterly builder — a near-copy that every change in this spec
+also touched — was never executed by the suite, and the 428-ticker sweeps only
+ever called the annual builder. Breadth of tickers hid absence of path coverage.
+
+**Fixed, and made unrepeatable:**
+- `member_concepts` declared in the quarterly builder.
+- `test_the_quarterly_builder_runs_and_totals_correctly` runs
+  `_build_segment_tables_quarterly` with fabricated 10-Q rows, so the suite now
+  executes both builders.
+- `test_both_builders_declare_everything_they_use` runs pyflakes over
+  `repository.py` and fails on any undefined name — this exact class of bug
+  (declared in one builder, used in the other) can no longer ship.
+- Both tests were confirmed to fail with the bug reintroduced.
+- Fleet smoke test of the quarterly builder: **428 tickers, 0 exceptions** (337
+  render quarterly data, 91 have none).
+
 ## 12. Rollout
 
 Code-only change — no schema change, no data migration, no writes. The Segments

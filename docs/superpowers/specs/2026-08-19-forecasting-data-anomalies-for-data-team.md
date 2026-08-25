@@ -83,16 +83,23 @@ SGI   ... 2014:530  2015:521  2016:533   [4-year hole]   2020:3,677  2021:4,931 
 
 ### A4. Negative and zero revenue in the live portal database
 
-Not just Coty. `coreiq_av_financials_income_statement` currently holds:
+Not just Coty. Re-counted **2026-08-24** — the population has grown since the
+first pass, so quote these numbers, not the earlier ones:
 
 | scope | rows | companies |
 |---|---|---|
+| quarterly, revenue **< 0** | **19** | `APC` (9), `SMFG` (4), `ACI`, `COTY`, `JACK`, `MDLZ`, `PM`, `VYX` |
+| quarterly, revenue **= 0** | **70** | `GLDG` (33), `OR` (28), `SMFG` (4), `WING` (3), `TMHC` (2) |
 | annual, revenue = 0 | 19 | `GLDG` (13), `OR` (6) |
-| quarterly, revenue < 0 | 18 | `SMFG`, `PM`, `ACI`, `MDLZ`, `APC`, `VYX`, `COTY` |
-| quarterly, revenue = 0 | 7 | `GLDG` |
 
 Worst values: `SMFG` −133,720 (2013-03), `PM` −15,426 (2006-12),
-`ACI` −11,995 (2014-11), `MDLZ` −4,273 (2012-12), `COTY` −1,098 (2020-06).
+`ACI` −11,995 (2014-11), `MDLZ` −4,273 (2012-12), `COTY` −1,098 (2020-06),
+`APC` −3,266 (2009-06), `VYX` −2,064 (2023-12), `JACK` −116 (2012-09).
+89 rows in total across 12 companies.
+
+`OR` is L'Oréal in `coreiq_companies` but the zero-revenue rows under that key are
+a **US filer with the ticker `OR`** (Osisko Gold Royalties) — the same
+bare-ticker collision class as A1.
 
 Several are genuine accounting artefacts (contra-revenue, hedging losses netted
 into the revenue line, and `SMFG` is a bank reporting in JPY). They are still
@@ -121,16 +128,15 @@ least one source, so overall coverage is fine.
 
 ### A7. `exchange_acronym` still holds exchange names, not Yahoo suffixes
 
-4 rows remain (down from the ~9 tickers previously reported):
+Mostly cleared. As of **2026-08-24 only one row remains**:
 
 | ticker | stored value | should be |
 |---|---|---|
-| `CMRC`, `ZBRA` | `NASDAQ` | *(US — no suffix)* |
-| `ORCL` | `NYSE` | *(US — no suffix)* |
 | `LULU` | `ADX` | `.AD` for Abu Dhabi |
 
-These build invalid composite symbols (`ORCL.NYSE`), so Yahoo ingestion cannot
-resolve them.
+(`CMRC`, `ZBRA`, `ORCL` have been fixed since the first pass.) A bad acronym
+builds an invalid composite symbol that Yahoo cannot resolve, so ingestion for
+that company silently returns nothing.
 
 ### A8. Universe composition — one bank in a retail forecast set
 

@@ -7169,8 +7169,9 @@ class FilingMetricRepository:
         """Return date and fiscal-period metadata for a filing document header.
 
         `effective_year` is the same value used by the filings Year filter:
-        COALESCE(storage_year, report_fiscal_year). The storage year is the
-        document bucket/source of truth; report fiscal fields only enrich labels.
+        COALESCE(storage_year, report_fiscal_year, fiscal_year). The storage
+        year is the document bucket/source of truth; report fiscal fields only
+        enrich labels.
         """
         params: Dict[str, Any] = {
             "ticker": ticker,
@@ -7196,12 +7197,12 @@ class FilingMetricRepository:
                 period_start,
                 period_end,
                 period_instant,
-                COALESCE(fiscal_year, storage_year, report_fiscal_year) AS effective_year,
+                COALESCE(storage_year, report_fiscal_year, fiscal_year) AS effective_year,
                 report_fiscal_year,
                 storage_year
             FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
-              AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
+              AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
               AND doc_type = :doc_type
               {filing_unit_clause}
             ORDER BY
@@ -7440,7 +7441,7 @@ class FilingMetricRepository:
             SELECT {FilingMetricRepository._SELECT_COLS_RAW}
             FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
-              AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
+              AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
               AND doc_type = :doc_type
               AND numeric_value IS NOT NULL
               AND (standard_concept IS NULL OR standard_concept NOT LIKE '%Text Block')
@@ -7644,7 +7645,7 @@ class FilingMetricRepository:
                            ) AS rn
                     FROM coreiq_filing_metrics_v5
                     WHERE ticker = :ticker
-                      AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
+                      AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
                       AND doc_type = :doc_type
                       AND MATCH(original_label, standard_concept, dimension_label)
                           AGAINST (:ft_query IN BOOLEAN MODE)
@@ -7680,7 +7681,7 @@ class FilingMetricRepository:
                        ) AS rn
                 FROM coreiq_filing_metrics_v5
                 WHERE ticker = :ticker
-                  AND COALESCE(fiscal_year, storage_year, report_fiscal_year) = :year
+                  AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
                   AND doc_type = :doc_type
                   AND ({where_synonyms})
                   AND (standard_concept IS NULL OR standard_concept NOT LIKE '%Text Block')
@@ -10152,9 +10153,17 @@ class SegmentDataRepository:
 
     @staticmethod
     def _member_display_map(rows, geo_member_set: set) -> Dict[str, str]:
-        """key → the label to show for it: the one from the most recent filing, so a
-        renamed segment reads the way its latest 10-K names it."""
-        chosen: Dict[str, Tuple[str, str]] = {}
+        """key → the label to show for it.
+
+        A trailing "Segment" or full stop is an artifact of how the element was
+        named rather than part of the geography, so a spelling without one wins —
+        lululemon's latest filing says "China Mainland Segment" where earlier ones
+        say "China Mainland", and Caleres files both "Other" and "Other.".
+        Between equally clean spellings the most recent filing wins, so a genuinely
+        renamed segment reads the way its latest 10-K names it; the shorter
+        spelling settles anything still tied.
+        """
+        chosen: Dict[str, Tuple[bool, str, int, str]] = {}
         for row in rows:
             if row.get('_is_ndim'):
                 continue
@@ -10165,9 +10174,15 @@ class SegmentDataRepository:
             key = SegmentDataRepository._member_key(member)
             filing_date = row.get('filing_date')
             filed = filing_date.isoformat()[:10] if hasattr(filing_date, 'isoformat') else ''
-            if key not in chosen or filed > chosen[key][0]:
-                chosen[key] = (filed, member)
-        return {key: member for key, (_, member) in chosen.items()}
+            trimmed = member.strip()
+            # A full stop after a whole word is stray punctuation ("Other.",
+            # "Japan."); after a single letter it is an abbreviation and part of the
+            # name ("Outside U.S."), so only the first kind counts as an artifact.
+            clean = not re.search(r'(\bsegments?$|[A-Za-z]{2,}\.$)', trimmed, re.IGNORECASE)
+            rank = (clean, filed, -len(trimmed), member)
+            if key not in chosen or rank > chosen[key]:
+                chosen[key] = rank
+        return {key: member for key, (_, _, _, member) in chosen.items()}
 
     @staticmethod
     def _drop_offmeasure_members(biz_data, geo_data, member_concepts, total_concepts) -> None:
@@ -11053,6 +11068,7 @@ class SegmentDataRepository:
         # it cannot be the top line (see _rank_total_candidate rule 2).
         largest_member: Dict[Tuple[str, str, int], float] = {}
         member_sum: Dict[Tuple[str, str, int], float] = {}
+        member_concepts: Dict[Tuple[str, str, str, int], Set[str]] = {}
         member_display = SegmentDataRepository._member_display_map(all_rows, geo_member_set)
 
         for row in all_rows:
@@ -11761,14 +11777,21 @@ def _build_geo_segment_members(ticker: str) -> List[str]:
 
     Mirrors the Segments tab: members come from the very same classified
     ``geo_segments`` that tab renders, so the header can never name a geography
-    the Segments tab does not show. Only the **Revenues** metric is used — that
-    is the commercial footprint. Assets is deliberately excluded because
-    asset-location countries are distribution hubs rather than markets (NKE
-    files Belgium there, which would read as a Nike retail market).
+    the Segments tab does not show.
 
-    Members are ordered by largest reported revenue so the biggest market reads
-    first, and de-duplicated case-insensitively because filings drift between
-    spellings of one member ("Rest of World" / "Rest of world" — LULU).
+    **Revenues** is preferred — that is the commercial footprint, and where a
+    filer reports it, asset-location countries are ignored because they are
+    distribution hubs rather than markets (NKE files Belgium there, which would
+    read as a Nike retail market). But plenty of companies disclose geography on
+    no other basis than Assets: TJX names Australia, Canada, Europe and the
+    United States under Assets and reports no geographic revenue at all, so a
+    Revenues-only rule left its header reading "Worldwide, if Applicable" while
+    the Segments tab listed four geographies. When Revenues has no members the
+    other metrics are used in turn, best available naming rather than none.
+
+    Members are ordered by largest reported value so the biggest reads first,
+    and de-duplicated case-insensitively because filings drift between spellings
+    of one member ("Rest of World" / "Rest of world" — LULU).
     """
     from datetime import date as _d
     res = SegmentDataRepository._build_segment_tables_from_db(
@@ -11782,17 +11805,23 @@ def _build_geo_segment_members(ticker: str) -> List[str]:
             res = None
     if not res:
         return []
-    revenues = (res.get("geo_segments") or {}).get("Revenues") or {}
-    if not revenues:
+    geo = res.get("geo_segments") or {}
+    by_member = {}
+    for metric in ("Revenues", "Assets", "Operating Profit Before Tax",
+                   "Capital Expenditure", "Depreciation & Amortization"):
+        by_member = geo.get(metric) or {}
+        if by_member:
+            break
+    if not by_member:
         return []
 
-    def _largest_revenue(member: str) -> float:
-        values = [v for v in (revenues.get(member) or {}).values() if v is not None]
+    def _largest_value(member: str) -> float:
+        values = [v for v in (by_member.get(member) or {}).values() if v is not None]
         return max(values) if values else 0.0
 
     seen: set = set()
     members: List[str] = []
-    for member in sorted(revenues, key=_largest_revenue, reverse=True):
+    for member in sorted(by_member, key=_largest_value, reverse=True):
         label = str(member).strip()
         key = label.lower()
         if not key or key in seen:

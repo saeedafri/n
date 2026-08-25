@@ -719,6 +719,106 @@ def _render_year_grid(events, ma_events, ipo_events, delisted_events,
 # CSS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _keep_popover_in_view() -> None:
+    """Stop the "+N more" popover from opening off the bottom of the calendar.
+
+    FullCalendar's ``Popover.updateSize()`` clamps the popover's LEFT and RIGHT to
+    the viewport but only floors its TOP (``Math.max(top, 10)``) — it never clamps
+    the bottom, because on an ordinary page you scroll the document down to see the
+    rest. The ``streamlit_calendar`` iframe calls ``Streamlit.setFrameHeight()`` once
+    at mount, so it is pinned to the grid height and does NOT scroll: a popover on
+    one of the lower weeks runs past the iframe's bottom edge and is clipped.
+
+    So clamp it here: keep FullCalendar's own position when the popover fits (a day
+    in week 1 opens at week 1, as it should) and slide it up by only as much as it
+    takes when it does not. CSS cannot do this — it cannot read the inline ``top``
+    FullCalendar writes — and no JS can be injected into the component's own bundle,
+    so this runs in the PARENT document and reaches into the calendar iframe, which
+    is same-origin (both are served off the Streamlit host).
+
+    Installed once per browser session in the parent realm (``__csCalPopover`` guard,
+    same pattern as the nav driver) so it survives client-side reruns.
+    """
+    driver = """
+(function(){
+  var pd = window.parent.document, pw = window.parent;
+  // Collapse this script-only iframe (Streamlit still reserves ~2px for it).
+  // Before the install guard: every rerun mounts a fresh one that needs it.
+  var self = window.frameElement;
+  if (self) self.style.cssText = 'height:0!important;min-height:0!important;' +
+    'border:none!important;display:block!important;margin:0!important;padding:0!important;';
+  if (pw.__csCalPopover) return;
+  pw.__csCalPopover = true;
+
+  var GAP = 10;   // breathing room at the iframe's top and bottom edges
+
+  function place(cdoc, pop){
+    var host = pop.offsetParent;                 // .fc-view-harness (position:relative)
+    if (!host) return;
+    var current = parseFloat(pop.style.top);
+    if (isNaN(current)) return;
+    // Our own write re-triggers the observer — ignore it, anything else is a fresh
+    // FullCalendar position (initial open, or a reposition after a window resize).
+    if (pop._csTop != null && Math.abs(current - pop._csTop) < 0.5) return;
+
+    var viewportBottom = cdoc.documentElement.clientHeight;
+    var hostTop = host.getBoundingClientRect().top;
+    var height  = pop.getBoundingClientRect().height;
+    var lowest  = viewportBottom - GAP - height - hostTop;   // bottom edge inside
+    var highest = GAP - hostTop;                             // top edge inside
+    var top = Math.max(highest, Math.min(current, lowest));
+    pop._csTop = top;
+    pop.style.top = top + 'px';
+  }
+
+  function watchPopover(cdoc, pop){
+    var win = cdoc.defaultView || window;
+    win.requestAnimationFrame(function(){ place(cdoc, pop); });
+    new win.MutationObserver(function(){ place(cdoc, pop); })
+      .observe(pop, {attributes:true, attributeFilter:['style']});
+  }
+
+  function watchFrame(frame){
+    var cdoc;
+    try { cdoc = frame.contentDocument; } catch(e) { return; }
+    // Mark the DOCUMENT, not the iframe element: an iframe polled before its src
+    // has loaded hands back the about:blank document, and marking the element
+    // there would leave the real document — the one with the calendar — unwatched.
+    // Every fresh document is a new object, so it gets its own observer.
+    if (!cdoc || !cdoc.body || cdoc.__csCalPopover) return;
+    cdoc.__csCalPopover = true;
+    var win = cdoc.defaultView || window;
+    new win.MutationObserver(function(records){
+      for (var i = 0; i < records.length; i++){
+        var added = records[i].addedNodes;
+        for (var j = 0; j < added.length; j++){
+          var node = added[j];
+          if (node.nodeType === 1 && node.classList &&
+              node.classList.contains('fc-popover')) watchPopover(cdoc, node);
+        }
+      }
+    }).observe(cdoc.body, {childList:true, subtree:true});
+  }
+
+  function scan(){
+    var frames = pd.querySelectorAll('iframe[title^="streamlit_calendar"]');
+    for (var i = 0; i < frames.length; i++) watchFrame(frames[i]);
+  }
+  scan();
+  // The iframe mounts after this script and is replaced whenever the calendar
+  // remounts (ec_cal_version bump), so keep re-attaching.
+  setInterval(scan, 1000);
+})();
+"""
+    try:
+        import streamlit.components.v1 as components_v1
+        components_v1.html("<script>" + driver + "</script>", height=0)
+    except Exception as exc:
+        log_structured_error(exc, page="earnings_calendar",
+                             component="_keep_popover_in_view",
+                             operation="inject_popover_clamp")
+
+
 def _get_calendar_css() -> str:
     """FullCalendar iframe CSS — Figma card events, today indicator, list view."""
     qbg, qtx = _QUARTER_STYLE["bg"], _QUARTER_STYLE["text"]
@@ -838,19 +938,15 @@ def _get_calendar_css() -> str:
             .fc-event.ec-no-badge .fc-event-title::after {{ display:none !important; }}
 
             /* ── "+N more" popover ──────────────────────────────────────────────
-               Two FullCalendar defaults break inside a Streamlit component iframe:
-               (1) .fc-popover has no max-height, so a day with 20+ events renders
-                   a popover taller than the iframe; (2) Popover.updateSize() only
-                   clamps the TOP (Math.max(top,10)) — it never clamps the bottom,
-                   because on a normal page you just scroll the document down. The
-                   iframe is sized once at mount and does NOT scroll, so anything
-                   past its bottom edge is clipped and unreachable.
-               Fix: cap the height, scroll the body, and pin the popover to the top
-               of the grid (`top` beats FullCalendar's inline style via !important)
-               so it is always fully inside the iframe, whichever week was clicked. */
+               .fc-popover has no max-height, so a day with 20+ events renders a
+               popover taller than the component iframe — and the iframe is sized
+               once at mount and never scrolls, so the overflow is clipped and
+               unreachable. Cap the height and scroll the body instead.
+               The popover's POSITION is clamped separately, in JS — see
+               `_keep_popover_in_view()`; FullCalendar clamps left/right but not
+               the bottom, and CSS cannot read its inline `top` to clamp it. */
             .fc-popover {{
                 display:flex !important; flex-direction:column !important;
-                top:10px !important;
                 max-height:min(560px, calc(100vh - 80px)) !important;
                 border-radius:8px !important; border-color:#E2E8F0 !important;
                 box-shadow:0 8px 24px rgba(15,23,42,0.16) !important;
@@ -3588,6 +3684,7 @@ def render_page() -> None:
                 )
                 log_timing("EC_PAGE_STCALENDAR_RENDER", (_time.perf_counter() - _t_fc_render) * 1000,
                            details=f"events={len(fc_events)} view={st.session_state.ec_view}", level="WARNING")
+                _keep_popover_in_view()
                 # Footer: count scoped to the displayed period only.
                 st.html(
                     f'<div class="ec-year-foot"><span>Showing <b>{_n_total:,}</b> '
