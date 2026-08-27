@@ -33,7 +33,7 @@ from urllib.parse import urlencode
 
 import streamlit as st
 from dotenv import load_dotenv
-from core.auth_environment import is_production_deploy
+from core.auth_environment import is_production_deploy, idp_base_url
 from utils.server_logger import new_rerun_id, log_structured_error
 
 new_rerun_id("logout_bridge")
@@ -48,7 +48,9 @@ except ImportError:
 load_dotenv()
 
 # OIDC config — must match login.py
-IDP_BASE_URL = "https://coresight.com"
+# MUST match the host login.py minted the id_token against — a stage3 token sent
+# to coresight.com/csr-idp/logout/ is rejected with "Invalid id_token_hint".
+IDP_BASE_URL = idp_base_url()
 OIDC_REDIRECT_URI = "https://marketdata.coresight.com" if is_production_deploy() else "https://marketdata-stg.coresight.com"
 OIDC_CLIENT_ID = "market-data"
 COOKIE_NAME = "auth_session"

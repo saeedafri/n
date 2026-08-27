@@ -31,3 +31,19 @@ def is_oidc_enabled() -> bool:
 
 # Snapshot at import (Streamlit workers load .env before pages import this module).
 IS_OIDC_ENV: bool = is_oidc_enabled()
+
+
+def idp_base_url() -> str:
+    """IdP origin for this deploy — stage3 on staging, coresight.com on production.
+
+    Single source of truth: login.py mints the id_token against this host, so
+    logout_bridge.py MUST send id_token_hint back to the same host or the IdP
+    rejects it with "Invalid id_token_hint".
+    """
+    override = os.getenv("IDP_BASE_URL", "").strip()
+    if override:
+        return override.rstrip("/")
+    env_values = {os.getenv(key, "").strip().lower() for key in ("APP_ENV", "ENVIRONMENT", "ENV")}
+    if not (env_values & {"production", "prod"}) and (env_values & {"staging", "stg"}):
+        return "https://stage3.coresight.com"
+    return "https://coresight.com"

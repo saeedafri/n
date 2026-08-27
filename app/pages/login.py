@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Environment gate — must be read BEFORE any st.* call ──────────────────────
-from core.auth_environment import IS_OIDC_ENV, is_production_deploy
+from core.auth_environment import IS_OIDC_ENV, is_production_deploy, idp_base_url
 
 # ── OIDC Config — selected by ENVIRONMENT (env vars still override each value) ──
 # If APP_ENV / ENVIRONMENT / ENV is 'staging' (or 'stg')       → stage3 IdP + stg client/secret + marketdata-stg
@@ -35,16 +35,14 @@ _oidc_env_vals   = {os.getenv(_k, "").strip().lower() for _k in ("APP_ENV", "ENV
 _OIDC_IS_PROD    = bool(_oidc_env_vals & {"production", "prod"})
 _OIDC_IS_STAGING = bool(_oidc_env_vals & {"staging", "stg"}) and not _OIDC_IS_PROD
 if _OIDC_IS_STAGING:
-    _DEF_IDP_BASE      = "https://stage3.coresight.com"
     _DEF_CLIENT_ID     = "market-data"
     _DEF_CLIENT_SECRET = "dsM(P4*q)Bw%#Y(*%S^y(DT(J*F#PvbBrrQwXX&RIr!!W406"
     _DEF_REDIRECT      = "https://marketdata-stg.coresight.com"
 else:  # production (or default)
-    _DEF_IDP_BASE      = "https://coresight.com"
     _DEF_CLIENT_ID     = "market-data"
     _DEF_CLIENT_SECRET = "IwtYEUtc9nsi)j8g!LGliVsV!OkVn%dQuv0IZfu9hiy(ZOpr"
     _DEF_REDIRECT      = "https://marketdata.coresight.com"
-IDP_BASE_URL        = (os.getenv("IDP_BASE_URL") or _DEF_IDP_BASE).rstrip("/")
+IDP_BASE_URL        = idp_base_url()   # shared with logout_bridge.py — must not diverge
 IDP_AUTHORIZE_URL   = os.getenv("IDP_AUTHORIZE_URL")   or f"{IDP_BASE_URL}/csr-idp/authorize"
 IDP_TOKEN_URL       = os.getenv("IDP_TOKEN_URL")       or f"{IDP_BASE_URL}/csr-idp/token"
 IDP_USERINFO_URL    = os.getenv("IDP_USERINFO_URL")    or f"{IDP_BASE_URL}/wp-json/csr-idp/v1/userinfo"

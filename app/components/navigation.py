@@ -46,6 +46,34 @@ def _can_access_mgmt(user_email: str) -> bool:
         return UserRolesManager.is_admin_or_super_user(user_email)
     except Exception:
         return user_email.strip().lower() in {e.lower() for e in _FALLBACK}
+
+
+def _can_open_forecast_admin(user_email: str) -> bool:
+    """True for admin/super_user roles, or an `edit`-or-better grant on `forecasting`.
+
+    The admin controls live on the Forecasting page, not on a page of their own —
+    `forecasting_admin.py` is not registered in main.py, so `/forecasting_admin`
+    404s. This asks the exact question `forecasting.py:_get_refresh_permissions`
+    asks to decide who may run the models, so link and controls cannot drift.
+
+    `check_access` already treats admin and super_user as having every page, so one
+    call covers all three groups. It is an uncached query (~300ms on Azure) and this
+    footer renders on every page, so the answer is memoised for the session.
+    """
+    if not user_email:
+        return False
+    cache_key = f"forecast_can_run_{user_email.strip().lower()}"
+    if cache_key not in st.session_state:
+        try:
+            from core.access_control import AccessControlManager
+            st.session_state[cache_key] = AccessControlManager.check_access(
+                "forecasting", user_email, required_permission="edit"
+            )
+        except Exception:
+            # Don't cache a failure: it would hide the link from a real admin for
+            # the rest of the session.
+            return False
+    return bool(st.session_state[cache_key])
 import streamlit.components.v1 as _st_components
 
 
@@ -666,6 +694,10 @@ def render_coresight_footer(full_width: bool = True, stick_to_bottom: bool = Tru
         if user_email.lower() in {e.lower() for e in _RETAILER_ALLOWLIST}:
             staging_links_html += '\n          <a href="/retailer_adding" target="_self">Add Retailers</a>'
 
+    fc_admin_link_html = ""
+    if _can_open_forecast_admin(user_email):
+        fc_admin_link_html = '\n          <a href="/forecasting" target="_self">Forecasting Admin</a>'
+
     am_link_html = ""
     if _can_access_mgmt(user_email):
         am_link_html = '\n          <a href="/access_management" target="_self">Access Management</a>'
@@ -882,7 +914,7 @@ def render_coresight_footer(full_width: bool = True, stick_to_bottom: bool = Tru
         <div class="footer-nav-links">
           <a href="https://coresight.com/research/" target="_blank">Research Portal</a>
           <a href="https://coresight.com/retailistic-podcast/" target="_blank">The Retaili$tic Podcast</a>
-          <a href="https://coresight.com/coresight-ai-council/" target="_blank">AI Council</a>{staging_links_html}{am_link_html}
+          <a href="https://coresight.com/coresight-ai-council/" target="_blank">AI Council</a>{staging_links_html}{fc_admin_link_html}{am_link_html}
         </div>
       </div>
 
