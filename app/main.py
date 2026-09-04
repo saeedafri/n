@@ -203,6 +203,7 @@ _PAGES_CONFIG = [
     ("pages/logs.py", "Logs", "logs", False),
     ("pages/retailer_adding.py", "Retailers", "retailer_adding", False),
     ("pages/forecasting.py", "Forecasting", "forecasting", False),
+    ("pages/market_size_forecasting.py", "Market Size Forecasting", "market_size_forecasting", False),
     ("pages/access_management.py", "Access Management", "access_management", False),
 ]
 

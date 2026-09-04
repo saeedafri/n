@@ -2975,12 +2975,30 @@ def _get_refresh_permissions(user_email: Optional[str]) -> tuple[bool, bool]:
     """
     if not user_email:
         return False, False
+
+    # Resolved once per session, then reused. Two uncached check_access calls is
+    # 2-4 Azure round-trips (~300ms each) on EVERY rerun of this page, and a
+    # single timed-out query used to return (False, False) — which is why the
+    # "Refresh Data" button would vanish for an admin on a page refresh and come
+    # back on the next one. A transient DB error must never read as "no access":
+    # fall back to the last answer we successfully resolved.
+    cache_key = f"_fc_refresh_perms_{user_email.strip().lower()}"
+    cached = st.session_state.get(cache_key)
+    if cached is not None:
+        return cached
     try:
         can_edit = AccessControlManager.check_access("forecasting", user_email, required_permission="edit")
         can_view = AccessControlManager.check_access("forecasting", user_email, required_permission="view_only")
+        st.session_state[cache_key] = (can_view, can_edit)
         return can_view, can_edit
-    except Exception:
-        return False, False
+    except Exception as exc:
+        log_structured_error(
+            exc, page="forecasting", component="_get_refresh_permissions",
+            operation="check_access", context=f"user={user_email} cached={cached is not None}",
+        )
+        # Keep the previous answer if we ever had one; deny only when we have
+        # never successfully resolved this user.
+        return cached if cached is not None else (False, False)
 
 
 def _has_report_date(value) -> bool:
@@ -3056,9 +3074,12 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
         st.warning("No forecast data found. Run models first.")
         return
 
-    # Tickers whose annual reporting date is not yet identified — their per-row
-    # "Refresh Now" is withheld and they are excluded from "Refresh All".
-    _blocked_tickers = {
+    # Tickers whose reporting date is not yet identified. The date is INFORMATIONAL:
+    # `sync_forecast_for_ticker` decides staleness from `last_actual_date` alone and
+    # never reads the earnings calendar, so a missing date is no reason to refuse a
+    # refresh. These companies stay refreshable — they are only labelled, because the
+    # gap is an earnings-calendar backfill gap, not a problem with their forecast.
+    _undated_tickers = {
         row["ticker"] for row in table_rows
         if not _has_report_date(row.get("annual_reported_on"))
     }
@@ -3084,21 +3105,34 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
             rcols[0].markdown(f'<span style="{_CELL_STYLE}">**{ticker}**</span>', unsafe_allow_html=True)
             rcols[1].markdown(f'<span style="{_CELL_STYLE}">{row["company_name"] or "—"}</span>', unsafe_allow_html=True)
             rcols[2].markdown(f'<span style="{_CELL_STYLE}">{row["exchange"] or "—"}</span>', unsafe_allow_html=True)
-            rcols[3].markdown(f'<span style="{_CELL_STYLE}">{row["annual_reported_on"]}</span>', unsafe_allow_html=True)
+            if _has_report_date(row.get("annual_reported_on")):
+                # Most rows carry the date the company LAST reported, not the next
+                # one — the calendar simply holds nothing newer. Unlabelled, the
+                # column reads as "next results", which is wrong for 386 of 440
+                # annual rows (AMPL's is from 2012).
+                if row.get("date_already_reported"):
+                    _kind, _tip = "reported", "Date this company last announced results"
+                else:
+                    _kind, _tip = "expected", "Next scheduled results announcement"
+                rcols[3].markdown(
+                    f'<span style="{_CELL_STYLE}" title="{_tip}">{row["annual_reported_on"]}'
+                    f'<span style="font-size:10px;color:#9CA3AF;margin-left:5px;">{_kind}</span>'
+                    f'</span>',
+                    unsafe_allow_html=True)
+            else:
+                rcols[3].markdown(
+                    f'<span style="{_CELL_STYLE};color:#9CA3AF;font-style:italic;" '
+                    f'title="Not in the earnings calendar yet — the forecast still refreshes '
+                    f'normally, it is dated from the latest reported period.">Pending</span>',
+                    unsafe_allow_html=True,
+                )
             rcols[4].markdown(f'<span style="{_CELL_STYLE}">{row["fiscal_period"]}</span>', unsafe_allow_html=True)
             last_refresh_ph = rcols[5].empty()
             last_refresh_ph.markdown(f'<span style="{_CELL_STYLE}">{row["last_refresh"]}</span>', unsafe_allow_html=True)
 
             if can_run:
                 action_ph = rcols[6].empty()
-                if not _has_report_date(row.get("annual_reported_on")):
-                    # Reporting date not identified yet — withhold Refresh Now.
-                    action_ph.markdown(
-                        '<span style="font-size:11px;color:#9CA3AF;font-style:italic;" '
-                        'title="Reporting date pending — refresh is on hold">On hold</span>',
-                        unsafe_allow_html=True,
-                    )
-                elif action_ph.button("Refresh Now", key=f"refresh_now_{ticker}"):
+                if action_ph.button("Refresh Now", key=f"refresh_now_{ticker}"):
                     action_ph.markdown('<span style="font-size:12px;color:#6B7280">Running…</span>', unsafe_allow_html=True)
                     with st.spinner(""):
                         result = _sync_one(ticker, force=True)
@@ -3121,7 +3155,7 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
     if can_run:
         if st.button("Refresh All", key="refresh_all_btn"):
             with st.spinner("Running all forecast models — this may take several minutes…"):
-                results = _sync_all(force=True, exclude_tickers=_blocked_tickers)
+                results = _sync_all(force=True)
                 clear_revenue_forecast_caches()
                 get_refresh_table_data.clear()
             updated = sum(1 for r in results if r.get("status") == "updated")
@@ -3130,19 +3164,20 @@ div[data-testid="stDialog"] div[data-testid="column"]:last-child {
             st.toast(f"✓ Refresh All done: {updated} updated")
             send_model_refresh_email(triggered_by=user_email, results=results, period_type=period_type.lower())
 
-    if _blocked_tickers:
-        _n = len(_blocked_tickers)
+    if _undated_tickers:
+        _n = len(_undated_tickers)
         _co = "company" if _n == 1 else "companies"
+        _label = "Reporting date pending" if _n == 1 else "Reporting dates pending"
         st.markdown(
             f'<div style="margin-top:10px;padding:11px 14px;background:#F9FAFB;'
-            f'border-left:3px solid #B91C1C;border-radius:4px;font-size:12px;'
+            f'border-left:3px solid #9CA3AF;border-radius:4px;font-size:12px;'
             f'color:#4B5563;line-height:1.55;">'
-            f'<strong style="color:#374151;">{_n} {_co} on hold.</strong> '
-            f'{"Its annual reporting date has" if _n == 1 else "Their annual reporting dates have"} '
-            f'not been confirmed yet. To keep every forecast aligned to a verified reporting period, '
-            f'automated refresh is paused for {"it" if _n == 1 else "them"} and '
-            f'{"it is" if _n == 1 else "they are"} excluded from <strong>Refresh All</strong>. '
-            f'Refresh re-enables automatically once the reporting date is identified.'
+            f'<strong style="color:#374151;">{_label} for {_n} {_co}.</strong> '
+            f'Their next results announcement is not in the earnings calendar yet, so the '
+            f'Reporting Date column shows <em>Pending</em>. '
+            f'<strong>This does not hold up the forecast</strong> — staleness is judged on each '
+            f'company\'s latest reported period, so they refresh normally and are included in '
+            f'<strong>Refresh All</strong>. The date fills in once the calendar is backfilled.'
             f'</div>',
             unsafe_allow_html=True,
         )

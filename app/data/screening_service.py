@@ -260,6 +260,91 @@ def get_base_company_universe() -> pd.DataFrame:
     return materialized_or_build("screening_universe", _build_universe, _sources)
 
 
+# Which of Alpha Vantage's two names to trust, decided by listing_status.
+#
+# AV holds `company_name` from the bulk LISTING feed and `overview_name` from the
+# per-symbol overview fetch, and NEITHER is reliably the current issuer:
+#
+#   Delisted row (166 of our 2,636 tickers, 103 with differing names) — the ticker
+#   was REUSED, so the listing row describes the dead former holder and only the
+#   overview knows who holds it now: MRNA listing "Marina Biotech" (delisted 2018)
+#   vs overview "Moderna"; COR "CoreSite Realty" (2021) vs "Cencora"; AMTD
+#   "TD Ameritrade" vs "AMTD IDEA Group". Overview wins.
+#
+#   Active row (2,470 tickers) — the listing feed is the fresher of the two and the
+#   overview snapshot can predate a rename: NEM listing "Newmont Corp" vs overview
+#   "Newmont Goldcorp Corp" (renamed away 2020); FCX "Freeport-McMoRan Inc" vs
+#   "Freeport-McMoran Copper & Gold Inc" (2014); ACNT "Ascent Industries" vs
+#   "Synalloy Corporation" (2022). Listing wins.
+#
+# Preferring the overview unconditionally was tried first and regressed exactly the
+# active cases above, which is why this is a CASE and not a flat COALESCE. Both
+# columns also carry the literal string 'null' and bare-ticker placeholders
+# (e.g. overview_name 'ACR-P-D'), which NULLIF strips so the next fallback applies.
+_AV_LISTING_NAME  = "NULLIF(NULLIF(TRIM(av.company_name),  'null'), e.ticker)"
+_AV_OVERVIEW_NAME = "NULLIF(NULLIF(TRIM(av.overview_name), 'null'), e.ticker)"
+_AV_COMPANY_NAME = (
+    f"CASE WHEN av.listing_status = 'Delisted' "
+    f"THEN COALESCE({_AV_OVERVIEW_NAME}, {_AV_LISTING_NAME}) "
+    f"ELSE COALESCE({_AV_LISTING_NAME}, {_AV_OVERVIEW_NAME}) END"
+)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_all_companies_universe() -> pd.DataFrame:
+    """Base universe widened to EVERY ticker that has key-development events.
+
+    coreiq_companies is the 450-row Coresight coverage list, which is why key-dev
+    screening reached only 426 of the 4,327 tickers in coreiq_company_events and
+    hid 9,691 of the 20,753 M&A Activity events (46.7% of that category). This
+    universe is the union: the Coresight rows verbatim, plus one row per extra
+    event ticker with whatever name/exchange/country the fallback masters know.
+
+    `sector` stays Coresight-only on purpose. It is what the Industry criterion
+    filters on, and its dropdown is the curated 79-value Coresight taxonomy — so
+    a company outside coverage has no sector here and an Industry criterion
+    correctly narrows back to Coresight names. The results grid's own Industry
+    column is a separate, display-only label (see _keydev_industry_label).
+    """
+    base = get_base_company_universe()
+    known = set(base["ticker"].dropna().astype(str))
+
+    query = f"""
+        SELECT DISTINCT e.ticker,
+               COALESCE({_AV_COMPANY_NAME}, sc.name) AS company_name,
+               av.exchange,
+               av.country
+        FROM coreiq_company_events e
+        LEFT JOIN coreiq_av_companies_all av  ON av.symbol = e.ticker
+        LEFT JOIN coreiq_sec_companies_all sc ON sc.ticker = e.ticker
+    """
+    try:
+        rows = db_manager.execute_query_readonly(query) or []
+    except Exception as exc:
+        log_error(f"[SCREENING] get_all_companies_universe failed: {exc}")
+        return base
+
+    extra = [
+        {
+            "ticker":       r["ticker"],
+            "company_name": _format_company_name(r.get("company_name") or "") or r["ticker"],
+            "sector":       "",
+            "exchange":     r.get("exchange") or "",
+            "country":      r.get("country") or "",
+        }
+        for r in rows
+        if r.get("ticker") and r["ticker"] not in known
+    ]
+    if not extra:
+        return base
+
+    out = pd.concat([base, pd.DataFrame(extra, columns=base.columns)],
+                    ignore_index=True)
+    log_info(f"[SCREENING] all-companies universe: {len(base)} Coresight "
+             f"+ {len(extra)} event-only = {len(out)}")
+    return out
+
+
 # =============================================================================
 # CRITERION APPLICATIONS
 # =============================================================================
@@ -4092,10 +4177,53 @@ def resolve_keydevs_event_window(keydev_criteria: List[Dict]) -> Dict:
     return {"days": max_days or None}
 
 
+# Sentinel `tickers` value meaning "every ticker in coreiq_company_events".
+# The all-companies screen IS the whole event table, so an IN list naming all
+# 4,327 tickers is a 40 KB no-op. Dropping the clause instead measured 260 ms for
+# the M&A all-history COUNT, against ~4 s for the 450-ticker IN list it replaces.
+# It also keeps the @st.cache_data key a 1-tuple rather than a 4,327-tuple.
+ALL_TICKERS = ("__ALL_EVENT_TICKERS__",)
+
+
+def _keydev_ticker_clause(tickers: tuple, alias: str = "") -> str:
+    """AND-clause restricting key-dev events to `tickers`; empty for ALL_TICKERS."""
+    if tickers == ALL_TICKERS:
+        return ""
+    col = f"{alias}.ticker" if alias else "ticker"
+    return f"AND {col} IN ({_build_ticker_in_list(tickers)})"
+
+
+# Name / industry fallback for tickers that are NOT in the Coresight master.
+# coreiq_company_events has no industry column of its own (only ticker), so the
+# label has always come from a JOIN. coreiq_companies covers the 447 Coresight
+# names; coreiq_av_companies_all (21,975 rows, symbol unique — verified 0 dupes,
+# so it cannot fan out rows) and coreiq_sec_companies_all cover the rest.
+# Measured on M&A all-history: 19,568/20,815 rows get a name, 18,987 an industry.
+_KEYDEV_COMPANY_JOINS = """
+        LEFT JOIN coreiq_companies c         ON c.ticker = e.ticker
+        LEFT JOIN coreiq_av_companies_all av ON av.symbol = e.ticker
+        LEFT JOIN coreiq_sec_companies_all sc ON sc.ticker = e.ticker
+"""
+
+# Coresight values win; AV is the fallback and is tagged so nobody reads a
+# Yahoo/Morningstar label as a curated Coresight classification (AV also carries
+# junk industry values — 'NONE', 'SHELL COMPANIES').
+#
+
+_KEYDEV_COMPANY_COLS = f"""
+            COALESCE(c.name_coresight, {_AV_COMPANY_NAME}, sc.name) AS company_name,
+            COALESCE(c.exchange_acronym, av.exchange)               AS exchange_acronym,
+            c.primary_industry_coresight                            AS industry,
+            NULLIF(av.industry, 'NONE')                             AS industry_fallback,
+            c.ticker IS NOT NULL                                    AS in_coresight_universe
+"""
+
+
 def apply_keydevs_criterion(
     criterion: Dict,
     working_df: pd.DataFrame,
     detail_column: bool = True,
+    all_tickers: bool = False,
 ) -> Tuple[pd.DataFrame, Dict]:
     """Filter working_df to companies that have key development events
     matching the selected categories and timeframe.
@@ -4129,7 +4257,7 @@ def apply_keydevs_criterion(
             "type": "keydevs", "rows_in": 0, "rows_out": 0, "elapsed_ms": 0,
         }
 
-    ticker_sql = _build_ticker_in_list(tickers)
+    ticker_clause = _keydev_ticker_clause(ALL_TICKERS if all_tickers else tuple(tickers))
     cat_sql = ", ".join(f"'{c}'" for c in query_cats)
 
     date_clause = _build_keydev_date_clause(criterion)
@@ -4140,7 +4268,7 @@ def apply_keydevs_criterion(
         try:
             rows = db_manager.execute_query_readonly(
                 f"SELECT DISTINCT ticker FROM coreiq_company_events "
-                f"WHERE ticker IN ({ticker_sql}) AND event_category IN ({cat_sql}) "
+                f"WHERE event_category IN ({cat_sql}) {ticker_clause} "
                 f"{date_clause}"
             ) or []
         except Exception as exc:
@@ -4177,8 +4305,8 @@ def apply_keydevs_criterion(
                            ORDER BY event_date DESC, event_id DESC
                        ) AS rn
                 FROM coreiq_company_events
-                WHERE ticker IN ({ticker_sql})
-                  AND event_category IN ({cat_sql})
+                WHERE event_category IN ({cat_sql})
+                  {ticker_clause}
                   {date_clause}
             ) ranked
             WHERE rn <= {_MAX_EVENTS_PER_COMPANY}
@@ -4305,6 +4433,47 @@ def _resolve_source_display(source_raw: str, source_detail: str) -> str:
 
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_keydev_subtypes_by_category() -> Dict[str, List[str]]:
+    """Every event_subtype that exists per category — the full filter domain.
+
+    The results grid's header filter builds its checkbox list from the rows it has
+    LOADED, which is one 500-row page of a result that can hold 20,753. On the M&A
+    all-history screen that list held 8 of the 10 real subtypes: 'M&A Cancellation'
+    (508 events) and 'Change in Control' (32) were simply not offerable. Harmless
+    while the filter was display-only, but the Excel export now honours it, so an
+    incomplete domain silently dropped 540 rows from a download.
+
+    One 462ms query over the whole table (129 category/subtype pairs), cached for an
+    hour — the taxonomy changes when the ETL gains a new event type, not per screen.
+    """
+    try:
+        rows = db_manager.execute_query_readonly(
+            "SELECT DISTINCT event_category, event_subtype FROM coreiq_company_events "
+            "WHERE event_subtype IS NOT NULL AND event_subtype <> ''"
+        ) or []
+    except Exception as exc:
+        log_error(f"[SCREENING] get_keydev_subtypes_by_category failed: {exc}")
+        return {}
+    out: Dict[str, List[str]] = {}
+    for r in rows:
+        out.setdefault(r["event_category"], []).append(r["event_subtype"])
+    return {k: sorted(set(v)) for k, v in out.items()}
+
+
+def keydev_subtype_domain(categories) -> List[str]:
+    """Sorted subtypes across the selected categories — empty if unknown.
+
+    Empty means "no domain to publish", and the grid falls back to the values it
+    loaded. It must never be a partial list presented as complete.
+    """
+    by_cat = get_keydev_subtypes_by_category()
+    if not by_cat:
+        return []
+    values = {s for c in (categories or []) for s in by_cat.get(c, [])}
+    return sorted(values)
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def get_keydevs_events_count(
     tickers: tuple,
@@ -4318,7 +4487,7 @@ def get_keydevs_events_count(
     idx_cat_date). Lets the UI show the honest total instead of a capped count."""
     if not tickers or not categories:
         return 0
-    ticker_sql = _build_ticker_in_list(tickers)
+    ticker_clause = _keydev_ticker_clause(tickers, "e")
     cat_sql = ", ".join(f"'{c}'" for c in categories)
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
@@ -4329,8 +4498,8 @@ def get_keydevs_events_count(
     query = f"""
         SELECT COUNT(*) AS c
         FROM coreiq_company_events e
-        WHERE e.ticker IN ({ticker_sql})
-          AND e.event_category IN ({cat_sql})
+        WHERE e.event_category IN ({cat_sql})
+          {ticker_clause}
           {date_clause}
     """
     try:
@@ -4370,7 +4539,7 @@ def get_keydevs_events_for_tickers(
     # Simple exact match - categories are exact DB event_category values
     query_cats = list(categories)
 
-    ticker_sql = _build_ticker_in_list(tickers)
+    ticker_clause = _keydev_ticker_clause(tickers, "e")
     cat_sql = ", ".join(f"'{c}'" for c in query_cats)
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
@@ -4396,18 +4565,16 @@ def get_keydevs_events_for_tickers(
             e.event_subtype,
             e.event_category,
             e.ticker,
-            c.name_coresight AS company_name,
-            c.exchange_acronym,
             e.headline,
             e.situation,
             e.source,
             e.source_ref,
             e.source_detail,
-            c.primary_industry_coresight AS industry
+            {_KEYDEV_COMPANY_COLS}
         FROM coreiq_company_events e
-        LEFT JOIN coreiq_companies c ON e.ticker = c.ticker
-        WHERE e.ticker IN ({ticker_sql})
-          AND e.event_category IN ({cat_sql})
+        {_KEYDEV_COMPANY_JOINS}
+        WHERE e.event_category IN ({cat_sql})
+          {ticker_clause}
           {date_clause}
           {keyset_clause}
         ORDER BY e.event_date DESC, e.event_id DESC
@@ -4451,9 +4618,7 @@ def _keydevs_records_from_rows(rows: list) -> list:
         source_raw = r.get("source", "")
         source_display = _resolve_source_display(source_raw, r.get("source_detail") or "")
         situation = r.get("situation") or "—"
-        industry = r.get("industry") or ""
-        if industry:
-            industry = f"{industry} (Primary)"
+        # industry = _keydev_industry_label(r)   # parked — see the records dict below
 
         source_ref = r.get("source_ref") or ""
         records.append({
@@ -4463,12 +4628,51 @@ def _keydevs_records_from_rows(rows: list) -> list:
             "Key Developments By Date": date_str,
             "Key Developments by Type": subtype,
             "Company Name(s)": company_display,
+            # ── Industry column: PARKED, pending a data-team decision ──────────
+            # Uncomment this ONE line to bring it back; everything behind it is
+            # still wired (the JOINs, `_keydev_industry_label`, the SQL columns).
+            #
+            # It works, but 8.7% of rows come back blank because the only source
+            # for a non-Coresight ticker is `coreiq_av_companies_all.industry`,
+            # and Alpha Vantage only filled that for ~6,543 of its 21,975 symbols.
+            # 458 of the blanks are retryable failures stamped
+            # `overview_last_error = 'Empty payload'` on the 2026-03-24 snapshot —
+            # Agilent, Electronic Arts, Hess, Ecopetrol, Interpublic among them.
+            # There is no fallback in the DB: `coreiq_av_company_overview` holds
+            # 457 tickers and recovers none of them.
+            #
+            # Waiting on: is the Alpha Vantage (Yahoo/Morningstar) taxonomy an
+            # acceptable source alongside the curated `primary_industry_coresight`?
+            # If yes, uncomment. If the answer is "only Coresight", drop the AV
+            # half of the COALESCE in `_KEYDEV_COMPANY_COLS` instead.
+            # "Industry": industry,
             "Key Development Headline": r.get("headline") or "",
             "Summary": situation,
             "Key Development Sources": source_display,
             "Source Reference": source_ref,
         })
     return records
+
+
+def _keydev_industry_label(row: dict) -> str:
+    """Industry shown on an event row.
+
+    coreiq_company_events carries no industry of its own, so this is the JOINed
+    label: the curated Coresight classification when the ticker is in the master,
+    otherwise the Alpha Vantage one title-cased to match. The AV values are a
+    different (Yahoo/Morningstar) taxonomy — Morningstar-style labels like
+    'BANKS - REGIONAL' against Coresight's curated 79 — so they are NOT marked
+    "(Primary)" and must never read as a Coresight classification. The AV industry
+    itself comes from the per-symbol overview fetch and is accurate even for reused
+    tickers; it is the LISTING name that goes stale there (see _AV_COMPANY_NAME).
+    """
+    coresight = (row.get("industry") or "").strip()
+    if coresight:
+        return f"{coresight} (Primary)"
+    fallback = (row.get("industry_fallback") or "").strip()
+    if not fallback:
+        return ""
+    return fallback.title().replace(" And ", " & ")
 
 
 def fetch_all_keydevs_events(
@@ -4484,7 +4688,7 @@ def fetch_all_keydevs_events(
     freed right after the workbook is built, not held in the cache for 5 min."""
     if not tickers or not categories:
         return pd.DataFrame()
-    ticker_sql = _build_ticker_in_list(tickers)
+    ticker_clause = _keydev_ticker_clause(tickers, "e")
     cat_sql = ", ".join(f"'{c}'" for c in categories)
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
@@ -4494,14 +4698,13 @@ def fetch_all_keydevs_events(
     })
     query = f"""
         SELECT
-            e.event_date, e.event_subtype, e.event_category, e.ticker,
-            c.name_coresight AS company_name, c.exchange_acronym,
+            e.event_id, e.event_date, e.event_subtype, e.event_category, e.ticker,
             e.headline, e.situation, e.source, e.source_ref, e.source_detail,
-            c.primary_industry_coresight AS industry
+            {_KEYDEV_COMPANY_COLS}
         FROM coreiq_company_events e
-        LEFT JOIN coreiq_companies c ON e.ticker = c.ticker
-        WHERE e.ticker IN ({ticker_sql})
-          AND e.event_category IN ({cat_sql})
+        {_KEYDEV_COMPANY_JOINS}
+        WHERE e.event_category IN ({cat_sql})
+          {ticker_clause}
           {date_clause}
         ORDER BY e.event_date DESC, e.event_id DESC
         LIMIT {int(cap)}
@@ -5074,6 +5277,7 @@ def recompute_working_set(
     allowed_tickers: Optional[set] = None,
     allowed_members: Optional[set] = None,
     keydev_details: bool = True,
+    all_companies: bool = False,
 ) -> Tuple[pd.DataFrame, List[Dict]]:
     """Re-apply all criteria in order from the base universe.
 
@@ -5095,10 +5299,10 @@ def recompute_working_set(
 
     # ── Load base universe ──
     t_base = time.perf_counter()
-    working_df  = get_base_company_universe()
+    working_df  = get_all_companies_universe() if all_companies else get_base_company_universe()
     ms_base = (time.perf_counter() - t_base) * 1000
     log_timing("SCREENING_BASE_UNIVERSE_LOAD", ms_base,
-               f"rows={len(working_df)}")
+               f"rows={len(working_df)} all_companies={all_companies}")
 
     # ── Watchlist filter (applied before any criteria) ──
     # Prefer composite (ticker, company_name) membership — ticker alone wrongly
@@ -5156,8 +5360,11 @@ def recompute_working_set(
                 return apply_forecast_criterion(crit, src_df)
             return apply_financial_criterion(crit, src_df)
         if ctype_ == "keydevs":
+            # all_companies means src_df already IS every event ticker, so the
+            # IN list would name all 4,327 — drop it (see _keydev_ticker_clause).
             return apply_keydevs_criterion(crit, src_df,
-                                           detail_column=keydev_details)
+                                           detail_column=keydev_details,
+                                           all_tickers=all_companies)
         if ctype_ == "biz_segments":
             return apply_biz_segments_criterion(crit, src_df)
         if ctype_ == "geo_segments":
@@ -5926,8 +6133,10 @@ def build_keydevs_summary(
         return "Key Developments by Category: (none)"
     n = len(category_labels)
     if n == 1:
-        return f"Key Developments by Category: {category_labels[0]} [{period}]"
-    return f"Key Developments: {n} categories selected [{period}]"
+        base = f"Key Developments by Category: {category_labels[0]}"
+    else:
+        base = f"Key Developments: {n} categories selected"
+    return f"{base} [{period}]"
 
 
 def keydevs_period_display_label(criterion: Dict) -> str:

@@ -320,9 +320,16 @@ def sync_quarterly_forecast_for_ticker(
             # Same stub-period rule the engines apply — kept identical so the
             # service never hands the engine a differently-truncated history.
             _deduped = drop_partial_periods(_deduped)
-        if len(_deduped) < 8:
+        # 4 is the data scientist's own MINIMAL boundary (mdp_quarterly_projections
+        # _and_testing.py: n_clean <= 7 -> MINIMAL, growth-only methods, no backtest).
+        # The old floor of 8 sat above it and silently dropped that entire tier: 43
+        # tickers had an annual forecast but no quarterly one, every one of them a
+        # foreign/YFinance listing where Yahoo serves only 5-7 quarters. Below 4
+        # there is no growth signal worth carrying 20 quarters forward, so the
+        # engine's FLAT tier stays out of the store.
+        if len(_deduped) < 4:
             out["status"] = "skipped"
-            out["message"] = f"Need >=8 quarters; got {len(_deduped)}."
+            out["message"] = f"Need >=4 quarters; got {len(_deduped)}."
             return out
 
         last_actual_date = _to_date(actual_rows[-1]["period_date"])

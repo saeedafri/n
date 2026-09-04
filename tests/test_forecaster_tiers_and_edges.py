@@ -147,3 +147,35 @@ def test_interior_stub_period_is_dropped():
 def test_trailing_stub_period_is_dropped():
     stub = _annual([1000, 1100, 1200, 30])
     assert list(drop_partial_periods(stub)["sales"]) == [1000, 1100, 1200]
+
+
+# ---------------------------------------------------------------------------
+# The sync-layer floor
+#
+# forecast_admin_service skips a ticker below 4 quarters. That number is only
+# safe while the engine keeps producing a usable MINIMAL forecast from 4-7
+# points — the tier the old floor of 8 was silently dropping.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("n_quarters", [4, 5, 6, 7])
+def test_minimal_tier_still_forecasts_above_the_sync_floor(n_quarters):
+    engine = RetailerQuarterlyForecaster.from_dataframe(_quarterly(n_quarters))
+    # Same call order as sync_quarterly_forecast_for_ticker: MINIMAL has no
+    # backtest to rank on, so backtest() is where best_method gets its "cagr"
+    # default. forecast() alone leaves it None and the store has nothing to key on.
+    engine.backtest(holdout_quarters=4)
+    forecast = engine.forecast(periods=20)
+    assert engine.tier == "MINIMAL"
+    assert engine.best_method == "cagr"
+    assert not forecast.empty
+    assert engine.best_method in forecast.columns
+
+
+def test_sync_floor_matches_the_engines_minimal_boundary():
+    """The guard's number must track the engine, not drift from it."""
+    import re
+    source = open("app/data/forecast_admin_service.py").read()
+    floor = int(re.search(r"if len\(_deduped\) < (\d+):\n\s+out\[\"status\"\] = \"skipped\"\n\s+out\[\"message\"\] = f\"Need >=\d+ quarters", source).group(1))
+    assert floor == 4
+    assert RetailerQuarterlyForecaster.from_dataframe(_quarterly(floor)).tier == "MINIMAL"
+    assert RetailerQuarterlyForecaster.from_dataframe(_quarterly(floor - 1)).tier == "FLAT"

@@ -21,12 +21,14 @@ import hashlib
 import os
 import re
 import textwrap
+import threading
 import time
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 from io import BytesIO
 from typing import Dict, List, Optional
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode, JsCode
@@ -135,6 +137,15 @@ if HAS_AGGRID:
         var self = this;
         var seen = {};
         var order = [];
+        var fp = (this.params.colDef && this.params.colDef.filterParams)
+          ? this.params.colDef.filterParams : null;
+        var preset = (fp && fp.values && fp.values.length) ? fp.values : null;
+        if (preset) {
+          preset.forEach(function(v) {
+            v = (v === null || v === undefined) ? '' : String(v);
+            if (!seen[v]) { seen[v] = true; order.push(v); }
+          });
+        }
         var api = this.params.api;
         if (api && api.forEachLeafNode) {
           api.forEachLeafNode(function(node) {
@@ -278,6 +289,8 @@ from data.screening_service import (
     build_geo_segments_summary,
     build_additional_summary,
     get_base_company_universe,
+    get_all_companies_universe,
+    ALL_TICKERS,
     filter_universe_to_members,
     keep_working_set_companies,
     merge_company_columns,
@@ -285,6 +298,7 @@ from data.screening_service import (
     FILTERING_CRITERION_TYPES,
     get_keydevs_events_for_tickers,
     get_keydevs_events_count,
+    keydev_subtype_domain,
     fetch_all_keydevs_events,
     keydevs_period_display_label,
     resolve_keydevs_event_window,
@@ -321,7 +335,6 @@ from data.watchlist_service import (
 # because the DB is down do we fall back to the in-memory store.
 # Remove this block once the DB is stable / always reachable.
 # ---------------------------------------------------------------------------
-import threading as _wl_threading
 
 class _InMemoryWatchlistStore:
     """Thread-safe in-memory watchlist store for local dev fallback.
@@ -657,6 +670,37 @@ def _render_coresight_loading_overlay(message: str, subtext: str = ""):
     return slot
 
 
+def _narrowing_criteria(criteria: List[dict]) -> bool:
+    """True when a criterion actually drops companies (Industry / Geography).
+
+    Only those narrow the working set — financial, key-dev and segment criteria
+    annotate it (see FILTERING_CRITERION_TYPES). When none is present the working
+    set is still the whole universe, which is what lets the event query skip its
+    ticker IN list.
+    """
+    return any(c.get("type") in FILTERING_CRITERION_TYPES for c in criteria)
+
+
+def _all_companies_on() -> bool:
+    """True in Key Devs mode, which always covers every ticker that has events.
+
+    Key-dev screening is about the events themselves, and bounding it to the ~464
+    Coresight companies hid 9,741 of the 21,034 M&A Activity events (46%). So this
+    mode always screens the full ~4,350-ticker event universe — no opt-in.
+
+    Every other mode stays on the curated Coresight master, and so do the criteria
+    that describe a COMPANY rather than an event: Industry and Geography filter on
+    columns only Coresight rows carry, so adding either narrows a Key Devs screen
+    back to covered companies (verified: 4,374 -> 20 for "Food Retail").
+    """
+    return st.session_state.get("scr_screen_for") == "Key Devs"
+
+
+def _screening_universe():
+    """Base universe honouring the all-companies toggle."""
+    return get_all_companies_universe() if _all_companies_on() else get_base_company_universe()
+
+
 def _trigger_recompute():
     """Re-run the full criteria pipeline and store working_df + trace."""
     criteria = st.session_state.get("scr_active_criteria", [])
@@ -690,6 +734,7 @@ def _trigger_recompute():
             # Key Devs mode renders one row per EVENT, so the per-company key-dev
             # detail column is never displayed there — don't pay to build it.
             keydev_details=(st.session_state.get("scr_screen_for") != "Key Devs"),
+            all_companies=_all_companies_on(),
         )
         ms_rec = (time.perf_counter() - t_rec) * 1000
         log_timing(
@@ -4284,7 +4329,8 @@ def _render_keydevs_form():
                         if err:
                             st.error(err)
                             return
-                        criterion["summary"] = _keydevs_summary_from_fields(selected_labels, date_fields)
+                        criterion["summary"] = _keydevs_summary_from_fields(
+                            selected_labels, date_fields)
                         # Always attach a results column (see the other key-dev form
                         # and apply_keydevs_criterion) so the grid is never blank.
                         criterion["display_col"] = _keydevs_display_col(date_fields)
@@ -4853,9 +4899,10 @@ def _render_status_bar():
                         total = len(st.session_state.get("scr_watchlist_members") or wl_tickers)
                     wl_note = f" (watchlist: <strong>{wl_name}</strong>)"
                 else:
-                    base = get_base_company_universe()
+                    base = _screening_universe()
                     total = len(base)
-                    wl_note = ""
+                    wl_note = (" (all companies with key developments)"
+                               if _all_companies_on() else "")
             except Exception as _exc:
                 log_structured_error(_exc, page="screening", component="_render_status_bar", operation="GET_BASE_UNIVERSE")
                 total = "?"
@@ -4954,7 +5001,11 @@ def _render_keydevs_results():
         keydev_criteria = [c for c in criteria if c.get("type") == "keydevs"]
 
         # Resolve query params: tickers + categories + date window.
-        _tickers = tuple(df["ticker"].values)
+        # With the all-companies toggle on and no company-narrowing criterion, the
+        # working set already IS every event ticker — send the sentinel so the
+        # query drops its IN list entirely instead of naming all 4,327 tickers.
+        _tickers = (ALL_TICKERS if _all_companies_on() and not _narrowing_criteria(criteria)
+                    else tuple(df["ticker"].values))
         if not keydev_criteria:
             # No Key Dev criterion — all categories, default 1-year window.
             _cats = tuple(KEYDEV_CATEGORIES_ALL.values())
@@ -4981,15 +5032,53 @@ def _render_keydevs_results():
                 or "kd_df" not in st.session_state):
             render_sticky_loader("Loading Key Developments")
             try:
-                _kd_count = get_keydevs_events_count(
-                    _tickers, _cats, days=_window.get("days"),
-                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                )
+                # The count and the first page are independent, and on this DB a
+                # query costs ONE VPN round-trip almost regardless of what it
+                # returns (measured: COUNT 258ms, 500-row page 294ms, a 3-column
+                # 500-row page 280ms — the ~250ms Azure RTT dominates). Run in
+                # sequence that is 552ms; overlapped it is one round-trip.
+                # Folding both into a single `COUNT(*) OVER ()` query was tried and
+                # is much worse (2,190ms) — the window function forces MySQL to
+                # materialize all 20k rows instead of stopping at LIMIT 500.
+                _count_result: dict = {}
+
+                def _fetch_count():
+                    try:
+                        _count_result["value"] = get_keydevs_events_count(
+                            _tickers, _cats, days=_window.get("days"),
+                            start_date=_window.get("start_date"),
+                            end_date=_window.get("end_date"),
+                        )
+                    except BaseException as exc:      # re-raised on the main thread
+                        _count_result["error"] = exc
+
+                def _warm_subtype_domain():
+                    # Needed only when the grid renders, below — fetch it here so
+                    # its 462ms lands inside the page query's round-trip instead of
+                    # after it. Cached for an hour, so this costs nothing again.
+                    try:
+                        keydev_subtype_domain(_cats)
+                    except Exception:
+                        pass                       # falls back to the loaded values
+
+                _workers = [threading.Thread(target=_fetch_count, daemon=True),
+                            threading.Thread(target=_warm_subtype_domain, daemon=True)]
+                for _w in _workers:
+                    # The cached fetches read st.cache_data, so a worker needs the
+                    # script run context or it runs uncached and warns.
+                    add_script_run_ctx(_w, get_script_run_ctx())
+                    _w.start()
+
                 _df0, _cur0 = get_keydevs_events_for_tickers(
                     _tickers, _cats, days=_window.get("days"),
                     start_date=_window.get("start_date"), end_date=_window.get("end_date"),
                     limit=_KD_PAGE,
                 )
+                for _w in _workers:
+                    _w.join()
+                if "error" in _count_result:
+                    raise _count_result["error"]
+                _kd_count = _count_result.get("value", 0)
             except KeydevsQueryError as _kd_exc:
                 # A failed query is NOT an empty result. Leave the cache untouched so
                 # the next click retries instead of serving a poisoned empty answer.
@@ -5019,31 +5108,13 @@ def _render_keydevs_results():
             return
 
         # Header row with Excel download — honest total, newest-first.
+        # Both are rendered into placeholders and FILLED IN AFTER the grid below,
+        # because what the Excel button must export depends on the column filters
+        # the user has set in the grid — which only exist once the grid has run.
         _shown = len(events_df)
         _hdr_col, _dl_col = st.columns([9, 1.5])
-        with _hdr_col:
-            _hdr_txt = f"<strong>{_kd_total:,}</strong> key development events found"
-            if _kd_total > _shown:
-                _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
-                             f"· showing newest {_shown:,}</span>")
-            st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
-        with _dl_col:
-            # ONE branded Excel button carrying the FULL matching set (not just the
-            # shown 500). The workbook is built ON CLICK, never while the user waits
-            # for the grid: measured on STG for the 146k-event all-history screen, the
-            # grid needs 4.0s (count 1.1s + first 500-row page 2.8s) but the eager
-            # export build added 336s on top (fetch 323s + xlsx 13s) — 99% of the wait,
-            # spent on a file most users never ask for. That is what made "Show Results"
-            # sit there with no grid. st.download_button accepts a callable and defers
-            # it to click time, running it off the event loop, so nothing else blocks.
-            from datetime import datetime as _kd_dt
-            _render_excel_js_download(
-                lambda: _build_full_keydevs_workbook(
-                    _tickers, _cats, _window, len(criteria),
-                    working_df=df, criteria_cols=_kd_criteria_cols),
-                f"KeyDev_Screening_{_kd_dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                label="Excel",
-            )
+        _hdr_slot = _hdr_col.empty()
+        _dl_slot = _dl_col.empty()
 
         # Make relative internal URLs absolute so LinkColumn works in any environment
         if "Source Reference" in events_df.columns:
@@ -5095,7 +5166,51 @@ def _render_keydevs_results():
             link_columns=["Source Reference"] if "Source Reference" in grid_df.columns else None,
             hidden_columns=_kd_hidden or None,
             enable_selection=True,
+            # The subtype list must cover the whole result, not the loaded page —
+            # the Excel export honours this filter, so a missing value would drop
+            # rows the user never deselected.
+            filter_domains={"Key Developments by Type": keydev_subtype_domain(_cats)},
         )
+
+        # ── Header + Excel, now that the grid's column filters are known ──
+        # The Excel button used to be rendered ABOVE the grid and re-queried the
+        # whole result set, so filtering the grid and hitting Excel still handed
+        # back every row — the filter was invisible to it. It is filled in here
+        # instead, and the filter is re-applied to the FULL fetched set (not just
+        # the loaded page), so the file holds every row the filter matches.
+        _kd_filter_model = grid_filter_model(_kd_resp)
+        _kd_filtered_rows = len(_kd_resp.data) if (_kd_filter_model and _kd_resp is not None
+                                                   and _kd_resp.data is not None) else 0
+
+        with _hdr_slot:
+            _hdr_txt = f"<strong>{_kd_total:,}</strong> key development events found"
+            if _kd_total > _shown:
+                _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
+                             f"· showing newest {_shown:,}</span>")
+            if _kd_filter_model:
+                _cols = ", ".join(sorted(_kd_filter_model))
+                _hdr_txt += (f"<br><span style='color:#C8102E;font-weight:500;font-size:13px'>"
+                             f"Filtered on {_cols} · {_kd_filtered_rows:,} of {_shown:,} shown rows"
+                             f" — Excel exports every matching row</span>")
+            st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
+
+        with _dl_slot:
+            # The workbook is built ON CLICK, never while the user waits for the
+            # grid: measured on STG for the 146k-event all-history screen, the grid
+            # needs 4.0s (count 1.1s + first 500-row page 2.8s) but an eager export
+            # build added 336s on top (fetch 323s + xlsx 13s) — 99% of the wait,
+            # spent on a file most users never ask for. st.download_button accepts a
+            # callable and defers it to click time, off the event loop.
+            from datetime import datetime as _kd_dt
+            _render_excel_js_download(
+                lambda: _build_full_keydevs_workbook(
+                    _tickers, _cats, _window, len(criteria),
+                    working_df=df, criteria_cols=_kd_criteria_cols,
+                    filter_model=_kd_filter_model),
+                f"KeyDev_Screening_{_kd_dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                label="Excel",
+            )
+
         # Load-more link — small red text (not a full-width button), placed ABOVE
         # the "Save as watchlist" panel. Keyset seek (no OFFSET scan); accumulates
         # in session, one page per click, every historical event stays reachable.
@@ -5247,7 +5362,8 @@ def _render_excel_js_download(excel_bytes, filename: str, label: str = "Excel") 
 
 
 def _build_full_keydevs_workbook(tickers, categories, window, criteria_count,
-                                 working_df=None, criteria_cols=None) -> bytes:
+                                 working_df=None, criteria_cols=None,
+                                 filter_model=None) -> bytes:
     """Assemble the COMPLETE key-dev export for one query. Called on click only.
 
     ``working_df`` / ``criteria_cols`` carry the same criterion columns the grid
@@ -5304,6 +5420,16 @@ def _build_full_keydevs_workbook(tickers, categories, window, criteria_count,
                                              after="Company Name(s)")
             full = full.drop(columns=["Ticker", "_CompanyName"])
         full = full.drop(columns=[c for c in ("_event_id",) if c in full.columns])
+        # The user's grid column filters, re-applied to the COMPLETE set. Done last
+        # so the criterion columns merged above (Industry, Country, …) are filterable
+        # too — those are added after the fetch and would otherwise be invisible here.
+        if filter_model:
+            before = len(full)
+            full = apply_grid_filter_model(full, filter_model)
+            log_warning(f"[KEYDEVS_EXPORT] grid filter applied: {before} → {len(full)} rows "
+                        f"(columns: {sorted(filter_model)})")
+            if full.empty:
+                return b""
         return _build_keydevs_excel_fast(full, criteria_count,
                                         title="Coresight Key Developments")
     except Exception as exc:
@@ -6136,8 +6262,15 @@ def _render_filterable_results_grid(
     hidden_columns: Optional[List[str]] = None,
     height: int = 520,
     enable_selection: bool = False,
+    filter_domains: Optional[Dict[str, List[str]]] = None,
 ):
     """Render screening results with AG Grid column-menu text filters.
+
+    ``filter_domains`` publishes the COMPLETE set of values for a column, for the
+    columns where we know it. Without it the header filter can only offer what the
+    loaded page contains — on a 500-row page of a 20,753-row result that hid two
+    real subtypes, and since the Excel export now honours the filter, an incomplete
+    domain quietly dropped those rows from the download.
 
     When enable_selection=True, adds a left checkbox column + header select-all and
     returns the AgGrid response (use .selected_rows); otherwise returns None.
@@ -6265,6 +6398,17 @@ def _render_filterable_results_grid(
         hidden_columns=list(hidden_cols),
     )
 
+    # Publish the full value domain for the columns we know it for. The filter
+    # unions it with whatever the loaded page holds, so a value can never become
+    # unlistable just because it is missing from the domain.
+    for _col, _values in (filter_domains or {}).items():
+        if not _values:
+            continue
+        for _cd in grid_options.get("columnDefs", []):
+            if _cd.get("field") == _col:
+                _cd.setdefault("filterParams", {})["values"] = list(_values)
+                break
+
     # Display-only: strip "($mm)" from headers (the unit is shown once in the
     # legend above). Underlying column keys — and the Excel export — keep the unit.
     for _cd in grid_options.get("columnDefs", []):
@@ -6353,6 +6497,62 @@ def _render_filterable_results_grid(
             custom_css=_selectable_css,
         )
     return grid_response if enable_selection else None
+
+
+def grid_filter_model(grid_resp) -> dict:
+    """The grid's active column filters as ``{column: {allowed display values}}``.
+
+    The header funnel is our own DistinctValuesFilter, whose ``getModel()`` returns
+    ``{"values": [...]}`` per filtered column and ``null`` when that column is not
+    filtered — so an empty dict here means "nothing is filtered", never "unknown".
+
+    AG Grid exposes it through the grid state; the shape has moved between versions
+    (``state.filter.filterModel`` vs a flat ``filterModel``), so both are accepted.
+    Anything unrecognised is skipped rather than guessed at — a filter we cannot
+    read must not silently narrow an export.
+    """
+    if grid_resp is None:
+        return {}
+    try:
+        state = grid_resp.grid_state or {}
+    except Exception:
+        return {}
+
+    raw = None
+    if isinstance(state, dict):
+        filt = state.get("filter")
+        if isinstance(filt, dict):
+            raw = filt.get("filterModel")
+        if raw is None:
+            raw = state.get("filterModel")
+    if not isinstance(raw, dict) or not raw:
+        return {}
+
+    model: dict = {}
+    for col, spec in raw.items():
+        values = spec.get("values") if isinstance(spec, dict) else None
+        if isinstance(values, list):
+            model[col] = {"" if v is None else str(v) for v in values}
+    return model
+
+
+def apply_grid_filter_model(df: pd.DataFrame, model: dict) -> pd.DataFrame:
+    """Re-apply the grid's column filters to a DataFrame, server-side.
+
+    The grid holds only the loaded page, so filtering there and exporting the
+    result would hand back a slice of 500 rows when the filter really matches
+    thousands. Running the same model over the FULL fetched set instead gives the
+    user every row their filter matches. Values are compared as the display
+    strings the grid itself filtered on, so the two can never disagree.
+    """
+    if df is None or df.empty or not model:
+        return df
+    keep = pd.Series(True, index=df.index)
+    for col, allowed in model.items():
+        if col not in df.columns:
+            continue
+        keep &= df[col].fillna("").astype(str).isin(allowed)
+    return df[keep].reset_index(drop=True)
 
 
 def _normalize_selected_rows(grid_resp) -> List[dict]:

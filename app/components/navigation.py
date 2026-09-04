@@ -702,6 +702,9 @@ def render_coresight_footer(full_width: bool = True, stick_to_bottom: bool = Tru
     if _can_access_mgmt(user_email):
         am_link_html = '\n          <a href="/access_management" target="_self">Access Management</a>'
 
+    msf_link_html = ('\n          <a href="/market_size_forecasting" target="_self">'
+                     'Market Size Forecasting</a>')
+
     # STEP 1: Build style configuration
     if full_width:
         outer_style = "width: 100vw; margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%); box-sizing: border-box;"
@@ -914,7 +917,7 @@ def render_coresight_footer(full_width: bool = True, stick_to_bottom: bool = Tru
         <div class="footer-nav-links">
           <a href="https://coresight.com/research/" target="_blank">Research Portal</a>
           <a href="https://coresight.com/retailistic-podcast/" target="_blank">The Retaili$tic Podcast</a>
-          <a href="https://coresight.com/coresight-ai-council/" target="_blank">AI Council</a>{staging_links_html}{fc_admin_link_html}{am_link_html}
+          <a href="https://coresight.com/coresight-ai-council/" target="_blank">AI Council</a>{msf_link_html}{staging_links_html}{fc_admin_link_html}{am_link_html}
         </div>
       </div>
 

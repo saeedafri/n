@@ -709,12 +709,7 @@ def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
                     WHEN 'Jul' THEN 7  WHEN 'Aug' THEN 8  WHEN 'Sep' THEN 9
                     WHEN 'Oct' THEN 10 WHEN 'Nov' THEN 11 WHEN 'Dec' THEN 12
                     ELSE 0 END AS fqe_month_num,
-                CASE LOWER(LEFT(TRIM(ov.fiscal_year_end), 3))
-                    WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
-                    WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
-                    WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
-                    WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
-                    ELSE -1 END AS fye_month_num
+                -1 AS fye_month_num
             FROM (
                 SELECT ticker, earnings_date, fiscal_quarter_ending, fetched_at_utc, id
                 FROM (
@@ -730,22 +725,26 @@ def _quarterly_report_dates_bulk() -> Dict[str, Dict[str, Any]]:
                 ) ranked
                 WHERE rn = 1
             ) lc
-            JOIN (
-                SELECT ticker, fiscal_year_end FROM (
-                    SELECT ticker, fiscal_year_end,
-                        ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY fetched_at_utc DESC) AS rn
-                    FROM coreiq_av_company_overview
-                    WHERE ticker IS NOT NULL AND fiscal_year_end IS NOT NULL AND fiscal_year_end <> ''
-                ) fye_ranked WHERE rn = 1
-            ) ov ON ov.ticker = lc.ticker
             """,
             {},
         )
+        # Fiscal year end comes from the FULL source chain, not an INNER JOIN on
+        # coreiq_av_company_overview. That join silently dropped every ticker whose
+        # vendor overview carried no fiscal_year_end — 81 companies on STG that the
+        # chain resolves fine — so BLD, SCVL and VSCO showed no quarterly reporting
+        # date despite having recent calendar rows.
+        #
+        # Unlike the annual helper, quarterly does not NEED the FYE to choose a date:
+        # every quarter is eligible, so the month only labels which fiscal quarter it
+        # is. A ticker with no FYE anywhere still gets its date, with fiscal_q unknown.
+        fye_months = {tk: _fye_name_to_month_num(name)
+                      for tk, name in _fiscal_year_end_bulk().items()}
+
         ticker_candidates: Dict[str, list] = defaultdict(list)
         for r in nasdaq_rows:
             tk = (r.get("ticker") or "").strip()
             fqe_m = r.get("fqe_month_num") or 0
-            fye_m = r.get("fye_month_num") or -1
+            fye_m = fye_months.get(tk) or -1
             if fqe_m == 0:
                 continue
             raw_dt = r.get("earnings_date")
@@ -1122,6 +1121,10 @@ def _get_quarterly_refresh_table_data() -> List[Dict[str, Any]]:
         rep = info["date"] if info else None
         reported_str = rep.strftime("%b %d, %Y") if rep else "—"
         fiscal_q = info.get("fiscal_q") if info else None
+        # 288 of 397 quarterly rows show a date that has already passed, because
+        # the calendar holds no newer announcement for that company. Same rule as
+        # annual: keep the factual date, but say which kind of date it is.
+        reported_already = bool(rep and rep < date.today())
 
         fp = row.get("fiscal_period_end")
         if fp and hasattr(fp, "strftime"):
@@ -1140,6 +1143,7 @@ def _get_quarterly_refresh_table_data() -> List[Dict[str, Any]]:
             "company_name": m.get("company_name", ""),
             "exchange": m.get("exchange", ""),
             "annual_reported_on": reported_str,   # generic "Reporting Date" column
+            "date_already_reported": reported_already,
             "fiscal_period": fiscal_period_str,
             "last_refresh": lr_str,
             "annual_reporting_quarter": f"Q{fiscal_q}" if fiscal_q else "",
@@ -1307,6 +1311,11 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
         ann = ann_info["date"] if ann_info else None
         # Verbatim from the calendar table — never estimated, never projected.
         annual_str = ann.strftime("%b %d, %Y") if ann else "—"
+        # 386 of 440 annual rows carry a date that has already passed (AMPL's is
+        # from 2012), because the calendar holds nothing newer for that company.
+        # The date stays — a factual old date beats a hidden one — but the row now
+        # says which kind it is, so "Reporting Date" cannot be read as "next one".
+        reported_already = bool(ann and ann < date.today())
 
         # Fiscal period from coreiq_model_forecasts.last_actual_date.
         # Show month + day only (no year): the column denotes the fiscal-year-END
@@ -1329,6 +1338,7 @@ def get_refresh_table_data(period_type: str = "annual") -> List[Dict[str, Any]]:
             "company_name": m.get("company_name", ""),
             "exchange": m.get("exchange", ""),
             "annual_reported_on": annual_str,
+            "date_already_reported": reported_already,
             "fiscal_period": fiscal_period_str,
             "last_refresh": lr_str,
             # ── debug / validation fields (not rendered in UI by default) ──

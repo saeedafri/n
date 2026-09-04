@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import io
+import math
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -289,6 +290,46 @@ def _font(size: int):
         return ImageFont.load_default()
 
 
+# Final chart pixel size, and the size the <img> is declared at: an image map's
+# coordinates address the image's own pixel grid, so a CSS-scaled image would put
+# every hotspot in the wrong place. 600px also fits Outlook's content column, so
+# Outlook will not shrink the image and break the map.
+CHART_W, CHART_H = 600, 260
+
+
+def _nice_axis(lo: float, hi: float) -> Tuple[float, float]:
+    """Axis bounds on round numbers, divisible by 4 so the gridlines read cleanly.
+
+    The old code padded by 15% and split the raw range four ways, which produced
+    axes labelled -1,343 / 1,758 / 4,859 / 7,960 / 11,061 — and a negative floor
+    on a revenue chart where nothing is negative. Revenue starts at zero unless
+    the data actually goes below it.
+    """
+    if hi <= lo:
+        hi = lo + abs(lo or 1.0) * 0.1
+    floor_at_zero = lo >= 0
+    lo_p = 0.0 if floor_at_zero else lo - (hi - lo) * 0.12
+    hi_p = hi + (hi - lo) * 0.12
+
+    span = hi_p - lo_p or 1.0
+    raw = span / 4.0
+    mag = 10 ** math.floor(math.log10(raw)) if raw > 0 else 1.0
+    # A coarse ladder (1, 2, 2.5, 5, 10) overshot badly: data peaking at 9,300
+    # jumped from a 2,500 step to 5,000 and drew an axis to 20,000. The extra
+    # rungs keep the top tick close to the data.
+    for mult in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10):
+        step = mult * mag
+        if step * 4 >= hi_p - lo_p:
+            break
+    lo_r = 0.0 if floor_at_zero else math.floor(lo_p / step) * step
+    hi_r = lo_r + step * 4
+    while hi_r < hi_p:                       # widen until the data fits
+        step *= 2
+        lo_r = 0.0 if floor_at_zero else math.floor(lo_p / step) * step
+        hi_r = lo_r + step * 4
+    return lo_r, hi_r
+
+
 def _scenario_bands(scenarios: List[Dict[str, Any]], period_type: str = "annual") -> Dict[str, List[Tuple[int, float]]]:
     out: Dict[str, List[Tuple[int, float]]] = {"scenario_baseline": [], "scenario_optimistic": [], "scenario_pessimistic": []}
     for r in scenarios:
@@ -300,13 +341,23 @@ def _scenario_bands(scenarios: List[Dict[str, Any]], period_type: str = "annual"
     return out
 
 
-def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
+def draw_trajectory_png(
+    detail: Dict[str, Any],
+    hotspots: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[bytes]:
     """Historical actuals → ensemble forecast (the final output), with the best
     individual model as a light reference and the scenario band around the forecast.
 
     X-axis is one continuous timeline: historical fiscal years then forecast years.
     Forecast lines anchor to the last actual point so history and forecast connect.
     Degrades gracefully — if actuals are missing it draws forecast-only (old behaviour).
+
+    Pass a list as ``hotspots`` to receive one dict per plotted point:
+    ``{"left": pct, "top": pct, "title": "Q2 FY2026 — Ensemble $1,176.1M"}``.
+    The HTML uses them to lay invisible tooltip targets over the image, so every
+    value is readable on hover even where the chart only prints a few labels.
+    Percentages, not pixels, because the image is displayed at 680px wide but
+    drawn at 900 — pixel coordinates would not line up.
     """
     from PIL import Image, ImageDraw
     actuals = detail.get("actuals") or []            # [(fy, v)] historical
@@ -328,23 +379,42 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
     idx = {y: i for i, y in enumerate(all_years)}
 
     ss = 2  # supersample for crisp downscale
-    W, H = 900 * ss, 360 * ss
-    ml, mr, mt, mb = 92 * ss, 60 * ss, 64 * ss, 52 * ss
+    # Draw at the size the <img> is declared at. An image map addresses the
+    # image's own pixel grid, so a CSS-scaled image puts every hotspot in the
+    # wrong place — which is exactly what happened when this stayed at 900 while
+    # the tag said 600.
+    W, H = CHART_W * ss, CHART_H * ss
+    ml, mr, mt, mb = 64 * ss, 42 * ss, 58 * ss, 46 * ss
     img = Image.new("RGB", (W, H), "white")
     d = ImageDraw.Draw(img, "RGBA")
     f_title, f_lab, f_val = _font(20 * ss), _font(14 * ss), _font(13 * ss)
 
-    all_vals = ([v for _, v in actuals] + [v for _, v in ens] + [v for _, v in best]
-                + list(opt.values()) + list(pes.values()) + list(base.values()))
-    vmin, vmax = min(all_vals), max(all_vals)
-    pad = (vmax - vmin) * 0.15 or (vmax * 0.1) or 1.0
-    vmin, vmax = vmin - pad, vmax + pad
+    # Scale on what the reader is actually here for — the history, the ensemble
+    # and the best model. The scenario band is context, and letting it drive the
+    # axis destroys the chart: BIRK's optimistic scenario compounds to $8.3
+    # TRILLION against real revenue of $169-731M, which pinned every real point
+    # to a flat line on the floor under an axis running to 10,000,000. A band
+    # that runs past the top is clipped instead, which also reads honestly as
+    # "this scenario is off the chart".
+    core_vals = [v for _, v in actuals] + [v for _, v in ens] + [v for _, v in best]
+    band_vals = list(opt.values()) + list(pes.values()) + list(base.values())
+    if not core_vals:
+        core_vals = band_vals
+    lo, hi = min(core_vals), max(core_vals)
+    # Let the band widen the view a little, but never beyond 1.5x the core range.
+    if band_vals:
+        room = (hi - lo) * 1.5 if hi > lo else abs(hi or 1.0)
+        hi = max(hi, min(max(band_vals), hi + room))
+        lo = min(lo, max(min(band_vals), lo - room))
+    vmin, vmax = _nice_axis(lo, hi)
     x0, x1, y0, y1 = ml, W - mr, mt, H - mb
 
     def px(y): return x0 + (x1 - x0) * (idx[y] / (len(all_years) - 1))
     def py(v): return y1 - (y1 - y0) * ((v - vmin) / (vmax - vmin))
 
-    d.text((ml, 12 * ss), f"{detail['ticker']} — actuals + ensemble forecast ($M)",
+    # ASCII only: when no TrueType font is found the Pillow fallback is a bitmap
+    # font with no em-dash glyph, which printed a tofu box in the title.
+    d.text((ml, 12 * ss), f"{detail['ticker']}  actuals + ensemble forecast ($M)",
            font=f_title, fill=_TEXT)
 
     # y gridlines + labels
@@ -353,12 +423,21 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
         gy = py(gv)
         d.line([(x0, gy), (x1, gy)], fill=_GRID, width=1 * ss)
         d.text((10 * ss, gy - 8 * ss), f"{gv:,.0f}", font=f_val, fill=_MUTED)
-    # x labels (thin out if the history is long so labels never overlap)
-    step = 1 if len(all_years) <= 9 else 2
+
+    # X labels. A quarterly chart carries up to ~103 periods on the same 900px
+    # canvas an annual chart uses for 12, so a fixed step of 2 smeared every label
+    # into an unreadable ribbon. Derive the step from the MEASURED label width and
+    # always keep the newest period, which is the one people look for.
+    period_type = detail.get("period_type", "annual")
+    labels = [_period_label(y, period_type) for y in all_years]
+    label_w = max(d.textlength(lab, font=f_lab) for lab in labels)
+    fits = max(2, int((x1 - x0) // (label_w + 14 * ss)))
+    step = max(1, -(-len(all_years) // fits))          # ceil division
     for i, y in enumerate(all_years):
-        if i % step and i != len(all_years) - 1:
+        # count back from the end so the last period is always drawn
+        if (len(all_years) - 1 - i) % step:
             continue
-        lab = _period_label(y, detail.get("period_type", "annual"))
+        lab = labels[i]
         w = d.textlength(lab, font=f_lab)
         d.text((px(y) - w / 2, y1 + 10 * ss), lab, font=f_lab, fill=_TEXT)
 
@@ -370,8 +449,10 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
 
     # scenario band (optimistic top ↔ pessimistic bottom) over forecast years
     if opt and pes and all(y in opt and y in pes for y in fc_years):
-        top = [(px(y), py(opt[y])) for y in fc_years]
-        bot = [(px(y), py(pes[y])) for y in fc_years]
+        def pyc(v):   # clip to the plot box — the band may run far off scale
+            return min(max(py(v), y0), y1)
+        top = [(px(y), pyc(opt[y])) for y in fc_years]
+        bot = [(px(y), pyc(pes[y])) for y in fc_years]
         if actuals:  # anchor the band to the last actual so it starts at history
             ay = act_years[-1]; av = dict(actuals)[ay]
             top = [(px(ay), py(av))] + top
@@ -381,7 +462,21 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
     anchor = (px(act_years[-1]), py(dict(actuals)[act_years[-1]])) if actuals else None
 
     # historical actuals — solid slate line + markers
+    # One tooltip target per PERIOD, not per point. 16px dots on the markers meant
+    # the cursor missed them almost everywhere; a full-height column means hovering
+    # anywhere over that period works, which is how the in-app chart behaves too.
+    _spot_vals: Dict[int, Dict[str, float]] = {}
+
+    def _record(key, kind, value):
+        # A scenario row can carry a period the axis does not have (the axis is
+        # built from actuals + ensemble + best model). It cannot be plotted, so
+        # it cannot be hovered either — skip rather than blow up in px().
+        if hotspots is not None and key in idx:
+            _spot_vals.setdefault(key, {})[kind] = value
+
     apts = [(px(y), py(v)) for y, v in actuals]
+    for (y, v) in actuals:
+        _record(y, "Actual", v)
     for a, b in zip(apts, apts[1:]):
         d.line([a, b], fill=_ACTUAL, width=3 * ss)
     for cx, cy in apts:
@@ -389,7 +484,12 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=_ACTUAL)
     if apts:  # label the last actual so the handoff value is explicit
         lx, lv = act_years[-1], dict(actuals)[act_years[-1]]
-        d.text((px(lx) - 20 * ss, py(lv) + 8 * ss), f"{lv:,.0f}", font=f_val, fill=_ACTUAL)
+        _t = f"{lv:,.0f}"
+        _tw = d.textlength(_t, font=f_val)
+        _tx, _ty = px(lx) - _tw / 2, py(lv) + 8 * ss
+        d.rectangle([_tx - 3 * ss, _ty - 2 * ss, _tx + _tw + 3 * ss, _ty + 15 * ss],
+                    fill=(255, 255, 255))
+        d.text((_tx, _ty), _t, font=f_val, fill=_ACTUAL)
 
     # best individual model — light thin reference line (anchored to last actual)
     bpts = ([anchor] if anchor else []) + [(px(y), py(v)) for y, v in best]
@@ -398,13 +498,55 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
 
     # ensemble forecast — the highlighted final output (anchored to last actual)
     epts_data = [(px(y), py(v), v) for y, v in ens]
+    for (y, v) in ens:
+        _record(y, "Ensemble", v)
+    for y, v in best:
+        _record(y, "Best model", v)
+    for y, v in opt.items():
+        _record(y, "Optimistic", v)
+    for y, v in pes.items():
+        _record(y, "Pessimistic", v)
     epts = ([anchor] if anchor else []) + [(x, y) for x, y, _ in epts_data]
     for a, b in zip(epts, epts[1:]):
         d.line([a, b], fill=_ACCENT, width=3 * ss)
-    for cx, cy, v in epts_data:
+    # Every point kept its own value label, so 20 forecast quarters overprinted
+    # into "1,17.2,221,4741,6141,706". Draw the markers for all of them but label
+    # only as many as fit — first and last always, evenly spaced in between.
+    if epts_data:
+        val_w = max(d.textlength(f"{v:,.0f}", font=f_val) for _, _, v in epts_data)
+        span = abs(epts_data[-1][0] - epts_data[0][0]) or (x1 - x0)
+        room = max(1, int(span // (val_w + 12 * ss)))
+        # On a dense seasonal chart the forecast is squeezed into the last fifth
+        # of the canvas and the line zigzags through wherever a label would sit.
+        # Below ~4 slots, show just the two numbers a reader actually wants:
+        # where the forecast starts and where it ends.
+        lab_step = (len(epts_data) if room < 4
+                    else max(1, -(-len(epts_data) // room)))
+    else:
+        lab_step = 1
+    last_i = len(epts_data) - 1
+    # Spacing alone is not enough on a seasonal series: the points zigzag, so an
+    # evenly spaced label can still land on its neighbour. Track what has been
+    # drawn and skip anything that would overlap.
+    drawn_spans: List[Tuple[float, float]] = []
+    for i, (cx, cy, v) in enumerate(epts_data):
         r = 5 * ss
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=_ACCENT)
-        d.text((cx - 20 * ss, cy - 26 * ss), f"{v:,.0f}", font=f_val, fill=_ACCENT)
+        if not (i == 0 or i == last_i or i % lab_step == 0):
+            continue
+        txt = f"{v:,.0f}"
+        tw = d.textlength(txt, font=f_val)
+        lx0, lx1 = cx - tw / 2, cx + tw / 2
+        if any(lx0 < px1 + 6 * ss and lx1 > px0 - 6 * ss for px0, px1 in drawn_spans):
+            continue
+        ly0 = cy - 26 * ss
+        # A seasonal line zigzags straight through wherever the label sits, so the
+        # digits were struck through by the series itself. Knock out the background
+        # first — the number has to win against its own chart.
+        d.rectangle([lx0 - 3 * ss, ly0 - 2 * ss, lx1 + 3 * ss, ly0 + 15 * ss],
+                    fill=(255, 255, 255))
+        d.text((lx0, ly0), txt, font=f_val, fill=_ACCENT)
+        drawn_spans.append((lx0, lx1))
 
     # legend — one row under the title so long model names never collide
     ly = 34 * ss
@@ -421,7 +563,35 @@ def draw_trajectory_png(detail: Dict[str, Any]) -> Optional[bytes]:
     _key(ml + 270 * ss, _BEST_LINE, "Best model", width=2)
     _key(ml + 390 * ss, None, "Scenario range", swatch=True)
 
-    img = img.resize((W // ss, H // ss), Image.LANCZOS)
+    if hotspots is not None and _spot_vals:
+        period_type = detail.get("period_type", "annual")
+        keys = sorted(_spot_vals)
+        # Tile the columns off the MIDPOINTS between neighbouring periods. Taking
+        # cx +/- half and rounding independently collapsed 97 of 292 columns to
+        # zero width on a dense series (103 quarters across 600px is under 6px
+        # each), leaving dead strips the cursor fell through.
+        centres = [px(k) / ss for k in keys]
+        edges = [max(0.0, centres[0] - (centres[1] - centres[0]) / 2
+                     if len(centres) > 1 else centres[0] - 4)]
+        for a, b in zip(centres, centres[1:]):
+            edges.append((a + b) / 2)
+        edges.append(min(float(CHART_W),
+                         centres[-1] + (centres[-1] - centres[-2]) / 2
+                         if len(centres) > 1 else centres[-1] + 4))
+        top = int(y0 // ss)
+        for i, key in enumerate(keys):
+            x1_px = int(round(edges[i]))
+            x2_px = max(x1_px + 1, int(round(edges[i + 1])))   # never zero-width
+            parts = [f"{k}: ${v:,.1f}M" for k, v in _spot_vals[key].items()]
+            hotspots.append({
+                "x1": x1_px,
+                "y1": top,
+                "x2": min(x2_px, CHART_W),
+                "y2": CHART_H,
+                "title": _period_label(key, period_type) + "  " + "  ".join(parts),
+            })
+
+    img = img.resize((CHART_W, CHART_H), Image.LANCZOS)
     buf = io.BytesIO(); img.save(buf, "PNG"); return buf.getvalue()
 
 
@@ -438,7 +608,7 @@ def draw_mape_png(detail: Dict[str, Any]) -> Optional[bytes]:
     img = Image.new("RGB", (W, H), "white")
     d = ImageDraw.Draw(img)
     f_title, f_lab = _font(20 * ss), _font(14 * ss)
-    d.text((28 * ss, 14 * ss), f"{detail['ticker']} — model accuracy (backtest MAPE, lower is better)",
+    d.text((28 * ss, 14 * ss), f"{detail['ticker']}  model accuracy (backtest MAPE, lower is better)",
            font=f_title, fill=_TEXT)
     x0 = 240 * ss
     x1 = W - 90 * ss
@@ -460,11 +630,17 @@ def draw_mape_png(detail: Dict[str, Any]) -> Optional[bytes]:
 
 
 def render_charts(detail: Dict[str, Any]) -> List[Tuple[str, bytes]]:
-    """Return [(chart_id, png_bytes)] for this ticker (skips charts with no data)."""
+    """Return [(chart_id, png_bytes)] for this ticker (skips charts with no data).
+
+    Trajectory hotspots are stashed on ``detail`` for the HTML builder, which runs
+    after this and has no other way to learn where the points landed.
+    """
     out: List[Tuple[str, bytes]] = []
     tk = detail["ticker"].replace(".", "_")
-    traj = draw_trajectory_png(detail)
+    spots: List[Dict[str, Any]] = []
+    traj = draw_trajectory_png(detail, hotspots=spots)
     if traj:
+        detail["_traj_hotspots"] = spots
         out.append((f"traj_{tk}", traj))
     mape = draw_mape_png(detail)
     if mape:
@@ -479,6 +655,44 @@ _TD = 'style="padding:6px 10px;border:1px solid #e2e2e2;"'
 _TH = 'style="padding:7px 10px;border:1px solid #e2e2e2;text-align:left;background:#f6f6f6;font-weight:600;"'
 # Emphasis cell for the ensemble (final-output) values.
 _TD_ENS = 'style="padding:6px 10px;border:1px solid #e2e2e2;background:#fdeef0;color:#C8102E;font-weight:700;"'
+
+
+def _trajectory_with_hotspots(src: str, spots: List[Dict[str, Any]],
+                              map_name: str = "traj") -> str:
+    """The trajectory image with a hover tooltip over every period.
+
+    An HTML image map, not positioned <span>s. Spans were the wrong tool: Gmail
+    and Outlook both strip `position:absolute`, so the tooltips only ever worked
+    when the raw file was opened in a browser — in a real inbox it was a flat
+    picture. `<map>`/`<area>` is one of the few interactive constructs email
+    clients do keep, and `title` on an <area> is the native tooltip.
+
+    Two things have to hold for the coordinates to land: the image is emitted at
+    its intrinsic size with width/height attributes (no CSS scaling), and the
+    areas are in that same pixel grid. Clients that drop image maps show a plain
+    chart, and every value is in the table directly below it either way.
+    """
+    img = (f'<img src="{src}" alt="forecast trajectory" '
+           f'width="{CHART_W}" height="{CHART_H}" '
+           f'usemap="#{map_name}" border="0" '
+           f'style="display:block;border:1px solid #eee;">')
+    if not spots:
+        return f'<div style="margin:10px 0;">{img}</div>'
+    areas = "".join(
+        f'<area shape="rect" '
+        f'coords="{sp["x1"]},{sp["y1"]},{sp["x2"]},{sp["y2"]}" '
+        f'title="{_html_attr(sp["title"])}" alt="{_html_attr(sp["title"])}" '
+        f'nohref="nohref">'
+        for sp in spots
+    )
+    return (f'<div style="margin:10px 0;">{img}'
+            f'<map name="{map_name}" id="{map_name}">{areas}</map></div>')
+
+
+def _html_attr(value: str) -> str:
+    """Escape for an HTML attribute — titles carry $ , and company text."""
+    return (str(value).replace("&", "&amp;").replace('"', "&quot;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
 
 
 def _forecast_table(detail: Dict[str, Any]) -> str:
@@ -654,7 +868,8 @@ def build_report_html(
         mape = chart_src.get(f"mape_{tk}")
         charts = ""
         if traj:
-            charts += f'<img src="{traj}" alt="forecast trajectory" style="width:100%;max-width:680px;display:block;margin:10px 0;border:1px solid #eee;">'
+            charts += _trajectory_with_hotspots(
+                traj, det.get("_traj_hotspots") or [], map_name=f"traj_{tk}")
         if mape:
             charts += f'<img src="{mape}" alt="model accuracy" style="width:100%;max-width:680px;display:block;margin:10px 0;border:1px solid #eee;">'
         sections += (
