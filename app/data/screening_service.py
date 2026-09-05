@@ -256,7 +256,23 @@ def get_base_company_universe() -> pd.DataFrame:
         return df
 
     from utils.materialize import materialized_or_build
-    _sources = [{"table": "coreiq_companies", "signal": None}]
+    # The freshness signal has to be a CHECKSUM, not the default COUNT(*).
+    # coreiq_companies has no updated_at, and re-classifying a company is an
+    # UPDATE — the row count does not move, so the materialized snapshot never
+    # rebuilt and served industries the DB had already changed: NVDA/AMD/INTC/QCOM
+    # were still 'Chips' here long after coreiq_companies said 'Semiconductors',
+    # and 13 such retired values (Grocery, Footwear, Hardware, Drug Stores…) were
+    # being filtered on. That matters most for the Industry criterion, whose
+    # dropdown reads the live table while this frame answered from the stale one,
+    # so those companies could not be found under their current industry at all.
+    # CRC32 over the columns materialized below moves whenever any of them does;
+    # 465 rows, ~40ms. SUM (not GROUP_CONCAT) because group_concat_max_len would
+    # truncate at 1 KB and silently stop noticing changes past that point.
+    _sources = [{
+        "table": "coreiq_companies",
+        "signal": ("SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight, "
+                   "country_of_incorporation, exchange, exchange_acronym, name_coresight)))"),
+    }]
     return materialized_or_build("screening_universe", _build_universe, _sources)
 
 
@@ -290,6 +306,20 @@ _AV_COMPANY_NAME = (
 )
 
 
+# One row per ticker from the non-SEC master. It is NOT unique on ticker — 77
+# tickers repeat, 66 of them under conflicting industries — so every JOIN to it
+# must go through this, or one event row becomes two. (coreiq_sec_companies_all
+# IS unique on ticker: verified 0 duplicates, so it is joined directly.)
+# MIN() makes the pick deterministic rather than whatever the optimiser returns.
+_NON_SEC_INDUSTRY_SUBQUERY = """
+            SELECT ticker, MIN(primary_industry_coresight) AS industry
+            FROM coreiq_non_sec_companies_all
+            WHERE ticker IS NOT NULL AND ticker <> ''
+              AND primary_industry_coresight IS NOT NULL
+            GROUP BY ticker
+"""
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_all_companies_universe() -> pd.DataFrame:
     """Base universe widened to EVERY ticker that has key-development events.
@@ -300,11 +330,27 @@ def get_all_companies_universe() -> pd.DataFrame:
     universe is the union: the Coresight rows verbatim, plus one row per extra
     event ticker with whatever name/exchange/country the fallback masters know.
 
-    `sector` stays Coresight-only on purpose. It is what the Industry criterion
-    filters on, and its dropdown is the curated 79-value Coresight taxonomy — so
-    a company outside coverage has no sector here and an Industry criterion
-    correctly narrows back to Coresight names. The results grid's own Industry
-    column is a separate, display-only label (see _keydev_industry_label).
+    `sector` is the curated Coresight classification and nothing else — it is what
+    the Industry criterion filters on, and its dropdown is the Coresight taxonomy.
+    It used to be blank for every event-only ticker, because coreiq_companies (450
+    rows) was the only table carrying `primary_industry_coresight`. That silently
+    made Industry a Coresight-coverage filter: picking "Food Retail" on a 4,374-event
+    screen returned 20 rows, having dropped every out-of-coverage company as
+    "no sector" rather than as "not Food Retail".
+
+    The data team has since tagged `primary_industry_coresight` on
+    coreiq_sec_companies_all (10,338 rows) and coreiq_non_sec_companies_all (9,828),
+    from that same curated list — verified: every value in both is already one of
+    the coreiq_companies values, so the existing dropdown needs no new options.
+    Reading them here covers 4,218 of the 4,392 event tickers (96.0%, up from 439)
+    and is the whole fix for Industry filtering: `apply_industry_criterion` is
+    unchanged and simply has a populated column to work with.
+
+    Precedence is coreiq_companies > SEC > non-SEC: `base` is concatenated verbatim
+    and extras are only built for tickers it does not already carry.
+    non-SEC is grouped to one row per ticker — 77 of its tickers repeat, 66 of them
+    under conflicting industries (NANO is both 'Software and Services' and
+    'Technology'), which would otherwise multiply this universe's rows.
     """
     base = get_base_company_universe()
     known = set(base["ticker"].dropna().astype(str))
@@ -312,11 +358,13 @@ def get_all_companies_universe() -> pd.DataFrame:
     query = f"""
         SELECT DISTINCT e.ticker,
                COALESCE({_AV_COMPANY_NAME}, sc.name) AS company_name,
+               COALESCE(sc.primary_industry_coresight, nsc.industry) AS sector,
                av.exchange,
                av.country
         FROM coreiq_company_events e
         LEFT JOIN coreiq_av_companies_all av  ON av.symbol = e.ticker
         LEFT JOIN coreiq_sec_companies_all sc ON sc.ticker = e.ticker
+        LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc ON nsc.ticker = e.ticker
     """
     try:
         rows = db_manager.execute_query_readonly(query) or []
@@ -328,7 +376,7 @@ def get_all_companies_universe() -> pd.DataFrame:
         {
             "ticker":       r["ticker"],
             "company_name": _format_company_name(r.get("company_name") or "") or r["ticker"],
-            "sector":       "",
+            "sector":       (r.get("sector") or "").strip(),
             "exchange":     r.get("exchange") or "",
             "country":      r.get("country") or "",
         }
@@ -340,8 +388,10 @@ def get_all_companies_universe() -> pd.DataFrame:
 
     out = pd.concat([base, pd.DataFrame(extra, columns=base.columns)],
                     ignore_index=True)
+    with_sector = int((out["sector"].fillna("").astype(str).str.strip() != "").sum())
     log_info(f"[SCREENING] all-companies universe: {len(base)} Coresight "
-             f"+ {len(extra)} event-only = {len(out)}")
+             f"+ {len(extra)} event-only = {len(out)} "
+             f"({with_sector} with a Coresight industry)")
     return out
 
 
@@ -4194,27 +4244,38 @@ def _keydev_ticker_clause(tickers: tuple, alias: str = "") -> str:
 
 
 # Name / industry fallback for tickers that are NOT in the Coresight master.
-# coreiq_company_events has no industry column of its own (only ticker), so the
-# label has always come from a JOIN. coreiq_companies covers the 447 Coresight
-# names; coreiq_av_companies_all (21,975 rows, symbol unique — verified 0 dupes,
-# so it cannot fan out rows) and coreiq_sec_companies_all cover the rest.
-# Measured on M&A all-history: 19,568/20,815 rows get a name, 18,987 an industry.
-_KEYDEV_COMPANY_JOINS = """
+# coreiq_company_events has no name or industry column of its own (only ticker),
+# so both labels come from a JOIN. coreiq_companies covers the 465 Coresight rows;
+# coreiq_av_companies_all (21,975 rows, symbol unique — verified 0 dupes, so it
+# cannot fan out rows) supplies names only, and the SEC / non-SEC masters supply
+# both. Measured on M&A all-history (21,346 joined rows): 19,568 get a name and
+# 21,067 (98.7%) get a Coresight industry.
+#
+# Only coreiq_companies can multiply a row here, and that is intentional and
+# pre-existing: JD / LULU / TSCO each name two real companies, so one event is
+# listed once per candidate and `_event_id` collapses it downstream (see
+# keep_working_set_companies). Verified the non-SEC join adds nothing to that —
+# 21,346 rows / 21,284 events both with and without it.
+_KEYDEV_COMPANY_JOINS = f"""
         LEFT JOIN coreiq_companies c         ON c.ticker = e.ticker
         LEFT JOIN coreiq_av_companies_all av ON av.symbol = e.ticker
         LEFT JOIN coreiq_sec_companies_all sc ON sc.ticker = e.ticker
+        LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc ON nsc.ticker = e.ticker
 """
 
-# Coresight values win; AV is the fallback and is tagged so nobody reads a
-# Yahoo/Morningstar label as a curated Coresight classification (AV also carries
-# junk industry values — 'NONE', 'SHELL COMPANIES').
-#
-
+# Industry is now Coresight-only, from all three tables that carry the curated
+# `primary_industry_coresight`. Alpha Vantage is deliberately NOT a fallback here:
+# it is a different (Yahoo/Morningstar) taxonomy, so mixing it in would put values
+# like 'BANKS - REGIONAL' into a column the user filters with the Coresight
+# dropdown — a filter whose options and whose data disagree. Measured on M&A
+# all-history: the three Coresight sources label 21,067 of 21,346 rows (98.7%),
+# and AV would recover only 84 of the 279 that stay blank.
 _KEYDEV_COMPANY_COLS = f"""
             COALESCE(c.name_coresight, {_AV_COMPANY_NAME}, sc.name) AS company_name,
             COALESCE(c.exchange_acronym, av.exchange)               AS exchange_acronym,
-            c.primary_industry_coresight                            AS industry,
-            NULLIF(av.industry, 'NONE')                             AS industry_fallback,
+            COALESCE(c.primary_industry_coresight,
+                     sc.primary_industry_coresight,
+                     nsc.industry)                                  AS industry,
             c.ticker IS NOT NULL                                    AS in_coresight_universe
 """
 
@@ -4474,6 +4535,39 @@ def keydev_subtype_domain(categories) -> List[str]:
     return sorted(values)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def keydev_industry_domain() -> List[str]:
+    """Every Coresight industry any master can label an event row with.
+
+    Published to the results grid so the Industry header filter offers the whole
+    taxonomy instead of only the industries on the loaded page — a 100-row page of
+    a 21,000-row result carries a fraction of the 69, and the Excel export honours
+    this filter, so a missing value would silently drop rows from the download.
+
+    Read from the DB rather than reusing `get_all_industries()` (which sees only
+    coreiq_companies) so that an industry the data team adds to the SEC or non-SEC
+    master appears here on its own. The three tables agree exactly today — all 69
+    values, no drift — so this is currently the same list, arrived at safely.
+    """
+    query = """
+        SELECT DISTINCT primary_industry_coresight AS v FROM coreiq_companies
+        WHERE primary_industry_coresight IS NOT NULL AND primary_industry_coresight <> ''
+        UNION SELECT DISTINCT primary_industry_coresight FROM coreiq_sec_companies_all
+        WHERE primary_industry_coresight IS NOT NULL AND primary_industry_coresight <> ''
+        UNION SELECT DISTINCT primary_industry_coresight FROM coreiq_non_sec_companies_all
+        WHERE primary_industry_coresight IS NOT NULL AND primary_industry_coresight <> ''
+        ORDER BY v
+    """
+    try:
+        rows = db_manager.execute_query_readonly(query) or []
+    except Exception as exc:
+        # Never block the grid on this: an empty domain just means "no domain to
+        # publish" and the filter falls back to the values the page loaded.
+        log_error(f"[SCREENING] keydev_industry_domain failed: {exc}")
+        return []
+    return [r["v"] for r in rows if r.get("v")]
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def get_keydevs_events_count(
     tickers: tuple,
@@ -4618,7 +4712,7 @@ def _keydevs_records_from_rows(rows: list) -> list:
         source_raw = r.get("source", "")
         source_display = _resolve_source_display(source_raw, r.get("source_detail") or "")
         situation = r.get("situation") or "—"
-        # industry = _keydev_industry_label(r)   # parked — see the records dict below
+        industry = _keydev_industry_label(r)
 
         source_ref = r.get("source_ref") or ""
         records.append({
@@ -4628,24 +4722,12 @@ def _keydevs_records_from_rows(rows: list) -> list:
             "Key Developments By Date": date_str,
             "Key Developments by Type": subtype,
             "Company Name(s)": company_display,
-            # ── Industry column: PARKED, pending a data-team decision ──────────
-            # Uncomment this ONE line to bring it back; everything behind it is
-            # still wired (the JOINs, `_keydev_industry_label`, the SQL columns).
-            #
-            # It works, but 8.7% of rows come back blank because the only source
-            # for a non-Coresight ticker is `coreiq_av_companies_all.industry`,
-            # and Alpha Vantage only filled that for ~6,543 of its 21,975 symbols.
-            # 458 of the blanks are retryable failures stamped
-            # `overview_last_error = 'Empty payload'` on the 2026-03-24 snapshot —
-            # Agilent, Electronic Arts, Hess, Ecopetrol, Interpublic among them.
-            # There is no fallback in the DB: `coreiq_av_company_overview` holds
-            # 457 tickers and recovers none of them.
-            #
-            # Waiting on: is the Alpha Vantage (Yahoo/Morningstar) taxonomy an
-            # acceptable source alongside the curated `primary_industry_coresight`?
-            # If yes, uncomment. If the answer is "only Coresight", drop the AV
-            # half of the COALESCE in `_KEYDEV_COMPANY_COLS` instead.
-            # "Industry": industry,
+            # Un-parked once the data team tagged primary_industry_coresight on the
+            # SEC and non-SEC masters. The question this column was parked on —
+            # "is the Alpha Vantage taxonomy acceptable alongside the curated one?"
+            # — is answered by not needing AV at all: the blank rate went 8.7% -> 1.3%
+            # on Coresight sources alone, so the AV half of the COALESCE was dropped.
+            "Industry": industry,
             "Key Development Headline": r.get("headline") or "",
             "Summary": situation,
             "Key Development Sources": source_display,
@@ -4655,24 +4737,23 @@ def _keydevs_records_from_rows(rows: list) -> list:
 
 
 def _keydev_industry_label(row: dict) -> str:
-    """Industry shown on an event row.
+    """Industry shown on an event row — the curated Coresight classification.
 
     coreiq_company_events carries no industry of its own, so this is the JOINed
-    label: the curated Coresight classification when the ticker is in the master,
-    otherwise the Alpha Vantage one title-cased to match. The AV values are a
-    different (Yahoo/Morningstar) taxonomy — Morningstar-style labels like
-    'BANKS - REGIONAL' against Coresight's curated 79 — so they are NOT marked
-    "(Primary)" and must never read as a Coresight classification. The AV industry
-    itself comes from the per-symbol overview fetch and is accurate even for reused
-    tickers; it is the LISTING name that goes stale there (see _AV_COMPANY_NAME).
+    `primary_industry_coresight` from coreiq_companies / the SEC master / the
+    non-SEC master, in that order of precedence (see _KEYDEV_COMPANY_COLS).
+
+    Returned verbatim, with no "(Primary)" suffix. The suffix used to mark which
+    of two taxonomies a value came from; now that there is only one, it would just
+    make every grid-filter option read "Healthcare (Primary)" while the Industry
+    criterion's dropdown offers "Healthcare" — two spellings of one value the user
+    is expected to filter by. Bare keeps the grid filter, the criterion dropdown
+    and the DB in exact agreement.
+
+    Blank (1.3% of rows) means no Coresight source knows this ticker. It is left
+    empty rather than backfilled from Alpha Vantage's different taxonomy.
     """
-    coresight = (row.get("industry") or "").strip()
-    if coresight:
-        return f"{coresight} (Primary)"
-    fallback = (row.get("industry_fallback") or "").strip()
-    if not fallback:
-        return ""
-    return fallback.title().replace(" And ", " & ")
+    return (row.get("industry") or "").strip()
 
 
 def fetch_all_keydevs_events(
@@ -5332,7 +5413,6 @@ def recompute_working_set(
     # without data simply show N/A. The "matched" count always equals the
     # universe size; each criterion's trace records how many had actual data.
     full_df = working_df.copy()
-    universe_tickers = frozenset(full_df["ticker"].values)
 
     def _run_criterion(crit, ctype_, src_df):
         """Dispatch a single criterion against src_df (full universe)."""
@@ -5377,7 +5457,22 @@ def recompute_working_set(
         ctype  = criterion.get("type", "?")
         t_crit = time.perf_counter()
 
-        # Criterion-level cache (keyed on criterion + constant universe)
+        # Criterion-level cache, keyed on criterion + THE INPUT IT ACTUALLY SEES.
+        #
+        # The input is `full_df`, and `full_df` NARROWS below as each filtering
+        # criterion (industry / geography) is applied — so a criterion's result
+        # depends on which filters ran before it. Keying on the constant
+        # `universe_tickers` could not tell those cases apart, and served a result
+        # computed under a filter that had since been removed:
+        #   add Key Devs -> Industry=Healthcare -> Geography=US   (8 companies)
+        #   remove Industry                                       (should widen to 396)
+        # still reported "Geographic Locations: United States — 8 companies matched",
+        # because Geography's 8-row result was cached under the same key. Every
+        # downstream count and the whole results grid inherited that stale narrowing.
+        #
+        # Keying on the tickers of the frame the criterion is about to run against
+        # makes the key change exactly when the upstream filters change, and stay
+        # identical when they do not — so the cache still hits on repeat renders.
         cache_key = None
         result_df = None
         dbg = None
@@ -5385,7 +5480,8 @@ def recompute_working_set(
             # keydev_details is part of the key: the same criterion yields a
             # different SHAPE in Key Devs mode (membership only, no detail column),
             # and a mode switch must never serve the wrong one from cache.
-            cache_key = (_criterion_fingerprint(criterion), universe_tickers,
+            cache_key = (_criterion_fingerprint(criterion),
+                         frozenset(full_df["ticker"].values),
                          keydev_details if ctype == "keydevs" else None)
             if cache_key in criterion_cache:
                 result_df, cached_dbg = criterion_cache[cache_key]

@@ -17,6 +17,7 @@ This iteration implements: Companies flow only.
   • Financial Information (Income Statement, Balance Sheet, Cash Flow)
 """
 
+import json
 import hashlib
 import os
 import re
@@ -129,6 +130,7 @@ if HAS_AGGRID:
         this.values = [];
         this.buildValues();
         this.render('');
+        this.syncSelAll();
         var self = this;
         search.addEventListener('input', function() { self.render(search.value); });
         selAll.addEventListener('change', function() { self.onSelectAll(selAll.checked); });
@@ -158,7 +160,8 @@ if HAS_AGGRID:
           return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
         });
         this.values = order;
-        this.selected = null;
+        var pre = (fp && fp.preselected) ? fp.preselected : null;
+        this.selected = pre ? pre.slice() : null;
       }
       render(term) {
         var self = this;
@@ -299,6 +302,7 @@ from data.screening_service import (
     get_keydevs_events_for_tickers,
     get_keydevs_events_count,
     keydev_subtype_domain,
+    keydev_industry_domain,
     fetch_all_keydevs_events,
     keydevs_period_display_label,
     resolve_keydevs_event_window,
@@ -688,10 +692,15 @@ def _all_companies_on() -> bool:
     Coresight companies hid 9,741 of the 21,034 M&A Activity events (46%). So this
     mode always screens the full ~4,350-ticker event universe — no opt-in.
 
-    Every other mode stays on the curated Coresight master, and so do the criteria
-    that describe a COMPANY rather than an event: Industry and Geography filter on
-    columns only Coresight rows carry, so adding either narrows a Key Devs screen
-    back to covered companies (verified: 4,374 -> 20 for "Food Retail").
+    Every other mode stays on the curated Coresight master.
+
+    Industry no longer narrows a Key Devs screen back to Coresight coverage: the
+    SEC and non-SEC masters now carry `primary_industry_coresight` too, so
+    get_all_companies_universe() gives 96% of event tickers a real industry and the
+    criterion filters the whole event universe rather than the 439 it can name.
+    Geography is still Coresight-only — its column comes from a different table
+    that has had no such backfill — so adding a Country criterion here does still
+    narrow to covered companies.
     """
     return st.session_state.get("scr_screen_for") == "Key Devs"
 
@@ -5053,13 +5062,18 @@ def _render_keydevs_results():
                         _count_result["error"] = exc
 
                 def _warm_subtype_domain():
-                    # Needed only when the grid renders, below — fetch it here so
-                    # its 462ms lands inside the page query's round-trip instead of
-                    # after it. Cached for an hour, so this costs nothing again.
+                    # Both grid filter domains are needed only when the grid renders,
+                    # below — fetch them here so their 462ms / 275ms land inside the
+                    # page query's round-trip instead of after it. Cached for an
+                    # hour, so this costs nothing again.
                     try:
                         keydev_subtype_domain(_cats)
                     except Exception:
                         pass                       # falls back to the loaded values
+                    try:
+                        keydev_industry_domain()
+                    except Exception:
+                        pass
 
                 _workers = [threading.Thread(target=_fetch_count, daemon=True),
                             threading.Thread(target=_warm_subtype_domain, daemon=True)]
@@ -5166,10 +5180,13 @@ def _render_keydevs_results():
             link_columns=["Source Reference"] if "Source Reference" in grid_df.columns else None,
             hidden_columns=_kd_hidden or None,
             enable_selection=True,
-            # The subtype list must cover the whole result, not the loaded page —
-            # the Excel export honours this filter, so a missing value would drop
-            # rows the user never deselected.
-            filter_domains={"Key Developments by Type": keydev_subtype_domain(_cats)},
+            # The subtype and industry lists must cover the whole result, not the
+            # loaded page — the Excel export honours these filters, so a missing
+            # value would drop rows the user never deselected.
+            filter_domains={
+                "Key Developments by Type": keydev_subtype_domain(_cats),
+                "Industry": keydev_industry_domain(),
+            },
         )
 
         # ── Header + Excel, now that the grid's column filters are known ──
@@ -5425,11 +5442,14 @@ def _build_full_keydevs_workbook(tickers, categories, window, criteria_count,
         # too — those are added after the fetch and would otherwise be invisible here.
         if filter_model:
             before = len(full)
-            full = apply_grid_filter_model(full, filter_model)
-            log_warning(f"[KEYDEVS_EXPORT] grid filter applied: {before} → {len(full)} rows "
+            filtered = apply_grid_filter_model(full, filter_model)
+            log_warning(f"[KEYDEVS_EXPORT] grid filter applied: {before} → {len(filtered)} rows "
                         f"(columns: {sorted(filter_model)})")
-            if full.empty:
-                return b""
+            # An empty result used to `return b""`, which downloads a 0-BYTE .xlsx —
+            # a file Excel refuses to open, indistinguishable from a crash. Keep the
+            # filtered frame (its columns survive), so the workbook below is a valid
+            # header-only file the user can actually open and read as "no matches".
+            full = filtered
         return _build_keydevs_excel_fast(full, criteria_count,
                                         title="Coresight Key Developments")
     except Exception as exc:
@@ -5688,8 +5708,8 @@ def _render_people_results():
             for _, row in company_df.iterrows()
         }
 
-        # Detect which criteria types are active (for column visibility)
-        has_industry  = any(c.get("type") == "industry"  for c in criteria)
+        # Detect which criteria types are active (for column visibility).
+        # Industry is no longer gated on its criterion — it is always shown.
         has_geography = any(c.get("type") == "geography" for c in criteria)
 
         # Fetch SEC and YF data in parallel
@@ -5738,8 +5758,9 @@ def _render_people_results():
                 "Total Pay":         None,
                 "_source":           "SEC",
             }
-            if has_industry:
-                rec["Sector"] = meta.get("sector", "")
+            # Always populate — the Industry label is wanted on every People row,
+            # not only when an Industry criterion happens to be active.
+            rec["Industry"] = meta.get("sector", "")
             if has_geography:
                 rec["Country"] = meta.get("country", "")
             records.append(rec)
@@ -5762,8 +5783,9 @@ def _render_people_results():
                 "Total Pay":         r.get("total_pay"),
                 "_source":           "YF",
             }
-            if has_industry:
-                rec["Sector"] = meta.get("sector", "")
+            # Always populate — the Industry label is wanted on every People row,
+            # not only when an Industry criterion happens to be active.
+            rec["Industry"] = meta.get("sector", "")
             if has_geography:
                 rec["Country"] = meta.get("country", "")
             records.append(rec)
@@ -5785,8 +5807,13 @@ def _render_people_results():
         _base_cols = ["Company", "Ticker", "Executive Name", "Position", "Year"]
         # Optional criteria-driven columns
         _criteria_cols = []
-        if has_industry and "Sector" in people_df.columns:
-            _criteria_cols.append("Sector")
+        # Industry is ALWAYS shown (it used to be called "Sector" and appear only
+        # with an active Industry criterion). The value is the curated
+        # `primary_industry_coresight` carried on the working set — the same field
+        # the Key Devs and Companies grids show — so one name means one thing in
+        # every mode. Country stays criterion-driven: it has no equivalent backfill.
+        if "Industry" in people_df.columns:
+            _criteria_cols.append("Industry")
         if has_geography and "Country" in people_df.columns:
             _criteria_cols.append("Country")
 
@@ -6433,6 +6460,33 @@ def _render_filterable_results_grid(
     # stay open. onGridReady wires a capture-phase mousedown listener on the parent
     # (and top) document — those events fire ONLY for clicks outside this iframe — and
     # calls the public api.hideColumnFilter(). Wired once per grid iframe.
+    #
+    # ── Keep the header filter after the user touches it ────────────────────
+    # `GridUpdateMode.FILTERING_CHANGED` round-trips every toggle to Streamlit, which
+    # REMOUNTS this component. The rebuilt DistinctValuesFilter used to start with
+    # `selected = null`, so the funnel forgot what the user had ticked the moment they
+    # ticked it — and the export then disagreed with the grid.
+    #
+    # The restore is threaded through the column's own `filterParams`, NOT through
+    # `api.setFilterModel` at onGridReady: AG Grid instantiates a column filter lazily
+    # (first time its menu opens), so at grid-ready there is no instance to drive, and
+    # that approach was measured doing nothing. `filterParams` is read by our own
+    # `buildValues()` whenever the filter IS created, so the timing problem disappears.
+    #
+    # The selection is read from the component's own incoming value
+    # (`st.session_state[key]`), which already holds the interaction that caused this
+    # rerun — so the filter is restored on the SAME run the user toggled it, not one
+    # run late.
+    _restore_model = _incoming_grid_filter(key) or st.session_state.get(f"_grid_filter_raw_{key}") or {}
+    if _restore_model:
+        for _cd in grid_options.get("columnDefs", []):
+            _spec = _restore_model.get(_cd.get("field"))
+            if isinstance(_spec, dict) and isinstance(_spec.get("values"), list):
+                _cd.setdefault("filterParams", {})["preselected"] = list(_spec["values"])
+
+    # Close an open column-menu when the user clicks anywhere in the parent
+    # (and top) document — those events fire ONLY for clicks outside this iframe — and
+    # calls the public api.hideColumnFilter(). Wired once per grid iframe.
     grid_options["onGridReady"] = JsCode(
         "function(params){try{"
         "if(window.__ag_outside_close_wired){return;}"
@@ -6496,7 +6550,70 @@ def _render_filterable_results_grid(
             theme="streamlit",
             custom_css=_selectable_css,
         )
+    # Remember the filter this grid is carrying so the next mount can restore it
+    # (see the onGridReady note above). Stored RAW — the AG Grid shape
+    # {col: {"values": [...]}} that `setFilterModel` expects — not the parsed
+    # {col: set} that `grid_filter_model` hands the export.
+    try:
+        st.session_state[f"_grid_filter_raw_{key}"] = _raw_grid_filter_model(grid_response)
+    except Exception:
+        pass
     return grid_response if enable_selection else None
+
+
+def _extract_raw_filter_model(state) -> dict:
+    """Pull ``{col: {"values": [...]}}`` out of an AG Grid state dict.
+
+    The shape has moved between AG Grid versions (``state.filter.filterModel`` vs a
+    flat ``filterModel``), so both are accepted, and anything we cannot read is
+    dropped rather than guessed at.
+    """
+    if not isinstance(state, dict):
+        return {}
+    raw = None
+    filt = state.get("filter")
+    if isinstance(filt, dict):
+        raw = filt.get("filterModel")
+    if raw is None:
+        raw = state.get("filterModel")
+    if not isinstance(raw, dict):
+        return {}
+    return {c: sp for c, sp in raw.items()
+            if isinstance(sp, dict) and isinstance(sp.get("values"), list)}
+
+
+def _incoming_grid_filter(key: str) -> dict:
+    """The filter the grid is arriving WITH, read before it is re-rendered.
+
+    Streamlit puts a component's current value in ``st.session_state[key]``, so on the
+    rerun caused by a filter toggle this already holds that toggle. Reading it here —
+    rather than from the AgGrid return value, which only lands after the grid has been
+    built — is what lets the selection be restored on the SAME run the user made it.
+    """
+    val = st.session_state.get(key)
+    if val is None:
+        return {}
+    state = None
+    try:
+        state = val.grid_state
+    except Exception:
+        if isinstance(val, dict):
+            state = val.get("grid_state") or val.get("gridState")
+    return _extract_raw_filter_model(state)
+
+
+def _raw_grid_filter_model(grid_resp) -> dict:
+    """The grid's filter model in AG Grid's OWN shape, read from the AgGrid return.
+
+    Stored after each render as the fallback restore source; `_incoming_grid_filter`
+    is preferred because it is available before the grid is rebuilt.
+    """
+    if grid_resp is None:
+        return {}
+    try:
+        return _extract_raw_filter_model(grid_resp.grid_state or {})
+    except Exception:
+        return {}
 
 
 def grid_filter_model(grid_resp) -> dict:
