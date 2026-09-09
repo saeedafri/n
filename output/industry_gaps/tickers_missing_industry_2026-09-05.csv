@@ -1,0 +1,181 @@
+ticker,company_name,exchange,asset_type,likely_type,event_rows,categories,latest_event
+IPG,Interpublic Group Of Cos. Inc,NYSE,Stock,COMPANY,12,1,2026-08-22
+MMC,,,,COMPANY,11,1,2026-07-10
+HES,Hess Corporation,NYSE,Stock,COMPANY,9,1,2026-08-10
+ANSS,Ansys Inc,NASDAQ,Stock,COMPANY,7,1,2026-08-26
+JNPR,Juniper Networks Inc,NYSE,Stock,COMPANY,5,1,2026-08-17
+AULT,Hyperscale Data Inc,NYSE MKT,Stock,COMPANY,3,1,2026-06-26
+BC/PC,Brunswick Corp,NYSE,Stock,COMPANY,3,1,2026-05-04
+BUJA,Bukit Jalil Global Acquisition 1 Ltd,NASDAQ,Stock,COMPANY,3,1,2026-06-19
+CSTA,Constellation Acquisition Corp I Class A,NYSE,Stock,COMPANY,3,1,2026-04-15
+K,Kellanova,NYSE,Stock,COMPANY,3,2,2026-07-23
+BSP,,,,COMPANY,2,2,2026-08-17
+CFB,Crossfirst Bankshares Inc,NASDAQ,Stock,COMPANY,2,1,2026-04-21
+DFNS,T3 Defense Inc - New,NASDAQ,Stock,COMPANY,2,1,2026-07-10
+DGLY,Digital Ally Inc (New),NASDAQ,Stock,COMPANY,2,1,2026-09-01
+EWAV,,,,COMPANY,2,1,2026-08-15
+FI,,,,COMPANY,2,2,2026-09-01
+FRTT,,,,COMPANY,2,1,2026-08-26
+GCGR,,,,COMPANY,2,1,2026-08-16
+INFQ,Infleqtion Inc,NYSE,Stock,COMPANY,2,1,2026-05-21
+KLG,WK Kellogg Company,NYSE,Stock,COMPANY,2,2,2026-08-14
+LTRY,MDI ENTERTAINMENT INC,NASDAQ,Stock,COMPANY,2,1,2026-07-20
+MRGR,PROSHARES MERGER ETF,BATS,ETF,COMPANY,2,1,2026-07-12
+PLCI,,,,COMPANY,2,1,2026-08-14
+SPCX,THE SPAC AND NEW ISSUE ETF,NASDAQ,ETF,COMPANY,2,1,2026-08-14
+ALPX,,,,COMPANY,1,1,2026-08-13
+AMAN,,,,COMPANY,1,1,2026-08-13
+ARCL,,,,COMPANY,1,1,2026-08-21
+ATIF,ATIF Holdings Ltd,NASDAQ,Stock,COMPANY,1,1,2026-04-28
+BGDE,,,,COMPANY,1,1,2026-09-01
+BOWN,Bowen Acquisition Corp,NASDAQ,Stock,COMPANY,1,1,2026-06-20
+BSCT,INVESCO BULLETSHARES 2029 CORPORATE BOND ETF,NASDAQ,ETF,COMPANY,1,1,2026-05-03
+BXBL,,,,COMPANY,1,1,2026-08-21
+CBRS,,,,COMPANY,1,1,2026-09-04
+CHEK,Check-Cap Ltd,NASDAQ,Stock,COMPANY,1,1,2026-05-17
+CNRG,SPDR S&P KENSHO CLEAN POWER ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-06-22
+CPTK,Crown PropTech Acquisitions - Class A,NYSE,Stock,COMPANY,1,1,2026-05-21
+CSD,INVESCO S&P SPIN-OFF ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-07-13
+CYAB,,,,COMPANY,1,1,2026-08-13
+DFGX,DIMENSIONAL INTERNATIONAL CORE FIXED INCOME ETF,NASDAQ,ETF,COMPANY,1,1,2026-04-13
+DFUV,DIMENSIONAL US MARKETWIDE VALUE ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-04-09
+DIHP,DIMENSIONAL INTERNATIONAL HIGH PROFITABILITY ETF,BATS,ETF,COMPANY,1,1,2026-04-05
+DYCQ,DT Cloud Acquisition Corp,NASDAQ,Stock,COMPANY,1,1,2026-04-09
+EROK,,,,COMPANY,1,1,2026-08-11
+FIXD,FIRST TRUST TCW OPPORTUNISTIC FIXED INCOME ETF,NASDAQ,ETF,COMPANY,1,1,2026-05-13
+FRBN,Forbion European Acquisition Corp - Class A,NASDAQ,Stock,COMPANY,1,1,2026-08-03
+GABF,GABELLI FINANCIAL SERVICES OPPORTUNITIES ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-07-14
+GRML,Greenland Mines Ltd,NASDAQ,Stock,COMPANY,1,1,2026-08-26
+GSRV,,,,COMPANY,1,1,2026-09-04
+GUAC,,,,COMPANY,1,1,2026-09-05
+HEXO,HEXO Corp,NASDAQ,Stock,COMPANY,1,1,2026-09-01
+HMST,HomeStreet Inc,NASDAQ,Stock,COMPANY,1,1,2026-05-09
+IBTJ,ISHARES IBONDS DEC 2029 TERM TREASURY ETF,NASDAQ,ETF,COMPANY,1,1,2026-04-19
+IDNA,ISHARES GENOMICS IMMUNOLOGY AND HEALTHCARE ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-08-21
+IEFA,ISHARES CORE MSCI EAFE ETF,BATS,ETF,COMPANY,1,1,2026-08-14
+INFQ-WS,Infleqtion Inc Warrants each whole warrant exercisable for one share of Common Stock at an exercise price of 11.50 per share,NYSE,Stock,COMPANY,1,1,2026-08-18
+INPX,XTI Aerospace Inc,NASDAQ,Stock,COMPANY,1,1,2026-04-16
+ISNR,,,,COMPANY,1,1,2026-08-12
+IVLU,ISHARES MSCI INTL VALUE FACTOR ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-04-05
+JETS,U.S. GLOBAL JETS ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-04-08
+JGLO,JPMORGAN GLOBAL SELECT EQUITY ETF,NASDAQ,ETF,COMPANY,1,1,2026-04-01
+JTEK,JPMORGAN U.S. TECH LEADERS ETF,NASDAQ,ETF,COMPANY,1,1,2026-04-01
+LILAP,,,,COMPANY,1,1,2026-08-21
+MAIR,,,,COMPANY,1,1,2026-08-21
+MARB,FIRST TRUST MERGER ARBITRAGE ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-05-03
+MEDS,,,,COMPANY,1,1,2026-08-20
+MGU,Macquarie Global Infrastructure Total Return Fund Inc,NYSE,ETF,COMPANY,1,1,2026-05-19
+MINM,FiEE Inc,NASDAQ,Stock,COMPANY,1,1,2026-05-22
+PBK,,,,COMPANY,1,1,2026-09-01
+PIRS,Pieris Pharmaceuticals Inc,NASDAQ,Stock,COMPANY,1,1,2026-05-17
+PLMI,Plum Acquisition Corp I - Class A,NASDAQ,Stock,COMPANY,1,1,2026-06-29
+PLUN,,,,COMPANY,1,1,2026-09-04
+PWCM,,,,COMPANY,1,1,2026-08-12
+QVCG,,,,COMPANY,1,1,2026-08-12
+RDFN,Redfin Corp,NASDAQ,Stock,COMPANY,1,1,2026-05-16
+REF,,,,COMPANY,1,1,2026-08-24
+RKLX,DEFIANCE DAILY TARGET 2X LONG RKLB ETF,NASDAQ,ETF,COMPANY,1,1,2026-08-24
+RONB,Baron First Principles,NYSE,Stock,COMPANY,1,1,2026-05-27
+RSPM,INVESCO S&P 500 EQUAL WEIGHT MATERIALS ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-04-12
+RVII,,,,COMPANY,1,1,2026-08-15
+SABRP,Sabre Corp,NASDAQ,Stock,COMPANY,1,1,2026-05-16
+SBIO,ALPS MEDICAL BREAKTHROUGHS ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-07-02
+SIX,Six Flags Entertainment Corp,NYSE,Stock,COMPANY,1,1,2026-08-05
+SOFA,Direxion Daily SOFI Bull 2X ETF,NASDAQ,Stock,COMPANY,1,1,2026-06-24
+SPTX,,,,COMPANY,1,1,2026-08-20
+STNC,HENNESSY SUSTAINABLE ETF,NASDAQ,ETF,COMPANY,1,1,2026-05-22
+TANNI,TravelCenters of America Inc,NASDAQ,Stock,COMPANY,1,1,2026-08-06
+TCBC,TC Bancshares Inc,NASDAQ,Stock,COMPANY,1,1,2026-05-01
+URTH,ISHARES MSCI WORLD ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-04-11
+VGFC,The Very Good Food Company Inc,NASDAQ,Stock,COMPANY,1,1,2026-04-25
+VMRK,,,,COMPANY,1,1,2026-09-01
+VRMMQ,Vroom Inc,NASDAQ,Stock,COMPANY,1,1,2026-03-27
+WENC,,,,COMPANY,1,1,2026-08-12
+XLAB,,,,COMPANY,1,1,2026-09-03
+XRPR,REXOsprey XRP ETF,BATS,ETF,COMPANY,1,1,2026-04-09
+XSMO,INVESCO S&P SMALLCAP MOMENTUM ETF,NYSE ARCA,ETF,COMPANY,1,1,2026-04-16
+TWO-P-B,Two Harbors Investment Corp,NYSE,Stock,Preferred share,23,1,2026-08-12
+ASB-P-E,Associated Banc-Corp,NYSE,Stock,Preferred share,5,1,2026-07-26
+FATAV,FAT Brands Inc,NASDAQ,Stock,When-issued / variant,5,2,2026-06-18
+ATLQR,,,,Rights,4,1,2026-09-02
+COWNL,Cowen Inc. 8.25 Senior Notes due 2021,NASDAQ,Stock,Bond / note,4,2,2026-05-23
+PALOU,Paloma Acquisition Corp I,NASDAQ,Stock,SPAC unit,4,1,2026-07-13
+QXO-P-B,,,,Preferred share,4,2,2026-09-05
+VOYA-P-B,Voya Financial Inc,NYSE,Stock,Preferred share,4,1,2026-08-12
+ACR-P-D,ACRES Commercial Realty Corp,NYSE,Stock,Preferred share,3,1,2026-05-06
+CSTA-U,Constellation Acquisition Corp I Units each consisting of one Class A ordinary share and onethird of one redeemable warrant,NYSE,Stock,SPAC unit,3,1,2026-07-29
+EQH-P-A,Equitable Holdings Inc,NYSE,Stock,Preferred share,3,1,2026-07-30
+GAB-P-H,Gabelli Equity Trust Inc,NYSE,Stock,Preferred share,3,2,2026-04-29
+ILMNV,Illumina Inc,NASDAQ,Stock,When-issued / variant,3,1,2026-07-10
+NSAIR,,,,Rights,3,1,2026-09-05
+SF-P-C,Stifel Financial Corp,NYSE,Stock,Preferred share,3,1,2026-07-02
+VSNTV,Versant Media Group Inc,NASDAQ,Stock,When-issued / variant,3,1,2026-08-04
+ALKSV,Alkermes plc,NASDAQ,Stock,When-issued / variant,2,1,2026-05-04
+BHR-P-D,Braemar Hotels & Resorts Inc,NYSE,Stock,Preferred share,2,2,2026-08-14
+BREZR,,,,Rights,2,1,2026-08-21
+CCXIW,Churchill Capital Corp XI Warrants,NASDAQ,Stock,Warrant,2,1,2026-07-29
+CHMI-P-A,Cherry Hill Mortgage Investment Corporation,NYSE,Stock,Preferred share,2,1,2026-08-11
+CMCSV,Comcast Corporation,NASDAQ,Stock,When-issued / variant,2,1,2026-08-19
+DYCQR,DT Cloud Acquisition Corp,NASDAQ,Stock,Rights,2,1,2026-07-12
+HONAV,,,,When-issued / variant,2,1,2026-08-24
+IACVV,IAC Inc,NASDAQ,Stock,When-issued / variant,2,2,2026-06-20
+LBYAV,Liberty Global Ltd,NASDAQ,Stock,When-issued / variant,2,1,2026-08-05
+MDV-P-A,Modiv Industrial Inc,NYSE,Stock,Preferred share,2,1,2026-08-10
+PBI-P-B,Pitney Bowes Inc,NYSE,Stock,Preferred share,2,1,2026-06-08
+REXR-P-C,Rexford Industrial Realty Inc,NYSE,Stock,Preferred share,2,1,2026-07-06
+SOLSV,Solstice Advanced Materials Inc,NASDAQ,Stock,When-issued / variant,2,1,2026-07-29
+SUNSV,Sunrise Realty Trust Inc,NASDAQ,Stock,When-issued / variant,2,1,2026-08-11
+THEOR,,,,Rights,2,1,2026-08-16
+TWO-P-C,Two Harbors Investment Corp,NYSE,Stock,Preferred share,2,1,2026-08-12
+UMH-P-D,UMH Properties Inc,NYSE,Stock,Preferred share,2,1,2026-05-12
+AACIW,Armada Acquisition Corp I - Warrants (13/08/2026),NASDAQ,Stock,Warrant,1,1,2026-08-13
+AACPR,,,,Rights,1,1,2026-08-13
+ACAAU,Averin Capital Acquisition Corp Units,NASDAQ,Stock,SPAC unit,1,1,2026-04-09
+ADOCR,Australian Oilseeds Holdings Ltd,NASDAQ,Stock,Rights,1,1,2026-07-02
+AHT-P-I,Ashford Hospitality Trust Inc,NYSE,Stock,Preferred share,1,1,2026-05-08
+ANABV,,,,When-issued / variant,1,1,2026-08-17
+ANGIV,Angi Inc,NASDAQ,Stock,When-issued / variant,1,1,2026-05-05
+ARES-P-B,,,,Preferred share,1,1,2026-08-24
+AUB-P-A,Atlantic Union Bankshares Corp,NYSE,Stock,Preferred share,1,1,2026-07-21
+AXS-P-E,Axis Capital Holdings Ltd,NYSE,Stock,Preferred share,1,1,2026-05-07
+BANC-P-F,Banc of California Inc,NYSE,Stock,Preferred share,1,1,2026-07-12
+BIP-P-A,Brookfield Infrastructure Partners L.P,NYSE,Stock,Preferred share,1,1,2026-05-04
+BIP-P-B,Brookfield Infrastructure Partners L.P,NYSE,Stock,Preferred share,1,1,2026-07-29
+BOWNR,Bowen Acquisition Corp,NASDAQ,Stock,Rights,1,1,2026-05-17
+CADE-P-A,Cadence Bank,NYSE,Stock,Preferred share,1,1,2026-07-26
+CHMI-P-B,Cherry Hill Mortgage Investment Corporation,NYSE,Stock,Preferred share,1,1,2026-08-11
+CLDT-P-A,Chatham Lodging Trust,NYSE,Stock,Preferred share,1,1,2026-08-11
+CMRE-P-B,Costamare Inc,NYSE,Stock,Preferred share,1,1,2026-05-04
+CMRE-P-C,Costamare Inc,NYSE,Stock,Preferred share,1,1,2026-04-13
+CMRE-P-D,Costamare Inc,NYSE,Stock,Preferred share,1,1,2026-06-02
+CTO-P-A,CTO Realty Growth Inc,NYSE,Stock,Preferred share,1,1,2026-07-28
+EHLDV,Euroholdings Ltd,NASDAQ,Stock,When-issued / variant,1,1,2026-05-21
+EPR-P-G,EPR Properties,NYSE,Stock,Preferred share,1,1,2026-06-22
+EWAVR,,,,Rights,1,1,2026-08-16
+FLG-P-A,New York Community Bancorp Inc,NYSE,Stock,Preferred share,1,1,2026-06-20
+FOUR-P-A,,,,Preferred share,1,1,2026-08-11
+GNL-P-A,Global Net Lease Inc,NYSE,Stock,Preferred share,1,1,2026-08-25
+GNL-P-B,Global Net Lease Inc,NYSE,Stock,Preferred share,1,1,2026-07-22
+GS-P-A,Goldman Sachs Group Inc,NYSE,Stock,Preferred share,1,1,2026-06-20
+HL-P-B,Hecla Mining Company,NYSE,Stock,Preferred share,1,1,2026-07-12
+IACQW,,,,Warrant,1,1,2026-08-12
+INXBV,Inhibrx Biosciences Inc,NASDAQ,Stock,When-issued / variant,1,1,2026-04-23
+IRHOR,Iron Horse Acquisitions II Corp Rights,NASDAQ,Stock,Rights,1,1,2026-06-14
+JABRR,,,,Rights,1,1,2026-08-21
+JPM-P-J,JPMorgan Chase & Company,NYSE,Stock,Preferred share,1,1,2026-05-21
+KTWOR,K2 Capital Acquisition Corporation Rights,NASDAQ,Stock,Rights,1,1,2026-08-23
+LBDKV,Liberty Broadband Corporation,NASDAQ,Stock,When-issued / variant,1,1,2026-08-20
+LOB-P-A,,,,Preferred share,1,1,2026-08-15
+LPCVW,Launchpad Cadenza Acquisition Corp I Warrant,NASDAQ,Stock,Warrant,1,1,2026-08-13
+MEVOW,M Evo Global Acquisition Corp II Warrants,NASDAQ,Stock,Warrant,1,1,2026-06-03
+NCOOR,,,,Rights,1,1,2026-08-09
+NSA-P-A,National Storage Affiliates Trust,NYSE,Stock,Preferred share,1,1,2026-04-11
+PEB-P-E,Pebblebrook Hotel Trust,NYSE,Stock,Preferred share,1,1,2026-03-29
+PNFP-P-A,Pinnacle Financial Partners Inc,NYSE,Stock,Preferred share,1,1,2026-05-07
+PNFP-P-B,Pinnacle Financial Partners Inc,NYSE,Stock,Preferred share,1,1,2026-06-09
+RITM-P-F,Rithm Capital Corporation,NYSE,Stock,Preferred share,1,1,2026-04-09
+SAMO-U,,,,SPAC unit,1,1,2026-08-24
+SNDKV,Sandisk Corporation,NASDAQ,Stock,When-issued / variant,1,1,2026-07-06
+SOUL-R,Soulpower Acquisition Corporation Rights each right entitling the holder to receive onetenth 110 of one Class A Ordinary Share,NYSE,Stock,Rights,1,1,2026-07-31
+SRG-P-A,Seritage Growth Properties,NYSE,Stock,Preferred share,1,1,2026-06-10
+TWNPV,Twin Hospitality Group Inc,NASDAQ,Stock,When-issued / variant,1,1,2026-06-04

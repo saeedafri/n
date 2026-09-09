@@ -31,7 +31,7 @@ import pandas as pd
 import streamlit as st
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from core.database import db_manager
 from data.screening_config import (
@@ -1684,6 +1684,12 @@ def apply_ratios_criterion(criterion: Dict, working_df: pd.DataFrame) -> Tuple[p
 _SEGMENT_BULK_CHUNK = 20
 _SEGMENT_VALUES_CACHE_CHUNK = 500
 _SEGMENT_OPTIONS_LIMIT = 500
+# Geographic members collapse to ~220 named places, so the raw read must not be
+# capped at the display size — a cap applied before collapsing would silently
+# drop places as filings add spellings. Business members (3.3K rows and growing)
+# stay capped: they have no collapse step, and fetching them all costs rows on a
+# packet-per-row database.
+_SEGMENT_GEO_ROWS_LIMIT = 1500
 _SEGMENT_OPTIONS_UI_TIMEOUT_S = 3.0
 _SEGMENT_STATEMENT_DB_TIMEOUT_MS = 15000
 ENABLE_SEGMENT_REPOSITORY_FALLBACK = False
@@ -2551,17 +2557,17 @@ def _metric_label_sql(metric_key: str) -> Tuple[str, Dict]:
 def _selected_segments_sql(selected_segments: List[str]) -> Tuple[str, Dict]:
     if not selected_segments:
         return "", {}
-    safe = []
+    keys = []
     params: Dict = {}
     for i, seg in enumerate(selected_segments):
         if not seg:
             continue
         key = f"segm{i}"
         params[key] = seg.lower().strip()
-        safe.append(f"LOWER(TRIM(f.dimension_member_label)) = :{key}")
-    if not safe:
+        keys.append(f":{key}")
+    if not keys:
         return "", {}
-    return " AND (" + " OR ".join(safe) + ") ", params
+    return f" AND LOWER(TRIM(f.dimension_member_label)) IN ({', '.join(keys)}) ", params
 
 
 _SEGMENT_MEMBER_TABLE_READY = False
@@ -2598,15 +2604,22 @@ def ensure_segment_member_cache_table() -> bool:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]]:
-    """Fast read of precomputed segment member options (<300ms target)."""
+def read_segment_member_labels_raw(segment_type: str) -> List[Tuple[str, int]]:
+    """One cached read of the raw (uncollapsed) member cache rows.
+
+    The dropdown and the geo group expansion both need these labels, so the
+    query is cached once and shared — selecting members costs no extra round
+    trip on top of rendering the dropdown.
+    """
     t0 = time.perf_counter()
+    row_limit = (_SEGMENT_GEO_ROWS_LIMIT if segment_type == "geographical"
+                 else _SEGMENT_OPTIONS_LIMIT)
     sql = f"""
         SELECT member_label, company_count
         FROM {SEGMENT_MEMBER_CACHE_TABLE}
         WHERE segment_type = :segment_type
         ORDER BY company_count DESC, member_label ASC
-        LIMIT {_SEGMENT_OPTIONS_LIMIT}
+        LIMIT {row_limit}
     """
     try:
         rows = db_manager.execute_query_readonly(sql, {"segment_type": segment_type}) or []
@@ -2623,7 +2636,7 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
                 WHERE segment_type = :segment_type
                 GROUP BY member_label
                 ORDER BY company_count DESC, member_label ASC
-                LIMIT {_SEGMENT_OPTIONS_LIMIT}
+                LIMIT {row_limit}
                 """,
                 {"segment_type": segment_type},
             ) or []
@@ -2635,68 +2648,62 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
             source = "values_cache"
         except Exception as exc:
             log_error(f"[SCREENING] segment member values-cache fallback failed: {exc}")
-    if segment_type == "geographical":
-        out = _collapse_geo_canonical_options(out)
-    ms = (time.perf_counter() - t0) * 1000
     log_timing(
         "SCREENING_SEGMENT_OPTIONS_CACHE_HIT" if out else "SCREENING_SEGMENT_OPTIONS_CACHE_MISS",
-        ms,
-        f"type={segment_type} members={len(out)} source={source}",
+        (time.perf_counter() - t0) * 1000,
+        f"type={segment_type} raw_members={len(out)} source={source}",
     )
+    return out
+
+
+def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]]:
+    """Segment member dropdown options — geo labels collapsed to one per place."""
+    out = read_segment_member_labels_raw(segment_type)
+    if segment_type == "geographical":
+        out = _collapse_geo_canonical_options(out)
     return out
 
 
 def _collapse_geo_canonical_options(
     raw_opts: List[Tuple[str, int]],
 ) -> List[Tuple[str, int]]:
-    """Collapse raw US alias labels under canonical 'United States' in the geo dropdown.
+    """Collapse the geo dropdown to one option per real place.
 
-    Suppresses raw variants (U.S., UNITED STATES, United State, etc.) so users see
-    one clean "United States" option.  Also removes pension/plan contamination labels.
-    Company counts from suppressed aliases are folded into the canonical count
-    (may slightly over-count since companies rarely use multiple aliases in the same FY).
+    Every raw spelling of a place ("EMEA", "Europe, Middle East and Africa",
+    'Europe/Middle East/Africa') becomes the single business-approved name from
+    ``geo_label_map.json``; labels the business team ruled are not geographies
+    (business segments, facility descriptions, tax and pension categories,
+    scraper artifacts) drop out.  Pure dict work over at most a few thousand
+    cached rows, so this costs microseconds on both cold and warm loads.
+
+    Company counts are summed across the group.  That can over-count slightly
+    when one filer drifts between two spellings across years, which is the same
+    trade the per-alias counts already made and is not worth a second query.
     """
-    from data.segment_aliases import (
-        GEO_ALIAS_TO_CANONICAL,
-        GEO_CANONICAL_GROUPS,
-        GEO_KNOWN_BIZ_LABELS,
-        GEO_PENSION_SKIP_LABELS,
-        GEO_SUPPRESSED_DROPDOWN_LABELS,
-    )
-    # Accumulate company counts from suppressed raw aliases into their canonical
-    canonical_extra: Dict[str, int] = {}
-    for label, cnt in raw_opts:
-        norm = label.lower().strip()
-        if norm in GEO_PENSION_SKIP_LABELS or norm in GEO_KNOWN_BIZ_LABELS:
-            continue
-        canon = GEO_ALIAS_TO_CANONICAL.get(norm)
-        if canon and label in GEO_SUPPRESSED_DROPDOWN_LABELS:
-            canonical_extra[canon] = canonical_extra.get(canon, 0) + cnt
+    from data.segment_aliases import build_geo_label_groups
 
-    result: List[Tuple[str, int]] = []
-    seen_canonicals: Set[str] = set()
-    for label, cnt in raw_opts:
-        norm = label.lower().strip()
-        if norm in GEO_PENSION_SKIP_LABELS or norm in GEO_KNOWN_BIZ_LABELS:
-            continue
-        if label in GEO_SUPPRESSED_DROPDOWN_LABELS:
-            continue
-        canon = GEO_ALIAS_TO_CANONICAL.get(norm)
-        if canon and canon in GEO_CANONICAL_GROUPS:
-            if canon in seen_canonicals:
-                continue
-            seen_canonicals.add(canon)
-            result.append((canon, cnt + canonical_extra.get(canon, 0)))
-        else:
-            result.append((label, cnt))
-
-    # Ensure canonical labels are present even if only raw aliases were in DB
-    for canon, extra in canonical_extra.items():
-        if canon not in seen_canonicals:
-            result.append((canon, extra))
-
+    counts = {label: cnt for label, cnt in raw_opts if label}
+    groups = build_geo_label_groups(counts)
+    result = [
+        (display, sum(counts.get(member, 0) for member in members))
+        for display, members in groups.items()
+    ]
     result.sort(key=lambda x: (-x[1], x[0].lower()))
     return result
+
+
+def geo_label_groups() -> Dict[str, List[str]]:
+    """``{display name: [raw member labels]}`` for the geo segment cache.
+
+    Built from the cached member-cache read, so it costs no extra query. Used to
+    expand a chosen display name back to every raw spelling SQL must match, and
+    to label results with the name the dropdown showed.
+    """
+    from data.segment_aliases import build_geo_label_groups
+
+    return build_geo_label_groups(
+        label for label, _cnt in read_segment_member_labels_raw("geographical")
+    )
 
 
 _SEGMENT_VALUES_TABLE_READY = False
@@ -2933,15 +2940,17 @@ def read_segment_values_cache(
     member_clause = ""
     member_params: Dict = {}
     if selected_segments:
-        parts = []
+        # One IN list, not one OR per label: a single place now expands to every
+        # raw spelling filers used for it (United States has 8, EMEA 12).
+        keys = []
         for i, seg in enumerate(selected_segments):
             if not seg:
                 continue
             key = f"cm{i}"
             member_params[key] = seg.lower().strip()
-            parts.append(f"LOWER(TRIM(member_label)) = :{key}")
-        if parts:
-            member_clause = " AND (" + " OR ".join(parts) + ") "
+            keys.append(f":{key}")
+        if keys:
+            member_clause = f" AND LOWER(TRIM(member_label)) IN ({', '.join(keys)}) "
 
     for i in range(0, len(tickers), _SEGMENT_VALUES_CACHE_CHUNK):
         chunk = tickers[i : i + _SEGMENT_VALUES_CACHE_CHUNK]
@@ -2996,34 +3005,59 @@ def read_segment_values_cache(
 
 def _build_ticker_segment_values_from_cache(
     rows: List[Dict],
+    resolve_display=None,
 ) -> Dict[str, Dict[str, float]]:
+    """``{ticker: {display label: value}}`` from cached rows.
+
+    When two raw spellings of one place collapse to the same display name, the
+    newest fiscal year wins. Uber renamed "United States And Canada" to
+    'United States and Canada ("US&CAN")', so each spelling has its own latest
+    year (2023 and 2025) — picking the larger value instead of the newer year
+    would have shown a two-year-old number for any segment that shrank.
+    """
     out: Dict[str, Dict[str, float]] = {}
+    chosen_year: Dict[Tuple[str, str], Optional[int]] = {}
     for row in rows:
         ticker = row.get("ticker")
         member = row.get("member_label")
         val = row.get("value_mm")
         if not ticker or not member or val is None:
             continue
-        out.setdefault(ticker, {})[member] = float(val)
+        label = resolve_display(member) if resolve_display else member
+        value = float(val)
+        year = row.get("report_fiscal_year")
+        key = (ticker, label)
+        if key in chosen_year:
+            prior = chosen_year[key]
+            if year is None or (prior is not None and year < prior):
+                continue
+            if year == prior and value <= out[ticker][label]:
+                continue
+        chosen_year[key] = year
+        out.setdefault(ticker, {})[label] = value
     return out
 
 
 def _canonicalize_geo_ticker_values(
     ticker_values: Dict[str, Dict[str, float]],
+    resolve_display=None,
 ) -> Dict[str, Dict[str, float]]:
-    """Replace raw alias member labels with canonical labels and drop pension labels.
+    """Label fetched values with the name the dropdown showed, dropping non-places.
 
-    Applied after fetching from cache/v4 for geographical segment screening.
-    If multiple raw aliases resolve to the same canonical (rare), takes the max value.
+    Values already collapsed by ``_build_ticker_segment_values_from_cache`` pass
+    through unchanged; this also covers the live-SQL path, where two spellings of
+    one place resolve to the larger value because no year is available there.
     """
-    from data.segment_aliases import canonicalize_geo_label, is_geo_pension_label
+    from data.segment_aliases import is_geo_excluded_label
+
+    resolve = resolve_display or _geo_display_resolver()
     result: Dict[str, Dict[str, float]] = {}
     for ticker, member_values in ticker_values.items():
         canonical_mv: Dict[str, float] = {}
         for label, val in member_values.items():
-            if is_geo_pension_label(label):
+            if is_geo_excluded_label(label):
                 continue
-            canon = canonicalize_geo_label(label)
+            canon = resolve(label)
             if canon in canonical_mv:
                 canonical_mv[canon] = max(canonical_mv[canon], val)
             else:
@@ -3031,6 +3065,31 @@ def _canonicalize_geo_ticker_values(
         if canonical_mv:
             result[ticker] = canonical_mv
     return result
+
+
+def _geo_display_resolver(extra_labels: Iterable[str] = ()):
+    """Raw geo label → the display name the dropdown shows.
+
+    The member cache alone is not the full label universe: the case-insensitive
+    ``GROUP BY`` that builds it keeps one arbitrary spelling per place, so Uber's
+    "United States And Canada" is missing while "United States and Canada" is
+    present.  Grouping the labels just fetched alongside the cache closes that
+    hole, so a value can never be labelled with a raw spelling the dropdown
+    does not offer.
+    """
+    from data.segment_aliases import build_geo_label_groups, canonicalize_geo_label
+
+    # De-duplicate first: an unfiltered fetch hands over ~19K rows carrying only
+    # ~300 distinct labels, and grouping normalises text per label — building
+    # from the rows verbatim cost 700ms, from the distinct set it costs ~12ms.
+    labels = {label for label, _cnt in read_segment_member_labels_raw("geographical")}
+    labels.update(extra_labels)
+    display_of = {
+        raw: display
+        for display, members in build_geo_label_groups(labels).items()
+        for raw in members
+    }
+    return lambda label: display_of.get(label) or canonicalize_geo_label(label)
 
 
 def _normalize_segment_options_rows(
@@ -3056,7 +3115,10 @@ def _normalize_segment_options_rows(
                 continue
         cnt = int(row.get("company_count") or row.get("cnt") or 0)
         counts[member] = counts.get(member, 0) + cnt
-    return sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))[:_SEGMENT_OPTIONS_LIMIT]
+    out = sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))
+    if want_geo:
+        out = _collapse_geo_canonical_options(out)
+    return out[:_SEGMENT_OPTIONS_LIMIT]
 
 
 def _fetch_segment_options_aggregated_sql(
@@ -3375,12 +3437,16 @@ def apply_segment_statement_criterion(
     # canonicals to all raw aliases for DB matching.
     query_segments = selected_segments
     if segment_type == "geographical" and selected_segments:
-        from data.segment_aliases import canonicalize_geo_label, expand_geo_canonical_segments
-        normalized = list(dict.fromkeys(
+        from data.segment_aliases import canonicalize_geo_label
+        groups = geo_label_groups()
+        selected_segments = list(dict.fromkeys(
             canonicalize_geo_label(s) for s in selected_segments
         ))
-        selected_segments = normalized
-        query_segments = expand_geo_canonical_segments(normalized)
+        query_segments = list(dict.fromkeys(
+            raw
+            for display in selected_segments
+            for raw in (groups.get(display) or [display])
+        ))
 
     log_info(
         f"[TIMING] SCREENING_SEGMENT_STATEMENT_START | stmt={stmt} "
@@ -3446,12 +3512,20 @@ def apply_segment_statement_criterion(
     )
 
     t_build = time.perf_counter()
+    geo_display = None
+    if segment_type == "geographical":
+        # Built from the labels actually fetched, so a spelling the member cache
+        # dropped still gets the dropdown's name.
+        geo_display = _geo_display_resolver(
+            row.get("member_label") or row.get("dimension_member_label") or ""
+            for row in rows
+        )
     if data_source == "values_cache":
-        ticker_values = _build_ticker_segment_values_from_cache(rows)
+        ticker_values = _build_ticker_segment_values_from_cache(rows, geo_display)
     else:
         ticker_values = _build_ticker_segment_values(rows, segment_type, metric_key, year_sel)
     if segment_type == "geographical":
-        ticker_values = _canonicalize_geo_ticker_values(ticker_values)
+        ticker_values = _canonicalize_geo_ticker_values(ticker_values, geo_display)
     ms_build = (time.perf_counter() - t_build) * 1000
     log_timing(
         "SEGMENT_BUILD_VALUES",

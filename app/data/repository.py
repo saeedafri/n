@@ -10082,7 +10082,7 @@ class SegmentDataRepository:
         quarterly builder and the screening cache, so member routing cannot drift
         between the Segments tab and the screener."""
         from utils.constants import SEGMENT_SKIP_MEMBERS, SEGMENT_RECONCILIATION_MEMBERS
-        from data.segment_aliases import canonicalize_geo_label
+        from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
 
         member_raw = row.get('dimension_member_label') or ''
         forced_section = None
@@ -10126,8 +10126,17 @@ class SegmentDataRepository:
             heading = SegmentDataRepository._get_heading(row.get('full_dimension_label') or '')
             section = SegmentDataRepository._classify_heading(heading)
         # Canonicalise geographic labels so filing-to-filing drift collapses to one
-        # member ("United States Operations" → "United States").
+        # member ("United States Operations" → "United States"), and drop the ones
+        # the business team ruled are not places at all — facility descriptions
+        # ("Site in Plano, Texas"), tax and pension categories ("U.S. federal",
+        # "U.S. pensions"), product lines ("City Living") and scraper artifacts
+        # reach the geographic axis but are not geographies. Dropping them here
+        # rather than in the screener keeps this the single source of truth: the
+        # Segments tab and the screening cache are built from this one function,
+        # so they cannot disagree about what counts as a geography.
         if section == "geo":
+            if is_geo_excluded_label(member):
+                return None
             member = canonicalize_geo_label(member)
         return section, member
 
@@ -10162,8 +10171,8 @@ class SegmentDataRepository:
         return re.sub(r'segments?$', '', key) or key
 
     @staticmethod
-    def _member_display_map(rows, geo_member_set: set) -> Dict[str, str]:
-        """key → the label to show for it.
+    def _member_display_map(rows, geo_member_set: set) -> Dict[Tuple[str, str], str]:
+        """(section, key) → the label to show for it.
 
         A trailing "Segment" or full stop is an artifact of how the element was
         named rather than part of the geography, so a spelling without one wins —
@@ -10172,27 +10181,63 @@ class SegmentDataRepository:
         Between equally clean spellings the most recent filing wins, so a genuinely
         renamed segment reads the way its latest 10-K names it; the shorter
         spelling settles anything still tied.
+
+        Keyed per SECTION, because only geographic members carry the business
+        team's canonical names: Philip Morris tags "Middle East & Africa" on a
+        business axis and "Middle East and Africa" on the geographic one, and a
+        map shared across sections let the business spelling (more rows, later
+        filing) win and undo the geographic canonicalisation.
         """
-        chosen: Dict[str, Tuple[bool, str, int, str]] = {}
+        chosen: Dict[Tuple[str, str], Tuple[bool, str, int, str]] = {}
         for row in rows:
             if row.get('_is_ndim'):
                 continue
             classified = SegmentDataRepository._classify_member(row, geo_member_set)
             if classified is None:
                 continue
-            _, member = classified
-            key = SegmentDataRepository._member_key(member)
+            section, member = classified
+            key = (section, SegmentDataRepository._member_key(member))
             filing_date = row.get('filing_date')
             filed = filing_date.isoformat()[:10] if hasattr(filing_date, 'isoformat') else ''
             trimmed = member.strip()
-            # A full stop after a whole word is stray punctuation ("Other.",
-            # "Japan."); after a single letter it is an abbreviation and part of the
-            # name ("Outside U.S."), so only the first kind counts as an artifact.
-            clean = not re.search(r'(\bsegments?$|[A-Za-z]{2,}\.$)', trimmed, re.IGNORECASE)
+            clean = not SegmentDataRepository._MEMBER_NAME_ARTIFACT.search(trimmed)
             rank = (clean, filed, -len(trimmed), member)
             if key not in chosen or rank > chosen[key]:
                 chosen[key] = rank
-        return {key: member for key, (_, _, _, member) in chosen.items()}
+        # Strip the artifact from a winner that has one. Ranking alone only helps
+        # when the same section also filed a clean spelling; a segment filed only
+        # as "Europe Segment" or "Japan." kept the artifact, and it used to be
+        # hidden by borrowing the other section's spelling — which is exactly the
+        # cross-section leak this map now prevents.
+        return {key: SegmentDataRepository._strip_member_artifact(member)
+                for key, (_, _, _, member) in chosen.items()}
+
+    # A trailing "Segment"/"Segments", ":" or a full stop after a whole word is an
+    # artifact of the XBRL element name, not part of the segment's name. After a
+    # single letter the stop is an abbreviation and stays ("Outside U.S.").
+    _MEMBER_NAME_ARTIFACT = re.compile(r'(\bsegments?$|[A-Za-z]{2,}\.$|:$)', re.IGNORECASE)
+    # Only the unambiguous artifacts are stripped. A trailing stop is NOT: it is
+    # an artifact in "Japan." but the abbreviation itself in "Outside U.S." and
+    # "Eastern Mediterranean Ops.", and no rule separates those reliably. The
+    # ranking above still prefers a stop-free spelling when the same section
+    # filed one.
+    _ARTIFACT_STRIPPERS = (
+        re.compile(r'\s*\bsegments?$', re.IGNORECASE),   # "Europe Segment"
+        re.compile(r'\s*:$'),                            # "Europe:"
+    )
+
+    @staticmethod
+    def _strip_member_artifact(member: str) -> str:
+        text = member.strip()
+        for _ in range(3):                # "Europe Segment:" needs two passes
+            before = text
+            for pattern in SegmentDataRepository._ARTIFACT_STRIPPERS:
+                candidate = pattern.sub('', text).rstrip(' ,-')
+                if candidate:
+                    text = candidate
+            if text == before:
+                break
+        return text or member.strip()
 
     @staticmethod
     def _drop_offmeasure_members(biz_data, geo_data, member_concepts, total_concepts) -> None:
@@ -10680,7 +10725,6 @@ class SegmentDataRepository:
         business "Assets" are balance-sheet assets), so they need different totals.
         """
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
-        from data.segment_aliases import canonicalize_geo_label
 
         # Members this company reports on a genuine geographic axis (any metric, incl. non-monetary
         # warehouse/store counts). Used to confirm that a member recovered from a multi-dimensional
@@ -10730,7 +10774,8 @@ class SegmentDataRepository:
             if classified is None:
                 continue
             section, member = classified
-            member = member_display.get(SegmentDataRepository._member_key(member), member)
+            member = member_display.get(
+                (section, SegmentDataRepository._member_key(member)), member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
@@ -11105,7 +11150,8 @@ class SegmentDataRepository:
             if classified is None:
                 continue
             section, member = classified
-            member = member_display.get(SegmentDataRepository._member_key(member), member)
+            member = member_display.get(
+                (section, SegmentDataRepository._member_key(member)), member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg):
@@ -11260,6 +11306,7 @@ class SegmentDataRepository:
             EDGAR_BUSINESS_AXES, EDGAR_GEO_AXES, EDGAR_PRODUCT_AXES,
             SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS,
         )
+        from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         try:
@@ -11339,7 +11386,7 @@ class SegmentDataRepository:
                 all_facts_biz.extend(biz_facts)
                 all_facts_geo.extend(geo_facts)
 
-        def _process_facts(facts_list, target_dict):
+        def _process_facts(facts_list, target_dict, is_geo=False):
             for fact in facts_list:
                 member_raw = fact.get('dimension_member_label') or ''
                 if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
@@ -11347,6 +11394,15 @@ class SegmentDataRepository:
                 member = SegmentDataRepository._title_case_member(member_raw)
                 if not member:
                     continue
+                # Geographic members get the same treatment as the DB path in
+                # _classify_member: the business team's name, and nothing that
+                # is not a place. Without this a ticker whose DB rows are all
+                # non-places (SFIX: one facility sentence) falls back here and
+                # the raw label reappears on the Segments tab.
+                if is_geo:
+                    if is_geo_excluded_label(member):
+                        continue
+                    member = canonicalize_geo_label(member)
                 fy = fact.get('fiscal_year')
                 if not fy:
                     continue
@@ -11394,7 +11450,7 @@ class SegmentDataRepository:
                         break
 
         _process_facts(all_facts_biz, biz_data)
-        _process_facts(all_facts_geo, geo_data)
+        _process_facts(all_facts_geo, geo_data, is_geo=True)
 
         if not biz_data and not geo_data:
             return None

@@ -440,7 +440,9 @@ def test_a_total_its_own_members_disprove_is_withheld():
             for m, v in (("Asia Pacific", 10_948e6), ("North America", 9_003e6))]
     rows.append(consolidated("Long-lived assets", "us-gaap:NoncurrentAssets", 2025, 68e6))
     _, geo, totals = classify(rows)
-    assert sorted(geo["Assets"]) == ["Asia Pacific", "North America"]   # members still shown
+    # "Asia Pacific" carries the business team's approved name from the mapping
+    # workbook; "North America" is already the approved spelling of its own.
+    assert sorted(geo["Assets"]) == ["Asia Pacific (APAC)", "North America"]
     assert totals["geo"]["Assets"][2025] is None                        # the impossible Total is not
 
 
@@ -518,7 +520,12 @@ def test_a_trailing_full_stop_is_not_part_of_the_name_either():
 
 def test_an_abbreviation_keeps_its_full_stop():
     """Eli Lilly reports "Outside U.S." — the stop belongs to the abbreviation, so
-    the rule above must not rewrite it to "Outside US"."""
+    the trailing-stop rule must not rewrite it to "Outside US".
+
+    Both spellings are one place, and the business team's mapping workbook names
+    it "Non-US", so they land on that single member rather than two. The stop is
+    still never stripped from a name the workbook does not map (below).
+    """
     a = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
                         "Outside U.S.", 2025, 20_000e6)
     b = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
@@ -526,7 +533,13 @@ def test_an_abbreviation_keeps_its_full_stop():
     c = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
                         "United States", 2025, 25_000e6)
     _, geo, _ = classify([a, b, c])
-    assert "Outside U.S." in geo["Revenues"]
+    assert sorted(geo["Revenues"]) == ["Non-US", "United States"]
+    assert geo["Revenues"]["Non-US"] == {2024: 18_000.0, 2025: 20_000.0}
+
+    d = duration_member("Revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "Eastern Mediterranean Ops.", 2025, 100e6)
+    _, unmapped, _ = classify([d])
+    assert "Eastern Mediterranean Ops." in unmapped["Revenues"]
 
 
 def test_the_segment_suffix_is_not_treated_as_part_of_the_name():

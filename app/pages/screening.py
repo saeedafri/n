@@ -3529,10 +3529,18 @@ def _render_industry_form():
 
             with st.form("scr_industry_form", clear_on_submit=True):
                 selected = st.multiselect(
-                    "Select industries",
+                    f"Select industries — all {len(industries)} available, type to search",
                     options=industries,
                     default=default_selected,
-                    help="Filter companies to those in selected industries.",
+                    # The dropdown is virtualised: it renders only ~10 of the list at a
+                    # time, so the full taxonomy looks like a short list and industries
+                    # that ARE offered (Transportation, Semiconductors, Utilities …)
+                    # read as missing. The count in the label and this help text say
+                    # plainly that the rest are there and reachable by typing.
+                    help=(f"All {len(industries)} Coresight industries are listed — scroll or "
+                          f"type to find one. Filters companies to those in the selected "
+                          f"industries, across the full key-development universe, not just "
+                          f"Coresight-covered names."),
                     key="scr_ind_multiselect",
                 )
 
