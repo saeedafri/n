@@ -8497,31 +8497,21 @@ class EarningsCalendarRepository:
             try:
                 yf_rows = db_manager.execute_query_readonly(
                     """
-                    -- Late row lookup: rank NARROW columns only (id/ticker/ingested_at,
-                    -- served index-only from idx_ticker_ingested), then join back by PK
-                    -- for the fat payload_json of just the ~56 surviving rows. Carrying
-                    -- payload_json through the window sort dragged all 7,110 rows / 52 MB
-                    -- of JSON into a disk temp table: 70-117s on STG (measured 25-Aug),
-                    -- which blocked earnings_calls render for over a minute whenever the
-                    -- 6h cache went cold. Byte-identical rows, ~5x faster.
-                    SELECT o.ticker, o.payload_json
+                    SELECT ticker, payload_json
                     FROM (
-                        SELECT id
-                        FROM (
-                            SELECT
-                                id,
-                                ROW_NUMBER() OVER (
-                                    PARTITION BY ticker
-                                    ORDER BY ingested_at DESC
-                                ) AS rn
-                            FROM coreiq_yf_company_overview
-                            WHERE ticker IS NOT NULL
-                        ) ranked
-                        WHERE rn = 1
-                    ) latest
-                    JOIN coreiq_yf_company_overview o ON o.id = latest.id
-                    WHERE o.payload_json IS NOT NULL
-                      AND o.payload_json != ''
+                        SELECT
+                            ticker,
+                            payload_json,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY ticker
+                                ORDER BY ingested_at DESC
+                            ) AS rn
+                        FROM coreiq_yf_company_overview
+                        WHERE ticker IS NOT NULL
+                          AND payload_json IS NOT NULL
+                          AND payload_json != ''
+                    ) ranked
+                    WHERE rn = 1
                     """,
                     {},
                 )
@@ -8727,7 +8717,75 @@ class EarningsCalendarRepository:
                 "source_ref":    r.get("source_ref"),
                 "headline":      r.get("headline"),
             })
-        return events
+        return EarningsCalendarRepository._dedupe_ma_deals(events)
+
+    # Corporate suffixes and punctuation carry no identity — "CoStar Group Inc."
+    # and "CoStar Group" are the same acquirer and must collapse together.
+    _MA_SUFFIX_RE = re.compile(
+        r'\b(inc|incorporated|corp|corporation|co|company|ltd|limited|llc|'
+        r'lp|plc|sa|ag|nv|holdings?|group|the)\b', re.I)
+
+    @staticmethod
+    def _ma_entity_key(value) -> str:
+        """Normalise a party name for identity comparison."""
+        s = (value or "")
+        if not isinstance(s, str):
+            return ""
+        s = s.lower()
+        s = re.sub(r'[^a-z0-9 ]+', ' ', s)
+        s = EarningsCalendarRepository._MA_SUFFIX_RE.sub(' ', s)
+        return re.sub(r'\s+', ' ', s).strip()
+
+    @staticmethod
+    def _dedupe_ma_deals(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Collapse one transaction reported by many outlets into a single entry.
+
+        Every wire service files its own story on a completion and each is a
+        separate row in coreiq_company_events — the CoStar/Zonda close produced 7.
+        They are genuinely distinct articles, so this belongs here at render time
+        rather than in the events table.
+
+        Identity is the (acquirer, target) pair, normalised so "CoStar Group Inc."
+        and "CoStar Group" match. That deliberately collapses ACROSS tickers: the
+        news feeds tag one deal to several tickers (an analyst note about the Zonda
+        deal was filed under CFG), and a deal calendar should show one entry per
+        deal, not one per company mentioned.
+
+        Rows missing either party cannot be identified as a deal and are ALL kept —
+        dropping them would silently hide events whose extraction merely failed.
+
+        Within a group the EARLIEST date wins: the first outlet to report a close is
+        closest to the actual close date and later coverage re-reports it. Ties
+        break toward the row carrying the most detail (value, close date).
+        """
+        if not events:
+            return events
+
+        grouped: Dict[tuple, List[Dict[str, Any]]] = {}
+        singles: List[Dict[str, Any]] = []
+        for ev in events:
+            acq = EarningsCalendarRepository._ma_entity_key(ev.get("ma_acquirer"))
+            tgt = EarningsCalendarRepository._ma_entity_key(ev.get("ma_target"))
+            if not acq or not tgt or acq == tgt:
+                singles.append(ev)          # unidentifiable — never collapsed
+                continue
+            grouped.setdefault((acq, tgt), []).append(ev)
+
+        def _detail_score(ev: Dict[str, Any]) -> int:
+            return sum(1 for k in ("ma_value_usd_m", "ma_close_date",
+                                   "ma_announce_date", "ma_deal_type") if ev.get(k))
+
+        kept: List[Dict[str, Any]] = []
+        for group in grouped.values():
+            if len(group) > 1:
+                group.sort(key=lambda e: (str(e.get("earnings_date") or "9999-12-31"),
+                                          -_detail_score(e)))
+                group[0]["ma_duplicate_reports"] = len(group)
+            kept.append(group[0])
+
+        out = kept + singles
+        out.sort(key=lambda e: str(e.get("earnings_date") or ""), reverse=True)
+        return out
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)  # 6h: IPO feed changes ~daily; avoids 10-min re-cold (warmed on boot)
