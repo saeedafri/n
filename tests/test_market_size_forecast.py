@@ -426,3 +426,50 @@ def test_eviction_never_removes_the_fred_panel(tmp_path, monkeypatch):
     for index in range(6):
         engine.disk_cache_put("sarima", f"key{index}", {"n": index})
     assert engine.read_fred_cache("key") is not None
+
+
+# ── seasonal search gating ─────────────────────────────────────────
+# A seasonal AR/MA term at lag 52 is estimated from one point per annual cycle,
+# and each such fit costs ~90x one without them. A 288-week series took 50s
+# locally for the grid alone — minutes on STG. These pin the gate, and pin that
+# monthly and quarterly are never affected.
+
+def test_monthly_and_quarterly_always_search_seasonal_terms():
+    assert engine.seasonal_terms_supported(112, 12) is True      # the validated case
+    assert engine.seasonal_terms_supported(40, 4) is True
+    assert engine.seasonal_terms_supported(24, 12) is True       # short, still searched
+
+
+def test_weekly_needs_eight_years_before_searching_seasonal_terms():
+    assert engine.seasonal_terms_supported(236, 52) is False     # ~4.5 cycles
+    assert engine.seasonal_terms_supported(8 * 52, 52) is True
+    assert engine.seasonal_terms_supported(8 * 52 - 1, 52) is False
+
+
+def test_annual_never_searches_seasonal_terms():
+    assert engine.seasonal_terms_supported(50, 1) is False
+
+
+def test_monthly_grid_is_unchanged_by_the_gate():
+    """The order the research team validated must not move."""
+    loaded = engine.load_series(monthly_series(114), "Date", "Sales", "Monthly")
+    series = loaded.frame[engine.TARGET_COL].dropna()
+    result = engine.run_sarima(series, "Monthly", horizon=2)
+    assert result["seasonal_search"] is True
+    assert result["seasonal_order"][-1] == 12
+    assert result["seasonal_order"][:3] != (0, 0, 0)   # seasonal terms still searched
+
+
+def test_short_weekly_drops_seasonal_terms_but_keeps_differencing():
+    index = pd.date_range("2021-01-03", periods=200, freq="W")
+    values = (3.6e9 + np.arange(200) * 2.0e6
+              + 2.0e8 * np.sin(np.arange(200) / 52 * 2 * np.pi))
+    frame = pd.DataFrame({"Date": index, "Sales": values})
+    loaded = engine.load_series(frame, "Date", "Sales", "Weekly")
+    result = engine.run_sarima(loaded.frame[engine.TARGET_COL].dropna(),
+                               "Weekly", horizon=12)
+    assert result["seasonal_search"] is False
+    P, D, Q, season = result["seasonal_order"]
+    assert (P, Q) == (0, 0)        # no seasonal AR/MA searched
+    assert D == 1 and season == 52  # seasonal differencing still applied
+    assert len(result["forecast"]) == 12

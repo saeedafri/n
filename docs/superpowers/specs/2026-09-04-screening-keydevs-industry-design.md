@@ -347,3 +347,327 @@ The other 74 affected tickers are preferred shares / warrants / units
 
 **200,441 events in `coreiq_company_events` → 200,441 through the new joins.** Zero
 lost, zero duplicated. M&A alone: 21,341 → 21,341 (old joins) → 21,341 (new joins).
+
+---
+
+## 9. Section 9 — "Does a criterion search all companies, or only `coreiq_companies`?"
+
+Raised 2026-09-11: the business team screened **Restaurants + Coffee & Beverage** and
+got **49 companies**, which looked like a Coresight-only result.
+
+### 9.1 Answer: 49 is the wide-universe number
+
+| Universe | Industry = Restaurants + Coffee & Beverage |
+|---|---|
+| `coreiq_companies` only | **37** |
+| Full event universe (what the app uses) | **49** |
+
+The extra 12 are companies the Coresight master does not carry — `BRCB` Black Rock
+Coffee Bar, `REBN` Reborn Coffee, `CHA` Chagee, `BTBD` BT Brands, plus HK/TW numeric
+listings. Verified in the real UI: those names render in the results grid.
+
+### 9.2 Why not more than 49
+
+143 tickers across the three masters carry those two industries. Only **49 have any
+row in `coreiq_company_events`**; the other 94 have no key development at all, so
+there is nothing to screen in Key Devs mode. The ceiling is event coverage, not
+Coresight coverage.
+
+### 9.3 Per-criterion universe (measured)
+
+| Criterion | Universe it searches | Coverage |
+|---|---|---|
+| **Industry** | full event universe (4,476) | 95.9% have an industry |
+| **Key Developments** | full event universe (4,476) | 3,829 have M&A rows |
+| **Geography** | full event universe (4,476) | **58.4%** have a country |
+| **Financial Information** | `coreiq_companies` (510) | by design — financials only exist there |
+
+Geography is **not** Coresight-only (an earlier comment in `_all_companies_on()` said
+so; corrected). It filters the same wide universe, but `country` comes from the Alpha
+Vantage listing and is blank for 42% of event tickers, so a Country criterion drops
+those rows.
+
+### 9.4 BUG FOUND — stale materialized universe (465 of 510 companies)
+
+`get_base_company_universe()` was serving **465 rows while `coreiq_companies` held
+510**. 45 companies were missing from every screen: Allbirds, On Holding, Gildan,
+Hugo Boss, CarGurus, Chefs' Warehouse, Mission Produce, Baozun, Arhaus, Boqii…
+
+**Root cause — two independent caches, the inner one poisoning the outer:**
+
+1. `materialized_or_build` computes its freshness signature **live from the DB**.
+2. `_build_universe()` read through `CompanyRepository.get_companies_rows()`, which
+   carries its own `@st.cache_data(ttl=3600)` snapshot.
+3. DB changed → signature moved → rebuild fired → the build re-read the **stale
+   1-hour snapshot** → the old 465-row frame was written under the **new** signature.
+
+The on-disk meta proved it — signature `COUNT(*) = 510`, fingerprint `rows = 465`:
+
+```json
+{"signature": [["coreiq_companies", "1151802226184", 510]],
+ "fingerprint": {"rows": 465, ...}}
+```
+
+Because the signature then matched, the cache looked fresh **permanently**. A restart
+does not clear it; only deleting the file or another signature change does.
+
+**Fix** (`screening_service.py`, `_build_universe`): `materialized_or_build` only calls
+the build when the DB signal has moved, so the inner snapshot is by definition stale at
+that point — drop it first.
+
+```python
+try:
+    CompanyRepository.get_companies_rows.clear()
+except Exception:
+    pass
+company_rows = CompanyRepository.get_companies_rows()
+```
+
+`screening_universe` was the only materialized cache building through an
+`@st.cache_data` layer; the other six build straight from `execute_query_readonly`.
+
+**Visible effect of the fix**
+
+| | before | after |
+|---|---|---|
+| Base universe rows | 465 | **510** |
+| Key Devs universe | 4,442 | **4,476** |
+| Industry dropdown options | 69 | **72** |
+| Industries returning 0 companies | 3 | **0** |
+| Companies reachable across all industries | 465 | **4,294** |
+
+The three dead dropdown options were `Food & Beverage`, `Specialty Retail` and
+`Apparel & Footwear` — offered in the form but unable to match any row, because the
+only companies carrying them were among the 45 missing. `Food & Beverage` now
+returns 18.
+
+**STG/PROD note:** the poisoned `screening_universe.pkl.gz` / `.meta.json` must be
+deleted once per environment. The code fix prevents recurrence but cannot heal a file
+that already claims to be fresh.
+
+### 9.5 Verification (real UI, both orderings)
+
+| Step | Result | Time |
+|---|---|---|
+| Key Devs baseline universe | 4,476 | — |
+| **A1** Industry first | 49 | 1,241 ms |
+| **A2** + Key Devs M&A [All History] | 49 · *44 of 49 have data* | 2,054 ms |
+| **A3** Show Results | Industry column populated, **0 blank of 500 rows**; only the 2 selected industries present | 3,046 ms |
+| **B1** Key Devs first (reverse order) | 4,476 · 3,829 have data | 2,052 ms |
+| **B2** + Industry | **49** — identical to A, order-independent | 1,240 ms |
+| **C1** Industry = Food & Beverage | **18** (was 0 before the fix) | 1,504 ms |
+
+---
+
+## 10. Section 10 — Excel-style column filter: "so many refresh" and wrong rows
+
+Reported 2026-09-11 against this exact flow: Key Devs → Key Developments by Category
+= M&A Activity / All History → Show Results → Industry column funnel → (Select All)
+to clear → tick Restaurants, tick Coffee & Beverage.
+
+### 10.1 Measured before (Playwright, with video + server rerun counting)
+
+| Action | Reruns | Grid remounted | Popup |
+|---|---|---|---|
+| Open the Industry funnel | 0 | no | open, 74 values |
+| Click (Select All) to clear | **1** | **yes** | **destroyed — 0 labels** |
+| Tick Restaurants | — | — | popup was already gone |
+
+`st_aggrid` forwards every `filterChanged` to Streamlit, Streamlit reruns, and the
+rerun REMOUNTS the component — taking the open popup with it. One checkbox = one full
+page round-trip, and the user has to reopen the funnel after every single tick.
+
+### 10.2 Fix — client-side filtering, one sync at the end
+
+`AgGrid(should_grid_return=...)` is a JsCode gate st_aggrid calls before returning
+anything. Three coordinated pieces:
+
+1. **`_SUPPRESS_FILTER_RERUN`** — returns `false` for `filterChanged` unless an
+   explicit flush flag is set. Ticking values is now pure client-side AG Grid work.
+2. **`DistinctValuesFilter.afterGuiAttached/afterGuiDetached`** — tracks whether the
+   popup is open, and on close compares a snapshot; if the selection changed it sets
+   `window.__agFilterFlush` and fires `filterChangedCallback()` once.
+3. **Restore via `api.setFilterModel()` in `onFirstDataRendered`** — see 10.3.
+
+| Action | Reruns | Remounted | Popup |
+|---|---|---|---|
+| Open funnel | 0 | no | open |
+| (Select All) clear | **0** | **no** | **open, 74 labels** |
+| Tick Restaurants | **0** | **no** | open |
+| Tick Coffee & Beverage | **0** | **no** | open |
+| Close the popup | **1** | yes (harmless, popup already closed) | — |
+| Reopen the funnel | — | — | ticks remembered: Coffee & Beverage, Restaurants |
+
+### 10.3 BUG — the grid silently dropped the filter on remount
+
+With the popup closed there is no filter instance, so nothing read
+`filterParams.preselected` and the grid re-rendered **unfiltered** while Python still
+reported the filtered count. Measured: banner said *"6 of 500 shown rows"* while the
+grid displayed **13 unrelated industries** (E-commerce, Utilities, Energy…). This is
+the "results are also wrong" report.
+
+`filterParams.preselected` only restores what the *popup* shows. The grid itself needs
+`api.setFilterModel()`, and it must run in **`onFirstDataRendered`**, not `onGridReady`
+— at grid-ready there are no rows and the call was previously measured doing nothing.
+`setFilterModel` also forces the filter to be created, which is what defeats AG Grid's
+lazy instantiation. The `filterChanged` it raises is swallowed by the gate, so
+restoring cannot loop. After the fix the grid shows `['Restaurants']` only.
+
+### 10.4 BUG — Excel exported unfiltered when clicked from an open popup
+
+Introduced by 10.2: closing the popup is what flushes the filter to Python, and that
+flush travels over the websocket. Clicking **Excel** straight from an open popup raced
+it — **21,548 rows downloaded when only 610 matched**.
+
+Fixed the way Excel itself behaves: the first click outside an open dropdown only
+closes it, it does not activate what was clicked. The parent-document `mousedown`
+handler now calls `preventDefault()`/`stopPropagation()` and eats the following
+`click` when a popup was open. Same pass moved the listener to one-per-parent-document
+with the live api republished on each mount — the old per-iframe guard re-added a
+listener on every remount and left each previous one holding a dead api.
+
+Verified: click 1 closes the popup and no download starts; click 2 downloads
+**610 rows = 593 Restaurants + 17 Coffee & Beverage**, matching the DB exactly. With
+no popup open, ordinary clicks are untouched ("Load more events" 500 → 1,000 works).
+
+### 10.5 Remaining limitation — the filter only sees the loaded page (disclosed)
+
+The column filter is client-side, so it can only sift the rows the grid holds — the
+newest 500 of 21,548. Filtering Industry to Restaurants + Coffee shows **6 rows when
+610 events really match**. The Excel export is unaffected (it re-applies the model
+server-side over the full set — proven at 610).
+
+The banner used to read "6 of 500 shown rows", which is true but reads as "6 matches".
+It now names the gap outright:
+
+> ⚠ This filter only searched the 500 events loaded so far — the other 21,048 of
+> 21,548 have not been checked. Use "Load more events" to widen it, or download Excel,
+> which applies this filter to all 21,548.
+
+Making the on-screen grid exact would mean loading every matching row client-side
+(~43 paged queries ≈ 13 s for this screen, far worse for the 200k-event all-category
+case) or pushing generic column filters into SQL. That is a performance/product
+trade-off, not a bug — left for an explicit decision.
+
+---
+
+## 11. Section 11 — Per-industry first page for unbounded Key Devs screens
+
+### 11.1 Problem
+
+The first page was a flat "newest 500", which is whatever happens to be busy. On
+M&A / All History that carried **36 of 69 industries**, so the Industry column filter
+could only ever surface 6 of the 610 rows matching Restaurants + Coffee & Beverage —
+and Coffee & Beverage had **zero** rows on the page. Telling the user to press "Load
+more events" to find their industry is not a design.
+
+### 11.2 Design
+
+| Screen state | First page |
+|---|---|
+| **Unbounded** — no Industry / Geography criterion (`_tickers is ALL_TICKERS`) | newest **8 per industry** (~526 rows, every industry represented) |
+| **Narrowed** — an Industry criterion is applied | newest **500 within that industry** (unchanged) |
+
+Once an industry is chosen the universe is already narrow, so the plain newest-first
+page over those tickers is the right answer and needs no stratification.
+
+"Load more events" changes meaning in the unbounded case: the cursor is a **row-number
+depth**, not a date, so each click takes the next slice of *every* industry rather than
+drifting into whichever industry happens to own the older events.
+
+### 11.3 Query shape — why this one
+
+`ROW_NUMBER() OVER (PARTITION BY <industry> ORDER BY event_date DESC, event_id DESC)`,
+run over a **lean subquery selecting only `event_id`**, with the display columns joined
+on afterwards — all in a single statement.
+
+Measured on M&A / All History, k=8:
+
+| Shape | Time |
+|---|---|
+| Window over the FULL row (all display columns inside it) | **11,860 ms** |
+| Window over lean ids, two round trips | 3,088 ms |
+| UNION ALL of one indexed `LIMIT k` per industry (69 subqueries, 45 KB SQL) | 8,046 ms |
+| Window over lean ids, **single statement** ← chosen | **2,193 ms** |
+
+Selecting the wide columns inside the window makes MySQL materialise every matching
+row with all its text. Resolving industry once per ticker in a derived table was also
+tried and did **not** help (5,758 ms vs 5,889 ms on the all-category case) — the cost
+is the 150k-row sort, not the joins.
+
+Cold vs warm is the buffer pool on `coreiq_company_events`: window-ids 5,672 ms cold,
+767 / 742 ms on the next two runs. `@st.cache_data(ttl=900)` covers repeat views.
+
+### 11.4 Measured in the UI (click → grid painted)
+
+| Step | Time | Result |
+|---|---|---|
+| Unbounded first view (cold) | **3,075 ms** | 526 rows, **68 industries** |
+| Same screen again (cached) | **547 ms** | — |
+| Load more (next slice per industry) | 4,555 ms | 991 rows |
+| Industry criterion applied | 2,952 ms | 610 found · newest 500, Restaurants + Coffee only |
+
+Filtering the Industry column on the new page now returns **16 rows (8 + 8)** with both
+industries present, against 6 rows and Coffee & Beverage entirely absent before.
+
+Timings are click→painted over VPN to STG, where ~250 ms of every round trip is network.
+
+### 11.5 Scope
+
+Only "every category + All History" remains slow (~5 s cold for the window), because
+that scans ~150k events. Every realistic combination is under 2 s for the ids query:
+all categories / 365 days (the no-criterion default) 1,787 ms, 3 categories / all
+history 676 ms, M&A / all history 733 ms.
+
+---
+
+## 12. Section 12 — Selecting industries in the GRID must dig as deep as the criterion
+
+Reported 2026-09-11: picking Restaurants + Coffee & Beverage in the results grid's
+Industry column still showed only 20-30 rows. Section 11 wired the deep load to the
+**criterion form** only; the user does not care which control they used.
+
+### 12.1 Fix
+
+The grid's Industry selection now narrows the fetch exactly like the criterion does.
+It is readable before any fetch is decided because closing the filter popup flushes
+the model to Streamlit (§10.2), so on that run the grid's incoming value already
+carries it. `apply_industry_criterion` is imported and reused rather than
+re-implemented, so the two paths cannot diverge.
+
+| Industry selected in the grid | Result |
+|---|---|
+| Restaurants + Coffee & Beverage | **500 of 610**, all on-industry |
+| Financial Services | **500 of 4,120** |
+| Website Builder (only 9 events exist) | **9 of 9** — "i.e. all of them" |
+| cleared | back to the per-industry page, 526 rows / 68 industries |
+
+### 12.2 BUG — a cleared filter could not be cleared
+
+`_incoming_grid_filter()` returned `{}` both when the component had not reported yet
+and when it reported *no filter*. The call sites read
+`incoming or persisted or {}`, so an empty (cleared) model fell through to the
+previously persisted one and the old filter came straight back — the grid stayed stuck
+on the last industry picked. It now returns `None` for "has not reported", which is
+distinct from `{}` for "reported, no filter". Affects every screening grid, not just
+Key Devs.
+
+### 12.3 BUG — the match count was one interaction stale
+
+The banner read *"16 matching rows out of the 500 loaded"* over a grid correctly
+showing all 500 (verified: AG Grid container 14,500px ÷ 29px row height = 500 rows).
+`_kd_filtered_rows` came from `_kd_resp.data`, and the component only returns a payload
+when the gate allows it — so its rows described the page as it was when the popup last
+closed. It is now recomputed server-side with `apply_grid_filter_model(events_df, …)`,
+which cannot drift from what was rendered.
+
+### 12.4 Verified
+
+Five-case matrix (baseline → two industries → big industry → tiny industry → cleared)
+all pass; Excel still exports **610 rows = 593 Restaurants + 17 Coffee & Beverage**;
+the filter interaction is still **0 reruns while ticking, 1 on close**, popup intact,
+ticks remembered on reopen.
+
+Note for future tests: AG Grid's "(Select All)" is **tri-state**. From an indeterminate
+state a click SELECTS ALL — it does not clear. A test that assumes one click clears
+will silently end up with "everything except one" selected and report a false failure.

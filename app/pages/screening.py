@@ -94,6 +94,36 @@ if HAS_AGGRID:
 # toggle (no Apply button), 100% client-side. Registered once as every grid's
 # default_column filter so all screening grids inherit it.
 # NOTE: JsCode strips JS comments and collapses whitespace — keep this comment-free.
+_SUPPRESS_FILTER_RERUN = None
+if HAS_AGGRID:
+    # Excel never reloads the sheet while you tick boxes; this grid used to reload
+    # the whole page on EVERY tick. st_aggrid hands each `filterChanged` straight to
+    # Streamlit, which reruns the script and REMOUNTS the component — destroying the
+    # open filter popup, so the user had to reopen it after every single checkbox.
+    # Measured: one click on (Select All) = 1 rerun, grid remounted, popup gone.
+    #
+    # st_aggrid calls this gate before returning anything. Returning false while a
+    # filter popup is open keeps the toggle purely client-side (AG Grid filters in
+    # the browser, instantly), so ticking N values costs ZERO reruns. The filter
+    # class flushes once from afterGuiDetached() when the popup closes, and by then
+    # this flag is false — so Python still learns the final model for the Excel
+    # export, in exactly one rerun instead of one per click.
+    _SUPPRESS_FILTER_RERUN = JsCode("""
+    function shouldGridReturn(p) {
+      try {
+        var ev = p ? p.streamlitRerunEventTriggerName : null;
+        if (ev === 'filterChanged') {
+          if (window.__agFilterFlush === true) {
+            window.__agFilterFlush = false;
+            return true;
+          }
+          return false;
+        }
+      } catch (e) {}
+      return true;
+    }
+    """)
+
 _DISTINCT_VALUES_FILTER = None
 if HAS_AGGRID:
     _DISTINCT_VALUES_FILTER = JsCode("""
@@ -232,7 +262,20 @@ if HAS_AGGRID:
         if (this.list) { this.render(this.search ? this.search.value : ''); this.syncSelAll(); }
       }
       getGui() { return this.eGui; }
-      afterGuiAttached() { if (this.search) { this.search.focus(); } }
+      afterGuiAttached() {
+        window.__agFilterPopupOpen = true;
+        this.openSnapshot = JSON.stringify(this.selected);
+        if (this.search) { this.search.focus(); }
+      }
+      afterGuiDetached() {
+        window.__agFilterPopupOpen = false;
+        var now = JSON.stringify(this.selected);
+        if (now !== this.openSnapshot) {
+          this.openSnapshot = now;
+          window.__agFilterFlush = true;
+          this.params.filterChangedCallback();
+        }
+      }
     }
     """)
 
@@ -293,6 +336,9 @@ from data.screening_service import (
     build_additional_summary,
     get_base_company_universe,
     get_all_companies_universe,
+    get_keydevs_events_by_industry,
+    KEYDEV_PER_INDUSTRY,
+    apply_industry_criterion,
     ALL_TICKERS,
     filter_universe_to_members,
     keep_working_set_companies,
@@ -698,9 +744,11 @@ def _all_companies_on() -> bool:
     SEC and non-SEC masters now carry `primary_industry_coresight` too, so
     get_all_companies_universe() gives 96% of event tickers a real industry and the
     criterion filters the whole event universe rather than the 439 it can name.
-    Geography is still Coresight-only — its column comes from a different table
-    that has had no such backfill — so adding a Country criterion here does still
-    narrow to covered companies.
+
+    Geography filters this same wide universe, but on thinner data: `country` comes
+    from the Alpha Vantage listing and is populated for 58% of event tickers versus
+    96% for industry. A Country criterion therefore drops the 42% that have no
+    country at all — a coverage gap in that column, not a Coresight-only universe.
     """
     return st.session_state.get("scr_screen_for") == "Key Devs"
 
@@ -5035,8 +5083,47 @@ def _render_keydevs_results():
         # old LIMIT 2000 that silently truncated "All History" to the newest ~17 days.
         # Only _KD_PAGE rows live in memory per page; the honest total is shown up front.
         _KD_PAGE = 500
+        # An UNBOUNDED screen (no Industry / Geography criterion, so _tickers is the
+        # ALL_TICKERS sentinel) gets a per-industry page instead of a flat newest-500.
+        # A flat page is whatever happens to be busy: on M&A / All History it carried
+        # 36 of 69 industries, so the Industry column filter could only ever find 6 of
+        # the 610 rows that really match Restaurants + Coffee & Beverage. Once the user
+        # DOES pick an industry the universe is already narrow and the plain
+        # newest-first page over those tickers is exactly right — so this only applies
+        # while nothing has narrowed the screen.
+        _kd_by_industry = (_tickers is ALL_TICKERS or _tickers == ALL_TICKERS)
+
+        # Picking industries in the RESULTS GRID's Industry column must dig as deep as
+        # picking them in the criterion form — the user does not care which control
+        # they used. Without this the column filter could only sift the per-industry
+        # page and showed ~16 rows of the 610 that match Restaurants + Coffee.
+        #
+        # The selection is readable here because closing the filter popup flushes the
+        # model to Streamlit (see shouldGridReturn / afterGuiDetached), so on THIS run
+        # the grid's incoming value already carries it — before any fetch is decided.
+        _kd_grid_industries: tuple = ()
+        if _kd_by_industry:
+            _gm = _incoming_grid_filter("keydevs_results_grid")
+            if _gm is None:
+                _gm = st.session_state.get("_grid_filter_raw_keydevs_results_grid") or {}
+            _spec = _gm.get("Industry") if isinstance(_gm, dict) else None
+            if isinstance(_spec, dict) and isinstance(_spec.get("values"), list):
+                _kd_grid_industries = tuple(sorted(
+                    str(v) for v in _spec["values"] if str(v).strip()))
+
+        # A grid industry selection narrows the universe exactly like the criterion
+        # does, so the stratified page gives way to the plain newest-500 over those
+        # tickers — which is the whole point: every one of the 500 is now on-industry.
+        if _kd_grid_industries:
+            _ind_rows, _ = apply_industry_criterion(list(_kd_grid_industries), df)
+            _ind_tickers = tuple(sorted({str(t) for t in _ind_rows["ticker"] if str(t).strip()}))
+            if _ind_tickers:
+                _tickers = _ind_tickers
+                _kd_by_industry = False
+
         _kd_sig = (_tickers, _cats, _window.get("days"),
-                   _window.get("start_date"), _window.get("end_date"))
+                   _window.get("start_date"), _window.get("end_date"),
+                   _kd_by_industry, _kd_grid_industries)
         # Publish the signature LAST, and only together with the rows it describes.
         # It used to be stamped BEFORE the two queries, which take ~9s together on a
         # broad screen (count 4s + first page 5s). Any rerun in that window — and
@@ -5091,11 +5178,20 @@ def _render_keydevs_results():
                     add_script_run_ctx(_w, get_script_run_ctx())
                     _w.start()
 
-                _df0, _cur0 = get_keydevs_events_for_tickers(
-                    _tickers, _cats, days=_window.get("days"),
-                    start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                    limit=_KD_PAGE,
-                )
+                if _kd_by_industry:
+                    _df0, _more0 = get_keydevs_events_by_industry(
+                        _cats, days=_window.get("days"),
+                        start_date=_window.get("start_date"),
+                        end_date=_window.get("end_date"),
+                        per_industry=KEYDEV_PER_INDUSTRY, rn_from=0,
+                    )
+                    _cur0 = KEYDEV_PER_INDUSTRY if _more0 else None
+                else:
+                    _df0, _cur0 = get_keydevs_events_for_tickers(
+                        _tickers, _cats, days=_window.get("days"),
+                        start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                        limit=_KD_PAGE,
+                    )
                 for _w in _workers:
                     _w.join()
                 if "error" in _count_result:
@@ -5204,19 +5300,75 @@ def _render_keydevs_results():
         # instead, and the filter is re-applied to the FULL fetched set (not just
         # the loaded page), so the file holds every row the filter matches.
         _kd_filter_model = grid_filter_model(_kd_resp)
-        _kd_filtered_rows = len(_kd_resp.data) if (_kd_filter_model and _kd_resp is not None
-                                                   and _kd_resp.data is not None) else 0
+        # Count the matches HERE rather than trusting `_kd_resp.data`. The component
+        # only returns a payload when it is allowed to (see shouldGridReturn), so its
+        # rows describe the page as it was when the user last closed the filter popup
+        # — one interaction stale. That is how the banner came to read "16 matching
+        # rows out of the 500 loaded" over a grid that was correctly showing all 500.
+        # Re-applying the model to the frame we just rendered cannot drift.
+        _kd_filtered_rows = (len(apply_grid_filter_model(events_df, _kd_filter_model))
+                             if _kd_filter_model else 0)
 
         with _hdr_slot:
             _hdr_txt = f"<strong>{_kd_total:,}</strong> key development events found"
-            if _kd_total > _shown:
+            if _kd_grid_industries:
                 _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
-                             f"· showing newest {_shown:,}</span>")
+                             f"· {', '.join(_kd_grid_industries)}"
+                             f"{' · showing newest ' + format(_shown, ',') if _kd_total > _shown else ''}"
+                             f"</span>")
+            elif _kd_total > _shown:
+                if _kd_by_industry:
+                    _n_inds = (events_df["Industry"].replace("", pd.NA).nunique(dropna=True)
+                               if "Industry" in events_df.columns else 0)
+                    _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
+                                 f"· showing the newest few from each of "
+                                 f"{_n_inds} industries ({_shown:,} rows) — add an "
+                                 f"Industry criterion to see everything for one</span>")
+                else:
+                    _hdr_txt += (f" <span style='color:#6b7280;font-weight:400'>"
+                                 f"· showing newest {_shown:,}</span>")
             if _kd_filter_model:
-                _cols = ", ".join(sorted(_kd_filter_model))
-                _hdr_txt += (f"<br><span style='color:#C8102E;font-weight:500;font-size:13px'>"
-                             f"Filtered on {_cols} · {_kd_filtered_rows:,} of {_shown:,} shown rows"
-                             f" — Excel exports every matching row</span>")
+                # The column filter is a CLIENT-side filter: it can only sift the rows
+                # the grid actually holds, which is the newest `_shown` page — not the
+                # whole result. Measured: filtering Industry to Restaurants + Coffee on
+                # the all-history M&A screen shows 6 rows when 610 events really match,
+                # because 500 of 21,610 events were loaded. The old wording ("6 of 500
+                # shown rows") was technically true but read as "6 matches", so say
+                # outright that rows beyond the loaded page were never examined.
+                # With a grid industry selection the rows were fetched FOR those
+                # industries, so "filtered on Industry" adds nothing — the green line
+                # below already states the real totals. Only mention other columns.
+                _other = sorted(c for c in _kd_filter_model if c != "Industry"
+                                or not _kd_grid_industries)
+                if _other:
+                    _cols = ", ".join(_other)
+                    _hdr_txt += (f"<br><span style='color:#C8102E;font-weight:500;font-size:13px'>"
+                                 f"Filtered on {_cols} · {_kd_filtered_rows:,} matching rows"
+                                 f" out of the {_shown:,} loaded</span>")
+                if _kd_grid_industries:
+                    # The Industry selection re-queried the DB for exactly these
+                    # industries, so every loaded row is on-industry and `_kd_total`
+                    # is already their true total — nothing was skipped.
+                    _hdr_txt += (
+                        f"<br><span style='color:#1a7f37;font-weight:600;font-size:13px'>"
+                        f"Loaded straight from the database for "
+                        f"{', '.join(_kd_grid_industries)} — "
+                        f"{_shown:,} of {_kd_total:,} matching events"
+                        + ("; download Excel for all of them."
+                           if _kd_total > _shown else ", i.e. all of them.")
+                        + "</span>")
+                elif _kd_total > _shown:
+                    _how = ("the newest few per industry loaded so far"
+                            if _kd_by_industry else
+                            f"the {_shown:,} events loaded so far")
+                    _fix = ("add an Industry criterion to load every event for that "
+                            "industry" if _kd_by_industry else
+                            "use “Load more events” to widen it")
+                    _hdr_txt += (
+                        f"<br><span style='color:#8f0b1f;font-weight:600;font-size:13px'>"
+                        f"⚠ This filter only searched {_how} ({_shown:,} of {_kd_total:,} "
+                        f"events) — {_fix}, or download Excel, which applies this filter "
+                        f"to all {_kd_total:,}.</span>")
             st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
 
         with _dl_slot:
@@ -5253,11 +5405,24 @@ def _render_keydevs_results():
             )
             if st.button("⬇ Load more events", key="kd_load_older"):
                 try:
-                    _df_next, _cur_next = get_keydevs_events_for_tickers(
-                        _tickers, _cats, days=_window.get("days"),
-                        start_date=_window.get("start_date"), end_date=_window.get("end_date"),
-                        limit=_KD_PAGE, before_date=_kd_cursor[0], before_id=_kd_cursor[1],
-                    )
+                    if _kd_by_industry:
+                        # The cursor is a row-number depth, not a date: each click
+                        # takes the NEXT slice of every industry, so the page keeps
+                        # covering all of them instead of drifting into whichever
+                        # industry happens to have the older events.
+                        _df_next, _more_next = get_keydevs_events_by_industry(
+                            _cats, days=_window.get("days"),
+                            start_date=_window.get("start_date"),
+                            end_date=_window.get("end_date"),
+                            per_industry=KEYDEV_PER_INDUSTRY, rn_from=int(_kd_cursor),
+                        )
+                        _cur_next = (int(_kd_cursor) + KEYDEV_PER_INDUSTRY) if _more_next else None
+                    else:
+                        _df_next, _cur_next = get_keydevs_events_for_tickers(
+                            _tickers, _cats, days=_window.get("days"),
+                            start_date=_window.get("start_date"), end_date=_window.get("end_date"),
+                            limit=_KD_PAGE, before_date=_kd_cursor[0], before_id=_kd_cursor[1],
+                        )
                 except KeydevsQueryError:
                     st.warning("Could not load more events just now — please try again.")
                     return
@@ -6454,13 +6619,6 @@ def _render_filterable_results_grid(
         if not _cd.get("hide"):
             _hn = str(_cd.get("headerName") or _f)
             _cd["minWidth"] = max(120, len(_hn) * 8 + 44)
-    # Auto-size each column to its content, clamped to the minWidth above so the
-    # full header always fits; the grid scrolls horizontally past the viewport.
-    grid_options["onFirstDataRendered"] = JsCode(
-        "function(p){var a=p.api;"
-        "if(a&&a.autoSizeAllColumns){a.autoSizeAllColumns(false);}"
-        "else if(p.columnApi&&p.columnApi.autoSizeAllColumns){p.columnApi.autoSizeAllColumns(false);}}"
-    )
     # Close the column-filter popup on a click ANYWHERE outside the grid, not just
     # inside the table. The grid lives in its own iframe; AG Grid already closes the
     # popup on clicks within the iframe, but clicks elsewhere on the Streamlit page
@@ -6475,35 +6633,94 @@ def _render_filterable_results_grid(
     # `selected = null`, so the funnel forgot what the user had ticked the moment they
     # ticked it — and the export then disagreed with the grid.
     #
-    # The restore is threaded through the column's own `filterParams`, NOT through
-    # `api.setFilterModel` at onGridReady: AG Grid instantiates a column filter lazily
-    # (first time its menu opens), so at grid-ready there is no instance to drive, and
-    # that approach was measured doing nothing. `filterParams` is read by our own
-    # `buildValues()` whenever the filter IS created, so the timing problem disappears.
+    # The restore needs BOTH halves, because a column filter has two very different
+    # states to recover:
+    #
+    #   1. `filterParams.preselected` — what the popup shows as ticked when the user
+    #      REOPENS it. Read by our own buildValues(), so it works whenever AG Grid
+    #      gets around to instantiating the filter (it does so lazily, on first open).
+    #
+    #   2. `api.setFilterModel()` — what the GRID is actually filtered by. This is the
+    #      half that was missing, and it is why the rows looked wrong after a rerun:
+    #      with the popup closed there is no filter instance, so nothing read
+    #      `preselected` and the grid re-rendered UNFILTERED while Python still
+    #      reported the filtered count. Measured: banner said "6 of 500 shown rows"
+    #      while the grid displayed 13 unrelated industries.
+    #
+    # It goes in onFirstDataRendered, not onGridReady: at grid-ready there are no rows
+    # yet and the call was measured doing nothing. setFilterModel also FORCES the
+    # filter to be created, which is exactly what defeats the lazy instantiation.
+    # The filterChanged it raises is swallowed by shouldGridReturn (only an explicit
+    # afterGuiDetached flush passes), so restoring cannot loop into another rerun.
     #
     # The selection is read from the component's own incoming value
     # (`st.session_state[key]`), which already holds the interaction that caused this
     # rerun — so the filter is restored on the SAME run the user toggled it, not one
     # run late.
-    _restore_model = _incoming_grid_filter(key) or st.session_state.get(f"_grid_filter_raw_{key}") or {}
+    _incoming = _incoming_grid_filter(key)
+    _restore_model = (_incoming if _incoming is not None
+                      else (st.session_state.get(f"_grid_filter_raw_{key}") or {}))
     if _restore_model:
         for _cd in grid_options.get("columnDefs", []):
             _spec = _restore_model.get(_cd.get("field"))
             if isinstance(_spec, dict) and isinstance(_spec.get("values"), list):
                 _cd.setdefault("filterParams", {})["preselected"] = list(_spec["values"])
 
+    # Auto-size each column to its content, clamped to the minWidth above so the
+    # full header always fits; the grid scrolls horizontally past the viewport.
+    # Same hook re-applies the saved filter (see the two halves above).
+    _restore_js = json.dumps({
+        _col: {"values": list(_spec["values"])}
+        for _col, _spec in _restore_model.items()
+        if isinstance(_spec, dict) and isinstance(_spec.get("values"), list)
+    })
+    grid_options["onFirstDataRendered"] = JsCode(
+        "function(p){var a=p.api;"
+        "if(a&&a.autoSizeAllColumns){a.autoSizeAllColumns(false);}"
+        "else if(p.columnApi&&p.columnApi.autoSizeAllColumns){p.columnApi.autoSizeAllColumns(false);}"
+        "try{var m=" + _restore_js + ";"
+        "if(a&&a.setFilterModel&&m&&Object.keys(m).length){a.setFilterModel(m);}}catch(e){}}"
+    )
+
     # Close an open column-menu when the user clicks anywhere in the parent
     # (and top) document — those events fire ONLY for clicks outside this iframe — and
     # calls the public api.hideColumnFilter(). Wired once per grid iframe.
+    # The first click outside an OPEN filter popup only closes it — it does not also
+    # activate whatever was clicked. That is exactly how an Excel dropdown behaves,
+    # and here it is also load-bearing for correctness: closing the popup is what
+    # flushes the filter to Python (afterGuiDetached), and that flush travels over
+    # the websocket. Clicking "Excel" straight from an open popup therefore raced the
+    # flush and exported UNFILTERED — measured: 21,548 rows downloaded when only 610
+    # matched. Swallowing that first click removes the race entirely; the user clicks
+    # Excel again and the model is already in.
+    #
+    # The listener lives on the PARENT document (clicks outside this iframe never
+    # reach it) and is wired ONCE per parent, with the live api/window republished on
+    # every mount — the old per-iframe guard re-added a listener on each remount and
+    # left every previous one holding a dead api.
     grid_options["onGridReady"] = JsCode(
         "function(params){try{"
-        "if(window.__ag_outside_close_wired){return;}"
-        "window.__ag_outside_close_wired=true;"
-        "var close=function(){try{if(params.api&&params.api.hideColumnFilter){params.api.hideColumnFilter();}}catch(e){}};"
         "var docs=[];"
         "try{if(window.parent&&window.parent!==window){docs.push(window.parent.document);}}catch(e){}"
         "try{if(window.top&&window.top!==window&&window.top!==window.parent){docs.push(window.top.document);}}catch(e){}"
-        "docs.forEach(function(d){try{d.addEventListener('mousedown',close,true);}catch(e){}});"
+        "var gw=window;"
+        "docs.forEach(function(d){try{"
+        "var w=d.defaultView;"
+        "w.__agLiveApi=params.api; w.__agLiveWin=gw;"
+        "if(w.__agOutsideCloseWired){return;}"
+        "w.__agOutsideCloseWired=true;"
+        "d.addEventListener('mousedown',function(ev){try{"
+        "var api=w.__agLiveApi, fw=w.__agLiveWin;"
+        "var wasOpen=!!(fw&&fw.__agFilterPopupOpen===true);"
+        "if(api&&api.hideColumnFilter){api.hideColumnFilter();}"
+        "if(wasOpen){"
+        "ev.preventDefault(); ev.stopPropagation();"
+        "var eat=function(e2){e2.preventDefault(); e2.stopPropagation();"
+        "d.removeEventListener('click',eat,true);};"
+        "d.addEventListener('click',eat,true);"
+        "}"
+        "}catch(e){}},true);"
+        "}catch(e){}});"
         "}catch(err){}}"
     )
 
@@ -6554,6 +6771,7 @@ def _render_filterable_results_grid(
             show_toolbar=False,
             show_download_button=False,
             update_mode=_update_mode,
+            should_grid_return=_SUPPRESS_FILTER_RERUN,
             data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
             theme="streamlit",
             custom_css=_selectable_css,
@@ -6590,17 +6808,24 @@ def _extract_raw_filter_model(state) -> dict:
             if isinstance(sp, dict) and isinstance(sp.get("values"), list)}
 
 
-def _incoming_grid_filter(key: str) -> dict:
+def _incoming_grid_filter(key: str) -> Optional[dict]:
     """The filter the grid is arriving WITH, read before it is re-rendered.
 
     Streamlit puts a component's current value in ``st.session_state[key]``, so on the
     rerun caused by a filter toggle this already holds that toggle. Reading it here —
     rather than from the AgGrid return value, which only lands after the grid has been
     built — is what lets the selection be restored on the SAME run the user made it.
+
+    Returns ``None`` when the component has not reported yet, which is NOT the same as
+    ``{}`` — that means it reported and there is no filter, i.e. the user just cleared
+    it. Collapsing the two (``incoming or persisted``) made clearing impossible: the
+    empty model fell through to the previously persisted one and the old filter came
+    straight back. That is how ticking (Select All) left the grid stuck on the last
+    industry instead of returning to the per-industry page.
     """
     val = st.session_state.get(key)
     if val is None:
-        return {}
+        return None
     state = None
     try:
         state = val.grid_state

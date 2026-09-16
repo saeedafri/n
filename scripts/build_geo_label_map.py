@@ -204,12 +204,49 @@ def build(path: Path) -> dict:
     }
 
 
-def write_report(destination: Path) -> None:
+# Coarse family hint so the business team can answer the generic buckets in
+# blocks instead of 143 one-by-one decisions. A suggestion only — it never
+# decides anything, and the generator ignores it.
+_FAMILY_HINTS = (
+    ("international", "International family"),
+    ("int'l", "International family"),
+    ("foreign", "Foreign family"),
+    ("rest of", "Rest of World family"),
+    ("all other", "Other family"),
+    ("other", "Other family"),
+    ("emea", "EMEA family"),
+    ("middle east", "EMEA family"),
+    ("asia pacific", "Asia Pacific family"),
+    ("asia-pacific", "Asia Pacific family"),
+    ("apac", "Asia Pacific family"),
+    ("america", "Americas family"),
+    ("europe", "Europe family"),
+    ("china", "China family"),
+    ("hong kong", "China family"),
+)
+
+
+def _family_hint(label: str) -> str:
+    low = label.lower()
+    for needle, family in _FAMILY_HINTS:
+        if needle in low:
+            return family
+    return ""
+
+
+def _autofit(ws, widths):
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
+
+
+def write_report(destination: Path, workbook_path: Path) -> None:
+    """Review workbook: what the mapping already covers, and what is still open."""
     import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
 
     from core.database import db_manager
-    from data.segment_aliases import (build_geo_label_groups, is_geo_excluded_label,
-                                      is_geo_named_label)
+    from data.segment_aliases import (build_geo_label_groups, geo_iso_code,
+                                      is_geo_excluded_label, is_geo_named_label)
 
     rows = db_manager.execute_query_readonly(
         "SELECT member_label, company_count FROM coreiq_screening_segment_member_cache "
@@ -217,30 +254,95 @@ def write_report(destination: Path) -> None:
     ) or []
     counts = {r["member_label"]: int(r["company_count"] or 0)
               for r in rows if r.get("member_label")}
+    groups = build_geo_label_groups(counts)
 
-    # One row per dropdown option the workbook does not name, largest first, with
-    # every raw spelling that currently lands on it so the business team can see
-    # what they are naming.
-    unmapped = [
-        (display, sum(counts.get(m, 0) for m in members),
-         "; ".join(m for m in members if m != display))
-        for display, members in build_geo_label_groups(counts).items()
-        if not is_geo_named_label(display) and not is_geo_excluded_label(display)
-    ]
-    unmapped.sort(key=lambda row: (-row[1], row[0].lower()))
+    covered, open_items = [], []
+    for display, members in groups.items():
+        if is_geo_excluded_label(display):
+            continue
+        live = [m for m in members if m in counts]
+        total = sum(counts.get(m, 0) for m in members)
+        variants = "; ".join(m for m in sorted(live) if m != display)
+        row = (display, total, len(live), variants)
+        (covered if is_geo_named_label(display) else open_items).append(row)
+    covered.sort(key=lambda r: (-r[1], r[0].lower()))
+    open_items.sort(key=lambda r: (-r[1], r[0].lower()))
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1F4E79")
+    fill_me = PatternFill("solid", fgColor="FFF2CC")
+
+    def add_sheet(wb, title, headers, widths, first=False):
+        ws = wb.active if first else wb.create_sheet()
+        ws.title = title
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+        ws.freeze_panes = "A2"
+        _autofit(ws, widths)
+        return ws
 
     wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Unmapped"
-    ws.append(["MDP Label", "Mapping Name (please fill)", "Companies",
-               "Other spellings already grouped here"])
-    for label, count, variants in unmapped:
-        ws.append([label, None, count, variants])
-    ws.column_dimensions["A"].width = 60
-    ws.column_dimensions["B"].width = 40
-    ws.column_dimensions["D"].width = 70
+
+    ws = add_sheet(wb, "1 - To Map (please fill)",
+                   ["MDP Label", "Mapping Name (PLEASE FILL)", "Companies",
+                    "Suggested family (hint only)", "Spellings already grouped here"],
+                   {"A": 52, "B": 34, "C": 11, "D": 24, "E": 60}, first=True)
+    for display, total, _n, variants in open_items:
+        ws.append([display, None, total, _family_hint(display), variants])
+        ws.cell(row=ws.max_row, column=2).fill = fill_me
+
+    # What the workbook itself collapses into each name. The live cache stores
+    # only the canonical after a rebuild, so reading it back would show nothing.
+    by_canonical: Dict[str, List[str]] = defaultdict(list)
+    try:
+        workbook_mapping, _r, _d, _c = load_workbook_sheets(workbook_path)
+        for label, (canonical, _why) in MANUAL_CANONICALS.items():
+            workbook_mapping[label] = canonical
+        for raw, canonical in workbook_mapping.items():
+            if raw != canonical:
+                by_canonical[canonical].append(raw)
+    except Exception:
+        pass
+
+    ws = add_sheet(wb, "2 - Already Covered",
+                   ["Mapping Name (from your workbook)", "Companies",
+                    "MDP labels your workbook maps into it", "How many", "ISO"],
+                   {"A": 46, "B": 11, "C": 88, "D": 10, "E": 8})
+    for display, total, _n, _variants in covered:
+        sources = sorted(by_canonical.get(display, []))
+        ws.append([display, total, "; ".join(sources), len(sources),
+                   geo_iso_code(display)])
+
+    ws = add_sheet(wb, "3 - Removed (not places)",
+                   ["Label", "Why it was removed"], {"A": 62, "B": 70})
+    ws_removed_count = [0]
+    try:
+        _mapping, removed, _decoded, _codes = load_workbook_sheets(workbook_path)
+        removed.update(MANUAL_REMOVED)
+        for label in sorted(removed):
+            ws.append([label, removed[label]])
+        ws_removed_count[0] = len(removed)
+    except Exception as exc:
+        ws.append(["(could not read the workbook)", str(exc)[:120]])
+
+    ws = add_sheet(wb, "4 - Summary", ["Item", "Count"], {"A": 46, "B": 12})
+    for item, value in (
+        ("Dropdown options today", len(covered) + len(open_items)),
+        ("Already named by your workbook", len(covered)),
+        ("STILL TO MAP (sheet 1)", len(open_items)),
+        ("Companies behind the unmapped options",
+         sum(r[1] for r in open_items)),
+        ("Raw spellings removed as not-a-place", ws_removed_count[0]),
+    ):
+        ws.append([item, value])
+    ws["A4"].font = Font(bold=True)
+    ws["B4"].font = Font(bold=True)
+
     wb.save(destination)
-    print(f"{len(unmapped)} unnamed dropdown options -> {destination}")
+    print(f"{len(open_items)} to map / {len(covered)} already covered -> {destination}")
 
 
 def main() -> int:
@@ -252,7 +354,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.report:
-        write_report(args.report)
+        write_report(args.report, args.workbook)
         return 0
 
     if not args.workbook.exists():

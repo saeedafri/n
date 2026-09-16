@@ -256,6 +256,58 @@ change the selected model — `enforce_stationarity=False` (1.97x),
 `cov_type='none'` in the grid, which cannot affect AIC. Weekly data (s=52,
 ~76s for a first run) says so in the UI before you press the button.
 
+### Weekly was unusable — seasonal AR/MA at lag 52 (fixed 2026-09-15)
+
+Reported by data science: *"Run analysis takes forever"* on weekly data
+(288 weekly points, 260-week horizon).
+
+**Root cause, measured.** A seasonal AR or MA term at lag 52 is estimated from
+one observation per annual cycle. Each such fit costs **~3.6s** against **~41ms**
+for the same model without them — roughly 90x. The SARIMA grid fits 36 of them
+and the SARIMAX combination search another 10, so:
+
+| Stage | Before | After |
+|---|---|---|
+| SARIMA grid (36 fits) | **49.6s** | 1.8s |
+| SARIMAX combination search (10 fits) | ~36s | 2.1s |
+| Whole weekly run, compute only | ~86s | **~6s** |
+| Whole weekly run in the browser, incl. cold FRED | never finished | **13.8s** (7.8s server) |
+
+On STG, which runs these single-threaded fits roughly 7x slower than a laptop,
+the old path was several minutes — the "forever".
+
+**The fix.** With 288 weekly points you have 5.5 annual cycles; seasonal AR/MA
+at lag 52 is not identifiable from that, so searching it bought nothing and cost
+everything. `seasonal_terms_supported(sample_size, season)` now gates the search:
+
+```python
+MIN_CYCLES_FOR_SEASONAL_TERMS = 8
+LARGE_SEASON = 26
+
+def seasonal_terms_supported(sample_size, season):
+    if season < 2:            return False   # annual: no season at all
+    if season < LARGE_SEASON: return True    # monthly (12), quarterly (4): always
+    return sample_size >= MIN_CYCLES_FOR_SEASONAL_TERMS * season
+```
+
+When it returns False the models keep **seasonal differencing** (`D=1`, which is
+what actually removes the annual pattern) and stop searching `P`/`Q`. The SARIMA
+tab says so explicitly, naming the cycle count.
+
+**Monthly and quarterly are deliberately never affected.** `LARGE_SEASON`
+short-circuits them, so the exhaustive grid the research team validated still
+runs. Verified after the change, in the browser: order still
+`(2,1,2)x(0,1,0,12)`, AIC still `2114.3794`, forecast still
+**478,175 / 472,427** — identical to a verbatim run of `app_New.py`. Five tests
+pin the gate, including that monthly keeps searching seasonal terms and that
+short weekly drops `P`/`Q` while keeping `D=1`.
+
+**Judgement recorded:** this does change which model weekly data selects. That
+is a change from "no result at all" to "a result in seconds", on a series whose
+length cannot support the terms being dropped. `simple_differencing=True` was
+measured as an alternative (7.6x faster) and rejected — it changes the selected
+order on monthly too, which would have broken parity.
+
 ### Charts and sections
 
 Same conventions as the Revenue Estimates page: `lines+markers`, 3px lines,

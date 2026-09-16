@@ -751,9 +751,9 @@ def _render_controls() -> Dict[str, Any]:
                              min(config["max_lag"], 12), key=f"{KEY}max_lag")
 
     if freq_name == "Weekly" and (run_sarima or run_sarimax):
-        # 36 grid fits at a 52-period season, ~2s each. Measured 76s end to end.
-        st.caption("Weekly data fits a 52-period seasonal model — the first run "
-                   "takes around a minute. Re-runs are cached and instant.")
+        st.caption("Weekly data fits a 52-period seasonal model. Seasonal AR/MA "
+                   "terms are only searched with at least 8 years of history — "
+                   "below that the models keep seasonal differencing instead.")
 
     setting_left, setting_right = st.columns(2)
     with setting_left:
@@ -1333,6 +1333,16 @@ def _render_sarima_tab(outcome: Dict[str, Any]) -> None:
     _section("SARIMA",
              "Pure time series — no external data. The order is chosen automatically "
              "by grid search on AIC.")
+    if result.get("seasonal_search") is False:
+        cycles = result.get("cycles")
+        st.info(
+            f"Seasonal AR/MA terms were not searched: this series covers about "
+            f"{cycles:.1f} seasonal cycles, and those terms need at least "
+            f"{engine.MIN_CYCLES_FOR_SEASONAL_TERMS} to be estimated meaningfully. "
+            "Seasonal differencing is still applied, so the annual pattern is "
+            "still removed — and the fit is far quicker."
+            if cycles else
+            "Seasonal AR/MA terms were not searched — too few seasonal cycles.")
     st.markdown(
         f'<div class="msf-spec">'
         f'<div><b>Best order</b>ARIMA{result["order"]}x{result["seasonal_order"]}</div>'

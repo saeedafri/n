@@ -237,6 +237,20 @@ def get_base_company_universe() -> pd.DataFrame:
     """Return DataFrame of ALL companies as the base screening universe."""
 
     def _build_universe() -> pd.DataFrame:
+        # materialized_or_build only calls this when the DB freshness signal has
+        # MOVED, so the 1-hour st.cache_data snapshot behind get_companies_rows()
+        # is by definition out of date at this point. Without the clear, a rebuild
+        # re-materialises the OLD rows under the NEW signature — the disk cache
+        # then looks fresh forever and the staleness becomes permanent. That is
+        # how the universe sat at 465 rows while coreiq_companies held 510: 45
+        # companies (Allbirds, On Holding, Gildan, Hugo Boss, CarGurus, Chefs'
+        # Warehouse…) were missing from every screen, and the three industries
+        # only they carry — Food & Beverage, Specialty Retail, Apparel & Footwear
+        # — were offered in the criterion dropdown but could never match a row.
+        try:
+            CompanyRepository.get_companies_rows.clear()
+        except Exception:
+            pass
         company_rows = CompanyRepository.get_companies_rows()
         rows = []
         for c in company_rows:
@@ -4767,6 +4781,112 @@ def get_keydevs_events_for_tickers(
             next_cursor = (_ld.isoformat(), int(_last["event_id"]))
 
     return pd.DataFrame(_keydevs_records_from_rows(rows)), next_cursor
+
+
+# How many of each industry's newest events the unbounded first page carries.
+# 8 x ~69 industries lands at ~520 rows — the same page weight as the old flat
+# newest-500, but spread so EVERY industry is represented instead of 36 of them.
+KEYDEV_PER_INDUSTRY = 8
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def get_keydevs_events_by_industry(
+    categories: tuple,
+    days: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    per_industry: int = KEYDEV_PER_INDUSTRY,
+    rn_from: int = 0,
+) -> Tuple[pd.DataFrame, bool]:
+    """Newest `per_industry` events for EVERY industry, as one page.
+
+    Used only when the screen is unbounded (no Industry / Geography criterion, so
+    the universe is every ticker that has events). A flat "newest 500" page is
+    dominated by whatever is busy right now: on M&A / All History it carried just
+    36 of the 69 industries, so filtering the Industry column to Restaurants +
+    Coffee & Beverage showed 6 rows out of the 610 that actually match. Slicing
+    per industry instead guarantees every industry is on the page.
+
+    The moment the user DOES pick an industry the universe is already narrow, and
+    the caller goes back to the plain newest-first page over those tickers — which
+    is the right answer there and needs no stratification.
+
+    Shape: the window runs over a LEAN subquery (event_id only) and the display
+    columns are joined on afterwards. Selecting the wide columns inside the window
+    makes MySQL materialise every matching row with all its text — measured 11.9s
+    versus 2.2s for this shape on M&A / All History.
+
+    `rn_from` is the paging handle: 0 gives each industry's newest slice, then
+    "Load more" asks for the next one. Returns (df, has_more).
+    """
+    if not categories:
+        return pd.DataFrame(), False
+
+    cat_sql = ", ".join("'" + str(c).replace("'", "''") + "'" for c in categories)
+    date_clause = _build_keydev_date_clause({
+        "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
+        "start_date": start_date,
+        "end_date": end_date,
+        "days": days,
+    })
+    lo = max(0, int(rn_from))
+    hi = lo + max(1, int(per_industry))
+
+    query = f"""
+        SELECT
+            e.event_id,
+            e.event_date,
+            e.event_subtype,
+            e.event_category,
+            e.ticker,
+            e.headline,
+            e.situation,
+            e.source,
+            e.source_ref,
+            e.source_detail,
+            {_KEYDEV_COMPANY_COLS}
+        FROM (
+            SELECT t.event_id FROM (
+                SELECT e2.event_id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY COALESCE(c2.primary_industry_coresight,
+                                                 sc2.primary_industry_coresight,
+                                                 nsc2.industry)
+                           ORDER BY e2.event_date DESC, e2.event_id DESC
+                       ) AS rn
+                FROM coreiq_company_events e2
+                LEFT JOIN coreiq_companies c2          ON c2.ticker  = e2.ticker
+                LEFT JOIN coreiq_sec_companies_all sc2 ON sc2.ticker = e2.ticker
+                LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc2 ON nsc2.ticker = e2.ticker
+                WHERE e2.event_category IN ({cat_sql})
+                  {date_clause}
+            ) t
+            WHERE t.rn > {lo} AND t.rn <= {hi}
+        ) picked
+        JOIN coreiq_company_events e ON e.event_id = picked.event_id
+        {_KEYDEV_COMPANY_JOINS}
+        ORDER BY e.event_date DESC, e.event_id DESC
+    """
+    try:
+        rows = db_manager.execute_query_readonly(query)
+    except Exception as exc:
+        log_error(f"[SCREENING] get_keydevs_events_by_industry failed: {exc}")
+        raise KeydevsQueryError(str(exc)) from exc
+
+    if not rows:
+        return pd.DataFrame(), False
+
+    # More to come only if some industry actually filled this slice; an industry
+    # that returned fewer than `per_industry` rows has no deeper history left.
+    counts: Dict[str, int] = {}
+    for r in rows:
+        _k = (r.get("industry") or "")
+        counts[_k] = counts.get(_k, 0) + 1
+    has_more = any(v >= per_industry for v in counts.values())
+
+    log_info(f"[SCREENING] keydevs per-industry page: rn {lo + 1}-{hi} → "
+             f"{len(rows)} rows across {len(counts)} industries, has_more={has_more}")
+    return pd.DataFrame(_keydevs_records_from_rows(rows)), has_more
 
 
 def _keydevs_records_from_rows(rows: list) -> list:

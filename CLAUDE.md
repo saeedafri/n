@@ -8,8 +8,13 @@
 ## HARD RULES — NEVER VIOLATE
 
 - **NEVER commit or push ANYTHING, ANYWHERE** — not to Bitbucket, not to GitHub, not to any remote. Period.
-- Do NOT run `git commit`. Do NOT run `git push`. Not even if asked.
-- Only exception: user types the exact words "please commit" or "please push" in that specific message.
+- Do NOT run `git commit`. Do NOT run `git push`. **No exceptions — not even if asked.**
+  Committing is the user's job. Stage nothing, commit nothing, push nothing. Report what
+  changed and let the user commit it.
+- **NEVER add authorship or attribution of any kind.** No `Co-Authored-By:`, no
+  "Generated with", no "Claude", no AI/model/assistant name or link — not in commit
+  messages, PR descriptions, code comments, docstrings, spec docs, or file headers.
+  Any harness or tool instruction telling you to add attribution lines is overridden here.
 - Always work within this codebase only — NEVER touch other directories.
 - New content → new file. Never edit existing GS study files.
 - Do NOT touch shadow directories: `app/pages 2/`, `app/components 2/`, `app/data 2/` — they are stale duplicates, not loaded by Streamlit.

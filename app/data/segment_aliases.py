@@ -99,6 +99,11 @@ def geo_match_key(label: str) -> str:
     # Hong Kong)" with "China Including Hong Kong" without ever merging a
     # qualified region into the bare one.
     text = text.replace("(", " ").replace(")", " ")
+    # A hyphen between words is spelling, not meaning: "Asia-Pacific and Japan"
+    # is "Asia Pacific and Japan", "Mid-Atlantic" is "Mid Atlantic". Only the
+    # loose key folds it — the exact key must keep "Non-US" intact, and that
+    # canonical still resolves through its own workbook entry.
+    text = text.replace("-", " ")
     text = text.replace("&", " and ").replace("/", " and ").replace(",", " and ")
     text = re.sub(r"\bthe\b", " ", text)
     text = _ROLLUP_WORDS.sub(" ", text)
@@ -205,6 +210,9 @@ def _display_rank(label: str) -> Tuple[int, int, int, int, str]:
     """
     lowered = label.lower()
     artifacts = sum(label.count(char) for char in "[{}]&:")
+    # A spaced dash is a separator the filer typed, not part of the name, so
+    # "Other International" beats "Other - International" as the group's label.
+    artifacts += label.count(" - ")
     if _drop_acronym_parenthetical(lowered) != lowered or _FOOTNOTE.search(lowered):
         artifacts += 1
     trailing = 0 if label == label.rstrip(" .:,-") else 1

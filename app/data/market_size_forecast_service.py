@@ -731,6 +731,30 @@ def _seasonal_order(order: Tuple[int, int, int], season: int) -> Tuple[int, int,
     return (*order, season)
 
 
+# A seasonal AR or MA term at lag 52 is estimated from one observation per
+# annual cycle, so it needs many years of weekly history to identify at all —
+# and each such fit costs ~3.6s against ~40ms without them. On a 288-week
+# series (5.5 cycles) the 36-model grid took 50s locally, several minutes on
+# STG, which is what "takes forever" was.
+#
+# Below the threshold we keep seasonal DIFFERENCING (D=1, which is what
+# actually removes the annual pattern) and stop searching seasonal AR/MA.
+# Monthly and quarterly are never affected: their seasons are short, their fits
+# are cheap, and `LARGE_SEASON` keeps them on the original exhaustive grid so
+# the numbers the research team validated do not move.
+MIN_CYCLES_FOR_SEASONAL_TERMS = 8
+LARGE_SEASON = 26
+
+
+def seasonal_terms_supported(sample_size: int, season: int) -> bool:
+    """Can this series identify seasonal AR/MA terms at `season`?"""
+    if season < 2:
+        return False
+    if season < LARGE_SEASON:
+        return True                      # monthly (12), quarterly (4): always search
+    return sample_size >= MIN_CYCLES_FOR_SEASONAL_TERMS * season
+
+
 def run_sarima(sales_series: pd.Series, freq_name: str, horizon: int,
                progress: Optional[Callable[[int, int, str], None]] = None) -> Dict[str, Any]:
     """Grid-search the ARIMA order by AIC, validate, then forecast."""
@@ -745,7 +769,9 @@ def run_sarima(sales_series: pd.Series, freq_name: str, horizon: int,
     # 12 while fitting the grid at the data's real period, so quarterly and
     # weekly runs were refit against a season they never searched.
     p_range, d_range, q_range = (0, 2), (1, 1), (0, 2)
-    P_range, D_range, Q_range = (0, 1), (1, 1), (0, 1)
+    seasonal_search = seasonal_terms_supported(len(train), season)
+    P_range, D_range, Q_range = ((0, 1) if seasonal_search else (0, 0)), (1, 1), \
+                                ((0, 1) if seasonal_search else (0, 0))
     combos = [(p, d, q, P, D, Q)
               for p in range(p_range[0], p_range[1] + 1)
               for d in range(d_range[0], d_range[1] + 1)
@@ -785,9 +811,12 @@ def run_sarima(sales_series: pd.Series, freq_name: str, horizon: int,
                                    periods=horizon, freq=config['freq'])
 
     log_timing("MSF_SARIMA", (perf_counter() - started) * 1000,
-               details=f"order={best_order}{best_seasonal} mape={mape:.2f}")
+               details=f"order={best_order}{best_seasonal} fits={len(combos)} "
+                       f"seasonal_search={seasonal_search} mape={mape:.2f}")
     return {
         'model': 'SARIMA',
+        'seasonal_search': seasonal_search,
+        'cycles': (len(train) / season) if season >= 2 else None,
         'label': f"SARIMA{best_order}x{best_seasonal}",
         'order': best_order,
         'seasonal_order': best_seasonal,
@@ -1024,7 +1053,11 @@ def rank_exog_combinations(lagged: pd.DataFrame, candidates: List[str], max_lag:
     all_combos = [list(c) for size in range(1, max_combo + 1)
                   for c in combinations(candidates, size)]
     rows = []
-    seasonal = _seasonal_order((1, 1, 1), config['s'])
+    # Same reasoning as the SARIMA grid: at lag 52 the seasonal AR/MA terms are
+    # both unidentifiable and ~90x more expensive per fit.
+    seasonal = _seasonal_order(
+        (1, 1, 1) if seasonal_terms_supported(len(train), config['s']) else (0, 1, 0),
+        config['s'])
     for position, combo in enumerate(all_combos, start=1):
         try:
             # Ranked on forecast RMSE, so standard errors are never read —

@@ -445,7 +445,7 @@ counts fall only where two spellings of one place merged.
 
 * *(Closed 2026-09-09.)* **Saved Screenings with stored geo members** — no
   production row had any (all 30 used all-segments mode), so one was created
-  through the UI: "CLAUDE geo-mapping E2E …" holding `United States`,
+  through the UI, a throwaway "geo-mapping E2E" set holding `United States`,
   `Europe, Middle East and Africa (EMEA)` and `South Korea`. After a full page
   reload it appeared in the dialog, loaded (228 of 465 companies have data), and
   its Edit form pre-filled **all three canonical names exactly**. It was then
