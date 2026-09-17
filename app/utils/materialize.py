@@ -106,7 +106,16 @@ def _total_rows(obj):
     return 0
 
 
-def read_materialized(name, sources):
+class _STALE:
+    """Marks a frame served from a stale generation (see materialized_or_build)."""
+
+    __slots__ = ("obj",)
+
+    def __init__(self, obj):
+        self.obj = obj
+
+
+def read_materialized(name, sources, allow_stale=False):
     try:
         if not _materialize_on():
             return None
@@ -126,8 +135,21 @@ def read_materialized(name, sources):
             _meta = json.load(_f)
         _live_sig = _live_signature(sources)
         if _meta.get("signature") != _live_sig:
-            slog_warning(f"[MAT][{name}] STALE → rebuild")
-            return None
+            if not allow_stale:
+                slog_warning(f"[MAT][{name}] STALE → rebuild")
+                return None
+            # Stale-while-revalidate: the caller gets the previous generation
+            # immediately and a background thread refreshes it. A full rebuild is
+            # ~21s on calendar_events_full, and the signature moves on every
+            # ingest, so blocking the request on it is what made "one row changed"
+            # cost the user 21 seconds.
+            try:
+                _obj = pd.read_pickle(_pk, compression="gzip")
+            except Exception:
+                return None
+            slog_warning(f"[MAT][{name}] STALE → serving previous generation, "
+                         f"rebuilding in background rows={_total_rows(_obj):,}")
+            return _STALE(_obj)
         _t = time.perf_counter()
         _obj = pd.read_pickle(_pk, compression="gzip")
         _fp = _fingerprint(_obj)
@@ -185,13 +207,59 @@ def write_materialized(name, obj, sources):
         slog_warning(f"[MAT][{name}] write failed: {type(_e).__name__}")
 
 
+_REBUILDING = set()
+_REBUILD_LOCK = threading.Lock()
+
+
+def _refresh_in_background(name, build_fn, sources):
+    """Rebuild one cache off the request path. At most one thread per name."""
+    with _REBUILD_LOCK:
+        if name in _REBUILDING:
+            return
+        _REBUILDING.add(name)
+
+    def _run():
+        _t = time.perf_counter()
+        try:
+            _fresh = build_fn()
+            write_materialized(name, _fresh, sources)
+            slog_warning(f"[MAT][{name}] background refresh done in "
+                         f"{time.perf_counter() - _t:.1f}s")
+        except Exception as _e:
+            slog_warning(f"[MAT][{name}] background refresh failed: {type(_e).__name__}")
+        finally:
+            with _REBUILD_LOCK:
+                _REBUILDING.discard(name)
+
+    _th = threading.Thread(target=_run, name=f"mat-refresh-{name}", daemon=True)
+    try:
+        # inherit the Streamlit context so st.cache_data inside build_fn behaves;
+        # harmless when there is no script context (warmup thread, CLI)
+        from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+        _ctx = get_script_run_ctx()
+        if _ctx is not None:
+            add_script_run_ctx(_th, _ctx)
+    except Exception:
+        pass
+    _th.start()
+
+
 def materialized_or_build(name, build_fn, sources):
+    """Return the cache, never blocking a request on a rebuild.
+
+      fresh on disk   -> return it
+      stale on disk   -> return the previous generation NOW, refresh in background
+      nothing on disk -> build synchronously (there is nothing to serve)
+    """
     if not _materialize_on():
         return build_fn()
-    _obj = read_materialized(name, sources)
+    _obj = read_materialized(name, sources, allow_stale=True)
+    if isinstance(_obj, _STALE):
+        _refresh_in_background(name, build_fn, sources)
+        return _obj.obj
     if _obj is not None:
         return _obj
-    slog_warning(f"[MAT][{name}] MISS → live build")
+    slog_warning(f"[MAT][{name}] MISS → live build (no previous generation)")
     _obj = build_fn()
     write_materialized(name, _obj, sources)
     return _obj

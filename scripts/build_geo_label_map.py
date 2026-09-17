@@ -51,8 +51,8 @@ MANUAL_CANONICALS: Dict[str, Tuple[str, str]] = {
     # remove sheet, "Decode -> keep": the acronym is opaque in the dropdown and
     # the sheet spells out what it means.  Only the unambiguous ones are here —
     # "Mci" ("needs confirmation") and "JAPA" ("likely") are left untouched.
-    "Apj": ("Asia Pacific & Japan (APJ)", "remove sheet: decode -> keep"),
-    "Apjc": ("Asia Pacific, Japan & China (APJC)", "remove sheet: decode -> keep"),
+    "Apj": ("Asia Pacific (APAC)", "decode -> Asia Pacific & Japan; data team maps that into Asia Pacific (APAC)"),
+    "Apjc": ("Asia Pacific (APAC)", "decode -> APJC; data team maps APJC into Asia Pacific (APAC)"),
     "Apla": ("Asia Pacific & Latin America (APLA)", "remove sheet: decode -> keep"),
     "Eame": ("Europe, Asia & Middle East (EAME)", "remove sheet: decode -> keep"),
     "Laap": ("Latin America & Asia Pacific (LAAP)", "remove sheet: decode -> keep"),
@@ -131,14 +131,49 @@ def load_workbook_sheets(path: Path):
     return mapping, removed, decoded, iso_codes
 
 
+# Reviewed decisions for labels the Mapping sheet does not cover, one row per raw
+# label: MAP to a name, KEEP the label as its own name, or REMOVE it as not a
+# place. Built on 2026-09-16 from the data team's review sheet, with every
+# regional call checked against the companies that actually file the label —
+# their two machine passes disagreed on 62 of 143 rows and inverted several
+# ("Outside Canada" -> Canada). Each row carries its reason. Edit this file, not
+# the JSON, then rerun the generator.
+DECISIONS_CSV = REPO / "scripts" / "geo_label_decisions.csv"
+
+
+def load_decisions(path: Path = DECISIONS_CSV):
+    """(mapped, removed) from the decisions file; a missing file applies nothing."""
+    import csv
+
+    mapped: Dict[str, str] = {}
+    removed: Dict[str, str] = {}
+    if not path.exists():
+        return mapped, removed
+    with open(path, newline="") as handle:
+        for row in csv.DictReader(handle):
+            label = (row.get("MDP Label") or "").strip()
+            action = (row.get("Action") or "").strip().upper()
+            if not label:
+                continue
+            if action == "REMOVE":
+                removed[label] = (row.get("Reason") or "").strip()
+            elif action in ("MAP", "KEEP"):
+                name = (row.get("Mapping Name") or "").strip() or label
+                mapped[label] = name
+    return mapped, removed
+
+
 def build(path: Path) -> dict:
     from data.segment_aliases import geo_match_key, normalize_geo_key
 
     mapping, removed, decoded, iso_codes = load_workbook_sheets(path)
+    decided, decided_removed = load_decisions()
+    mapping.update(decided)
 
     for label, (canonical, _why) in MANUAL_CANONICALS.items():
         mapping[label] = canonical
     removed.update(MANUAL_REMOVED)
+    removed.update(decided_removed)
 
     # The remove sheet wins where both sheets name the same label: it carries a
     # specific per-filer reason ("tax category, Micron"), while the Mapping
@@ -187,6 +222,7 @@ def build(path: Path) -> dict:
             "loose_keys": len(loose),
             "removed": len(removed),
         },
+        "_decisions": {"mapped_or_kept": len(decided), "removed": len(decided_removed)},
         "_conflicts_remove_wins": conflicts,
         "_ambiguous_loose_keys": ambiguous,
         "_decode_keep_untouched": [label for label, _ in decoded
@@ -328,6 +364,29 @@ def write_report(destination: Path, workbook_path: Path) -> None:
     except Exception as exc:
         ws.append(["(could not read the workbook)", str(exc)[:120]])
 
+    ws = add_sheet(wb, "5 - Decisions (reviewed)",
+                   ["MDP Label", "Mapping Name", "Action", "Reason",
+                    "Data team Filled", "Data team Suggested", "Overrides data team?"],
+                   {"A": 50, "B": 36, "C": 9, "D": 80, "E": 26, "F": 26, "G": 12})
+    override_fill = PatternFill("solid", fgColor="FCE4D6")
+    try:
+        import csv
+
+        with open(DECISIONS_CSV, newline="") as handle:
+            for row in csv.DictReader(handle):
+                filled = row.get("Data team Filled", "")
+                suggested = row.get("Data team Suggested", "")
+                overrides = bool(filled) and not filled.startswith("(") and \
+                    row["Mapping Name"] not in (filled, suggested)
+                ws.append([row["MDP Label"], row["Mapping Name"], row["Action"],
+                           row["Reason"], filled, suggested,
+                           "YES" if overrides else ""])
+                if overrides:
+                    for cell in ws[ws.max_row]:
+                        cell.fill = override_fill
+    except FileNotFoundError:
+        ws.append(["(no decisions file)"])
+
     ws = add_sheet(wb, "4 - Summary", ["Item", "Count"], {"A": 46, "B": 12})
     for item, value in (
         ("Dropdown options today", len(covered) + len(open_items)),
@@ -372,6 +431,8 @@ def main() -> int:
           f"{counts['canonicals']} canonicals "
           f"({counts['exact_keys']} exact + {counts['loose_keys']} loose keys), "
           f"{counts['removed']} removed")
+    print(f"  decisions file: {payload['_decisions']['mapped_or_kept']} mapped/kept, "
+          f"{payload['_decisions']['removed']} removed")
     if payload["_conflicts_remove_wins"]:
         print("  remove sheet overrides Mapping for:", payload["_conflicts_remove_wins"])
     if payload["_ambiguous_loose_keys"]:

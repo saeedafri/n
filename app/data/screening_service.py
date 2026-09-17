@@ -55,16 +55,20 @@ from data.repository import (
 )
 from data.models import get_fiscal_quarter, parse_fiscal_year_end
 
+from utils.ma_8k_extract import format_ma_amount, sanitize_ma_name
+from utils.ma_overrides_auto import sec_closure_for_event
+
 try:
     from utils.server_logger import (
         log_error, log_exception, log_info, log_timing, log_db_timing,
-        timed_operation,
+        log_structured_error, timed_operation,
     )
 except ImportError:
     import logging
     _lg = logging.getLogger(__name__)
     log_error = _lg.error
     log_info = _lg.info
+    def log_structured_error(exc, **kw): _lg.error("%s %s", exc, kw)
     def log_timing(*a, **kw): pass
     def log_db_timing(*a, **kw): pass
     from contextlib import contextmanager as _cm
@@ -4367,6 +4371,20 @@ _KEYDEV_COMPANY_COLS = f"""
             c.ticker IS NOT NULL                                    AS in_coresight_universe
 """
 
+# M&A deal parties. Selected ONLY when the user picked the 'M&A Activity' category:
+# every other category leaves these columns NULL on ~99% of rows, and the grid must
+# not grow three empty columns for a Management-Changes screen.
+MA_KEYDEV_CATEGORY = "M&A Activity"
+_KEYDEV_MA_COLS = """,
+            e.ma_acquirer, e.ma_target, e.ma_deal_type,
+            e.ma_transaction_value, e.ma_transaction_value_usd_m
+"""
+
+
+def _keydev_ma_select(categories) -> str:
+    """Extra SELECT list for M&A screens, empty string otherwise."""
+    return _KEYDEV_MA_COLS if MA_KEYDEV_CATEGORY in (categories or ()) else ""
+
 
 def apply_keydevs_criterion(
     criterion: Dict,
@@ -4740,6 +4758,7 @@ def get_keydevs_events_for_tickers(
             f"OR (e.event_date = '{before_date}' AND e.event_id < {int(before_id)}))"
         )
     _lim = max(1, int(limit))
+    with_ma = MA_KEYDEV_CATEGORY in (categories or ())
     query = f"""
         SELECT
             e.event_id,
@@ -4752,7 +4771,7 @@ def get_keydevs_events_for_tickers(
             e.source,
             e.source_ref,
             e.source_detail,
-            {_KEYDEV_COMPANY_COLS}
+            {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
         FROM coreiq_company_events e
         {_KEYDEV_COMPANY_JOINS}
         WHERE e.event_category IN ({cat_sql})
@@ -4780,7 +4799,7 @@ def get_keydevs_events_for_tickers(
         if _ld is not None and _last.get("event_id") is not None:
             next_cursor = (_ld.isoformat(), int(_last["event_id"]))
 
-    return pd.DataFrame(_keydevs_records_from_rows(rows)), next_cursor
+    return pd.DataFrame(_keydevs_records_from_rows(rows, with_ma)), next_cursor
 
 
 # How many of each industry's newest events the unbounded first page carries.
@@ -4832,6 +4851,7 @@ def get_keydevs_events_by_industry(
     lo = max(0, int(rn_from))
     hi = lo + max(1, int(per_industry))
 
+    with_ma = MA_KEYDEV_CATEGORY in (categories or ())
     query = f"""
         SELECT
             e.event_id,
@@ -4844,7 +4864,7 @@ def get_keydevs_events_by_industry(
             e.source,
             e.source_ref,
             e.source_detail,
-            {_KEYDEV_COMPANY_COLS}
+            {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
         FROM (
             SELECT t.event_id FROM (
                 SELECT e2.event_id,
@@ -4886,12 +4906,17 @@ def get_keydevs_events_by_industry(
 
     log_info(f"[SCREENING] keydevs per-industry page: rn {lo + 1}-{hi} → "
              f"{len(rows)} rows across {len(counts)} industries, has_more={has_more}")
-    return pd.DataFrame(_keydevs_records_from_rows(rows)), has_more
+    return pd.DataFrame(_keydevs_records_from_rows(rows, with_ma)), has_more
 
 
-def _keydevs_records_from_rows(rows: list) -> list:
+def _keydevs_records_from_rows(rows: list, with_ma: bool = False) -> list:
     """Map raw coreiq_company_events rows → the 7 display columns. Shared by the
-    paginated fetch and the full-export fetch so both stay identical."""
+    paginated fetch and the full-export fetch so both stay identical.
+
+    ``with_ma`` adds Acquirer / Target / Transaction Amount — only on an
+    'M&A Activity' screen, and only ever showing values that survive the overlay
+    merge and the amount gate (see utils/ma_8k_extract)."""
+    overlays = _load_ma_overlays_safe() if with_ma else {}
     records = []
     for r in rows:
         ev_date = r.get("event_date")
@@ -4909,7 +4934,7 @@ def _keydevs_records_from_rows(rows: list) -> list:
         industry = _keydev_industry_label(r)
 
         source_ref = r.get("source_ref") or ""
-        records.append({
+        record = {
             # Hidden: lets the fan-out from the bare-ticker company JOIN be
             # collapsed to one row per event. Never shown, never exported.
             "_event_id": r.get("event_id"),
@@ -4924,10 +4949,68 @@ def _keydevs_records_from_rows(rows: list) -> list:
             "Industry": industry,
             "Key Development Headline": r.get("headline") or "",
             "Summary": situation,
-            "Key Development Sources": source_display,
-            "Source Reference": source_ref,
-        })
+        }
+        # Deal parties sit between the Summary and the provenance columns, so the
+        # reader goes headline → summary → who/whom/how much → where it came from.
+        # dict order IS the grid's column order (pandas keeps insertion order).
+        if with_ma:
+            record.update(_ma_display_fields(r, overlays))
+        record["Key Development Sources"] = source_display
+        record["Source Reference"] = source_ref
+        records.append(record)
     return records
+
+
+def _load_ma_overlays_safe() -> dict:
+    """Overlay corrections for the M&A columns; never fails a screen."""
+    try:
+        from utils.ma_overrides_auto import load_ma_overlays
+        return load_ma_overlays()
+    except Exception as exc:
+        log_structured_error(exc, page="screening_service",
+                             component="_load_ma_overlays_safe",
+                             operation="load_ma_overlays")
+        return {}
+
+
+def _ma_display_fields(row: dict, overlays: dict) -> dict:
+    """Acquirer / Target / Transaction Amount for one event row.
+
+    An overlay entry (LLM-verified gold, or a deterministic EDGAR re-extraction)
+    wins over the DB column. Where the overlay has nothing to say, the DB value is
+    shown only if it survives `sanitize_ma_name` — the nightly ETL still writes
+    8-K boilerplate such as "Financial Statements of Businesses or Funds" into
+    ma_acquirer. Anything unproven renders "—", never a guess.
+    """
+    fix = overlays.get(str(row.get("event_id"))) or {}
+    # Deal status comes from SEC structure, not from ma_deal_status: verified
+    # against 5,775 filings, that column is right on only 29.2% of the rows it
+    # marks 'closed'. An 8-K declaring Item 2.01, or the target's delisting, is
+    # 92%+ precise. Absence of evidence is shown as "—", never as "not closed".
+    closure = sec_closure_for_event(row.get("ticker"), row.get("event_date"))
+    acquirer = sanitize_ma_name(fix.get("acquirer") or row.get("ma_acquirer"))
+    target = sanitize_ma_name(fix.get("target") or row.get("ma_target"))
+    subtype = row.get("event_subtype")
+    overlay_amount = fix.get("transaction_value_usd_m")
+    if overlay_amount is not None:
+        # an overlay figure is LLM-verified against the filing — no financing check
+        amount = format_ma_amount(f"${overlay_amount} million", None, subtype)
+    else:
+        # 8-K Item 1.01 carries both merger and credit agreements, so the row's own
+        # words decide: a revolver names itself, an acquisition names two parties
+        context = " ".join(str(v) for v in (row.get("headline"),
+                                            (row.get("situation") or "")[:400],
+                                            row.get("ma_acquirer"),
+                                            row.get("ma_target")) if v)
+        amount = format_ma_amount(row.get("ma_transaction_value"), None,
+                                  subtype, financing_context=context,
+                                  parties_known=bool(acquirer and target))
+    return {
+        "Acquirer": acquirer or "—",
+        "Target": target or "—",
+        "Transaction Amount": amount,
+        "Deal Status": f"Closed ({closure})" if closure else "—",
+    }
 
 
 def _keydev_industry_label(row: dict) -> str:
@@ -4971,11 +5054,12 @@ def fetch_all_keydevs_events(
         "end_date": end_date,
         "days": days,
     })
+    with_ma = MA_KEYDEV_CATEGORY in (categories or ())
     query = f"""
         SELECT
             e.event_id, e.event_date, e.event_subtype, e.event_category, e.ticker,
             e.headline, e.situation, e.source, e.source_ref, e.source_detail,
-            {_KEYDEV_COMPANY_COLS}
+            {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
         FROM coreiq_company_events e
         {_KEYDEV_COMPANY_JOINS}
         WHERE e.event_category IN ({cat_sql})
@@ -4989,7 +5073,7 @@ def fetch_all_keydevs_events(
     except Exception as exc:
         log_error(f"[SCREENING] fetch_all_keydevs_events failed: {exc}")
         return pd.DataFrame()
-    return pd.DataFrame(_keydevs_records_from_rows(rows or []))
+    return pd.DataFrame(_keydevs_records_from_rows(rows or [], with_ma))
 
 
 # =============================================================================

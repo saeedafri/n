@@ -195,3 +195,219 @@ screen.
    acceptable to the business, or is complete coverage the requirement (→ licensed feed)?
 2. Tier 2 needs a working LLM key. Which one do we use?
 3. Who owns filing the upstream-job defect with the data team?
+
+---
+
+# PART 2 — Implementation (built 2026-09-16)
+
+Constraint from the owner: **zero extra cost.** No LLM key, no paid feed — only
+what the repo already has (the DB, the checked-in overlay, and the free
+`edgartools`/SEC path). Tier 2's LLM pass from Part 1 §5 is therefore NOT built;
+the free deterministic equivalent is, and §2.4 below measures what it is worth.
+
+## 1. What changed
+
+| File | Change |
+|---|---|
+| `app/utils/ma_8k_extract.py` | `ma_amount_is_trustworthy()` / `format_ma_amount()` — the amount gate. `sanitize_ma_name()` tightened with `_reads_as_prose()`. `_self_check()` runnable via `python app/utils/ma_8k_extract.py`. |
+| `app/utils/ma_overrides_auto.py` | `load_ma_overlays()` — ONE reader for all three overlays (runtime < edgar backfill < repo gold), mtime-cached. `data_overlay_path()`, `_read_overlay()`. |
+| `app/data/repository.py` | `_load_ma_overrides()` now delegates to `load_ma_overlays()`; the two duplicate class-level caches deleted. Calendar behaviour unchanged. |
+| `app/data/screening_service.py` | `_keydev_ma_select()` adds the `ma_*` columns to the three Key Devs queries **only when 'M&A Activity' is selected**; `_keydevs_records_from_rows(rows, with_ma)` emits Acquirer / Target / Transaction Amount; `_ma_display_fields()` does the overlay-then-gate merge. |
+| `scripts/enrich_ma_events_v2.py` | `backfill-edgar` subcommand — free, resumable, no LLM. |
+| `app/data/ma_event_overrides_edgar.json` | NEW, generated: 21 recovered deals. |
+
+## 2. Decisions, each with its measurement
+
+### 2.1 Columns appear only on an M&A screen
+`_keydev_ma_select(categories)` returns the extra SELECT list only when
+`'M&A Activity'` is among the chosen categories, and `with_ma` gates the display
+keys. Verified against STG: an M&A screen returns 12 columns including
+Acquirer/Target/Transaction Amount; a Management-Changes screen returns the
+original 9 and no M&A column leaks in.
+
+### 2.2 Speed — the columns are free
+They are more columns on rows already being fetched, no extra join and no extra
+rows (this DB is packet-per-row bound). Measured on STG, 500 rows, warm pool:
+
+| query | rows | time |
+|---|---|---|
+| without the M&A columns | 500 | 2,622 ms / 2,575 ms |
+| with the M&A columns | 500 | 4,270 ms (first, cold TLS) / **2,317 ms** |
+
+Within noise once warm. The overlay merge is a dict lookup per row over a
+mtime-cached JSON (268 entries), and `load_ma_overlays()` costs one `os.stat`
+per file per render, not a JSON parse.
+
+### 2.3 Materialization: pickle.gz stays, parquet rejected
+`utils/materialize.py` writes **pickle + gzip level-1**, not parquet. Measured on
+the largest cache (`calendar_events_full`, 20,946 rows × 15 cols):
+
+| format | read | write | size |
+|---|---|---|---|
+| pickle.gz (current) | 9.2 ms | 20.6 ms | 403,241 B |
+| pickle raw | 8.5 ms | — | 2,269,362 B |
+| parquet (snappy) | **5.2 ms** | 22.0 ms | 381,900 B |
+
+Parquet is ~4 ms faster to read. One STG round-trip is ~250 ms, so the format is
+0.1% of a page's cost — switching buys nothing and costs a pyarrow dependency on
+every cache reader. **Not changed.** Faster *updates* are a freshness-signal
+question, not a format question (see the CRC32 note in the materialization
+memory); the Key Devs grid is not materialized at all — it reads the DB directly
+with keyset pagination.
+
+### 2.4 The free EDGAR backfill is real but small — and here is why
+`scripts/enrich_ma_events_v2.py backfill-edgar` re-fetches the source filing with
+`edgartools` (SEC is free) and runs the precision-tested template extractor.
+
+First run targeted every EDGAR-sourced M&A row missing a name — **4,156 rows** —
+and the first 40 returned **zero** names. Cause, from the filings themselves:
+
+| subtype of the 4,156 rows missing names | count | why nothing can be extracted |
+|---|---|---|
+| Material Agreement | 2,707 | 8-K Item 1.01 credit-facility amendments — no buyer, no seller |
+| M&A News (6-K) | 840 | foreign private issuer cover reports |
+| M&A Cancellation | 462 | Item 1.02 terminations |
+| **M&A Closing** | **124** | the genuinely extractable slice |
+| Change in Control / Deal News | 23 | |
+
+So the subcommand now restricts itself to the four deal-bearing subtypes
+(`BACKFILL_SUBTYPES`) — otherwise it is 4,000 SEC round-trips for nothing.
+
+**Result of the real run:** 462 candidate rows → 147 missing names → **21
+recovered** (14% yield, consistent with the extractor's documented 27-40% recall
+on filings that do describe a deal). Recovered names are correct on inspection:
+Broadcom/VMware, Synopsys/Ansys, J.M. Smucker/Hostess Brands, Denny's/Keke's
+Breakfast Cafe, Sanmina/ZT Group, Bed Bath & Beyond/The Container Store.
+
+The overlay is **fill-only** — an event absent from it keeps its DB value. The
+backfill can never blank a good name.
+
+### 2.5 Tightening the name validator — the gold set is the oracle
+The first live grid still showed prose in the Acquirer column
+("B deal, its second in four", "Qualcomm shares", "credit card accounts issued by
+Wells Fargo"). `sanitize_ma_name` now also rejects a value carrying a **lowercase**
+deal noun or prose verb, or opening with an all-lowercase word on a 3+ word value.
+
+Every rule is lowercase-sensitive on purpose, and was tuned against the 480
+verified names in `ma_event_overrides.json` as a regression oracle:
+
+| attempt | garbage caught | verified gold names destroyed |
+|---|---|---|
+| consecutive-lowercase-run | yes | **26 / 262** — "lululemon athletica inc.", "salesforce.com, inc.", "SK hynix Inc." |
+| + legal-suffix exemption, verbs | yes | 3 / 262 |
+| **final** (3+ words, `str.islower()` first word) | yes | **1 / 262** — "digital banking business", a descriptor, not a company |
+
+`_self_check()` now asserts that at most one verified name is rejected, so a
+future tightening that starts eating real companies fails the check.
+
+## 3. Coverage after the build (last 12 months, 14,261 M&A events)
+
+| | raw DB | shown after overlay + gate |
+|---|---|---|
+| rows with Acquirer **and** Target | 8,651 | **7,368** (2,112 tickers) |
+| rows with a Transaction Amount | 3,382 | **2,486** |
+
+The ~1,300 rows the gate removes are the prose fragments and the mis-scaled /
+per-share / credit-facility amounts. They render "—".
+
+## 4. How to re-run the free backfill
+
+```bash
+# picks up where it left off; writes app/data/ma_event_overrides_edgar.json
+.venv/bin/python scripts/enrich_ma_events_v2.py backfill-edgar --workers 4
+.venv/bin/python app/utils/ma_8k_extract.py          # gate + gold regression
+```
+
+The daemon in `utils/ma_overrides_auto.py` keeps handling newly-inserted calendar
+rows; the backfill is for the historical screening rows it never looked at.
+
+## 5. Still true, still the data team's job
+
+None of this repairs `coreiq_company_events`. The nightly enrichment job outside
+this repo is still writing regex output — the Sep-2026 rows re-fetched during
+this build still had `ma_acquirer = "Financial Statements of Businesses or Funds"`.
+The app now hides that; it does not fix it.
+
+---
+
+# PART 3 — All-company coverage + amount rework (2026-09-16, after review)
+
+Review question: *do all companies arrive, not just Coresight ones, and are
+acquirer / target / amount as complete as possible?*
+
+## 1. All companies DO arrive — measured
+
+| | |
+|---|---|
+| M&A events in `coreiq_company_events` | 22,122 across **3,871 tickers** |
+| of those tickers, in the Coresight universe (`coreiq_companies`) | **453** |
+| rows returned by the screening path (`ALL_TICKERS`, all history) | **22,184** |
+| distinct tickers that reached the grid | **3,871 — all of them** |
+| rows showing a real company name (not a bare ticker) | **22,184 / 22,184** |
+
+An unbounded Key Devs screen passes the `ALL_TICKERS` sentinel, so
+`_keydev_ticker_clause` emits no ticker restriction at all; names for the 3,418
+non-Coresight tickers come from the AV / SEC / non-SEC masters already joined in
+`_KEYDEV_COMPANY_JOINS`. The 62 extra rows over 22,122 are the known JD/LULU/TSCO
+ticker fan-out, collapsed downstream by `_event_id`.
+
+## 2. The amount is now read from the text, not from the broken column
+
+`ma_transaction_value_usd_m` is no longer trusted at all. **No row has a number
+without its text** (`num_only = 0`, `text_only = 569`, `both = 7,414`), so the
+text is always available and is always the better source.
+
+`parse_ma_amount()` reads the figure and its own scale word. This *recovers* the
+142 mis-scaled rows instead of hiding them: PAG `"$12,340,000"` was stored as
+12,340,000 (i.e. $12.34 **trillion**) and now reads **$12.3M**. Still refused:
+per-share quotes, non-USD, and a bare `"$441"` whose scale is unknowable.
+
+## 3. The `Material Agreement` exclusion was too blunt — corrected
+
+8-K **Item 1.01 covers merger agreements AND credit agreements**, so excluding
+the subtype wholesale hid **624 genuine deals** — Adobe/Figma $1,000M,
+BidCo/Adevinta $2,200M, Denso/Silicon Carbide $500M, CarGurus/CarOffer $75M.
+
+Replaced with two conditions the row must satisfy *itself*:
+
+1. no financing vocabulary in its text, headline, situation or party names
+   (`credit agreement`, `revolv`, `indenture`, `notes`, `securitiz`, `receivabl`,
+   `repurchase`, `preferred stock`, `Funding, LLC`, `aggregate principal`, …);
+2. **both** a valid acquirer and a valid target — an amount alone cannot tell a
+   purchase price from a borrowing.
+
+Tuning was measured, not assumed:
+
+| rule | Item 1.01 rows shown | precision on a 14-row sample |
+|---|---|---|
+| exclude the whole subtype | 0 | — (624 real deals lost) |
+| financing vocabulary only | 839 | ~6/14 — "2018 Notes", "Taco Bell Funding, LLC", "Series A Senior Preferred" leaked |
+| **+ both parties required** | **456** | **~10/14** |
+
+Residual leakage is real and acknowledged: `CDW LLC → CDW Finance Corporation`
+(notes co-issuer) and `Merrill Lynch → Alliance Data Systems` (underwriting
+purchase agreement) still show. Tightening further started cutting genuine deals,
+so this is the stopping point.
+
+## 4. Final coverage, all history, all companies
+
+| | baseline (first gate) | now |
+|---|---|---|
+| Acquirer | 13,513 (60.9%) | 13,513 (60.9%) |
+| Target | 13,248 (59.7%) | 13,248 (59.7%) |
+| **Transaction Amount** | 4,447 (20.0%) | **4,643 (20.9%)** |
+| acquirer + target | 11,080 (49.9%) | 11,080 (49.9%) |
+| all three | 3,566 (16.1%) | **3,820 (17.2%)** |
+
+The headline number moved little; what changed materially is *correctness* — the
+mis-scaled rows are now right rather than hidden, and real Item 1.01 acquisitions
+are no longer discarded.
+
+## 5. Rejected after measurement: filling names from headlines
+
+Tested high-confidence headline patterns (`X to acquire Y`, `X completes its
+acquisition of Y`) against every M&A row with a missing name. Result: **91 rows
+filled out of ~11,000 missing (0.4%)**, and the targets were visibly wrong —
+`"Pinnacle Foods for"`, `"Larry H. Miller Dealerships for"`, and `"Salesforce"`
+for a headline whose target is Waeg. Not implemented; the remaining ~40% gap in
+acquirer/target is upstream data, not something the app can parse its way out of.

@@ -533,6 +533,94 @@ already prefers a stop-free spelling when the same section filed one) handles it
 The first attempt did strip stops and turned "Eastern Mediterranean Ops." into
 "Ops"; the test added for that case caught it.
 
+## 8c. Second mapping round (2026-09-16)
+
+### What came back
+
+The data team returned `Countries Mapping(1).xlsx`. The original four sheets are
+unchanged cell for cell; the new work is in four added sheets:
+
+| Sheet | Rows | What it is |
+|---|---|---|
+| `final` | 143 | Answer to the review workbook — two name columns, *Filled* and *Suggested* |
+| `working` | 257 | Scratch passes: fuzzy-match scores, a broad-family pass, many rows flagged "Needs manual regional decision" |
+| `counntry names` | 215 | Flat restatement of the existing Mapping sheet — the current map already agrees with every row |
+| `Sheet1` | 0 | Empty |
+
+### Why the sheet could not be applied as-is
+
+Neither `final` column is a human decision:
+
+* *Filled* is keyword extraction — 106 of 143 values are a literal substring of
+  the label. On "outside/excluding" labels it names the place the label
+  **excludes**: `Outside Canada → Canada`, `Outside of the United States and India
+  → India`, `Other countries, excluding United States and Japan → Japan`. Applied,
+  a "Canada" screen would pick up revenue earned everywhere except Canada.
+* The two columns disagree on 62 rows; 13 say "Needs review".
+* Even rows where both agreed were wrong once checked against the filers:
+
+| Label | Both passes said | Filed by | Actually |
+|---|---|---|---|
+| `Mid East` | Middle East | NVR, beside Mid Atlantic / North East / South East | U.S. homebuilding region |
+| `Mountain` | Montana | Toll Brothers, beside Pacific / California / West | U.S. region |
+| `Pacific` | Asia Pacific (APAC) | Toll Brothers (U.S. region) and Pilgrim's Pride | not safely APAC |
+| `Other Americas` | South America | ADBE, GOOGL, PANW, SNOW + 7 more | Americas ex-U.S. |
+| `East Asia` | Southeast Asia | Caleres | not Southeast Asia |
+
+The same check exposed an error in the **original** Mapping sheet: bare `North`
+and `South` are filed only by Toll Brothers, D.R. Horton and Children's Place —
+all as U.S. regions — yet were mapped to North America and South America.
+
+### How the decisions were made
+
+Every one of the 143 rows, plus 31 labels the review workbook never listed (it
+was built from the Revenues-only dropdown cache, but the Segments tab shows every
+metric — `H K`, `Italian`, `pf0:CN`, `Minsk, Belarus`…), was decided against the
+companies that file it, using these rules:
+
+1. **Never map to a place the label excludes.** "Outside/excluding X" goes to
+   the bucket describing everything else — `Non-US` when X is the U.S.,
+   otherwise `International` / `Foreign` / `Other`.
+2. **Several places named → the smallest existing name containing all of them**
+   (`East Asia and Australia → Asia Pacific (APAC)`), or keep the label when none
+   does (`Africa/Eurasia`, `Germany, Italy, and Japan`).
+3. **Exactly one place named → that place** (`Americas - U.S. → United States`).
+4. **Generic buckets: the family word wins** — "foreign" → `Foreign`,
+   "international" → `International`, otherwise `Other`.
+5. **U.S. internal regions stay regions** (`Midwest`, `Southwest`, `North`, `South`).
+6. **Prefer existing names; coin none** — every name must be a fixed point.
+
+Result: 145 mapped, 29 kept as their own name, 3 removed as not places. The
+data team's agreed name was kept on 52 rows and overridden on 29, each with a
+filer-level reason.
+
+### Where the decisions live
+
+`scripts/geo_label_decisions.csv` — one row per raw label: `MDP Label`, `Mapping
+Name`, `Action` (MAP / KEEP / REMOVE), `Reason`, and the data team's *Filled* and
+*Suggested* values for audit. The generator applies it on top of the Mapping
+sheet (so it can correct entries like `North`), then the manual additions. Edit
+the CSV, not the JSON, and rerun the generator.
+
+Two manual decodes had to follow the data team's decisions to stay fixed points:
+`Apj` and `Apjc` now map to `Asia Pacific (APAC)`.
+
+### Effect
+
+| | before | after |
+|---|---|---|
+| Dropdown options | 213 | **91** |
+| Options no one has reviewed | 143 | **0** |
+| Non-places offered | 0 | 0 |
+
+### Tests
+
+`tests/test_geo_label_map.py` — 71 pass. Added: every CSV row resolves exactly as
+written; the inverted and misnamed labels above can never map to the place they
+exclude or misname. The qualified-region guard now uses labels no decision covers:
+automatic normalisation still never merges `X (excluding Y)` into `X`; only an
+explicit decision may.
+
 ## 9. Rollout
 
 No migration, no DB write, no cache rebuild. Ship the code; the collapse is live

@@ -766,13 +766,22 @@ def _trigger_recompute():
     # Branded loading overlay during the (multi-second, uncached) criteria pipeline.
     # EVERY apply/edit/remove path routes through here, so this single guard replaces
     # the blank-no-spinner screen the criterion-apply path used to show while the
-    # additional-data / keydevs queries ran. The "Show Results" path renders its own
-    # overlay first, so skip the duplicate there.
+    # additional-data / keydevs queries ran.
+    #
+    # This used to skip the Show Results path ("it renders its own overlay first").
+    # It does not: that overlay lives near the end of the script, i.e. AFTER this
+    # work has already run, so it never painted while anything was loading. Screen
+    # recording of a cold run: 34 seconds from the click with ZERO pixel change —
+    # and Streamlit's own "Running" indicator is off (hideTopBar=true in
+    # .streamlit/config.toml), so there was no feedback of any kind. Rendering here,
+    # BEFORE recompute_working_set, is what the user actually sees.
     overlay_slot = None
-    if criteria and not st.session_state.get("scr_results_loading"):
+    if criteria:
         try:
+            _loading_results = bool(st.session_state.get("scr_results_loading"))
             overlay_slot = _render_coresight_loading_overlay(
-                "Applying criteria…", "Screening companies against your filters."
+                "Loading screening results…" if _loading_results else "Applying criteria…",
+                "Screening companies against your filters."
             )
         except Exception:
             pass
@@ -5135,6 +5144,7 @@ def _render_keydevs_results():
         if (st.session_state.get("kd_sig") != _kd_sig
                 or "kd_df" not in st.session_state):
             render_sticky_loader("Loading Key Developments")
+            _kd_overlay = None   # cleared in the finally below
             try:
                 # The count and the first page are independent, and on this DB a
                 # query costs ONE VPN round-trip almost regardless of what it
@@ -5169,6 +5179,19 @@ def _render_keydevs_results():
                         keydev_industry_domain()
                     except Exception:
                         pass
+
+                # Feedback for the events fetch itself. Show Results does NOT go
+                # through _trigger_recompute (it renders the pre-computed set), so
+                # its overlay has to be raised here, immediately before the query.
+                # Cold, this block is ~34s; a screen recording showed the page
+                # completely static for all of it, with Streamlit's own "Running"
+                # indicator disabled by hideTopBar=true.
+                try:
+                    _kd_overlay = _render_coresight_loading_overlay(
+                        "Loading key development events…",
+                        "Fetching matching events and building the results grid.")
+                except Exception:
+                    pass
 
                 _workers = [threading.Thread(target=_fetch_count, daemon=True),
                             threading.Thread(target=_warm_subtype_domain, daemon=True)]
@@ -5212,6 +5235,13 @@ def _render_keydevs_results():
                     "**Show Results** again."
                 )
                 return
+            finally:
+                # position:fixed — one left behind swallows every click on the page
+                if _kd_overlay is not None:
+                    try:
+                        _kd_overlay.empty()
+                    except Exception:
+                        pass
             st.session_state["kd_total"] = _kd_count
             st.session_state["kd_df"] = _df0
             st.session_state["kd_cursor"] = _cur0
@@ -6934,7 +6964,7 @@ def _render_save_as_watchlist_panel(grid_resp) -> None:
     """
     try:
         sel = _normalize_selected_rows(grid_resp)
-        with st.expander(f"⭐ Save selection as Watchlist  ·  {len(sel)} selected", expanded=False):
+        with st.expander(f"Save selection as Watchlist  ·  {len(sel)} selected", expanded=False):
             with st.form("scr_save_wl_form", clear_on_submit=False):
                 c1, c2, c3 = st.columns([3, 5, 2])
                 with c1:

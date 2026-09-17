@@ -1,0 +1,179 @@
+MDP Label,Mapping Name,Action,Reason,Data team Filled,Data team Suggested
+Africa/Eurasia,Africa/Eurasia,KEEP,Colgate's region; 'Africa' would drop Eurasia,Africa,Africa
+Alaska and Hawaii,United States,MAP,Domino's; both are U.S. states — Alaska alone would drop Hawaii,Alaska,Alaska
+All foreign countries,Foreign,MAP,'foreign' family,Foreign,Other
+All international,International,MAP,both data-team passes agree,International,International
+All other,Other,MAP,both data-team passes agree,Other,Other
+All other countries,Other,MAP,both data-team passes agree,Other,Other
+All Other Foreign Countries,Foreign,MAP,'foreign' family,Foreign,Other
+All other international,International,MAP,both data-team passes agree,International,International
+All other regions,Other,MAP,both data-team passes agree,Other,Other
+All others international,International,MAP,'international' family,International,Other
+America,Americas,MAP,both data-team passes agree,Americas,Americas
+Americas (excluding United States),Americas,MAP,head noun is Americas,Americas,Americas excluding U.S.
+Americas (non-U.S.),Americas,MAP,head noun is Americas; the U.S. carve-out is still Americas revenue,Americas,Americas
+Americas - Other,Americas,MAP,both data-team passes agree,Americas,Americas
+Americas - U.S.,United States,MAP,names only the U.S.; matches data team's own 'Americas - United States' row,Americas,Americas
+Americas - United States,United States,MAP,both data-team passes agree,United States,United States
+Americas excluding U.S.,Americas,MAP,head noun is Americas,Americas,Americas excluding U.S.
+Asia (excluding China region),Asia,MAP,both data-team passes agree,Asia,Asia
+Asia and Central America,Asia and Central America,KEEP,two continents,(not in their sheet),
+Asia Pacific & Latin America (APLA),Asia Pacific & Latin America (APLA),KEEP,two continents; 'Asia' would drop Latin America,Asia,Asia
+Asia Pacific (excluding China and Japan),Asia Pacific (APAC),MAP,head noun is Asia Pacific (data team said 'Asia'),Asia,Asia
+"Asia Pacific (excluding China, Taiwan and Japan)",Asia Pacific (APAC),MAP,head noun is Asia Pacific,Asia,Asia
+Asia Pacific (including Oceania),Asia Pacific (APAC),MAP,head noun is Asia Pacific,Asia,Asia
+Asia Pacific (other than China and Japan),Asia Pacific (APAC),MAP,head noun is Asia Pacific,Asia,Asia
+Asia Pacific (other than Japan and China),Asia Pacific (APAC),MAP,head noun is Asia Pacific,Asia,Asia
+Asia Pacific and Japan,Asia Pacific (APAC),MAP,both data-team passes agree,Asia Pacific (APAC),Asia Pacific (APAC)
+Asia Pacific and other,Asia Pacific (APAC),MAP,head noun is Asia Pacific,Asia,Asia Pacific (APAC)
+"Asia Pacific, Europe, Middle East and Africa",EMEA And Asia Pacific,MAP,names APAC too; the workbook already has 'EMEA And Asia Pacific',"Europe, Middle East and Africa (EMEA)","Europe, Middle East and Africa (EMEA)"
+"Asia Pacific, Japan & China (APJC)",Asia Pacific (APAC),MAP,both data-team passes agree,Asia Pacific (APAC),Asia Pacific (APAC)
+"Asia, Middle East & Africa (AMEA)","Asia, Middle East & Africa (AMEA)",KEEP,three regions; 'Africa' drops most of it,Africa,"Asia, Middle East & Africa (AMEA)"
+Australia / New Zealand,Australia,MAP,both data-team passes agree; Krispy Kreme's ANZ,Australia,Australia
+California and France,California and France,KEEP,two unrelated places; no name contains both,(not in their sheet),
+Canada and other,International,MAP,Johnson Outdoors; Canada plus other non-U.S.,(not in their sheet),
+Canada and other international,International,MAP,"DSW reports only U.S. and this, so it is all non-U.S.",Canada,Canada
+"Canada, Caribbean and Central America",Americas,MAP,smallest existing name containing all three,Canada,North America
+Canada/Mexico,North America,MAP,both are North America,Canada,North America
+Caribbean Operations,Latin America and the Caribbean,MAP,Caribbean is part of this region,Needs review,Caribbean
+"Caribbean, Central and South America",Latin America and the Caribbean,MAP,smallest name containing all three,Central,Latin America and the Caribbean (LAC)
+CEE (Central & Eastern Europe),CEE (Central & Eastern Europe),KEEP,already the workbook's name; recorded so it stops reporting as unmapped,CEE (Central & Eastern Europe),CEE (Central & Eastern Europe)
+Central America,Latin America,MAP,FDP assets; part of Latin America,(not in their sheet),
+Central American Operations,Latin America,MAP,Central America is part of Latin America,Central,Americas
+China (including Hong Kong),China,MAP,Hong Kong is part of China; consistent with 'China and Hong Kong',China,China (including Hong Kong)
+China (including Taiwan),Greater China,MAP,includes Taiwan; Greater China contains it,China,China
+China and Hong Kong,China,MAP,both data-team passes agree,China,China
+China and Viet Nam,Asia,MAP,two Asian countries,(not in their sheet),
+China Including HongKong,China,MAP,same as 'China (including Hong Kong)'; the filer spells Hong Kong without a space,(not in their sheet),
+China Mainland,China,MAP,both data-team passes agree,China,China
+Commonwealth of Independent States (CIS),Commonwealth of Independent States (CIS),KEEP,"EPAM's region; a real region, not 'Other'",Needs review,Other
+Core North America,North America,MAP,both data-team passes agree,North America,North America
+Developed Europe,Europe,MAP,both data-team passes agree,Europe,Europe
+Developed International,International,MAP,'international' family,International,Other
+Developed Markets,Developed Markets,KEEP,Pfizer's parent of 'Developed Europe' + 'Developed Rest of World'; merging would double count,Needs review,Other
+Developed Rest of World,Rest of World (RoW),MAP,Pfizer; head noun is Rest of World,Needs review,Other
+Domestic (Non-US Title),Domestic,MAP,Steve Madden; head noun is Domestic,Domestic,Other
+East and Southeast Asia,Asia,MAP,names East Asia too; Southeast Asia alone would drop China/Japan/Korea,Southeast Asia,Southeast Asia
+East Asia,Asia,MAP,East Asia is not Southeast Asia,Southeast Asia,Southeast Asia
+East Asia and Australia,Asia Pacific (APAC),MAP,names Australia too; Asia would not contain it,Asia,Asia
+Eastern Asia,Asia,MAP,both data-team passes agree,Asia,Asia
+"Eastern Europe, Middle East & Africa","Europe, Middle East and Africa (EMEA)",MAP,both data-team passes agree,"Europe, Middle East and Africa (EMEA)","Europe, Middle East and Africa (EMEA)"
+Eastern Mediterranean,Middle East,MAP,Seaboard; the Levant,East,Eastern Mediterranean (Levant)
+Emerging,Emerging Markets,MAP,Brown-Forman; same grouping,Needs review,Other
+Emerging Markets,Emerging Markets,KEEP,"real market grouping, not 'Other'",Needs review,Other
+Europe (Excluding United Kingdom),Europe,MAP,head noun is Europe,Europe,Europe (Excluding United Kingdom)
+Europe and other,Europe,MAP,both data-team passes agree,Europe,Europe
+"Europe, Asia & Middle East (EAME)","Europe, Asia & Middle East (EAME)",KEEP,Caterpillar's region; 'Asia' would drop Europe,Asia,"Europe, Asia & Middle East (EAME)"
+"Europe, excluding United Kingdom",Europe,MAP,head noun is Europe,Europe,Europe (Excluding United Kingdom)
+"Europe, Middle East, and Africa, Other","Europe, Middle East and Africa (EMEA)",MAP,both data-team passes agree,"Europe, Middle East and Africa (EMEA)","Europe, Middle East and Africa (EMEA)"
+"Europe, Middle East, North Africa and United Kingdom","Europe, Middle East and Africa (EMEA)",MAP,all parts are EMEA,(not in their sheet),
+"Europe, the Middle East and North Africa","Europe, Middle East and Africa (EMEA)",MAP,both data-team passes agree,"Europe, Middle East and Africa (EMEA)","Europe, Middle East and Africa (EMEA)"
+"Europe, the United Kingdom and Ireland and Emerging Markets (""EUKEM"")",Europe,MAP,both data-team passes agree,Europe,Europe
+European Union,Europe,MAP,both data-team passes agree,Europe,Europe
+Far East,Asia,MAP,Caleres; Far East = East Asia,East,Other
+Foreign countries,Foreign,MAP,'foreign' family,Foreign,Other
+Foreign source revenue,Foreign,MAP,'foreign' family,Foreign,Other
+Foreign Tax Authority,,REMOVE,"Lands' End tax category, like the remove sheet's 'State and Local Jurisdiction'",(not in their sheet),
+"Foreign, excluding The United States of America and Canada",Foreign,MAP,NOT Canada — the label excludes Canada; data team's pass inverted it,Canada,Other
+"Foreign, primarily Europe",Foreign,MAP,head noun is Foreign; not all of it is Europe,Europe,Europe
+G B,United Kingdom,MAP,"PMNT: Great Britain, beside 'H K'",Needs review,United Kingdom
+Germany and Italy,Germany and Italy,KEEP,Penske reports it beside 'Germany' and 'Italy'; merging would double count,Germany,Germany and Italy
+"Germany, Italy, and Japan","Germany, Italy, and Japan",KEEP,Penske cumulative disclosure; no single name,Germany,"Germany, Italy, and Japan"
+"Germany, Italy, Japan, and Australia","Germany, Italy, Japan, and Australia",KEEP,Penske cumulative disclosure; no single name,Australia,"Germany, Italy, Japan, and Australia"
+Global Emerging Markets,Emerging Markets,MAP,Mattel; same grouping,Needs review,Other
+H K,Hong Kong,MAP,"PMNT, beside 'G B' and 'Hong Kong'",(not in their sheet),
+"Hong Kong SAR, Taiwan, and Macau SAR",Greater China,MAP,all three are Greater China; 'Hong Kong' would drop two,Hong Kong,"Hong Kong SAR, Taiwan, and Macau SAR"
+In U.S. offices,United States,MAP,Citigroup assets held in U.S. offices,(not in their sheet),
+Inside the U.S.,United States,MAP,Home Depot's label; the Sep-8 map already treated 'Inside the U.S.' as U.S.,Needs review,United States
+Inside United States,United States,MAP,both data-team passes agree,United States,United States
+Int'l,International,MAP,abbreviation; Abbott and Merck report it beside 'International',Needs review,Other
+International - other,International,MAP,both data-team passes agree,International,International
+International and other,International,MAP,both data-team passes agree,International,International
+International Franchise,International,MAP,'international' family,International,Other
+International Markets,International,MAP,both data-team passes agree,International,International
+International Wholesale,International,MAP,'international' family,International,Other
+"International, Excluding North America",International,MAP,head noun is International,International,Other
+"Ireland, Netherlands, and Singapore","Ireland, Netherlands, and Singapore",KEEP,three unrelated countries,(not in their sheet),
+Italian,Italy,MAP,Penske,(not in their sheet),
+JAPA Geographic Region,Asia Pacific (APAC),MAP,"Amex's Japan/Asia Pacific/Australia region, beside its EMEA and LACC",Needs review,Japan
+Latin America & Asia Pacific (LAAP),Latin America & Asia Pacific (LAAP),KEEP,two continents; 'Asia' would drop Latin America,Asia,Latin America & Asia Pacific
+Latin America & Canada,Americas,MAP,names Canada too; Americas is the smallest name containing both,Latin America,Latin America
+Latin America and Other,Latin America,MAP,'and Other' is unspecified; consistent with 'Other Latin America',Latin America and the Caribbean,Latin America and the Caribbean
+Latin America Europe And Other,Latin America Europe And Other,KEEP,two continents,(not in their sheet),
+Long-lived assets related to foreign operations,Foreign,MAP,Celsius assets abroad,(not in their sheet),
+Mainland China,China,MAP,both data-team passes agree,China,China
+Mainland China (excluding Hong Kong),China,MAP,both data-team passes agree,China,China
+Mci,International,MAP,"Molson Coors International, beside its Canada/Europe/U.S.",Needs review,Other
+Mexico and Central America,Latin America,MAP,both are Latin America,Central,Americas
+Mid Atlantic,Mid-Atlantic,MAP,U.S. region (NVR); same as Toll Brothers' 'Mid-Atlantic',Needs review,United States
+Mid East,Mid East,KEEP,"NVR reports Mid Atlantic / Mid East / North East / South East — a U.S. homebuilding region, NOT the Middle East",Middle East,Middle East
+Mid-Atlantic,Mid-Atlantic,KEEP,U.S. region (Toll Brothers),(not in their sheet),
+Midwest,Midwest,KEEP,"U.S. region (D.R. Horton, Children's Place) — not 'West'",West,Midwest
+"Minneapolis, MN","Minneapolis, MN",KEEP,city; workbook keeps cities as their own names,(not in their sheet),
+"Minsk, Belarus",Belarus,MAP,EPAM site; country-level,(not in their sheet),
+Mountain,Mountain,KEEP,Toll Brothers' U.S. Mountain region — NOT Montana,Montana,Montana
+Non-domestic,Non-US,MAP,NATH (U.S. filer) reports Domestic / Non-domestic; data team's 'Americas' and 'Domestic' were both wrong,Americas,Domestic
+North,North,KEEP,"only Toll Brothers and D.R. Horton file it, both as a U.S. region — overrides the Mapping sheet's 'North America'",(not in their sheet),
+"North America (U.S., Canada and Latin America)",Americas,MAP,"includes Latin America, so North America would understate it",Canada,North America
+North American Markets,North America,MAP,both data-team passes agree,North America,North America
+Northeast,North East,MAP,both data-team passes agree,North East,North East
+Northwest,Northwest,KEEP,U.S. region (D.R. Horton) — not North America,North America,North west
+of which France,France,MAP,both data-team passes agree,France,France
+of which Germany,Germany,MAP,both data-team passes agree,Germany,Germany
+of which Japan,Japan,MAP,both data-team passes agree,Japan,Japan
+of which United States,United States,MAP,both data-team passes agree,United States,United States
+Other Americas,Americas,MAP,"11 tech filers (ADBE, GOOGL, PANW…) report it as Americas ex-U.S.; not South America",South America,South America
+Other AP,Asia Pacific (APAC),MAP,"'AP' is Asia Pacific (Diebold, beside 'Other Americas')",Other,Other
+Other APAC,Asia Pacific (APAC),MAP,both data-team passes agree,Asia Pacific (APAC),Asia Pacific (APAC)
+Other Asia,Asia,MAP,both data-team passes agree,Asia,Asia
+Other Asia Pacific,Asia Pacific (APAC),MAP,head noun is Asia Pacific; consistent with 'Other APAC',Asia,Asia
+Other Countries,Other,MAP,both data-team passes agree,Other,Other
+"Other countries, excluding United States and Japan",Other,MAP,NOT Japan — the label excludes Japan; data team's pass inverted it,Japan,Other
+Other Country,Other,MAP,Coherent assets,(not in their sheet),
+Other EMEA,"Europe, Middle East and Africa (EMEA)",MAP,both data-team passes agree,"Europe, Middle East and Africa (EMEA)","Europe, Middle East and Africa (EMEA)"
+Other Europe,Europe,MAP,"not specifically Western Europe (ADBE, DXC, Corning)",Western Europe,Western Europe
+Other European Countries,Europe,MAP,both data-team passes agree,Europe,Europe
+Other foreign,Foreign,MAP,'foreign' family,Other,Other
+Other foreign countries,Foreign,MAP,'foreign' family,Foreign,Other
+Other foreign locations,Foreign,MAP,'foreign' family,Foreign,Other
+Other Global,Other,MAP,GE assets,(not in their sheet),
+Other International,International,MAP,'international' family,Other,Other
+Other international locations,International,MAP,'international' family,International,Other
+Other International Operations,International,MAP,'international' family,International,Other
+Other Latin America,Latin America,MAP,both data-team passes agree,Latin America,Latin America
+Other locations,Other,MAP,both data-team passes agree,Other,Other
+Other than the United States,Non-US,MAP,means everything outside the U.S.,(not in their sheet),
+Others,Other,MAP,both data-team passes agree,Other,Other
+Outside Canada,International,MAP,NOT Canada — Restaurant Brands' revenue outside its home country,Canada,Other
+Outside of North America,International,MAP,NOT North America — the label excludes it,North America,Other
+Outside of the United States and India,Non-US,MAP,NOT India — the label excludes India; data team's pass inverted it,India,Other
+"Outside of the United States, China, and India",Non-US,MAP,NOT China — the label excludes China; data team's pass inverted it,China,Other
+Pacific,Pacific,KEEP,Toll Brothers: U.S. Pacific region; Pilgrim's Pride uses it differently — not safe to call it APAC,Asia Pacific (APAC),Asia Pacific (APAC)
+Pacific Basin and Far East,Asia Pacific (APAC),MAP,smallest name containing both,East,Asia-Pacific
+pf0:CN,China,MAP,namespace artifact,(not in their sheet),
+pf0:GB,United Kingdom,MAP,namespace artifact,(not in their sheet),
+pf0:HK,Hong Kong,MAP,"namespace artifact, like the workbook's pf0:US",(not in their sheet),
+pf0:MX,Mexico,MAP,namespace artifact,(not in their sheet),
+Regions Excluding North America,International,MAP,NOT North America — the label excludes it,North America,Americas
+Rest of Asia,Asia,MAP,both data-team passes agree,Asia,Asia
+Rest of North and South America,Americas,MAP,smallest name containing both,North America,Americas
+"Santa Clara, California",California,MAP,Palo Alto Networks capex site; state-level,(not in their sheet),
+Saudi Arabia and Mexico,Saudi Arabia and Mexico,KEEP,two unrelated countries,(not in their sheet),
+South,South,KEEP,"only Toll Brothers and Children's Place file it, both as a U.S. region — overrides the Mapping sheet's 'South America'",(not in their sheet),
+South & Southeast Asia,Asia,MAP,names South Asia too; Southeast Asia alone would drop India,Southeast Asia,Southeast Asia
+South Central,South Central,KEEP,U.S. region (D.R. Horton),Central,South Central America
+Southeast,South East,MAP,both data-team passes agree,South East,South East
+Southeast Region of the United States Acquisition,,REMOVE,"La-Z-Boy acquisition descriptor, not a segment",(not in their sheet),
+Southwest,Southwest,KEEP,"U.S. region (D.R. Horton, KB Home) — not South East",South East,South East
+"SSEA, CIS & MEA","SSEA, CIS & MEA",KEEP,Philip Morris region; remove sheet said decode -> keep,(not in their sheet),
+Subtotal all foreign regions,Foreign,MAP,'foreign' family,Foreign,Other
+Swiss,Switzerland,MAP,Movado,(not in their sheet),
+The Americas Group,Americas,MAP,both data-team passes agree,Americas,Americas
+U.K. and Europe,Europe,MAP,both data-team passes agree,Europe,Europe
+U.S. and Canada,North America,MAP,both data-team passes agree,North America,North America
+U.S. and International Location,,REMOVE,"Movado total of both, not a region",(not in their sheet),
+U.S. and Puerto Rico,United States,MAP,workbook already maps Puerto Rico to United States,(not in their sheet),
+United States and Canada,North America,MAP,both data-team passes agree,North America,North America
+United States and Puerto Rico,United States,MAP,workbook already maps Puerto Rico to United States,(not in their sheet),
+"United States, Canada And Latin America (Americas)",Americas,MAP,both data-team passes agree,Americas,Americas
+Vietnam and China,Asia,MAP,two Asian countries,(not in their sheet),

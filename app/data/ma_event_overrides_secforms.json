@@ -1,0 +1,2175 @@
+{
+ "source": "SEC merger form types (header parties + fee exhibit)",
+ "events": {
+  "42168": {
+   "acquirer": "Rocket Companies, Inc.",
+   "source": "SEC 425",
+   "accession": "0000950142-25-000695",
+   "acquirer_cik": "1805284",
+   "target_cik": "1382821",
+   "date_gap_days": 0
+  },
+  "42159": {
+   "acquirer": "Rocket Companies, Inc.",
+   "target": "Redfin Corp",
+   "source": "SEC 425",
+   "accession": "0000950142-25-001237",
+   "acquirer_cik": "1805284",
+   "target_cik": "1382821",
+   "date_gap_days": 0
+  },
+  "42149": {
+   "acquirer": "Rocket Companies, Inc.",
+   "target": "Redfin Corp",
+   "source": "SEC 425",
+   "accession": "0000950142-25-001466",
+   "acquirer_cik": "1805284",
+   "target_cik": "1382821",
+   "date_gap_days": 21
+  },
+  "441114": {
+   "acquirer": "Shift4 Payments, Inc.",
+   "target": "Global Blue Group Holding AG",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-25-145067",
+   "acquirer_cik": "1794669",
+   "target_cik": "1799983",
+   "date_gap_days": 7
+  },
+  "372714": {
+   "acquirer": "CoreWeave, Inc.",
+   "target": "Core Scientific, Inc./tx",
+   "source": "SEC 425",
+   "accession": "0000950103-25-008769",
+   "acquirer_cik": "1769628",
+   "target_cik": "1839341",
+   "date_gap_days": 17
+  },
+  "372720": {
+   "acquirer": "CoreWeave, Inc.",
+   "target": "Core Scientific, Inc./tx",
+   "source": "SEC 425",
+   "accession": "0000950103-25-008769",
+   "acquirer_cik": "1769628",
+   "target_cik": "1839341",
+   "date_gap_days": 14
+  },
+  "378754": {
+   "acquirer": "SYNOPSYS INC",
+   "source": "SEC 425",
+   "accession": "0001140361-25-026140",
+   "acquirer_cik": "883241",
+   "target_cik": "1013462",
+   "date_gap_days": 0
+  },
+  "378755": {
+   "acquirer": "SYNOPSYS INC",
+   "source": "SEC 425",
+   "accession": "0001140361-25-026140",
+   "acquirer_cik": "883241",
+   "target_cik": "1013462",
+   "date_gap_days": 0
+  },
+  "372724": {
+   "acquirer": "CoreWeave, Inc.",
+   "source": "SEC 425",
+   "accession": "0000950103-25-008522",
+   "acquirer_cik": "1769628",
+   "target_cik": "1839341",
+   "date_gap_days": 0
+  },
+  "441445": {
+   "acquirer": "Gildan Activewear Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-25-077520",
+   "acquirer_cik": "1061894",
+   "target_cik": "1359841",
+   "date_gap_days": 0
+  },
+  "372688": {
+   "acquirer": "CoreWeave, Inc.",
+   "target": "Core Scientific, Inc./tx",
+   "source": "SEC 425",
+   "accession": "0000950103-25-013304",
+   "acquirer_cik": "1769628",
+   "target_cik": "1839341",
+   "date_gap_days": 1
+  },
+  "407916": {
+   "target": "Tourmaline Bio, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-25-102943",
+   "acquirer_cik": "1114448",
+   "target_cik": "1827506",
+   "date_gap_days": 23
+  },
+  "32215": {
+   "acquirer": "KIMBERLY CLARK CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-25-105659",
+   "acquirer_cik": "55785",
+   "target_cik": "1944048",
+   "date_gap_days": 0
+  },
+  "31997": {
+   "acquirer": "KIMBERLY CLARK CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-26-007049",
+   "acquirer_cik": "55785",
+   "target_cik": "1944048",
+   "date_gap_days": 3
+  },
+  "32001": {
+   "acquirer": "KIMBERLY CLARK CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-26-007049",
+   "acquirer_cik": "55785",
+   "target_cik": "1944048",
+   "date_gap_days": 2
+  },
+  "436778": {
+   "acquirer": "Mission Produce, Inc.",
+   "target": "CALAVO GROWERS INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-022711",
+   "acquirer_cik": "1802974",
+   "target_cik": "1133470",
+   "date_gap_days": 4
+  },
+  "208919": {
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-149688",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 10
+  },
+  "208962": {
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-149688",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 10
+  },
+  "209183": {
+   "acquirer": "GSK plc",
+   "target": "RAPT Therapeutics, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-086527",
+   "acquirer_cik": "1131399",
+   "target_cik": "1673772",
+   "date_gap_days": 26
+  },
+  "209535": {
+   "acquirer": "Paramount Skydance Corp",
+   "target": "Warner Bros. Discovery, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-020849",
+   "acquirer_cik": "2041610",
+   "target_cik": "1437107",
+   "date_gap_days": 30
+  },
+  "209644": {
+   "acquirer": "Merck & Co., Inc.",
+   "transaction_value_usd_m": 6729.18,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-144514",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 9
+  },
+  "209823": {
+   "acquirer": "SOMNIGROUP INTERNATIONAL INC.",
+   "target": "LEGGETT & PLATT INC",
+   "source": "SEC 425",
+   "accession": "0001140361-26-014338",
+   "acquirer_cik": "1206264",
+   "target_cik": "58492",
+   "date_gap_days": 16
+  },
+  "210194": {
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-038557",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 5
+  },
+  "210300": {
+   "acquirer": "GSK plc",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-086527",
+   "acquirer_cik": "1131399",
+   "target_cik": "1673772",
+   "date_gap_days": 24
+  },
+  "210372": {
+   "transaction_value_usd_m": 6729.18,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-144514",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 12
+  },
+  "214422": {
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 1
+  },
+  "210907": {
+   "target": "Coterra Energy Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-187458",
+   "acquirer_cik": "1090012",
+   "target_cik": "858470",
+   "date_gap_days": 0
+  },
+  "210944": {
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-188071",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 1
+  },
+  "210757": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-174972",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 3
+  },
+  "210805": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-174972",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 3
+  },
+  "206482": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "transaction_value_usd_m": 5786.64,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-153814",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 10
+  },
+  "206523": {
+   "transaction_value_usd_m": 867.26,
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-054931",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 10
+  },
+  "206660": {
+   "acquirer": "Udemy, Inc.",
+   "target": "Coursera, Inc.",
+   "source": "SEC 425",
+   "accession": "0001140361-26-012323",
+   "acquirer_cik": "1607939",
+   "target_cik": "1651562",
+   "date_gap_days": 22
+  },
+  "206740": {
+   "target": "Penumbra Inc",
+   "source": "SEC 425",
+   "accession": "0001104659-26-046912",
+   "acquirer_cik": "885725",
+   "target_cik": "1321732",
+   "date_gap_days": 1
+  },
+  "206822": {
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001628280-26-027486",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 6
+  },
+  "206870": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-174972",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 4
+  },
+  "206965": {
+   "acquirer": "BIOGEN INC.",
+   "transaction_value_usd_m": 5786.64,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-153814",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 6
+  },
+  "206977": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "target": "Qorvo, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-055835",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 16
+  },
+  "206982": {
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-174972",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 4
+  },
+  "207084": {
+   "transaction_value_usd_m": 5786.64,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-153814",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 4
+  },
+  "207248": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "transaction_value_usd_m": 6729.18,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-144514",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 8
+  },
+  "207268": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "transaction_value_usd_m": 5786.64,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-153814",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 1
+  },
+  "207285": {
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-044653",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 2
+  },
+  "384758": {
+   "acquirer": "REZOLVE AI PLC",
+   "target": "Commerce.com, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-155121",
+   "acquirer_cik": "1920294",
+   "target_cik": "1626450",
+   "date_gap_days": 0
+  },
+  "207457": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "transaction_value_usd_m": 6729.18,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-144514",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 6
+  },
+  "207779": {
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "transaction_value_usd_m": 5786.64,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-153814",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 6
+  },
+  "27129": {
+   "target": "EBAY INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-202500",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 27
+  },
+  "208091": {
+   "transaction_value_usd_m": 5786.64,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-153814",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 13
+  },
+  "224619": {
+   "acquirer": "WH Topco, L.P.",
+   "target": "LANDS' END, INC.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-038282",
+   "acquirer_cik": "2121523",
+   "target_cik": "799288",
+   "date_gap_days": 0
+  },
+  "224620": {
+   "acquirer": "WH Topco, L.P.",
+   "target": "LANDS' END, INC.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-038282",
+   "acquirer_cik": "2121523",
+   "target_cik": "799288",
+   "date_gap_days": 0
+  },
+  "257975": {
+   "acquirer": "QXO, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-070539",
+   "acquirer_cik": "1236275",
+   "target_cik": "1633931",
+   "date_gap_days": 4
+  },
+  "257999": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 26
+  },
+  "258012": {
+   "target": "Coterra Energy Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-204307",
+   "acquirer_cik": "1090012",
+   "target_cik": "858470",
+   "date_gap_days": 27
+  },
+  "258048": {
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 2
+  },
+  "255737": {
+   "acquirer": "MCCORMICK & CO INC",
+   "target": "UNILEVER PLC",
+   "source": "SEC 425",
+   "accession": "0001999371-26-011912",
+   "acquirer_cik": "63754",
+   "target_cik": "217410",
+   "date_gap_days": 5
+  },
+  "255740": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 8
+  },
+  "255741": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 8
+  },
+  "255327": {
+   "acquirer": "GameStop Corp.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-240384",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 0
+  },
+  "255441": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-222837",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 13
+  },
+  "255246": {
+   "acquirer": "CINTAS CORP",
+   "target": "UNIFIRST CORP",
+   "source": "SEC 425",
+   "accession": "0000950103-26-007718",
+   "acquirer_cik": "723254",
+   "target_cik": "717954",
+   "date_gap_days": 1
+  },
+  "255250": {
+   "acquirer": "GILEAD SCIENCES, INC.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 27
+  },
+  "255269": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 20
+  },
+  "255270": {
+   "acquirer": "GILEAD SCIENCES, INC.",
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 27
+  },
+  "255272": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 20
+  },
+  "255273": {
+   "acquirer": "GILEAD SCIENCES, INC.",
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 27
+  },
+  "255018": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-064625",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 4
+  },
+  "255021": {
+   "acquirer": "QXO, Inc.",
+   "target": "TopBuild Corp",
+   "source": "SEC 425",
+   "accession": "0001104659-26-062863",
+   "acquirer_cik": "1236275",
+   "target_cik": "1633931",
+   "date_gap_days": 6
+  },
+  "255048": {
+   "acquirer": "GILEAD SCIENCES, INC.",
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 26
+  },
+  "247965": {
+   "acquirer": "GREEN DOT CORP",
+   "source": "SEC 425",
+   "accession": "0001140361-26-025338",
+   "acquirer_cik": "1386278",
+   "target_cik": "2103884",
+   "date_gap_days": 24
+  },
+  "247970": {
+   "acquirer": "IonQ, Inc.",
+   "target": "SkyWater Technology, Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001324",
+   "acquirer_cik": "1824920",
+   "target_cik": "1819974",
+   "date_gap_days": 16
+  },
+  "247865": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-246500",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 7
+  },
+  "247659": {
+   "acquirer": "DEVON ENERGY CORP/DE",
+   "source": "SEC 425",
+   "accession": "0001193125-26-204307",
+   "acquirer_cik": "1090012",
+   "target_cik": "858470",
+   "date_gap_days": 17
+  },
+  "247662": {
+   "acquirer": "IonQ, Inc.",
+   "target": "SkyWater Technology, Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001324",
+   "acquirer_cik": "1824920",
+   "target_cik": "1819974",
+   "date_gap_days": 14
+  },
+  "247686": {
+   "acquirer": "Allegiant Travel CO",
+   "target": "Sun Country Airlines Holdings, Inc.",
+   "source": "SEC 425",
+   "accession": "0001140361-26-018573",
+   "acquirer_cik": "1362468",
+   "target_cik": "1743907",
+   "date_gap_days": 20
+  },
+  "247687": {
+   "acquirer": "DEVON ENERGY CORP/DE",
+   "target": "Coterra Energy Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-204307",
+   "acquirer_cik": "1090012",
+   "target_cik": "858470",
+   "date_gap_days": 17
+  },
+  "247702": {
+   "target": "Coterra Energy Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-204307",
+   "acquirer_cik": "1090012",
+   "target_cik": "858470",
+   "date_gap_days": 17
+  },
+  "247711": {
+   "acquirer": "GILEAD SCIENCES, INC.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 23
+  },
+  "247733": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001735",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 21
+  },
+  "242939": {
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 15
+  },
+  "242948": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-064625",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 0
+  },
+  "242954": {
+   "acquirer": "BOSTON SCIENTIFIC CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-26-046912",
+   "acquirer_cik": "885725",
+   "target_cik": "1321732",
+   "date_gap_days": 28
+  },
+  "242571": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "242574": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001735",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 24
+  },
+  "242597": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "242623": {
+   "acquirer": "BOSTON SCIENTIFIC CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-26-046912",
+   "acquirer_cik": "885725",
+   "target_cik": "1321732",
+   "date_gap_days": 26
+  },
+  "242632": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "242633": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "242638": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "target": "GENCO SHIPPING & TRADING LTD",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-063246",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 0
+  },
+  "242642": {
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 13
+  },
+  "242452": {
+   "acquirer": "IonQ, Inc.",
+   "target": "SkyWater Technology, Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001324",
+   "acquirer_cik": "1824920",
+   "target_cik": "1819974",
+   "date_gap_days": 10
+  },
+  "237552": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237553": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237556": {
+   "acquirer": "Allegiant Travel CO",
+   "target": "Sun Country Airlines Holdings, Inc.",
+   "source": "SEC 425",
+   "accession": "0001140361-26-018573",
+   "acquirer_cik": "1362468",
+   "target_cik": "1743907",
+   "date_gap_days": 15
+  },
+  "237596": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237598": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237613": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237616": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237619": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237623": {
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "237382": {
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 10
+  },
+  "237411": {
+   "acquirer": "MasterCraft Boat Holdings, Inc.",
+   "target": "MARINE PRODUCTS CORP",
+   "source": "SEC 425",
+   "accession": "0001193125-26-201656",
+   "acquirer_cik": "1638290",
+   "target_cik": "1129155",
+   "date_gap_days": 14
+  },
+  "237412": {
+   "acquirer": "MasterCraft Boat Holdings, Inc.",
+   "target": "MARINE PRODUCTS CORP",
+   "source": "SEC 425",
+   "accession": "0001193125-26-201656",
+   "acquirer_cik": "1638290",
+   "target_cik": "1129155",
+   "date_gap_days": 14
+  },
+  "237450": {
+   "acquirer": "MasterCraft Boat Holdings, Inc.",
+   "target": "MARINE PRODUCTS CORP",
+   "source": "SEC 425",
+   "accession": "0001193125-26-201656",
+   "acquirer_cik": "1638290",
+   "target_cik": "1129155",
+   "date_gap_days": 14
+  },
+  "237226": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-222837",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 0
+  },
+  "237233": {
+   "acquirer": "Lumen Technologies, Inc.",
+   "target": "QWEST CORP",
+   "source": "SEC 425",
+   "accession": "0001193125-26-218274",
+   "acquirer_cik": "18926",
+   "target_cik": "68622",
+   "date_gap_days": 2
+  },
+  "237242": {
+   "acquirer": "Allegiant Travel CO",
+   "target": "Sun Country Airlines Holdings, Inc.",
+   "source": "SEC 425",
+   "accession": "0001140361-26-018573",
+   "acquirer_cik": "1362468",
+   "target_cik": "1743907",
+   "date_gap_days": 13
+  },
+  "237266": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-222837",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 0
+  },
+  "233372": {
+   "acquirer": "GameStop Corp.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-221991",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 0
+  },
+  "237136": {
+   "acquirer": "Public Storage",
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-188071",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 14
+  },
+  "231325": {
+   "acquirer": "Merck & Co., Inc.",
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 7
+  },
+  "231326": {
+   "acquirer": "GILEAD SCIENCES, INC.",
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 14
+  },
+  "231341": {
+   "acquirer": "BOSTON SCIENTIFIC CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-26-046912",
+   "acquirer_cik": "885725",
+   "target_cik": "1321732",
+   "date_gap_days": 20
+  },
+  "231174": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-063251",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 7
+  },
+  "231175": {
+   "acquirer": "Prologium Holding Inc.",
+   "target": "Translational Development Acquisition Corp.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-252878",
+   "acquirer_cik": "2137754",
+   "target_cik": "1926599",
+   "date_gap_days": 22
+  },
+  "231249": {
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 13
+  },
+  "223732": {
+   "target": "Arcellx, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-049870",
+   "acquirer_cik": "882095",
+   "target_cik": "1786205",
+   "date_gap_days": 10
+  },
+  "223739": {
+   "acquirer": "DEVON ENERGY CORP/DE",
+   "source": "SEC 425",
+   "accession": "0001193125-26-204307",
+   "acquirer_cik": "1090012",
+   "target_cik": "858470",
+   "date_gap_days": 4
+  },
+  "223623": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-224235",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 7
+  },
+  "221244": {
+   "acquirer": "Public Storage",
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-188071",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 7
+  },
+  "219915": {
+   "acquirer": "EXPRO GROUP HOLDINGS N.V.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-068993",
+   "acquirer_cik": "1575828",
+   "target_cik": "2126198",
+   "date_gap_days": 27
+  },
+  "219961": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-055835",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 1
+  },
+  "214667": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-182126",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 4
+  },
+  "376470": {
+   "target": "UNILEVER PLC",
+   "source": "SEC 425",
+   "accession": "0001999371-26-009634",
+   "acquirer_cik": "63754",
+   "target_cik": "217410",
+   "date_gap_days": 0
+  },
+  "381452": {
+   "acquirer": "QXO, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-076036",
+   "acquirer_cik": "1236275",
+   "target_cik": "1633931",
+   "date_gap_days": 7
+  },
+  "381262": {
+   "acquirer": "Public Storage",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 26
+  },
+  "381270": {
+   "acquirer": "SMART KREATE GROUP Ltd",
+   "target": "Quetta Acquisition Corp",
+   "source": "SEC 425",
+   "accession": "0001493152-26-032497",
+   "acquirer_cik": "2124478",
+   "target_cik": "1978528",
+   "date_gap_days": 11
+  },
+  "381023": {
+   "transaction_value_usd_m": 10628.61,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-280246",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 0
+  },
+  "381027": {
+   "transaction_value_usd_m": 10628.61,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-280246",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 0
+  },
+  "381041": {
+   "transaction_value_usd_m": 10628.61,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-280246",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 0
+  },
+  "381071": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 19
+  },
+  "369854": {
+   "acquirer": "Public Storage",
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 22
+  },
+  "369864": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 18
+  },
+  "369867": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 18
+  },
+  "369878": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "target": "GENCO SHIPPING & TRADING LTD",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-075894",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 1
+  },
+  "369884": {
+   "acquirer": "Public Storage",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 22
+  },
+  "369712": {
+   "acquirer": "Public Storage",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 21
+  },
+  "369715": {
+   "acquirer": "Public Storage",
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 21
+  },
+  "369549": {
+   "acquirer": "Fox Corp",
+   "source": "SEC 425",
+   "accession": "0001193125-26-271554",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 5
+  },
+  "369351": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-277571",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 2
+  },
+  "354914": {
+   "acquirer": "GameStop Corp.",
+   "target": "EBAY INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-276853",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 4
+  },
+  "350971": {
+   "acquirer": "GameStop Corp.",
+   "target": "EBAY INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-276853",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 5
+  },
+  "351033": {
+   "acquirer": "Public Storage",
+   "target": "National Storage Affiliates Trust",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251768",
+   "acquirer_cik": "1393311",
+   "target_cik": "1618563",
+   "date_gap_days": 16
+  },
+  "350856": {
+   "acquirer": "Fox Corp",
+   "target": "ROKU, INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-271554",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 0
+  },
+  "350902": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 11
+  },
+  "350917": {
+   "acquirer": "Fox Corp",
+   "target": "ROKU, INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-271554",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 0
+  },
+  "350922": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-071008",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 11
+  },
+  "350952": {
+   "acquirer": "Fox Corp",
+   "target": "ROKU, INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-271554",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 0
+  },
+  "350953": {
+   "acquirer": "Fox Corp",
+   "target": "ROKU, INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-271554",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 0
+  },
+  "350717": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-073893",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 0
+  },
+  "350779": {
+   "acquirer": "Fox Corp",
+   "target": "ROKU, INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-271270",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 0
+  },
+  "350589": {
+   "acquirer": "New Slider Holdco, Inc.",
+   "target": "SYSCO CORP",
+   "source": "SEC 425",
+   "accession": "0001104659-26-080393",
+   "acquirer_cik": "2134688",
+   "target_cik": "96021",
+   "date_gap_days": 18
+  },
+  "350402": {
+   "acquirer": "SOUNDHOUND AI, INC.",
+   "source": "SEC 425",
+   "accession": "0001213900-26-075092",
+   "acquirer_cik": "1840856",
+   "target_cik": "1102993",
+   "date_gap_days": 19
+  },
+  "350404": {
+   "acquirer": "MCCORMICK & CO INC",
+   "source": "SEC 425",
+   "accession": "0001999371-26-011912",
+   "acquirer_cik": "63754",
+   "target_cik": "217410",
+   "date_gap_days": 11
+  },
+  "349967": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-222837",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 28
+  },
+  "350026": {
+   "acquirer": "Solstice Advanced Materials Inc.",
+   "target": "Element Solutions Inc",
+   "source": "SEC 425",
+   "accession": "0001213900-26-075623",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 26
+  },
+  "350027": {
+   "acquirer": "BIOGEN INC.",
+   "target": "Apellis Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-222837",
+   "acquirer_cik": "875045",
+   "target_cik": "1492422",
+   "date_gap_days": 28
+  },
+  "350062": {
+   "acquirer": "GSK plc",
+   "target": "Nuvalent, Inc.",
+   "transaction_value_usd_m": 10628.61,
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-280246",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 14
+  },
+  "350109": {
+   "acquirer": "New Slider Holdco, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-080393",
+   "acquirer_cik": "2134688",
+   "target_cik": "96021",
+   "date_gap_days": 22
+  },
+  "259131": {
+   "acquirer": "GameStop Corp.",
+   "target": "EBAY INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-260341",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 1
+  },
+  "259132": {
+   "acquirer": "GameStop Corp.",
+   "target": "EBAY INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-260341",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 1
+  },
+  "258479": {
+   "acquirer": "GameStop Corp.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-260341",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 1
+  },
+  "258415": {
+   "acquirer": "QXO, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-070539",
+   "acquirer_cik": "1236275",
+   "target_cik": "1633931",
+   "date_gap_days": 2
+  },
+  "257631": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001735",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 7
+  },
+  "257634": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-001735",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 7
+  },
+  "257678": {
+   "acquirer": "Mission Produce, Inc.",
+   "target": "CALAVO GROWERS INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-237171",
+   "acquirer_cik": "1802974",
+   "target_cik": "1133470",
+   "date_gap_days": 12
+  },
+  "257697": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-256815",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 1
+  },
+  "257759": {
+   "acquirer": "QXO, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-070539",
+   "acquirer_cik": "1236275",
+   "target_cik": "1633931",
+   "date_gap_days": 2
+  },
+  "257806": {
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251383",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 1
+  },
+  "257835": {
+   "target": "Terns Pharmaceuticals, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-205232",
+   "acquirer_cik": "310158",
+   "target_cik": "1831363",
+   "date_gap_days": 27
+  },
+  "257895": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251383",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 0
+  },
+  "257900": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251383",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 0
+  },
+  "257923": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251383",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 0
+  },
+  "257924": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-251383",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 0
+  },
+  "391186": {
+   "acquirer": "Criteo Holdings, Inc.",
+   "target": "Criteo S.A.",
+   "source": "SEC 425",
+   "accession": "0001628280-26-050330",
+   "acquirer_cik": "2144230",
+   "target_cik": "1576427",
+   "date_gap_days": 2
+  },
+  "391474": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 0
+  },
+  "390932": {
+   "target": "Criteo S.A.",
+   "source": "SEC 425",
+   "accession": "0001628280-26-050330",
+   "acquirer_cik": "2144230",
+   "target_cik": "1576427",
+   "date_gap_days": 0
+  },
+  "390933": {
+   "acquirer": "Criteo Holdings, Inc.",
+   "source": "SEC 425",
+   "accession": "0001628280-26-050330",
+   "acquirer_cik": "2144230",
+   "target_cik": "1576427",
+   "date_gap_days": 0
+  },
+  "390861": {
+   "acquirer": "Solstice Advanced Materials Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-088693",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 2
+  },
+  "390867": {
+   "acquirer": "Solstice Advanced Materials Inc.",
+   "target": "Element Solutions Inc",
+   "source": "SEC 425",
+   "accession": "0001104659-26-088693",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 2
+  },
+  "390875": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 3
+  },
+  "390613": {
+   "acquirer": "Solstice Advanced Materials Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-088693",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 3
+  },
+  "390616": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-324103",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 2
+  },
+  "390627": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-324103",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 2
+  },
+  "390099": {
+   "acquirer": "GSK plc",
+   "target": "Nuvalent, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-304122",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 8
+  },
+  "390114": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "target": "GENCO SHIPPING & TRADING LTD",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-086886",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 4
+  },
+  "385244": {
+   "acquirer": "FIRST FINANCIAL BANCORP /OH/",
+   "source": "SEC 425",
+   "accession": "0001104659-26-085426",
+   "acquirer_cik": "708955",
+   "target_cik": "919864",
+   "date_gap_days": 1
+  },
+  "384941": {
+   "acquirer": "Camac Fund, LP",
+   "source": "SEC SC TO-T",
+   "accession": "0001493152-26-034722",
+   "acquirer_cik": "1516478",
+   "target_cik": "813298",
+   "date_gap_days": 6
+  },
+  "385024": {
+   "acquirer": "Tempus AI, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-309096",
+   "acquirer_cik": "1717115",
+   "target_cik": "1527753",
+   "date_gap_days": 1
+  },
+  "385042": {
+   "acquirer": "FIRST HAWAIIAN, INC.",
+   "target": "TRICO BANCSHARES /",
+   "source": "SEC 425",
+   "accession": "0001104659-26-086650",
+   "acquirer_cik": "36377",
+   "target_cik": "356171",
+   "date_gap_days": 3
+  },
+  "385053": {
+   "acquirer": "Fox Corp",
+   "target": "ROKU, INC",
+   "source": "SEC 425",
+   "accession": "0001193125-26-341217",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 20
+  },
+  "385059": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 10
+  },
+  "384497": {
+   "acquirer": "GameStop Corp.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-308408",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 1
+  },
+  "384583": {
+   "acquirer": "SMART KREATE GROUP Ltd",
+   "target": "Quetta Acquisition Corp",
+   "source": "SEC 425",
+   "accession": "0001493152-26-032497",
+   "acquirer_cik": "2124478",
+   "target_cik": "1978528",
+   "date_gap_days": 11
+  },
+  "384599": {
+   "acquirer": "Rocket Lab Corp",
+   "source": "SEC 425",
+   "accession": "0001753926-26-001099",
+   "acquirer_cik": "1819994",
+   "target_cik": "1418819",
+   "date_gap_days": 20
+  },
+  "384429": {
+   "acquirer": "FIRST HAWAIIAN, INC.",
+   "target": "TRICO BANCSHARES /",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083886",
+   "acquirer_cik": "36377",
+   "target_cik": "356171",
+   "date_gap_days": 3
+  },
+  "384133": {
+   "acquirer": "American Water Works Company, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-324103",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 13
+  },
+  "384161": {
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "384002": {
+   "acquirer": "SMART KREATE GROUP Ltd",
+   "target": "Quetta Acquisition Corp",
+   "source": "SEC 425",
+   "accession": "0001493152-26-032497",
+   "acquirer_cik": "2124478",
+   "target_cik": "1978528",
+   "date_gap_days": 7
+  },
+  "383696": {
+   "acquirer": "FIRST HAWAIIAN, INC.",
+   "target": "TRICO BANCSHARES /",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083110",
+   "acquirer_cik": "36377",
+   "target_cik": "356171",
+   "date_gap_days": 0
+  },
+  "383706": {
+   "acquirer": "FIRST HAWAIIAN, INC.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083110",
+   "acquirer_cik": "36377",
+   "target_cik": "356171",
+   "date_gap_days": 0
+  },
+  "383708": {
+   "acquirer": "Chicago Atlantic BDC, Inc.",
+   "target": "Chicago Atlantic Real Estate Finance, Inc.",
+   "source": "SEC 425",
+   "accession": "0001213900-26-077754",
+   "acquirer_cik": "1843162",
+   "target_cik": "1867949",
+   "date_gap_days": 1
+  },
+  "383732": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 3
+  },
+  "383733": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 3
+  },
+  "383746": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 18
+  },
+  "383760": {
+   "acquirer": "MCCORMICK & CO INC",
+   "target": "UNILEVER PLC",
+   "source": "SEC 425",
+   "accession": "0001999371-26-015708",
+   "acquirer_cik": "63754",
+   "target_cik": "217410",
+   "date_gap_days": 10
+  },
+  "383590": {
+   "acquirer": "Fox Corp",
+   "source": "SEC 425",
+   "accession": "0001193125-26-290614",
+   "acquirer_cik": "1754301",
+   "target_cik": "1428439",
+   "date_gap_days": 12
+  },
+  "383602": {
+   "acquirer": "QXO, Inc.",
+   "target": "TopBuild Corp",
+   "source": "SEC 425",
+   "accession": "0001104659-26-076036",
+   "acquirer_cik": "1236275",
+   "target_cik": "1633931",
+   "date_gap_days": 20
+  },
+  "383617": {
+   "acquirer": "Solstice Advanced Materials Inc.",
+   "target": "Element Solutions Inc",
+   "source": "SEC 425",
+   "accession": "0001213900-26-077155",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 2
+  },
+  "383408": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 5
+  },
+  "383410": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 5
+  },
+  "383143": {
+   "target": "Nuvalent, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-300322",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 1
+  },
+  "382950": {
+   "acquirer": "GameStop Corp.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-296631",
+   "acquirer_cik": "1326380",
+   "target_cik": "1065088",
+   "date_gap_days": 1
+  },
+  "382996": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "target": "GENCO SHIPPING & TRADING LTD",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-081696",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 0
+  },
+  "382997": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "target": "GENCO SHIPPING & TRADING LTD",
+   "source": "SEC SC TO-T",
+   "accession": "0001104659-26-081696",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 0
+  },
+  "383019": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-277571",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 16
+  },
+  "383036": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 8
+  },
+  "383063": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-083962",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 8
+  },
+  "383073": {
+   "acquirer": "Rocket Lab Corp",
+   "source": "SEC 425",
+   "accession": "0001753926-26-001099",
+   "acquirer_cik": "1819994",
+   "target_cik": "1418819",
+   "date_gap_days": 9
+  },
+  "382436": {
+   "acquirer": "Rocket Lab Corp",
+   "source": "SEC 425",
+   "accession": "0001753926-26-001099",
+   "acquirer_cik": "1819994",
+   "target_cik": "1418819",
+   "date_gap_days": 5
+  },
+  "382440": {
+   "acquirer": "FIRST FINANCIAL BANCORP /OH/",
+   "target": "Finward Bancorp",
+   "source": "SEC 425",
+   "accession": "0001104659-26-085426",
+   "acquirer_cik": "708955",
+   "target_cik": "919864",
+   "date_gap_days": 17
+  },
+  "433975": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 3
+  },
+  "433976": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 3
+  },
+  "433656": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 29
+  },
+  "421102": {
+   "acquirer": "ASP Isotopes Inc.",
+   "target": "ENDRA Life Sciences Inc.",
+   "source": "SEC 425",
+   "accession": "0001477932-26-005199",
+   "acquirer_cik": "1921865",
+   "target_cik": "1681682",
+   "date_gap_days": 1
+  },
+  "420783": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 21
+  },
+  "420785": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 21
+  },
+  "420534": {
+   "acquirer": "Magna Holdings Ltd.",
+   "source": "SEC SC TO-T",
+   "accession": "0001539497-26-002306",
+   "acquirer_cik": "2125850",
+   "target_cik": "1516899",
+   "date_gap_days": 0
+  },
+  "420260": {
+   "acquirer": "DIANA SHIPPING INC.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-087517",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 21
+  },
+  "420270": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 18
+  },
+  "414677": {
+   "acquirer": "REZOLVE AI PLC",
+   "target": "Commerce.com, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-338450",
+   "acquirer_cik": "1920294",
+   "target_cik": "1626450",
+   "date_gap_days": 11
+  },
+  "414779": {
+   "acquirer": "HomeTrust Bancshares, Inc.",
+   "source": "SEC 425",
+   "accession": "0001538263-26-000108",
+   "acquirer_cik": "1538263",
+   "target_cik": "842717",
+   "date_gap_days": 0
+  },
+  "413950": {
+   "acquirer": "GSK plc",
+   "target": "Nuvalent, Inc.",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-304122",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 29
+  },
+  "414003": {
+   "acquirer": "GSK plc",
+   "source": "SEC SC TO-T",
+   "accession": "0001193125-26-304122",
+   "acquirer_cik": "1131399",
+   "target_cik": "1861560",
+   "date_gap_days": 29
+  },
+  "414007": {
+   "acquirer": "American Water Works Company, Inc.",
+   "target": "Essential Utilities, Inc.",
+   "source": "SEC 425",
+   "accession": "0001193125-26-347720",
+   "acquirer_cik": "1410636",
+   "target_cik": "78128",
+   "date_gap_days": 0
+  },
+  "413143": {
+   "acquirer": "EigenQ Inc",
+   "source": "SEC 425",
+   "accession": "0001213900-26-086432",
+   "acquirer_cik": "2064142",
+   "target_cik": "2085659",
+   "date_gap_days": 5
+  },
+  "412848": {
+   "target": "GENCO SHIPPING & TRADING LTD",
+   "source": "SEC 425",
+   "accession": "0001104659-26-087517",
+   "acquirer_cik": "1318885",
+   "target_cik": "1326200",
+   "date_gap_days": 14
+  },
+  "412872": {
+   "target": "Cadeler A/S",
+   "source": "SEC 425",
+   "accession": "0001104659-26-102520",
+   "acquirer_cik": "2063345",
+   "target_cik": "1978867",
+   "date_gap_days": 17
+  },
+  "412908": {
+   "acquirer": "Eaton Corp plc",
+   "target": "DANA Inc",
+   "source": "SEC 425",
+   "accession": "0000950142-26-002234",
+   "acquirer_cik": "1551182",
+   "target_cik": "26780",
+   "date_gap_days": 11
+  },
+  "412937": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0000753308-26-000066",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "412941": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0000753308-26-000066",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 0
+  },
+  "391720": {
+   "target": "Element Solutions Inc",
+   "source": "SEC 425",
+   "accession": "0001104659-26-089308",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 1
+  },
+  "445197": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "target": "Qorvo, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-106992",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 0
+  },
+  "435692": {
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 3
+  },
+  "435261": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "target": "Qorvo, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-104396",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 2
+  },
+  "435262": {
+   "acquirer": "SKYWORKS SOLUTIONS, INC.",
+   "target": "Qorvo, Inc.",
+   "source": "SEC 425",
+   "accession": "0001104659-26-104396",
+   "acquirer_cik": "4127",
+   "target_cik": "1604778",
+   "date_gap_days": 2
+  },
+  "434515": {
+   "acquirer": "Camac Fund, LP",
+   "source": "SEC SC TO-T",
+   "accession": "0001493152-26-039939",
+   "acquirer_cik": "1516478",
+   "target_cik": "813298",
+   "date_gap_days": 8
+  },
+  "434713": {
+   "acquirer": "Solstice Advanced Materials Inc.",
+   "target": "Element Solutions Inc",
+   "source": "SEC 425",
+   "accession": "0001104659-26-094108",
+   "acquirer_cik": "2064953",
+   "target_cik": "1590714",
+   "date_gap_days": 22
+  },
+  "434191": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "434192": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "434205": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "434219": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "434261": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  },
+  "434262": {
+   "acquirer": "NEXTERA ENERGY INC",
+   "target": "DOMINION ENERGY, INC",
+   "source": "SEC 425",
+   "accession": "0001104659-26-105115",
+   "acquirer_cik": "753308",
+   "target_cik": "715957",
+   "date_gap_days": 2
+  }
+ }
+}

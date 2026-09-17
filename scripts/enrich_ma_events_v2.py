@@ -36,7 +36,8 @@ from datetime import date, datetime
 import pymysql
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app"))
-from utils.ma_8k_extract import extract_item_sections, sanitize_ma_name  # noqa: E402
+from utils.ma_8k_extract import (extract_item_sections, extract_ma_fields,  # noqa: E402
+                                 sanitize_ma_name)
 
 CANON_DEAL_TYPES = {
     "merger": "merger", "acquisition": "acquisition",
@@ -332,6 +333,105 @@ def cmd_apply(args):
           f"missing_extractions={len(db_rows) - len(extracted)}")
 
 
+# ── free deterministic backfill (no LLM, no API cost) ───────────────────────
+#
+# Screening shows Acquirer/Target for any M&A event, not just the 1,194 calendar
+# closings, and 3,192 rows that DO carry a source 8-K have a missing or
+# boilerplate name. SEC EDGAR is free, so those are re-extractable at zero cost
+# with the same precision-tested template extractor the calendar daemon uses
+# (utils/ma_8k_extract, ~98% precision / ~30% recall). Whatever it cannot match
+# stays absent from the overlay, so the DB value is used — this file only ever
+# ADDS names, it never blanks one.
+
+# Only subtypes that describe an actual change of ownership. Measured on STG:
+# of the 4,156 EDGAR-sourced rows missing a name, 2,707 are 'Material Agreement'
+# (Item 1.01 credit-facility amendments), 840 are 6-K foreign-issuer reports and
+# 462 are terminations — none of them name a buyer and a seller, so fetching them
+# is 4,000 SEC round-trips for nothing.
+BACKFILL_SUBTYPES = ("M&A Closing", "Change in Control", "Deal News",
+                     "Divestiture/Asset Sale")
+
+BACKFILL_WHERE = """
+    event_category = 'M&A Activity'
+    AND is_active = 1
+    AND event_date IS NOT NULL
+    AND source_ref LIKE '%sec.gov%'
+    AND event_subtype IN ({subtypes})
+"""
+
+
+def cmd_backfill_edgar(args):
+    """Re-extract names for EDGAR-sourced M&A rows the nightly job left unusable."""
+    from edgar import set_identity, find
+    set_identity("Coresight Research mohdsaeedafri@coresight.com")
+
+    conn = _conn()
+    cur = conn.cursor()
+    subtypes = ", ".join(f"'{s}'" for s in BACKFILL_SUBTYPES)
+    cur.execute(f"""
+        SELECT event_id, ticker, event_date, source_ref, ma_acquirer, ma_target
+        FROM coreiq_company_events
+        WHERE {BACKFILL_WHERE.format(subtypes=subtypes)}
+        ORDER BY event_date DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    todo = [r for r in rows
+            if not (sanitize_ma_name(r["ma_acquirer"]) and sanitize_ma_name(r["ma_target"]))]
+    print(f"[backfill] {len(rows)} EDGAR-sourced M&A rows, {len(todo)} need names")
+
+    out_path = args.out
+    existing = {}
+    if os.path.exists(out_path):            # resumable: a run can be stopped anytime
+        with open(out_path, encoding="utf-8") as f:
+            existing = json.load(f).get("events", {})
+        todo = [r for r in todo if str(r["event_id"]) not in existing]
+        print(f"[backfill] {len(existing)} already done, {len(todo)} left")
+    if args.limit:
+        todo = todo[: args.limit]
+
+    def fetch(row):
+        acc = _accession_from_url(row["source_ref"])
+        if not acc:
+            return str(row["event_id"]), None
+        try:
+            filing = find(acc)
+            text = extract_item_sections(filing.text())
+            fields = extract_ma_fields(str(getattr(filing, "company", "") or ""), text)
+        except Exception as exc:
+            print(f"  SKIP {row['ticker']} {row['event_id']}: {type(exc).__name__} {str(exc)[:70]}")
+            return str(row["event_id"]), None
+        if not (fields.get("acquirer") and fields.get("target")):
+            return str(row["event_id"]), None      # unmatched: leave the DB value alone
+        fields["accession"] = acc
+        fields["extractor"] = "deterministic-backfill"
+        return str(row["event_id"]), fields
+
+    found = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as ex:
+        futures = {ex.submit(fetch, r): r["event_id"] for r in todo}
+        for done, fut in enumerate(as_completed(futures), 1):
+            eid, fields = fut.result()
+            if fields:
+                existing[eid] = fields
+                found += 1
+            if done % 100 == 0:
+                print(f"[backfill] {done}/{len(todo)} fetched, {found} names recovered")
+                _write_backfill(out_path, existing)
+    _write_backfill(out_path, existing)
+    print(f"[backfill] DONE — {found} new names, {len(existing)} events in {out_path}")
+
+
+def _write_backfill(path, events):
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"source": "deterministic-backfill (edgartools, no LLM)",
+                   "generated": datetime.now().isoformat(timespec="seconds"),
+                   "events": events}, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
 def main():
     _load_env()
     p = argparse.ArgumentParser(description=__doc__)
@@ -342,6 +442,13 @@ def main():
     e = sub.add_parser("emit-overrides")
     e.add_argument("--results", required=True, help="glob of extraction JSONL files")
     e.add_argument("--out", required=True, help="path of ma_event_overrides.json")
+    b = sub.add_parser("backfill-edgar",
+                       help="free EDGAR re-extraction of missing names (no LLM)")
+    b.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..",
+                                                 "app", "data",
+                                                 "ma_event_overrides_edgar.json"))
+    b.add_argument("--limit", type=int, default=0, help="0 = all remaining")
+    b.add_argument("--workers", type=int, default=4)
     a = sub.add_parser("apply", help="DATA TEAM ONLY — writes to the DB")
     a.add_argument("--results", required=True, help="glob of extraction JSONL files")
     a.add_argument("--dry-run", action="store_true")
@@ -350,6 +457,8 @@ def main():
         cmd_harvest(args)
     elif args.cmd == "emit-overrides":
         cmd_emit_overrides(args)
+    elif args.cmd == "backfill-edgar":
+        cmd_backfill_edgar(args)
     else:
         cmd_apply(args)
 

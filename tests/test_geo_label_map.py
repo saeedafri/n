@@ -27,7 +27,7 @@ MAP = json.loads((REPO / "app" / "data" / "geo_label_map.json").read_text())
 
 
 def test_map_is_generated_and_populated():
-    assert MAP["_source"] == "Countries Mapping.xlsx"
+    assert MAP["_source"].startswith("Countries Mapping")
     assert MAP["_counts"]["workbook_labels"] > 400
     assert MAP["_counts"]["canonicals"] > 200
 
@@ -69,16 +69,16 @@ def test_business_names_reachable_from_every_spelling(raw, expected):
 
 
 @pytest.mark.parametrize("raw", [
-    # Qualified regions are their own segments — merging them into the bare
-    # region would silently combine revenue the filer split on purpose.
-    "Americas (excluding United States)",
-    "Asia Pacific (excluding China and Japan)",
-    "Asia Pacific (including Oceania)",
-    "Europe (Excluding United Kingdom)",
-    "Mainland China (excluding Hong Kong)",
-    "China (including Hong Kong)",
+    # Labels no decision covers. Automatic normalisation must never fold a
+    # qualified region into the bare one — that would silently combine revenue
+    # the filer split. Only an explicit row in scripts/geo_label_decisions.csv
+    # may make that call (as it does for "Europe (Excluding United Kingdom)").
+    "Latin America (excluding Brazil)",
+    "Europe (excluding Germany)",
+    "Asia Pacific (including India)",
+    "China (excluding Macau)",
 ])
-def test_qualified_regions_are_never_merged_into_the_bare_region(raw):
+def test_qualified_regions_are_never_merged_automatically(raw):
     assert canonicalize_geo_label(raw) == raw
 
 
@@ -101,7 +101,7 @@ def test_non_places_are_hidden(raw):
 
 def test_unnamed_labels_survive_untouched():
     """A label the workbook never saw keeps its own name — nothing is dropped."""
-    for raw in ("Midwest", "Far East", "Emerging Markets", "Eastern Mediterranean"):
+    for raw in ("Nordic Cluster", "Benelux Operations"):
         assert canonicalize_geo_label(raw) == raw
         assert raw in build_geo_label_groups([raw])
 
@@ -109,11 +109,10 @@ def test_unnamed_labels_survive_untouched():
 def test_spelling_drift_collapses_without_a_workbook_entry():
     """New spellings of an unnamed segment still land on one option."""
     groups = build_geo_label_groups([
-        "United States and Canada", "United States & Canada",
-        'United States and Canada ("US&CAN")',
+        "Iberia and Maghreb", "Iberia & Maghreb", "Iberia/Maghreb",
     ])
-    assert list(groups) == ["United States and Canada"]
-    assert len(groups["United States and Canada"]) == 3
+    assert list(groups) == ["Iberia and Maghreb"]
+    assert len(groups["Iberia and Maghreb"]) == 3
 
 
 def test_group_expansion_covers_every_raw_spelling():
@@ -189,10 +188,10 @@ def test_case_variants_group_even_when_the_member_cache_hides_one():
     arbitrary spelling per place, so grouping must work from the fetched labels
     too — otherwise a value gets a name the dropdown never offered."""
     groups = build_geo_label_groups([
-        "United States and Canada",        # the spelling the member cache kept
-        "United States And Canada",        # the spelling the values cache holds
+        "Nordics and Baltics",             # the spelling the member cache kept
+        "Nordics And Baltics",             # the spelling the values cache holds
     ])
-    assert list(groups) == ["United States and Canada"]
+    assert len(groups) == 1 and len(next(iter(groups.values()))) == 2
 
 
 def test_named_vs_unnamed_is_distinguishable():
@@ -202,8 +201,8 @@ def test_named_vs_unnamed_is_distinguishable():
 
     assert is_geo_named_label("United States")   # a canonical is named
     assert is_geo_named_label("EMEA")            # a spelling of one is named
-    assert not is_geo_named_label("Midwest")     # the workbook never saw it
-    assert not is_geo_named_label("Other countries")
+    assert is_geo_named_label("Midwest")         # named by the decisions file
+    assert not is_geo_named_label("Nordic Cluster")  # nobody has named it
 
 
 def test_watchlist_scoped_options_collapse_the_same_way():
@@ -336,3 +335,43 @@ def test_element_name_artifacts_are_stripped_per_section(raw, expected):
     from data.repository import SegmentDataRepository
 
     assert SegmentDataRepository._strip_member_artifact(raw) == expected
+
+
+def test_every_reviewed_decision_resolves_as_written():
+    """scripts/geo_label_decisions.csv is the reviewed source for everything the
+    Mapping sheet does not cover. Each row must come out of the map exactly as
+    written, or the JSON is stale / a key collided."""
+    import csv
+
+    from data.segment_aliases import is_geo_excluded_label
+
+    path = REPO / "scripts" / "geo_label_decisions.csv"
+    wrong = []
+    for row in csv.DictReader(open(path, newline="")):
+        label, action, name = row["MDP Label"], row["Action"], row["Mapping Name"]
+        if action == "REMOVE":
+            if not is_geo_excluded_label(label):
+                wrong.append((label, "not removed"))
+        elif canonicalize_geo_label(label) != name:
+            wrong.append((label, canonicalize_geo_label(label)))
+    assert not wrong, wrong
+
+
+@pytest.mark.parametrize("raw,forbidden,expected", [
+    # The data team's keyword pass named the place each label EXCLUDES.
+    ("Outside Canada", "Canada", "International"),
+    ("Outside of the United States and India", "India", "Non-US"),
+    ("Outside of the United States, China, and India", "China", "Non-US"),
+    ("Other countries, excluding United States and Japan", "Japan", "Other"),
+    ("Foreign, excluding The United States of America and Canada", "Canada", "Foreign"),
+    ("Regions Excluding North America", "North America", "International"),
+    # U.S. homebuilder regions that read like continents.
+    ("Mid East", "Middle East", "Mid East"),          # NVR
+    ("North", "North America", "North"),              # Toll Brothers, D.R. Horton
+    ("South", "South America", "South"),              # Toll Brothers, Children's Place
+    ("Mountain", "Montana", "Mountain"),              # Toll Brothers
+    ("Pacific", "Asia Pacific (APAC)", "Pacific"),    # Toll Brothers
+])
+def test_labels_never_map_to_the_place_they_exclude_or_misname(raw, forbidden, expected):
+    assert canonicalize_geo_label(raw) != forbidden
+    assert canonicalize_geo_label(raw) == expected

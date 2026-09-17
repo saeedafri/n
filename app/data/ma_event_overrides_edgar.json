@@ -1,0 +1,237 @@
+{
+ "source": "deterministic-backfill (edgartools, no LLM)",
+ "generated": "2026-09-16T09:49:54",
+ "events": {
+  "382932": {
+   "acquirer": "Bed Bath & Beyond, Inc.",
+   "target": "The Container Store Holdings, LLC",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2026-04-02",
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001140361-26-028107"
+  },
+  "362914": {
+   "acquirer": "Sanmina Corp.",
+   "target": "ZT Group Int’l, Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0000897723-26-000004"
+  },
+  "378754": {
+   "acquirer": "Synopsys Inc.",
+   "target": "Ansys",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2024-01-15",
+   "close_date": "2025-07-17",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001140361-25-026139"
+  },
+  "394234": {
+   "acquirer": "Broadcom Inc.",
+   "target": "VMware, Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2022-05-26",
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001140361-23-054354"
+  },
+  "363409": {
+   "acquirer": "J M SMUCKER Co",
+   "target": "Hostess Brands, Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2023-09-10",
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001193125-23-272302"
+  },
+  "423433": {
+   "acquirer": "DENNY'S Corp",
+   "target": "Keke's Breakfast Cafe",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": "2022-07-20",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0000852772-22-000092"
+  },
+  "236839": {
+   "acquirer": "Sonic Automotive Inc.",
+   "target": "RFJ Auto Partners, Inc",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2021-09-17",
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001043509-21-000022"
+  },
+  "249993": {
+   "acquirer": "EVgo Inc",
+   "target": "Recargo, Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001558370-21-008902"
+  },
+  "225894": {
+   "acquirer": "PLBY Group, Inc.",
+   "target": "HB",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001803914-21-000067"
+  },
+  "361214": {
+   "acquirer": "Insight Enterprises Inc.",
+   "target": "PCM, Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2019-06-23",
+   "close_date": "2019-08-30",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001564590-19-033760"
+  },
+  "225380": {
+   "acquirer": "Childrens Place, Inc.",
+   "target": "the Gymboree Assets",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": "2019-04-04",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001144204-19-018207"
+  },
+  "370446": {
+   "acquirer": "Autodesk Inc.",
+   "target": "PlanGrid",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": "2018-12-19",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0000769397-18-000055"
+  },
+  "23913": {
+   "acquirer": "CVS HEALTH Corp",
+   "target": "Aetna Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2017-12-03",
+   "close_date": "2018-11-28",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001193125-18-336591"
+  },
+  "227646": {
+   "acquirer": "Conagra Brands Inc.",
+   "target": "Pinnacle Foods",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001193125-18-308603"
+  },
+  "230067": {
+   "acquirer": "Post Holdings, Inc.",
+   "target": "Bob Evans Farms, Inc.",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2017-09-18",
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001530950-18-000023"
+  },
+  "252149": {
+   "acquirer": "Movado Group Inc.",
+   "target": "JLB Brands Ltd",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0000950142-17-001319"
+  },
+  "214034": {
+   "acquirer": "Sherwin Williams Co",
+   "target": "Valspar",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001193125-17-191042"
+  },
+  "409955": {
+   "acquirer": "Tesla Motors Inc.",
+   "target": "SolarCity",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001193125-16-773705"
+  },
+  "393897": {
+   "acquirer": "AbbVie Inc.",
+   "target": "Stemcentrx",
+   "deal_type": "merger",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001104659-16-124683"
+  },
+  "224254": {
+   "acquirer": "Liberty Interactive Corp",
+   "target": "Bright House Networks, LLC",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": "2015-05-23",
+   "close_date": "2016-05-18",
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001355096-16-000076"
+  },
+  "368590": {
+   "acquirer": "Western Digital Corp.",
+   "target": "SanDisk",
+   "deal_type": "acquisition",
+   "transaction_value_usd_m": null,
+   "announce_date": null,
+   "close_date": null,
+   "confidence": 0.75,
+   "extractor": "deterministic-backfill",
+   "accession": "0001193125-16-588382"
+  }
+ }
+}

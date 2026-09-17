@@ -30,6 +30,9 @@ from utils.server_logger import log_info, log_structured_error, log_timing
 from utils.ma_8k_extract import extract_item_sections, extract_ma_fields
 
 RUNTIME_OVERLAY_BASENAME = "ma_event_overrides_runtime.json"
+REPO_OVERLAY_BASENAME = "ma_event_overrides.json"           # LLM-verified gold, 262 events
+EDGAR_OVERLAY_BASENAME = "ma_event_overrides_edgar.json"    # deterministic EDGAR backfill
+SECFORMS_OVERLAY_BASENAME = "ma_event_overrides_secforms.json"  # SEC form headers + fee exhibit
 MAX_ATTEMPTS = 3
 MAX_FETCH_PER_TICK = 40
 
@@ -51,13 +54,51 @@ def runtime_overlay_path() -> Optional[str]:
     return os.path.join(d, RUNTIME_OVERLAY_BASENAME) if d else None
 
 
-def _repo_overlay_ids() -> set:
+def data_overlay_path(basename: str) -> str:
+    return os.path.join(os.path.dirname(__file__), "..", "data", basename)
+
+
+def _read_overlay(path: Optional[str]) -> Dict[str, Any]:
+    if not path or not os.path.exists(path):
+        return {}
     try:
-        path = os.path.join(os.path.dirname(__file__), "..", "data", "ma_event_overrides.json")
         with open(path, "r", encoding="utf-8") as f:
-            return set(json.load(f).get("events", {}).keys())
-    except Exception:
-        return set()
+            return {str(k): v for k, v in (json.load(f).get("events", {}) or {}).items()}
+    except Exception as exc:
+        log_structured_error(exc, page="ma_overrides_auto", component="_read_overlay",
+                             operation="load_overlay", context=path)
+        return {}
+
+
+_OVERLAY_CACHE: Dict[str, Any] = {"stamp": None, "merged": {}}
+
+
+def load_ma_overlays() -> Dict[str, Dict[str, Any]]:
+    """Every M&A field correction, keyed by event_id (str). One shared reader.
+
+    Precedence, weakest first — runtime (deterministic, written by the daemon for
+    rows the ETL added later) < edgar (deterministic offline backfill) < secforms
+    (SEC merger-form headers: both parties named by the filer itself and matched
+    on CIK, so it outranks anything we extract ourselves) < repo (LLM-verified
+    gold). Reloaded only when a file's mtime changes, so a page render costs one
+    os.stat per file, not a JSON parse.
+    """
+    paths = [runtime_overlay_path(),
+             data_overlay_path(EDGAR_OVERLAY_BASENAME),
+             data_overlay_path(SECFORMS_OVERLAY_BASENAME),
+             data_overlay_path(REPO_OVERLAY_BASENAME)]
+    stamp = tuple(os.path.getmtime(p) if p and os.path.exists(p) else None for p in paths)
+    if _OVERLAY_CACHE["stamp"] != stamp:
+        merged: Dict[str, Any] = {}
+        for path in paths:
+            merged.update(_read_overlay(path))
+        _OVERLAY_CACHE["stamp"] = stamp
+        _OVERLAY_CACHE["merged"] = merged
+    return _OVERLAY_CACHE["merged"]
+
+
+def _repo_overlay_ids() -> set:
+    return set(_read_overlay(data_overlay_path(REPO_OVERLAY_BASENAME)).keys())
 
 
 def _load_runtime() -> Dict[str, Any]:
@@ -177,3 +218,78 @@ def start_ma_overrides_auto() -> None:
             time.sleep(sleep_s)
 
     threading.Thread(target=_loop, daemon=True, name="ma-overrides-auto").start()
+
+
+# ── SEC deal-closure index ───────────────────────────────────────────────────
+#
+# `ma_deal_status` cannot be shown as-is: verified against 5,775 source filings,
+# 'closed' is right on only 29.2% of rows (1,442 false positives, mostly Item 1.01
+# credit agreements). SEC publishes the real signal as structure:
+#   * an 8-K whose DECLARED items include 2.01 ("Completion of Acquisition or
+#     Disposition of Assets") — 92.2% precision;
+#   * Form 25 / Form 15, which a target files only AFTER a takeover completes.
+# scripts/sec_closure_index.py harvests both offline into app/data. Renders only
+# ever read that local file — never SEC — so the page stays instant.
+
+CLOSURE_INDEX_BASENAME = "sec_closure_index.json"
+_CLOSURE_CACHE: Dict[str, Any] = {"mtime": None, "companies": {}}
+
+
+def load_sec_closure_index() -> Dict[str, Any]:
+    """Per-ticker SEC closure evidence. Reloaded only when the file changes."""
+    path = data_overlay_path(CLOSURE_INDEX_BASENAME)
+    try:
+        mtime = os.path.getmtime(path) if os.path.exists(path) else None
+    except OSError:
+        mtime = None
+    if mtime != _CLOSURE_CACHE["mtime"]:
+        companies: Dict[str, Any] = {}
+        if mtime is not None:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    companies = json.load(f).get("companies", {}) or {}
+            except Exception as exc:
+                log_structured_error(exc, page="ma_overrides_auto",
+                                     component="load_sec_closure_index",
+                                     operation="load_closure_index", context=path)
+        _CLOSURE_CACHE["mtime"] = mtime
+        _CLOSURE_CACHE["companies"] = companies
+    return _CLOSURE_CACHE["companies"]
+
+
+def sec_closure_for_event(ticker: Optional[str], event_date: Any,
+                          window_days: int = 21) -> Optional[str]:
+    """Label an event 'closed' only when SEC structure says so, near its date.
+
+    Returns a short provenance string ("SEC 8-K Item 2.01", "SEC delisting") or
+    None. The window keeps an old completion from marking an unrelated new event.
+    """
+    if not ticker or not event_date:
+        return None
+    entry = load_sec_closure_index().get(str(ticker).upper()) or \
+        load_sec_closure_index().get(str(ticker))
+    if not entry:
+        return None
+    try:
+        from datetime import date, datetime
+        if isinstance(event_date, datetime):
+            event_date = event_date.date()
+        if not isinstance(event_date, date):
+            event_date = datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+    def near(iso: Optional[str]) -> bool:
+        if not iso:
+            return False
+        try:
+            from datetime import datetime as _dt
+            return abs((_dt.strptime(iso[:10], "%Y-%m-%d").date() - event_date).days) <= window_days
+        except Exception:
+            return False
+
+    if any(near(f.get("date")) for f in entry.get("item201") or ()):
+        return "SEC 8-K Item 2.01"
+    if any(near(f.get("date")) for f in entry.get("delistings") or ()):
+        return "SEC delisting"
+    return None

@@ -8532,69 +8532,31 @@ class EarningsCalendarRepository:
                                  context="fiscal year end map fetch failed — falling back to calendar quarters")
             return {}
 
-    _MA_OVERRIDES_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
-    _MA_RUNTIME_CACHE: Tuple[float, Dict[str, Dict[str, Any]]] = (-1.0, {})
 
     @staticmethod
     def _load_ma_overrides() -> Dict[str, Dict[str, Any]]:
         """Curated M&A field corrections, keyed by event_id (as str).
 
         The upstream nightly ETL populated ma_acquirer/ma_target with regex
-        captures of 8-K boilerplate ('reference', sentence fragments). DB
-        repair is the data team's job — until they apply it, two read-only
-        overlays correct what the calendar shows:
+        captures of 8-K boilerplate ('reference', sentence fragments). DB repair
+        is the data team's job — until they apply it, read-only overlays correct
+        what the app shows. `utils.ma_overrides_auto.load_ma_overlays` is the one
+        reader for all three (runtime < edgar backfill < LLM-verified repo gold);
+        Screening's M&A columns merge the same dict, so the calendar popup and the
+        screening grid can never disagree about a deal.
 
-          1. repo overlay app/data/ma_event_overrides.json — LLM-verified
-             re-extraction of the 262 rows known at build time (see
-             scripts/enrich_ma_events_v2.py); loaded once per process;
-          2. runtime overlay (MDP cache dir) — written by the background
-             auto-enricher (utils/ma_overrides_auto.py) for rows the nightly
-             ETL inserts later; reloaded on mtime change.
-
-        Repo entries win over runtime entries. A JSON field explicitly set to
-        null means "verified unknown — clear the DB garbage"; an absent
-        event_id means "keep the DB value".
+        A JSON field explicitly set to null means "verified unknown — clear the DB
+        garbage"; an absent event_id means "keep the DB value".
         """
-        cls = EarningsCalendarRepository
-        if cls._MA_OVERRIDES_CACHE is None:
-            try:
-                import json as _json
-                _path = os.path.join(os.path.dirname(__file__), "ma_event_overrides.json")
-                with open(_path, "r", encoding="utf-8") as _f:
-                    _raw = _json.load(_f)
-                cls._MA_OVERRIDES_CACHE = {str(k): v for k, v in _raw.get("events", {}).items()}
-            except FileNotFoundError:
-                cls._MA_OVERRIDES_CACHE = {}
-            except Exception as exc:
-                log_structured_error(
-                    exc, page="repository", component="EarningsCalendarRepository",
-                    operation="_load_ma_overrides", context="ma_event_overrides.json load failed",
-                )
-                cls._MA_OVERRIDES_CACHE = {}
-
         try:
-            import json as _json
-            from utils.ma_overrides_auto import runtime_overlay_path
-            _rt_path = runtime_overlay_path()
-            if _rt_path and os.path.exists(_rt_path):
-                _mtime = os.path.getmtime(_rt_path)
-                if _mtime != cls._MA_RUNTIME_CACHE[0]:
-                    with open(_rt_path, "r", encoding="utf-8") as _f:
-                        _rt_raw = _json.load(_f)
-                    cls._MA_RUNTIME_CACHE = (
-                        _mtime,
-                        {str(k): v for k, v in _rt_raw.get("events", {}).items()},
-                    )
+            from utils.ma_overrides_auto import load_ma_overlays
+            return load_ma_overlays()
         except Exception as exc:
             log_structured_error(
                 exc, page="repository", component="EarningsCalendarRepository",
-                operation="_load_ma_overrides", context="runtime overlay load failed",
+                operation="_load_ma_overrides", context="overlay load failed",
             )
-
-        _runtime = cls._MA_RUNTIME_CACHE[1]
-        if not _runtime:
-            return cls._MA_OVERRIDES_CACHE
-        return {**_runtime, **cls._MA_OVERRIDES_CACHE}
+            return {}
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)  # 6h: M&A completions change ~daily; avoids 5-min re-cold (warmed on boot)
