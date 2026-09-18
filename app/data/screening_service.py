@@ -370,47 +370,85 @@ def get_all_companies_universe() -> pd.DataFrame:
     under conflicting industries (NANO is both 'Software and Services' and
     'Technology'), which would otherwise multiply this universe's rows.
     """
-    base = get_base_company_universe()
-    known = set(base["ticker"].dropna().astype(str))
+    def _build() -> pd.DataFrame:
+        base = get_base_company_universe()
+        known = set(base["ticker"].dropna().astype(str))
 
-    query = f"""
-        SELECT DISTINCT e.ticker,
-               COALESCE({_AV_COMPANY_NAME}, sc.name) AS company_name,
-               COALESCE(sc.primary_industry_coresight, nsc.industry) AS sector,
-               av.exchange,
-               av.country
-        FROM coreiq_company_events e
-        LEFT JOIN coreiq_av_companies_all av  ON av.symbol = e.ticker
-        LEFT JOIN coreiq_sec_companies_all sc ON sc.ticker = e.ticker
-        LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc ON nsc.ticker = e.ticker
-    """
-    try:
+        query = f"""
+            SELECT DISTINCT e.ticker,
+                   COALESCE({_AV_COMPANY_NAME}, sc.name) AS company_name,
+                   COALESCE(sc.primary_industry_coresight, nsc.industry) AS sector,
+                   av.exchange,
+                   av.country
+            FROM coreiq_company_events e
+            LEFT JOIN coreiq_av_companies_all av  ON av.symbol = e.ticker
+            LEFT JOIN coreiq_sec_companies_all sc ON sc.ticker = e.ticker
+            LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc ON nsc.ticker = e.ticker
+        """
         rows = db_manager.execute_query_readonly(query) or []
+        # Same trap as the subtype taxonomy: execute_query_readonly returns [] for a
+        # failure as well as for an empty table, and materializing that would pin the
+        # universe back to the 510 Coresight rows — silently dropping ~4,000 tickers
+        # from every key-dev screen until the signal moved. coreiq_company_events is
+        # never empty, so raise instead and let the previous generation stand.
+        if not rows:
+            raise RuntimeError(
+                "all-companies universe query returned no rows — the DISTINCT over "
+                "coreiq_company_events failed; refusing to materialize an empty widening")
+
+        extra = [
+            {
+                "ticker":       r["ticker"],
+                "company_name": _format_company_name(r.get("company_name") or "") or r["ticker"],
+                "sector":       (r.get("sector") or "").strip(),
+                "exchange":     r.get("exchange") or "",
+                "country":      r.get("country") or "",
+            }
+            for r in rows
+            if r.get("ticker") and r["ticker"] not in known
+        ]
+        if not extra:
+            return base
+
+        out = pd.concat([base, pd.DataFrame(extra, columns=base.columns)],
+                        ignore_index=True)
+        with_sector = int((out["sector"].fillna("").astype(str).str.strip() != "").sum())
+        log_info(f"[SCREENING] all-companies universe: {len(base)} Coresight "
+                 f"+ {len(extra)} event-only = {len(out)} "
+                 f"({with_sector} with a Coresight industry)")
+        return out
+
+    # Materialized, because this query is what froze the Key Devs screen.
+    # Measured on STG 18-Sep 13:13:48: 34.7s for its 4,481 rows
+    # (DB_READ_SPLIT exec+deserialize_ms=34659), page black for all of it. It is a
+    # DISTINCT over the 211,290-row coreiq_company_events joined to three masters,
+    # and @st.cache_data(ttl=3600) on its own meant every app restart AND every
+    # hourly expiry handed those 34s to whichever user clicked first.
+    # materialized_or_build serves the previous generation instantly and rebuilds
+    # off the request path, so nobody ever waits for it twice.
+    #
+    # Freshness signal: MAX(event_id) (an index max — a new ticker only ever
+    # arrives as a new event) plus CRC32 sums over the two masters' industry
+    # columns, which change by UPDATE and would be invisible to COUNT(*).
+    # coreiq_companies is covered by get_base_company_universe's own signature, and
+    # is repeated here because `base` is concatenated into this frame.
+    # Whole signature measured at 0.33s warm, 7.1s on a cold buffer pool.
+    from utils.materialize import materialized_or_build
+    _sources = [
+        {"table": "coreiq_company_events", "signal": "MAX(event_id)"},
+        {"table": "coreiq_companies",
+         "signal": ("SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight, "
+                    "country_of_incorporation, exchange, name_coresight)))")},
+        {"table": "coreiq_sec_companies_all",
+         "signal": "SUM(CRC32(CONCAT_WS('|', ticker, name, primary_industry_coresight)))"},
+        {"table": "coreiq_non_sec_companies_all",
+         "signal": "SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight)))"},
+    ]
+    try:
+        return materialized_or_build("screening_all_companies_universe", _build, _sources)
     except Exception as exc:
         log_error(f"[SCREENING] get_all_companies_universe failed: {exc}")
-        return base
-
-    extra = [
-        {
-            "ticker":       r["ticker"],
-            "company_name": _format_company_name(r.get("company_name") or "") or r["ticker"],
-            "sector":       (r.get("sector") or "").strip(),
-            "exchange":     r.get("exchange") or "",
-            "country":      r.get("country") or "",
-        }
-        for r in rows
-        if r.get("ticker") and r["ticker"] not in known
-    ]
-    if not extra:
-        return base
-
-    out = pd.concat([base, pd.DataFrame(extra, columns=base.columns)],
-                    ignore_index=True)
-    with_sector = int((out["sector"].fillna("").astype(str).str.strip() != "").sum())
-    log_info(f"[SCREENING] all-companies universe: {len(base)} Coresight "
-             f"+ {len(extra)} event-only = {len(out)} "
-             f"({with_sector} with a Coresight industry)")
-    return out
+        return get_base_company_universe()
 
 
 # =============================================================================
@@ -1940,6 +1978,7 @@ def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=No
     entries: List[tuple] = []  # (ticker, segment_type, metric_key, member, year, value_mm)
     processed = 0
     skipped: List[str] = []
+    _consecutive_failures = 0
     import time as _seg_time
     from sqlalchemy import text as _sql_text
     for start in range(0, total_t, ticker_chunk):
@@ -1972,6 +2011,25 @@ def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=No
         # (that corrupted the cache once, 19-Jul). The raw read engine raises, so a
         # transient failure is retried and a persistent one is recorded → aborts the
         # publish below (the live cache is kept), never silently shipped partial.
+        # Circuit breaker. Every chunk costs 3 x 20s before it gives up, so a run
+        # where the DB is simply too loaded to answer keeps 3 of the 5 read-pool
+        # connections busy for ~60s per chunk and does that once per chunk, forever.
+        # Observed on STG 18-Sep: chunks 21 through 41 all failed back to back,
+        # 12:50 to 13:09 — twenty solid minutes of timing-out scans over the 14.4M
+        # row v5 table, ending right before the user's session and leaving the DB
+        # cold enough that their first Key Devs query took 34s. `raise_on_timeout`
+        # would have aborted the publish anyway; the only thing those 20 chunks
+        # bought was load. Stop after 3 consecutive failures and say so once.
+        if _consecutive_failures >= 3:
+            log_error(
+                f"[SCREENING] segment cache: giving up after {_consecutive_failures} "
+                f"consecutive chunk failures at chunk {start // ticker_chunk} of "
+                f"{(total_t + ticker_chunk - 1) // ticker_chunk} — the DB is not "
+                f"answering this scan. {len(skipped)} tickers skipped; the live cache "
+                f"is untouched and this retries on the next poll."
+            )
+            skipped.extend(tickers[start:])
+            break
         rows = None
         for _attempt in range(3):
             try:
@@ -1988,8 +2046,10 @@ def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=No
                     f"({len(chunk)} tickers) failed after 3 tries — {str(_qe)[:160]}"
                 )
         if rows is None:
+            _consecutive_failures += 1
             _seg_time.sleep(0.4)
             continue
+        _consecutive_failures = 0
         by_ticker: Dict[str, List[dict]] = {}
         for r in rows:
             by_ticker.setdefault(r["ticker"], []).append(r)
@@ -4611,21 +4671,74 @@ def get_keydev_subtypes_by_category() -> Dict[str, List[str]]:
     while the filter was display-only, but the Excel export now honours it, so an
     incomplete domain silently dropped 540 rows from a download.
 
-    One 462ms query over the whole table (129 category/subtype pairs), cached for an
-    hour — the taxonomy changes when the ETL gains a new event type, not per screen.
+    It returns 130 pairs and it is the single slowest thing on this page. There is
+    no index on (event_category, event_subtype), so MySQL runs `type: ALL,
+    Using temporary` across all 34 date partitions of a 211,290-row table:
+    measured 87s from a dev machine and **119.2s on STG** on 18-Sep at 13:14:44
+    (DB_READ_SPLIT exec+deserialize_ms=119176 rows=130) — that two-minute freeze,
+    with the branded "Loading Key Developments" card up the whole time, is exactly
+    what the user reported. @st.cache_data(ttl=3600) did not save anyone: it is
+    per-worker and per-hour, so a restart or an hourly expiry re-ran it in full.
+
+    So it is materialized: served from disk instantly, rebuilt in a background
+    thread only when the signal below has moved. The signal is MAX(event_id) —
+    a new event type reaches this table as an INSERT, never as an UPDATE of an
+    existing row's subtype — plus the framework's own COUNT(*), together ~0.3s.
+
+    The index that would make even the rebuild cheap is the data team's to add:
+        ALTER TABLE coreiq_company_events
+          ADD INDEX idx_cat_subtype (event_category, event_subtype);
     """
+    def _build() -> Dict[str, List[str]]:
+        # Walked in event_id ranges, not as one DISTINCT over the table.
+        # The single query sits right ON the 120s DB_READ_TIMEOUT — 119.2s on STG
+        # (it squeaked through), 124.7s from a dev box (it did not) — so whether the
+        # taxonomy loads at all was a coin flip. Each PK range is bounded work
+        # instead: measured 16.4s / 27.1s / 20.7s for the three populated ranges and
+        # 0.25s for every empty one, so no single query is anywhere near the ceiling.
+        #
+        # Read on a RAISING connection, deliberately. execute_query_readonly swallows
+        # the exception and returns [], and here most chunks are LEGITIMATELY empty,
+        # so a swallowed timeout would look like a normal gap, quietly drop whatever
+        # subtypes lived in that range, and materialized_or_build would write the
+        # gap-ridden result to disk as the answer. (An empty dict got written exactly
+        # that way while this was one big query — hence the final guard too.)
+        from sqlalchemy import text as _sql_text
+        _CHUNK = 25_000
+        _max_id = (db_manager.fetch_one(
+            "SELECT MAX(event_id) AS m FROM coreiq_company_events") or {}).get("m") or 0
+        _sql = _sql_text(
+            "SELECT DISTINCT event_category AS c, event_subtype AS s "
+            "FROM coreiq_company_events "
+            "WHERE event_id >= :lo AND event_id < :hi "
+            "  AND event_subtype IS NOT NULL AND event_subtype <> ''")
+        pairs = set()
+        with db_manager._read_engine.connect() as _conn:
+            for _lo in range(0, int(_max_id) + 1, _CHUNK):
+                for _r in _conn.execute(_sql, {"lo": _lo, "hi": _lo + _CHUNK}).mappings():
+                    if _r["c"]:
+                        pairs.add((_r["c"], _r["s"]))
+        if not pairs:
+            raise KeydevsQueryError(
+                "subtype taxonomy scan produced no category/subtype pairs — "
+                "coreiq_company_events is never empty, so this is a failed read; "
+                "refusing to materialize it as the answer")
+        out: Dict[str, List[str]] = {}
+        for _c, _s in pairs:
+            out.setdefault(_c, []).append(_s)
+        log_info(f"[SCREENING] keydev subtype taxonomy: {len(pairs)} pairs "
+                 f"across {len(out)} categories (scanned to event_id {_max_id})")
+        return {k: sorted(set(v)) for k, v in out.items()}
+
+    from utils.materialize import materialized_or_build
     try:
-        rows = db_manager.execute_query_readonly(
-            "SELECT DISTINCT event_category, event_subtype FROM coreiq_company_events "
-            "WHERE event_subtype IS NOT NULL AND event_subtype <> ''"
-        ) or []
+        return materialized_or_build(
+            "keydev_subtype_taxonomy", _build,
+            [{"table": "coreiq_company_events", "signal": "MAX(event_id)"}],
+        )
     except Exception as exc:
         log_error(f"[SCREENING] get_keydev_subtypes_by_category failed: {exc}")
         return {}
-    out: Dict[str, List[str]] = {}
-    for r in rows:
-        out.setdefault(r["event_category"], []).append(r["event_subtype"])
-    return {k: sorted(set(v)) for k, v in out.items()}
 
 
 def keydev_subtype_domain(categories) -> List[str]:

@@ -355,6 +355,23 @@ def _warm_screening_segment_options() -> None:
     read_segment_member_options_cache("geographical")
 
 
+def _warm_keydevs_screening() -> None:
+    """Build the two Key Devs caches here instead of on a user's first click.
+
+    Both are materialized, so this is a disk read (~0.3s each) on every boot after
+    the first. The one time it is not — a cache directory with nothing in it — it is
+    a 125s subtype scan plus a 35s universe query, and those are exactly the 119.3s
+    and 34.7s freezes reported from STG on 18-Sep: whoever opened Key Devs first
+    paid for both, with the branded loader up and nothing else happening.
+    Paying it on this thread means nobody in the UI ever does.
+    """
+    from data.screening_service import (
+        get_keydev_subtypes_by_category, get_all_companies_universe)
+
+    get_all_companies_universe()
+    get_keydev_subtypes_by_category()
+
+
 def _background_warmup_thread():
     """
     Background thread function for cache warming.
@@ -443,6 +460,7 @@ def _background_warmup_thread():
                 # /forecasting after a deploy is a hit, not the one who pays it.
                 _warm_forecast_schema,
                 _warm_screening_segment_options,
+                _warm_keydevs_screening,
                 _warm_refresh_dialog,
             ):
                 try:

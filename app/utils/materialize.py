@@ -103,6 +103,11 @@ def _total_rows(obj):
         return len(obj)
     if isinstance(obj, (tuple, list)):
         return sum(_total_rows(_x) for _x in obj)
+    # Not every cache is a frame — keydev_subtype_taxonomy is a {category: [subtype]}
+    # dict, and reporting it as "rows=0" made a healthy HIT read like an empty one.
+    if isinstance(obj, dict):
+        return sum(len(_v) if isinstance(_v, (list, tuple, set, dict)) else 1
+                   for _v in obj.values())
     return 0
 
 
@@ -113,6 +118,22 @@ class _STALE:
 
     def __init__(self, obj):
         self.obj = obj
+
+
+def _changed_sources(old_sig, new_sig) -> str:
+    """Which tables moved between two signatures, for the rebuild log line."""
+    try:
+        _old = {_r[0]: tuple(_r[1:]) for _r in (old_sig or [])}
+        _new = {_r[0]: tuple(_r[1:]) for _r in (new_sig or [])}
+        _out = []
+        for _tab, _now in _new.items():
+            _then = _old.get(_tab)
+            if _then != _now:
+                _out.append(f"{_tab} sig {_then[0] if _then else '?'}→{_now[0]} "
+                            f"rows {_then[1] if _then else '?'}→{_now[1]}")
+        return "; ".join(_out)
+    except Exception:
+        return ""
 
 
 def read_materialized(name, sources, allow_stale=False):
@@ -135,8 +156,12 @@ def read_materialized(name, sources, allow_stale=False):
             _meta = json.load(_f)
         _live_sig = _live_signature(sources)
         if _meta.get("signature") != _live_sig:
+            # Name the table(s) that actually moved. "STALE" on its own could not
+            # answer "why is it rebuilding again?" from the log — which is the first
+            # question asked every time a cache rebuild is suspected of being slow.
+            _why = _changed_sources(_meta.get("signature"), _live_sig) or "signature shape changed"
             if not allow_stale:
-                slog_warning(f"[MAT][{name}] STALE → rebuild")
+                slog_warning(f"[MAT][{name}] STALE → rebuild | changed: {_why}")
                 return None
             # Stale-while-revalidate: the caller gets the previous generation
             # immediately and a background thread refreshes it. A full rebuild is
@@ -148,7 +173,8 @@ def read_materialized(name, sources, allow_stale=False):
             except Exception:
                 return None
             slog_warning(f"[MAT][{name}] STALE → serving previous generation, "
-                         f"rebuilding in background rows={_total_rows(_obj):,}")
+                         f"rebuilding in background rows={_total_rows(_obj):,} "
+                         f"| changed: {_why}")
             return _STALE(_obj)
         _t = time.perf_counter()
         _obj = pd.read_pickle(_pk, compression="gzip")

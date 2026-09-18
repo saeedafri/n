@@ -328,6 +328,38 @@ def _malloc_trim() -> bool:
         return False
 
 
+def _build_stamp() -> str:
+    """One line naming the code this process is running, written at boot.
+
+    Until now nothing in the log said WHICH build was up, so "is this slow because
+    of a deploy?" could not be answered from the log alone — the only way to tell a
+    deploy from a plain restart was to go and look at the repo. Three fields answer
+    it: `root` is the Oryx extract directory, which is a fresh /tmp/<hash> on every
+    deploy and constant across a restart; `newest` is the most recent .py mtime in
+    the app tree; `files`/`bytes` catch a hand-edited container (the Testing-2 sync
+    method writes files in place, which moves neither root nor the deploy time).
+    """
+    try:
+        _app = Path(__file__).resolve().parent.parent
+        _newest, _n, _bytes = 0.0, 0, 0
+        for _f in _app.rglob("*.py"):
+            try:
+                _st = _f.stat()
+            except OSError:
+                continue
+            _n += 1
+            _bytes += _st.st_size
+            if _st.st_mtime > _newest:
+                _newest = _st.st_mtime
+        _when = datetime.fromtimestamp(
+            _newest, timezone(timedelta(hours=5, minutes=30))
+        ).strftime('%d-%b-%Y %H:%M:%S IST') if _newest else "?"
+        return (f"[BUILD] root={_app.parent} | newest_py={_when} "
+                f"| files={_n} bytes={_bytes} | APP_ENV={os.getenv('APP_ENV', '?')}")
+    except Exception as _e:
+        return f"[BUILD] unavailable ({type(_e).__name__})"
+
+
 def _write_restart_ledger():
     try:
         _p = SERVER_LOGS_DIR / "restarts.log"
@@ -698,6 +730,7 @@ def get_server_logger():
                     f"| persistent={_persist} | rotate={_rotate_desc} "
                     f"| MALLOC_ARENA_MAX={_arena} | defaults_applied=[{_defaults_s}]"
                 )
+                logger.warning(_build_stamp())
                 _write_restart_ledger()
                 _start_heartbeat()
 

@@ -775,13 +775,14 @@ def _trigger_recompute():
     # and Streamlit's own "Running" indicator is off (hideTopBar=true in
     # .streamlit/config.toml), so there was no feedback of any kind. Rendering here,
     # BEFORE recompute_working_set, is what the user actually sees.
+    # The Show Results path renders its own overlay (scr_results_loading, below), so
+    # this one must stay out of its way: the cards are position:fixed and two of
+    # them stack into a visible double card. That is what this guard is for.
     overlay_slot = None
-    if criteria:
+    if criteria and not st.session_state.get("scr_results_loading"):
         try:
-            _loading_results = bool(st.session_state.get("scr_results_loading"))
             overlay_slot = _render_coresight_loading_overlay(
-                "Loading screening results…" if _loading_results else "Applying criteria…",
-                "Screening companies against your filters."
+                "Applying criteria…", "Screening companies against your filters."
             )
         except Exception:
             pass
@@ -1451,8 +1452,38 @@ div:has(.scr-loading-overlay) {
   color: #495057;
   margin-bottom: 8px;
   padding: 6px 0;
-  border-bottom: 1px solid #dee2e6;
 }
+/* ── Excel download button (EVERY screening tab) ──
+   Branded red-outline button, right-aligned to the results grid's right edge.
+
+   These rules live in the page stylesheet, not next to the button, because
+   _render_excel_js_download used to emit them itself with st.markdown. That works
+   in Companies and People, whose button sits in a plain st.columns block — but the
+   Key Devs button is rendered `with _dl_slot:` where `_dl_slot = _dl_col.empty()`,
+   and an st.empty() holds exactly ONE element: the st.container that follows
+   REPLACED the <style>, so Key Devs silently got an unstyled grey button while the
+   other tabs got the red one. That is the "Excel button looks different" report.
+   Emitting them once per page instead makes every tab identical by construction.
+
+   st.container(key=...) renders as a COLUMN flex block, so the horizontal axis is
+   align-items, not justify-content; Streamlit's own emotion class on the same
+   element sets align-items:start, hence !important. */
+div[class*="st-key-xlbtn-"] {
+  display: flex;
+  align-items: flex-end !important;
+  justify-content: center;
+  min-height: 52px;
+}
+div[class*="st-key-xlbtn-"] button {
+  background: transparent; border: 1px solid #D62E2F; color: #D62E2F;
+  border-radius: 4px; padding: 6px 10px; font-size: 13px; font-weight: 500;
+  letter-spacing: 0.01em; white-space: nowrap; width: auto; min-height: 0;
+  transition: background .15s, color .15s;
+}
+div[class*="st-key-xlbtn-"] button p { font-size: 13px; font-weight: 500; margin: 0; }
+div[class*="st-key-xlbtn-"] button:hover { background: #D62E2F; color: #fff; }
+div[class*="st-key-xlbtn-"] button:hover p { color: #fff; }
+div[class*="st-key-xlbtn-"] button:active { opacity: .85; }
 .screening-results-card {
   background: #ffffff;
   border: 1px solid #e3e6ea;
@@ -3496,6 +3527,11 @@ def _render_screen_for():
         # Keep session state in sync; reset criteria when switching away from Companies
         if selected != prev:
             st.session_state.scr_screen_for = selected
+            # The tab the user is on is the single most useful thing to know when
+            # reading a slow trace back: "Companies, applied filters, switched to
+            # Key Devs, froze" was reconstructed by hand from a screenshot because
+            # nothing in the log said a switch had happened.
+            log_warning(f"[SCREEN_FOR] {prev} -> {selected}")
             _reset_criteria()
             st.rerun()
     except Exception as e:
@@ -5144,7 +5180,6 @@ def _render_keydevs_results():
         if (st.session_state.get("kd_sig") != _kd_sig
                 or "kd_df" not in st.session_state):
             render_sticky_loader("Loading Key Developments")
-            _kd_overlay = None   # cleared in the finally below
             try:
                 # The count and the first page are independent, and on this DB a
                 # query costs ONE VPN round-trip almost regardless of what it
@@ -5180,19 +5215,11 @@ def _render_keydevs_results():
                     except Exception:
                         pass
 
-                # Feedback for the events fetch itself. Show Results does NOT go
-                # through _trigger_recompute (it renders the pre-computed set), so
-                # its overlay has to be raised here, immediately before the query.
-                # Cold, this block is ~34s; a screen recording showed the page
-                # completely static for all of it, with Streamlit's own "Running"
-                # indicator disabled by hideTopBar=true.
-                try:
-                    _kd_overlay = _render_coresight_loading_overlay(
-                        "Loading key development events…",
-                        "Fetching matching events and building the results grid.")
-                except Exception:
-                    pass
-
+                # NO second overlay here. render_sticky_loader("Loading Key
+                # Developments") above already covers this exact block, and both
+                # cards are position:fixed and centred, so adding one stacked a
+                # visible card-inside-a-card (reported from STG with a screenshot).
+                # One loader per wait — this is the one.
                 _workers = [threading.Thread(target=_fetch_count, daemon=True),
                             threading.Thread(target=_warm_subtype_domain, daemon=True)]
                 for _w in _workers:
@@ -5235,13 +5262,6 @@ def _render_keydevs_results():
                     "**Show Results** again."
                 )
                 return
-            finally:
-                # position:fixed — one left behind swallows every click on the page
-                if _kd_overlay is not None:
-                    try:
-                        _kd_overlay.empty()
-                    except Exception:
-                        pass
             st.session_state["kd_total"] = _kd_count
             st.session_state["kd_df"] = _df0
             st.session_state["kd_cursor"] = _cur0
@@ -5517,24 +5537,6 @@ def _render_excel_download(sig: str, builder) -> None:
 
 _EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-# Branded look for the Excel download buttons — matches the old iframe button
-# (red outline, 13px, table icon, right-aligned) without an iframe.
-_EXCEL_BTN_CSS = """
-<style>
-div[class*="st-key-xlbtn-"]{display:flex;justify-content:flex-end;align-items:center;min-height:52px;}
-div[class*="st-key-xlbtn-"] button{
-  background:transparent;border:1px solid #D62E2F;color:#D62E2F;border-radius:4px;
-  padding:6px 10px;font-size:13px;font-weight:500;letter-spacing:0.01em;
-  white-space:nowrap;width:auto;min-height:0;transition:background .15s,color .15s;
-}
-div[class*="st-key-xlbtn-"] button p{font-size:13px;font-weight:500;margin:0;}
-div[class*="st-key-xlbtn-"] button:hover{background:#D62E2F;color:#fff;}
-div[class*="st-key-xlbtn-"] button:hover p{color:#fff;}
-div[class*="st-key-xlbtn-"] button:active{opacity:.85;}
-</style>
-"""
-
-
 def _render_excel_js_download(excel_bytes, filename: str, label: str = "Excel") -> None:
     """Branded Excel download button served over HTTP, not the websocket.
 
@@ -5565,7 +5567,6 @@ def _render_excel_js_download(excel_bytes, filename: str, label: str = "Excel") 
         # Stable per-call key so the CSS can target it and the widget survives reruns.
         btn_key = "xlbtn-" + hashlib.md5(
             f"{filename}|{label}|{size_part}".encode()).hexdigest()[:12]
-        st.markdown(_EXCEL_BTN_CSS, unsafe_allow_html=True)
         with st.container(key=btn_key):
             st.download_button(
                 label=label,
