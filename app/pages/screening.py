@@ -6598,12 +6598,24 @@ def _render_filterable_results_grid(
                 break
     # ── Read / copy long cells (e.g. Summary) ───────────────────────────────
     # AG Grid cells are not editable here, so clicking does nothing by design.
-    # enableBrowserTooltips → hover a cell to read its FULL value in a tooltip.
+    # Hover a cell to read its FULL value in a tooltip.
     # enableCellTextSelection + ensureDomOrder → select text in a cell with the
     # mouse and copy it (Cmd/Ctrl+C). Together these answer "how do I see/copy
     # the whole Summary" without an extra dialog.
-    grid_options["enableBrowserTooltips"] = True
-    grid_options["tooltipShowDelay"] = 200
+    #
+    # enableBrowserTooltips is deliberately FALSE. With it on, AG Grid stops
+    # rendering a tooltip at all and just writes a `title` attribute on every cell
+    # (verified: 60 of 60 cells carried one, and `.ag-tooltip` was never in the
+    # DOM) — after which the DELAY belongs to Chrome, not to us. Chrome waits ~1s
+    # and restarts that timer on every mouse move, which is the "2 or 3 seconds
+    # before the hover data shows" people report. tooltipShowDelay is documented as
+    # not applicable in that mode, so the 200 that used to sit on the next line
+    # never did anything. Off, AG Grid renders its own tooltip element and the
+    # delay below is honoured exactly.
+    grid_options["enableBrowserTooltips"] = False
+    grid_options["tooltipShowDelay"] = 0
+    # Default is 10s, then it vanishes mid-read on a long Summary.
+    grid_options["tooltipHideDelay"] = 60000
     grid_options["enableCellTextSelection"] = True
     grid_options["ensureDomOrder"] = True
     # Double-click ANY cell → copy its FULL (untruncated) value to the clipboard,
@@ -6784,6 +6796,32 @@ def _render_filterable_results_grid(
         ".ag-cell-value span, .ag-cell span, .ag-cell a": {
             "user-select": "text !important",
             "-webkit-user-select": "text !important",
+        },
+        # AG Grid's own tooltip (enableBrowserTooltips is off so that it appears
+        # instantly instead of on Chrome's ~1s timer). Its stock max-width is ~250px,
+        # which turns a Summary into a tall thin ribbon, and its stock styling does
+        # not wrap long unbroken strings. It is also a DOM element inside this
+        # iframe, so it is capped at 40vh rather than allowed to run off the bottom.
+        ".ag-tooltip": {
+            "max-width": "560px !important",
+            # Capped so a very long Summary cannot run off the iframe. It cannot
+            # scroll either (pointer-events are off so the tooltip never eats a
+            # click), which is no worse than the browser tooltip this replaces —
+            # and double-clicking the cell still copies the full untruncated value.
+            "max-height": "60vh",
+            "overflow": "hidden",
+            "pointer-events": "none",
+            "white-space": "normal !important",
+            "overflow-wrap": "anywhere",
+            "line-height": "1.45",
+            "font-size": "12.5px",
+            "padding": "8px 10px",
+            "background": "#1f2933",
+            "color": "#ffffff",
+            "border": "none",
+            "border-radius": "6px",
+            "box-shadow": "0 4px 14px rgba(0,0,0,.28)",
+            "z-index": "10000",
         },
     }
     # Keyed shell lets CSS mask the AG Grid iframe's grey bootstrap flash

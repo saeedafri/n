@@ -160,3 +160,46 @@ ALTER TABLE coreiq_company_events
 ```
 
 Not applied here: this repo does not write to the DB.
+
+---
+
+## 5. Follow-up: hover tooltips took 2–3s
+
+**Reported:** hovering a cell — Summary, Headline, anything — waited 2–3 seconds
+before showing the full value.
+
+**Cause.** `_render_filterable_results_grid` set `enableBrowserTooltips = True`.
+In that mode AG Grid does **not** render a tooltip at all: it writes a `title`
+attribute on the cell and hands the timing to the browser. Verified in the live
+grid — 60 of 60 cells carried `title=`, and `.ag-tooltip` was never in the DOM.
+Chrome's native delay is ~1s and **restarts on every mouse move**, which is the
+2–3s people experience. `tooltipShowDelay = 200` on the next line had never done
+anything: AG Grid documents it as not applicable when browser tooltips are on.
+
+**Fix** (`app/pages/screening.py`, in the shared grid helper, so it lands on every
+screening grid at once — Companies, Key Devs, People and the segment tables):
+
+```python
+grid_options["enableBrowserTooltips"] = False   # AG Grid renders it → we own the delay
+grid_options["tooltipShowDelay"]      = 0
+grid_options["tooltipHideDelay"]      = 60000   # default 10s vanished mid-Summary
+```
+
+plus `.ag-tooltip` styling injected through `custom_css` (which reaches inside the
+grid iframe): 560px max width and wrapping, because AG Grid's stock 250px turns a
+Summary into a tall thin ribbon; `pointer-events: none` so it can never eat a click;
+`max-height: 60vh` so a very long Summary cannot run off the iframe.
+
+**Measured.** Tooltip present **21ms** after a warm hover, ≤250ms end-to-end
+including the Playwright hover round-trip, on both `Summary` (560×312) and
+`Company Name(s)` (205×34). `title` attributes remaining: **0**, so there is no
+second native tooltip behind it.
+
+**Note on the investigation.** The first three measurement runs reported "tooltip
+NEVER appears" and nearly sent this down a false path (missing AG Grid module).
+That was the test harness: `page.mouse.move()` with coordinates from an element
+**inside the grid iframe** did not land on the cell. Playwright's
+`element.hover()` works. The grid was fine the whole time.
+
+Behaviour deliberately unchanged: double-click still copies a cell's full
+untruncated value, and drag-select + Cmd/Ctrl+C still works.

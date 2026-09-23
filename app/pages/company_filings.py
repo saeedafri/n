@@ -4047,16 +4047,26 @@ def main():
                     else:
                         # Scoped CSS: target button via Streamlit's st-key-* container class
                         _btn_key = f"gen_pdf_{company}_{year}_{doc_type}"
+                        # One f-string: the old version mixed f- and plain strings, so
+                        # every '}}' in a plain part emitted a literal '}}'. The stray
+                        # brace swallowed the selector of the next rule, and the CSS
+                        # parser dropped everything after the first block — which is why
+                        # the button kept Streamlit's full-column width and sat away from
+                        # the card's right edge.
+                        _btn_sel = f'[class*="st-key-{_btn_key}"]'
                         st.markdown(
-                            '<style>'
-                            f'[class*="st-key-{_btn_key}"] button{{'
-                            'background:transparent!important;border:1px solid #D62E2F!important;'
-                            'color:#D62E2F!important;border-radius:4px!important;'
-                            'padding:7px 12px!important;font-size:13px!important;'
-                            'font-weight:500!important;white-space:nowrap!important;'
-                            'letter-spacing:.01em!important;transition:background .15s,color .15s!important;}}'
-                            f'[class*="st-key-{_btn_key}"] button:hover{{background:#D62E2F!important;color:#fff!important}}'
-                            '</style>',
+                            f"<style>"
+                            f"{_btn_sel}{{display:flex!important;width:100%!important;"
+                            f"justify-content:flex-end!important;}}"
+                            f'{_btn_sel} [data-testid="stButton"]{{width:auto!important;}}'
+                            f"{_btn_sel} button{{width:auto!important;background:transparent!important;"
+                            f"border:1px solid #D62E2F!important;color:#D62E2F!important;"
+                            f"border-radius:4px!important;padding:7px 12px!important;"
+                            f"font-size:13px!important;font-weight:500!important;"
+                            f"white-space:nowrap!important;letter-spacing:.01em!important;"
+                            f"transition:background .15s,color .15s!important;}}"
+                            f"{_btn_sel} button:hover{{background:#D62E2F!important;color:#fff!important;}}"
+                            f"</style>",
                             unsafe_allow_html=True,
                         )
                         if st.button("⬇  Download", key=_btn_key):
