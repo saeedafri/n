@@ -3791,6 +3791,72 @@ def _segment_options_cache_key(
     return f"scr_segment_options_{segment_type}_{period_type}_{year}_{wl_key}_{scope}"
 
 
+def _render_geo_hierarchy_filters(
+    member_names: List[str],
+    member_counts: dict,
+) -> List[str]:
+    """Region > Sub-region > Country > State > City cascade above the member list.
+
+    Each level only offers values the remaining members actually reach, so a
+    dropdown never contains a place that would come back empty. Everything runs
+    in memory off geo_hierarchy.json — no DB call belongs on this path.
+
+    Picking nothing is the same as picking everything: the full member list comes
+    back untouched, which is what keeps the "no company is ever excluded"
+    promise true for anyone who ignores the cascade entirely.
+    """
+    from data.geo_hierarchy import (
+        LEVELS,
+        LEVEL_TITLES,
+        describe_label,
+        filter_members,
+        level_options,
+    )
+
+    include_broader = st.checkbox(
+        "Include broader segments",
+        value=st.session_state.get("scr_geo_include_broader", True),
+        key="scr_geo_include_broader",
+        help=(
+            "Keeps a filer that reports only a wider area — 'Americas' when you "
+            "filter to United States — in the list. Untick for strictly the "
+            "place you picked and what sits inside it."
+        ),
+    )
+
+    selections: dict = {}
+    columns = st.columns(len(LEVELS))
+    for column, level in zip(columns, LEVELS):
+        options = level_options(member_names, level, selections)
+        state_key = f"scr_geo_level_{level}"
+        # A wider pick can retire a value that is still sitting in session state
+        # (choose EMEA after having chosen Texas); drop those before rendering or
+        # Streamlit raises on a default that is not in options.
+        kept = [v for v in st.session_state.get(state_key, []) if v in options]
+        if kept != st.session_state.get(state_key, []):
+            st.session_state[state_key] = kept
+        with column:
+            selections[level] = st.multiselect(
+                LEVEL_TITLES[level],
+                options=options,
+                key=state_key,
+                placeholder="Any",
+                disabled=not options,
+            )
+
+    filtered = filter_members(member_names, selections, include_broader)
+    if any(selections.values()):
+        st.caption(
+            f"{len(filtered)} of {len(member_names)} segments match — "
+            "clear the filters above to see them all."
+        )
+        if not filtered:
+            st.info("No segment matches that combination. Widen a filter above.")
+    # The tooltip on each member is where the hierarchy pays off in the picker.
+    st.session_state["_scr_geo_paths"] = {m: describe_label(m) for m in filtered}
+    return filtered
+
+
 def _render_segment_members_step(
     segment_type: str,
     period_type: str,
@@ -3808,9 +3874,18 @@ def _render_segment_members_step(
     member_names = [m for m, _cnt in member_opts]
     member_counts = {m: cnt for m, cnt in member_opts}
 
+    # Geography has a place hierarchy behind it, so offer the cascade first and
+    # let it narrow the member list. Business segments have no such structure.
+    if segment_type == "geographical":
+        member_names = _render_geo_hierarchy_filters(member_names, member_counts)
+
+    geo_paths = st.session_state.get("_scr_geo_paths", {})
+
     def _member_label(name: str) -> str:
         cnt = member_counts.get(name, 0)
-        return f"{name} ({cnt} companies)" if cnt else name
+        shown = f"{name} ({cnt} companies)" if cnt else name
+        trail = geo_paths.get(name)
+        return f"{shown} — {trail}" if trail else shown
 
     # For geo segments: normalize any saved raw alias to its canonical label so
     # criteria stored before canonicalization (e.g. "U.S.") still pre-populate.
@@ -3819,6 +3894,14 @@ def _render_segment_members_step(
         default_seg_members = list(dict.fromkeys(
             canonicalize_geo_label(m) for m in default_seg_members
         ))
+
+    # A saved criterion must survive whatever the cascade is currently showing,
+    # so re-admit its members to the options rather than dropping the selection.
+    if is_edit and default_seg_members:
+        member_names = member_names + [
+            m for m in default_seg_members
+            if m in member_counts and m not in member_names
+        ]
 
     valid_defaults = [m for m in default_seg_members if m in member_names]
     _ms_kwargs = dict(
