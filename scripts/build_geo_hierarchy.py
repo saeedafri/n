@@ -39,7 +39,7 @@ from data.segment_aliases import (  # noqa: E402  (needs the path insert above)
     normalize_geo_key,
 )
 
-WORKBOOK = REPO / "data" / "geo" / "MDP_Geographic_Hierarchy-stage1.xlsx"
+WORKBOOK = REPO / "data" / "geo" / "MDP_Geographic_Hierarchy-stage2.xlsx"
 OUTPUT = REPO / "app" / "data" / "geo_hierarchy.json"
 
 # The five levels the screener cascades through, outermost first. The workbook

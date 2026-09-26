@@ -1,6 +1,6 @@
 # Hierarchy-based geographic segments in Screening
 
-**Date:** 2026-09-24
+**Date:** 2026-09-24 (stage 2 workbook: 2026-09-25)
 **Area:** Screening → Financial Information → Geographical Segments → Step 3
 **Status:** built, verified end to end on the local STG-backed app
 
@@ -56,12 +56,12 @@ signed off on, and re-grouping a place never renames it.
 
 | File | Role |
 |---|---|
-| `data/geo/MDP_Geographic_Hierarchy-stage1.xlsx` | The data team's workbook. Stage 1 — it will keep growing. |
+| `data/geo/MDP_Geographic_Hierarchy-stage2.xlsx` | The data team's workbook, current. Stage 1 is kept beside it for history. |
 | `scripts/build_geo_hierarchy.py` | Workbook → JSON. Never hand-edit the JSON. |
-| `app/data/geo_hierarchy.json` | 1,027 nodes, 1,745 exact + 1,661 loose label keys, 18 exclusions. |
+| `app/data/geo_hierarchy.json` | 1,294 nodes, 2,080 exact + 1,978 loose label keys, 18 exclusions. |
 | `app/data/geo_hierarchy.py` | Lookup + cascade. Pure functions, no DB, no Streamlit. |
 | `app/pages/screening.py` | `_render_geo_hierarchy_filters()` renders the five levels. |
-| `tests/test_geo_hierarchy.py` | 27 tests. |
+| `tests/test_geo_hierarchy.py` | 30 tests. |
 
 ### Label keys and the collision guard
 
@@ -102,6 +102,37 @@ and per the repo rule none may be added.
 
 JSON load is 1.8 ms, once per process. A test fails the build if the whole
 cascade exceeds 250 ms at 4,500 members.
+
+## Stage 2 (2026-09-25)
+
+The data team's second workbook, wired in the same way — drop it in `data/geo/`,
+point the generator at it, rerun, run the tests.
+
+| | Stage 1 | Stage 2 |
+|---|---|---|
+| Nodes | 1,027 | 1,294 |
+| Labels mapped | 1,678 | 2,018 |
+| States / provinces | 416 | 657 |
+
+Two changes matter to the cascade:
+
+1. **EMEA was re-cut.** `Middle East & North Africa (MENA)` and `Sub-Saharan
+   Africa (SSA)` became **`Middle East`** and **`Africa`** (with North Africa
+   and the SSA sub-splits as components underneath). Every EMEA filer is
+   re-grouped by that, so a test now pins the three EMEA sub-regions.
+2. **A second classification axis arrived** — UN M49 (region, sub-region,
+   intermediate region) and World Bank (region, income group FY27), carried as
+   26 `Reference grouping` nodes under a `Reference (UN / World Bank)` region.
+   These are a different way to slice the world, not places a filer reports. No
+   live member reaches one, so the "only offer values that lead somewhere" rule
+   keeps them out of the Region dropdown on its own; a test pins that too.
+
+   The generator does **not** yet carry the UN/World Bank columns into the JSON.
+   When you want to filter on them, that is a few lines in `build_nodes()` plus
+   a regenerate — no schema change.
+
+The seven labels in `PENDING_NODES` are **still ours** — stage 2 does not map
+them. They remain the thing to send back to the data team.
 
 ## Data growing daily
 

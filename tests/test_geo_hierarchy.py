@@ -98,6 +98,28 @@ def test_sub_regions_narrow_to_the_chosen_region():
     ]
 
 
+def test_emea_sub_regions_follow_the_current_workbook():
+    """Stage 2 split MENA/SSA into Middle East and Africa. Pin it — a workbook
+    revision that moves these silently re-groups every EMEA filer."""
+    assert level_options(LIVE_MEMBERS, "sub_region", {"region": ["EMEA"]}) == [
+        "Africa", "Europe", "Middle East",
+    ]
+
+
+def test_reference_groupings_stay_out_of_the_cascade():
+    """The workbook carries UN M49 and World Bank groupings as nodes. They are a
+    different way to slice the world, not a place a filer reports, so no live
+    member reaches one and the Region list must not offer them."""
+    assert "Reference (UN / World Bank)" not in level_options(LIVE_MEMBERS, "region")
+
+
+def test_every_member_lands_in_exactly_one_region():
+    """Regions partition the members — nothing double-counted, nothing dropped."""
+    regions = level_options(LIVE_MEMBERS, "region")
+    counted = sum(len(filter_members(LIVE_MEMBERS, {"region": [r]})) for r in regions)
+    assert counted == len(LIVE_MEMBERS)
+
+
 def test_countries_narrow_to_the_chosen_sub_region():
     countries = level_options(
         LIVE_MEMBERS, "country",
