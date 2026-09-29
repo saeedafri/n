@@ -1592,22 +1592,53 @@ def get_log_content(max_lines: int = 1000, max_bytes: int = 500000) -> str:
         return f"Error reading logs: {e}"
 
 def clear_logs() -> bool:
-    """DISABLED by retention policy — logs are NEVER deleted.
+    """Empty the LIVE log files so the next lines written start a clean view.
 
-    Retention policy (2026-07): server + analytics logs rotate at midnight and are
-    kept FOREVER in persistent /home (server-log.log.YYYY-MM-DD). The old behaviour
-    (unlink every rotated segment + truncate the live file) permanently destroyed
-    history, so it is disabled. This is a non-destructive no-op — every byte is
-    preserved. Use Download Logs to export; browse the dated files for history.
+    Clears ``server-log.log`` and ``user_analytics.log`` only. The dated segments
+    (``server-log.log.YYYY-MM-DD``) are left alone — that is the 2026-07 retention
+    policy, and truncating the live file already gives a fresh view without
+    destroying history. Download Logs still exports every segment.
+
+    A running handler holds the file open at its own write offset, so truncating
+    the path underneath it leaves a sparse file padded with NUL bytes. Each
+    handler's stream is therefore closed and reopened under its own lock, which
+    resets that offset to zero.
     """
+    cleared, failed = [], []
+
+    for logger_name, path in (("server_logger", SERVER_LOG_FILE),
+                              ("user_analytics", SERVER_LOGS_DIR / "user_analytics.log")):
+        try:
+            for handler in list(logging.getLogger(logger_name).handlers):
+                stream_handler = getattr(handler, "stream", None)
+                if stream_handler is None or not hasattr(handler, "_open"):
+                    continue
+                handler.acquire()
+                try:
+                    handler.stream.close()
+                    with open(handler.baseFilename, "w", encoding="utf-8"):
+                        pass                      # truncate to zero
+                    handler.stream = handler._open()
+                finally:
+                    handler.release()
+            # The analytics logger writes through a QueueListener, so its file
+            # handler is not on the logger itself — truncate the path directly.
+            if path.exists() and path.stat().st_size > 0:
+                with open(path, "w", encoding="utf-8"):
+                    pass
+            cleared.append(path.name)
+        except Exception as exc:
+            failed.append(f"{path.name}: {type(exc).__name__}")
+
     try:
         logging.getLogger("server_logger").warning(
-            "[RETENTION] clear_logs() requested but IGNORED — log deletion is "
-            "disabled; all server/analytics logs are retained in /home per policy."
+            f"[RETENTION] live logs cleared by request — {', '.join(cleared) or 'nothing'}"
+            + (f" | failed: {', '.join(failed)}" if failed else "")
+            + " | dated segments retained"
         )
     except Exception:
         pass
-    return False
+    return bool(cleared) and not failed
 
 def _rotated_log_files() -> list:
     """All log segments oldest→newest, for Download. Matches BOTH suffix styles:

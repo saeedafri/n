@@ -733,9 +733,26 @@ def _render_controls() -> Dict[str, Any]:
     guessed_date = engine.guess_date_column(raw)
     guessed_value = engine.guess_value_column(raw, guessed_date)
     if guessed_date is None or guessed_value is None:
-        st.error(
-            "Couldn't find both a date column and a numeric value column in this "
-            f"file. Columns found: {list(raw.columns)}")
+        # Say which one is missing. The old message blamed both, so a file with
+        # perfectly good dates and an all-text value column sent the analyst
+        # hunting through the date column.
+        found = ", ".join(f"`{c}`" for c in raw.columns)
+        if guessed_date is None and guessed_value is None:
+            st.error(f"No date column and no numeric value column found. "
+                     f"Columns in this file: {found}.\n\n"
+                     "Readable date spellings include `2020-01-31`, `2020-01`, "
+                     "`Jan 2020`, `Dec '22`, `Dec-22`, `2020M01`, `Q1 2020` and `2020`.")
+        elif guessed_date is None:
+            st.error(f"Found a value column (`{guessed_value}`) but no readable date "
+                     f"column. Columns in this file: {found}.\n\n"
+                     "Readable date spellings include `2020-01-31`, `2020-01`, "
+                     "`Jan 2020`, `Dec '22`, `Dec-22`, `2020M01`, `Q1 2020` and `2020`.")
+        else:
+            st.error(f"Found a date column (`{guessed_date}`) but no column of numbers. "
+                     f"Columns in this file: {found}.\n\n"
+                     "Values may carry thousands separators, currency symbols, percent "
+                     "signs or accounting brackets — but a column that is entirely text "
+                     "cannot be forecast.")
         return settings
 
     columns = list(raw.columns)
@@ -1483,9 +1500,12 @@ def _render_prophet_tab(outcome: Dict[str, Any]) -> None:
         if st.button("Run cross-validation", key=f"{KEY}prophet_cv"):
             ran = outcome["settings"]
             with st.spinner("Cross-validating Prophet across cut-points…"):
+                # Same arguments the original fit used: the seasonality mode comes
+                # from diagnostics, not settings, so the refit matches exactly.
                 result = _prophet(outcome["series"], outcome["freq_name"], outcome["horizon"],
-                                  ran["seasonality_mode"], ran["changepoint_prior"],
-                                  ran["seasonality_prior"], cross_validate=True)
+                                  outcome["diagnostics"]["seasonality_mode"],
+                                  ran["changepoint_prior"], ran["seasonality_prior"],
+                                  cross_validate=True)
             outcome["results"]["Prophet"] = result
             st.rerun()
     if result["cv_table"] is not None:

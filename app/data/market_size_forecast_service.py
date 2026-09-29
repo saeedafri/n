@@ -218,6 +218,34 @@ def _parse_month_year(value) -> Optional[str]:
     return f"{year}-{month:02d}-01"
 
 
+def _short_year_is_plausible(populated: pd.Series) -> bool:
+    """Guard the ambiguous `Mon NN` form, where NN is a day or a two-digit year.
+
+    `Dec '22` is unambiguous: the apostrophe marks a year. Bare `Jan 01` is not,
+    and `Jan 01, Feb 02, Mar 03` is days of the month. Reading those as years
+    gives 2001-01, 2002-02, 2003-03 -- steps of THIRTEEN months, which no real
+    timeline has. So read bare numbers as years only when the resulting series
+    steps like a timeline: consecutive labels a few months apart, or a constant
+    month name stepping once a year.
+    """
+    text = populated.astype(str)
+    marked = text.str.contains(f"[{re.escape(APOSTROPHES)}]|-|/", regex=True)
+    if marked.mean() >= 0.5:
+        return True                      # an explicit separator settles it
+
+    parsed = [p for p in (_parse_month_year(v) for v in text) if p]
+    if len(parsed) < 3:
+        return True
+    months = {p[5:7] for p in parsed}
+    if len(months) == 1:
+        return True                      # same month each year: an annual series
+    stamps = pd.to_datetime(pd.Series(parsed), errors='coerce').dropna()
+    if len(stamps) < 3:
+        return True
+    steps = (stamps.dt.year * 12 + stamps.dt.month).diff().dropna().abs()
+    return bool(steps.median() <= 6)
+
+
 def normalize_dates(series: pd.Series) -> pd.Series:
     """Turn messy period labels into real dates.
 
@@ -238,8 +266,10 @@ def normalize_dates(series: pd.Series) -> pd.Series:
             lambda v: _parse_quarter(v) is not None).mean() >= 0.9:
         return pd.to_datetime(values.apply(_parse_quarter), errors='coerce')
 
-    if len(populated) > 0 and populated.astype(str).apply(
-            lambda v: _parse_month_year(v) is not None).mean() >= 0.9:
+    if (len(populated) > 0
+            and populated.astype(str).apply(
+                lambda v: _parse_month_year(v) is not None).mean() >= 0.9
+            and _short_year_is_plausible(populated)):
         return pd.to_datetime(values.apply(_parse_month_year), errors='coerce')
 
     # A column of plain numbers that are not years is not a date column.

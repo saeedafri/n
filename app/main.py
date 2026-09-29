@@ -566,7 +566,14 @@ if _auth_ready_for_bg:
 # BACKGROUND CACHE WARMUP (authenticated-only)
 # =============================================================================
 _ENABLE_BG_WARMUP = os.getenv("ENABLE_BG_WARMUP", "1").strip() != "0"
-if _ENABLE_BG_WARMUP and _auth_ready_for_bg and os.environ.get("APP_BG_WARMUP_STARTED") != "1":
+# Not gated on auth any more. This thread warms the OTHER pages — calendar,
+# earnings calls, news, sectors, companies — and startup.sh now boots the app by
+# calling /_stcore/script-health-check, which runs this script with no session.
+# While it required a signed-in user, that boot run always landed in the
+# unauthenticated branch and every page except Screening stayed cold until a
+# human opened it. The thread is daemon, idempotent per process
+# (builtins._mdp_warmup_started) and honours WARM_ON_BOOT=0.
+if _ENABLE_BG_WARMUP and os.environ.get("APP_BG_WARMUP_STARTED") != "1":
     try:
         _warmup_start = perf_counter()
         from utils.cache_manager import start_background_warmup

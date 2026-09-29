@@ -631,3 +631,43 @@ def test_a_gapless_series_is_unchanged_by_the_index_repair():
     assert len(restored) == 24
     assert restored.notna().all()
     assert list(restored.values) == list(series.values)
+
+
+# ── ingestion: the day-vs-year ambiguity in `Mon NN` ────────────────────
+# `Jan 01, Feb 02, Mar 03` is days of the month. Read as two-digit years it
+# becomes 2001-01, 2002-02, 2003-03 -- steps of thirteen months, which no real
+# timeline has. Found by driving the page, not by the earlier tests.
+
+MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def test_bare_month_day_labels_are_not_read_as_years():
+    labels = [f"{MONTHS_3[i]} {i + 1:02d}" for i in range(12)]
+    got = engine.normalize_dates(pd.Series(labels))
+    years = {d.year for d in got.dropna()}
+    assert not (years and min(years) > 1990 and len(years) == 12), (
+        f"day-of-month labels were read as 12 separate years: {sorted(years)}")
+
+
+def test_a_repeating_day_cycle_is_not_read_as_years():
+    labels = [f"{MONTHS_3[i % 12]} {(i % 28) + 1:02d}" for i in range(30)]
+    got = engine.normalize_dates(pd.Series(labels))
+    years = {d.year for d in got.dropna()}
+    assert len(years) <= 2, f"repeating day cycle produced {len(years)} years"
+
+
+@pytest.mark.parametrize("labels", [
+    ["Dec '22", "Jan '23", "Feb '23"],
+    ["Dec’22", "Jan’23", "Feb’23"],
+    ["Dec-22", "Jan-23", "Feb-23"],
+    ["Dec 22", "Jan 23", "Feb 23"],
+])
+def test_real_short_year_series_still_read_as_years(labels):
+    got = engine.normalize_dates(pd.Series(labels)).dropna()
+    assert [d.year for d in got] == [2022, 2023, 2023]
+
+
+def test_an_annual_series_on_one_month_reads_as_years():
+    got = engine.normalize_dates(pd.Series(["Dec 20", "Dec 21", "Dec 22", "Dec 23"])).dropna()
+    assert [d.year for d in got] == [2020, 2021, 2022, 2023]
