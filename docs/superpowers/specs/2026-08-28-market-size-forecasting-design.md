@@ -427,3 +427,84 @@ whole flow — branded loader, stage progress, every tab — is at
 
 **Not carried over and therefore not tested:** the Ollama chat assistant, the
 FastAPI backend and the Next.js chat frontend.
+
+---
+
+## Downloads broke on the deployed portal (fixed 2026-09-29)
+
+**Symptom.** Clicking **Download CSV** or **Download Excel** on
+`marketdata-stg.coresight.com/market_size_forecasting` produced a download
+manager dialog reading `Error : No Internet Connection or DNS Failed`, with the
+URL `https://marketdata-stg.coresight.com/media/723d12d8…797868.csv` and the
+media hash — not `prophet_forecast.csv` — as the filename. Reproducible
+locally. No other export in the portal was affected.
+
+**Why this page and no other.** `_export_buttons` was the only place in the app
+still calling a bare `st.download_button`. That widget renders a real
+`<a href="/media/<hash>.csv" download="…">` anchor *and* reruns the script on
+click. Two independent failures follow.
+
+1. A desktop download manager that hooks anchor clicks refetches the URL as a
+   fresh request outside the browser, without the session cookie, and reports a
+   connection failure. It never sees the `download="…"` attribute either, which
+   is why the saved name was the hash.
+2. The rerun re-registers the payload with the media file manager. An openpyxl
+   workbook stamps the current time into its zip entries, so its bytes are not
+   identical run to run:
+
+   ```
+   xlsx deterministic: False
+   csv  deterministic: True
+   ```
+
+   The workbook therefore lands on a *new* `/media` hash while the browser is
+   still fetching the old one, and `remove_orphaned_files` deletes it at the end
+   of the run.
+
+Every export that works — filings PDFs, transcripts, market data, `/forecasting`
+Excel — goes through `fetch()` → `Blob` → `a.click()` inside a
+`components.v1.html` iframe. An iframe button reruns nothing, and the bytes are
+already in the page before the anchor is clicked, so neither failure applies.
+Screening is the one page that keeps `st.download_button`, and it passes
+`on_click="ignore"` specifically to suppress the rerun.
+
+**Fix.** `utils/media_url.render_download_buttons(files, page=…)` — one shared
+helper rendering N blob-download buttons in a single iframe. It went into
+`media_url.py` rather than becoming a fourth copy of the per-page
+`_render_excel_js_download`; the three existing copies were left alone as out of
+scope. `_export_buttons` now calls it for both CSV and Excel, and the buttons
+pick up the same red-outline styling as the Revenue Estimates Excel button.
+
+**Verification.** `tests/test_market_size_forecast.py` — 55 tests, including two
+new ones pinning that the markup contains no `/media` anchor, that filenames go
+through `json.dumps` and labels through `html.escape`, and that an unservable
+file returns `False`. End to end against `http://localhost:8501/market_size_forecasting`
+(114-month fixture, Prophet section):
+
+```
+buttons in iframe: ['Download CSV', 'Download Excel']
+Download CSV:   name='prophet_forecast.csv'   bytes=96
+Download Excel: name='prophet_forecast.xlsx'  bytes=5040
+download-related console errors: none
+```
+
+The suggested filename is now the real one rather than the media hash, which is
+the direct signature of the reported bug being gone.
+
+### Known, not fixed: month-start dates yield "0 usable rows"
+
+`load_series` ends with `frame.asfreq(config['freq'])`, and the monthly,
+quarterly and annual configs use period-*end* aliases (`ME`, `QE`, `YE`). An
+upload stamped at the first of the period reindexes onto labels that match
+nothing, so every value becomes NaN and the page reports
+`Only 0 usable rows after cleaning`. Same data, only the day-of-month changed:
+
+```
+Date stamped 2016-01-01 …  usable rows:   0
+Date stamped 2016-01-31 …  usable rows: 114
+```
+
+`TestingDataset.xlsx` is month-end stamped, which is why this never surfaced in
+the original validation. FRED publishes monthly series month-start, so analyst
+uploads will hit it. Not fixed here: it changes the model input path and needs a
+re-check against the pinned monthly result `(2,1,2)x(0,1,0,12)`, AIC 2114.3794.

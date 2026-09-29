@@ -1,0 +1,825 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Market Size Forecasting — Line by Line",
+    "output": "market-size-forecasting-lines.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    },
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Analyst UI"
+        },
+        "backend": {
+          "label": "Pipeline step"
+        },
+        "database": {
+          "label": "Cache / config"
+        },
+        "external": {
+          "label": "FRED API"
+        },
+        "security": {
+          "label": "Validation"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 5,
+    "cellW": 178,
+    "cellH": 72,
+    "gapX": 64,
+    "gapY": 34
+  },
+  "components": [
+    {
+      "id": "upload",
+      "type": "frontend",
+      "label": "st.file_uploader",
+      "sublabel": "xlsx, xls, csv",
+      "tag": "200 MB cap",
+      "col": 0,
+      "row": 0,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Upload widget"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "readfile",
+      "type": "backend",
+      "label": "read_excel / read_csv",
+      "sublabel": "raw rows only",
+      "tag": "no compute yet",
+      "col": 0,
+      "row": 1,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Read into a DataFrame"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "datecol",
+      "type": "backend",
+      "label": "normalize_dates",
+      "sublabel": "dates, years, quarters",
+      "tag": "numeric refused",
+      "col": 0,
+      "row": 2,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 176,
+          "label": "Date parsing and the numeric guard"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "valcol",
+      "type": "backend",
+      "label": "to_numeric",
+      "sublabel": "non-numeric to blank",
+      "tag": "coerce, never raise",
+      "col": 0,
+      "row": 3,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 298,
+          "label": "Value coercion"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "cadence",
+      "type": "database",
+      "label": "FREQ_CONFIGS",
+      "sublabel": "sets s, lag cap, horizon",
+      "tag": "W / M / Q / A",
+      "col": 0,
+      "row": 4,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 97,
+          "label": "Per-cadence configuration"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "clean",
+      "type": "backend",
+      "label": "load_series",
+      "sublabel": "dedupe, snap calendar",
+      "tag": "period-END only",
+      "col": 0,
+      "row": 5,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 298,
+          "label": "Clean and reindex"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "models",
+      "type": "frontend",
+      "label": "model toggles",
+      "sublabel": "SARIMAX, SARIMA, Prophet",
+      "tag": "all three = compare",
+      "col": 1,
+      "row": 0,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Model checkboxes"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "params",
+      "type": "frontend",
+      "label": "horizon + Granger lag",
+      "sublabel": "capped per cadence",
+      "tag": "DS-team defaults",
+      "col": 1,
+      "row": 1,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Horizon and lag sliders"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "run",
+      "type": "backend",
+      "label": "_run_analysis",
+      "sublabel": "one orchestrated pass",
+      "tag": "nothing on load",
+      "col": 1,
+      "row": 2,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 807,
+          "label": "Single cached pass"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "cachemem",
+      "type": "database",
+      "label": "@st.cache_data",
+      "sublabel": "keyed per stage",
+      "tag": "ttl 3600 s",
+      "col": 1,
+      "row": 3,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 558,
+          "label": "In-process cache"
+        },
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 593,
+          "label": "Disk-backed wrapper"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "cachedisk",
+      "type": "database",
+      "label": "/home disk cache",
+      "sublabel": "survives a deploy",
+      "tag": "results 168 h",
+      "col": 1,
+      "row": 4,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 454,
+          "label": "disk_cache_get"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 477,
+          "label": "disk_cache_put"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "fredapi",
+      "type": "external",
+      "label": "FRED API",
+      "sublabel": "32 series, 16 threads",
+      "tag": "key required",
+      "col": 2,
+      "row": 0,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 359,
+          "label": "Threaded pull"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 62,
+          "label": "The 32 series"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "fredcache",
+      "type": "database",
+      "label": "FRED disk cache",
+      "sublabel": "read before fetch",
+      "tag": "24 h TTL",
+      "col": 2,
+      "row": 1,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 511,
+          "label": "read_fred_cache"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 538,
+          "label": "write_fred_cache"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "resample",
+      "type": "backend",
+      "label": "resample_fred_to_freq",
+      "sublabel": "monthly to cadence",
+      "tag": "ffill on weekly",
+      "col": 2,
+      "row": 2,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 263,
+          "label": "Align to your cadence"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "granger",
+      "type": "backend",
+      "label": "granger_scan",
+      "sublabel": "which series lead",
+      "tag": "diff cap 3",
+      "col": 2,
+      "row": 3,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1000,
+          "label": "Granger causality scan"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "lagged",
+      "type": "backend",
+      "label": "build_lagged_frame",
+      "sublabel": "align at best lag",
+      "tag": "one col per driver",
+      "col": 2,
+      "row": 4,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1027,
+          "label": "Lagged design matrix"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "rank",
+      "type": "database",
+      "label": "rank_exog_combinations",
+      "sublabel": "ranked by held-out RMSE",
+      "tag": "refit any rank",
+      "col": 2,
+      "row": 5,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1043,
+          "label": "Combination search"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "diag",
+      "type": "backend",
+      "label": "data_diagnostics",
+      "sublabel": "ADF, KPSS, seasonality",
+      "tag": "outliers |z| > 3",
+      "col": 3,
+      "row": 0,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "Pre-modelling diagnostics"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "decomp",
+      "type": "database",
+      "label": "seasonal_decompose",
+      "sublabel": "trend, season, resid",
+      "tag": "needs 2 cycles",
+      "col": 3,
+      "row": 1,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "Decomposition"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "sarimax",
+      "type": "backend",
+      "label": "run_sarimax",
+      "sublabel": "series + macro drivers",
+      "tag": "macro may run short",
+      "col": 3,
+      "row": 2,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1086,
+          "label": "SARIMAX fit"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "sarima",
+      "type": "backend",
+      "label": "run_sarima",
+      "sublabel": "AIC grid search",
+      "tag": "P,Q=0 if <8y weekly",
+      "col": 3,
+      "row": 3,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 758,
+          "label": "SARIMA grid"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 749,
+          "label": "Seasonal term gate"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "prophet",
+      "type": "backend",
+      "label": "run_prophet",
+      "sublabel": "trend + covid_shock",
+      "tag": "CV may be skipped",
+      "col": 3,
+      "row": 4,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Prophet fit and CV"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "walkfwd",
+      "type": "security",
+      "label": "walk-forward",
+      "sublabel": "MAPE on unseen periods",
+      "tag": "the only fair score",
+      "col": 4,
+      "row": 0,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 709,
+          "label": "Validation window"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 805,
+          "label": "Walk-forward block",
+          "end_line": 825
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "resid",
+      "type": "security",
+      "label": "residual_diagnostics",
+      "sublabel": "Ljung-Box, Shapiro, DW",
+      "tag": "noise = good",
+      "col": 4,
+      "row": 1,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 648,
+          "label": "Residual tests"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "compare",
+      "type": "backend",
+      "label": "comparison tab",
+      "sublabel": "rank + agreement spread",
+      "tag": "under 5% = agree",
+      "col": 4,
+      "row": 2,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1448,
+          "label": "Model comparison"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1148,
+          "label": "forecast_spread"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    },
+    {
+      "id": "export",
+      "type": "frontend",
+      "label": "_export_buttons",
+      "sublabel": "CSV + Excel",
+      "tag": "Blob, no rerun",
+      "col": 4,
+      "row": 3,
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 529,
+          "label": "Download buttons"
+        }
+      ],
+      "size": [
+        172,
+        70
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Upload and detect",
+      "wraps": [
+        "upload",
+        "readfile",
+        "datecol",
+        "valcol",
+        "cadence",
+        "clean"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Configure and orchestrate",
+      "wraps": [
+        "models",
+        "params",
+        "run",
+        "cachemem",
+        "cachedisk"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "FRED macro branch — SARIMAX only",
+      "wraps": [
+        "fredapi",
+        "fredcache",
+        "resample",
+        "granger",
+        "lagged",
+        "rank"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Diagnostics and fits",
+      "wraps": [
+        "diag",
+        "decomp",
+        "sarimax",
+        "sarima",
+        "prophet"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Score and deliver",
+      "wraps": [
+        "walkfwd",
+        "resid",
+        "compare",
+        "export"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "upload",
+      "to": "readfile"
+    },
+    {
+      "from": "readfile",
+      "to": "datecol"
+    },
+    {
+      "from": "datecol",
+      "to": "valcol"
+    },
+    {
+      "from": "valcol",
+      "to": "cadence"
+    },
+    {
+      "from": "cadence",
+      "to": "clean",
+      "label": "s, freq, caps"
+    },
+    {
+      "from": "clean",
+      "to": "models",
+      "label": "cleaned series",
+      "variant": "emphasis"
+    },
+    {
+      "from": "models",
+      "to": "params"
+    },
+    {
+      "from": "params",
+      "to": "run"
+    },
+    {
+      "from": "run",
+      "to": "cachemem",
+      "label": "stage key"
+    },
+    {
+      "from": "cachemem",
+      "to": "cachedisk",
+      "label": "miss goes to disk"
+    },
+    {
+      "from": "run",
+      "to": "fredapi",
+      "label": "if SARIMAX",
+      "variant": "dashed"
+    },
+    {
+      "from": "fredapi",
+      "to": "fredcache"
+    },
+    {
+      "from": "fredcache",
+      "to": "resample",
+      "label": "32 monthly series"
+    },
+    {
+      "from": "resample",
+      "to": "granger",
+      "label": "aligned drivers"
+    },
+    {
+      "from": "granger",
+      "to": "lagged",
+      "label": "significant only"
+    },
+    {
+      "from": "lagged",
+      "to": "rank",
+      "label": "design matrix"
+    },
+    {
+      "from": "run",
+      "to": "diag",
+      "label": "always",
+      "variant": "emphasis"
+    },
+    {
+      "from": "diag",
+      "to": "decomp",
+      "label": "if 2+ cycles"
+    },
+    {
+      "from": "rank",
+      "to": "sarimax",
+      "label": "best driver set",
+      "variant": "emphasis"
+    },
+    {
+      "from": "run",
+      "to": "sarima",
+      "label": "series only"
+    },
+    {
+      "from": "run",
+      "to": "prophet",
+      "label": "series + flag"
+    },
+    {
+      "from": "sarimax",
+      "to": "walkfwd",
+      "variant": "emphasis",
+      "label": "fitted model"
+    },
+    {
+      "from": "sarima",
+      "to": "walkfwd",
+      "label": "fitted model"
+    },
+    {
+      "from": "prophet",
+      "to": "walkfwd",
+      "label": "fitted model"
+    },
+    {
+      "from": "walkfwd",
+      "to": "resid",
+      "label": "residuals"
+    },
+    {
+      "from": "resid",
+      "to": "compare",
+      "variant": "emphasis",
+      "label": "scores + residuals"
+    },
+    {
+      "from": "compare",
+      "to": "export",
+      "variant": "emphasis",
+      "label": "all three models"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Read it left to right",
+      "items": [
+        "Upload and detect, then configure, then one cached pass",
+        "The FRED column runs only when SARIMAX is ticked",
+        "All three models feed the same walk-forward score"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Where the time goes",
+      "items": [
+        "First run does the real work; a repeat replays from cache",
+        "FRED is cached 24 h, fitted results 168 h, both on /home",
+        "Weekly is slowest: 52-period season, gated under 8 years"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Known traps",
+      "items": [
+        "Dates must be period-END or cleaning yields 0 rows",
+        "No FRED key means SARIMAX is skipped, not failed",
+        "Quote the band across the horizon, never one number"
+      ]
+    }
+  ]
+}

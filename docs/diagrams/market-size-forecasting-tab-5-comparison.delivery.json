@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "87fd83c9-6dd9-492e-84a3-6e54b06b1f60",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-5-comparison.workflow.json",
+  "output": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-5-comparison.html",
+  "specification": {
+    "sha256": "f022595eae4b8139a69700374b2a3cae0e531b7bcb90113f862a2f323747789f",
+    "bytes": 5481
+  },
+  "artifact": {
+    "sha256": "56134540360791489644df5f288fd5006fe42b715a312e3a3b523f6a378d96fd",
+    "bytes": 755426
+  }
+}

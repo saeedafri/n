@@ -577,6 +577,72 @@ if _ENABLE_BG_WARMUP and _auth_ready_for_bg and os.environ.get("APP_BG_WARMUP_ST
         pass
 
 # =============================================================================
+# SCREENING UNIVERSE WARM — runs on EVERY script run, signed in or not
+# =============================================================================
+# The two warmups above are mutually exclusive by auth state: the DB one is
+# unauthenticated-only, the cache one authenticated-only. A boot triggered by
+# startup.sh hits /_stcore/script-health-check, which runs the script with NO
+# session — so it lands in the unauthenticated branch and the screening caches
+# were never built. The first real visitor then paid the build: measured on
+# staging at ~5s for screening_universe and ~9.6s for the 4,662-row
+# all-companies universe, with a blank page throughout.
+#
+# Both are materialized, so this is a one-off per deploy; on a warm cache each
+# call returns in ~0ms and this block is a no-op. Sequential on purpose — the
+# two builds hit the same tables, and market-data's sibling app segfaulted its
+# worker running such warms concurrently (mysql C-extension under concurrency).
+if os.getenv("WARM_ON_BOOT", "1").strip().lower() in ("1", "true", "yes", "on") \
+        and os.environ.get("APP_SCREENING_WARM_STARTED") != "1":
+    os.environ["APP_SCREENING_WARM_STARTED"] = "1"
+    try:
+        import threading as _sw_threading
+
+        def _warm_screening_universes() -> None:
+            import data.screening_service as _svc
+            for _name, _fn in (
+                ("screening_universe", "get_base_company_universe"),
+                ("screening_all_companies_universe", "get_all_companies_universe"),
+            ):
+                try:
+                    _t = perf_counter()
+                    _rows = len(getattr(_svc, _fn)())
+                    log_timing(f"MAIN_SCREENING_WARM_{_name.upper()}",
+                               (perf_counter() - _t) * 1000, f"rows={_rows}")
+                except Exception:
+                    log_exception(f"ERROR warming {_name}")
+
+            # The segment member dropdowns are read on every Screening open —
+            # ~280ms each against the member cache, paid twice by whoever opens
+            # the page first. Same materialized-cache story as above.
+            for _segment_type in ("geographical", "business"):
+                try:
+                    _t = perf_counter()
+                    _opts = _svc.read_segment_member_options_cache(_segment_type) or []
+                    log_timing(f"MAIN_SCREENING_WARM_MEMBERS_{_segment_type.upper()}",
+                               (perf_counter() - _t) * 1000, f"members={len(_opts)}")
+                except Exception:
+                    log_exception(f"ERROR warming {_segment_type} member options")
+
+        _sw_thread = _sw_threading.Thread(target=_warm_screening_universes, daemon=True,
+                                          name="screening_universe_warm")
+        # Without a script-run context a background thread's @st.cache_data calls
+        # land outside Streamlit's per-process cache — the materialized files get
+        # written, but the in-memory entries stay empty, so the first visitor
+        # still rebuilds them. Attaching this boot run's context is what makes the
+        # warm count for real sessions too.
+        try:
+            from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+            _ctx = get_script_run_ctx()
+            if _ctx is not None:
+                add_script_run_ctx(_sw_thread, _ctx)
+        except Exception:
+            pass
+        _sw_thread.start()
+        del _sw_threading
+    except Exception:
+        log_exception("ERROR starting screening universe warm")
+
+# =============================================================================
 # STORE COUNT CACHE — restore once, then keep itself current
 # =============================================================================
 # Both steps are deliberately off the request path. The restore is a single

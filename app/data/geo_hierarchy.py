@@ -68,7 +68,40 @@ def node_for_label(label: str) -> Optional[Dict[str, str]]:
         node_name = loose.get(geo_match_key(candidate))
         if node_name:
             return nodes.get(node_name)
+
+    # Last resort: drop a generic tail the filer added to a name we do know.
+    # "APAC Geographic Region" is in the workbook but "APAC Region" was not, and
+    # they are the same place. Only tried after every real key has missed, so a
+    # genuine node keeps its own name — "Andean Region" resolves as itself long
+    # before this runs.
+    for candidate in (label, canonicalize_geo_label(label)):
+        trimmed = _strip_generic_tail(candidate)
+        if not trimmed or trimmed == candidate:
+            continue
+        node_name = (exact.get(normalize_geo_key(trimmed))
+                     or loose.get(geo_match_key(trimmed)))
+        if node_name:
+            return nodes.get(node_name)
     return None
+
+
+# Words a filer tacks onto a place name that carry no geography. Longest first
+# so "geographic region" is taken off before "region".
+_GENERIC_TAILS: Tuple[str, ...] = (
+    "geographical reporting unit", "geographic reporting unit",
+    "geographical region", "geographic region", "reporting unit",
+    "geographical segment", "geographic segment", "geography",
+    "operating segment", "operations", "segment", "region",
+)
+
+
+def _strip_generic_tail(label: str) -> str:
+    text = label.strip()
+    lowered = text.casefold()
+    for tail in _GENERIC_TAILS:
+        if lowered.endswith(" " + tail):
+            return text[: -(len(tail) + 1)].strip(" -–—,:")
+    return text
 
 
 def path_for_label(label: str) -> Dict[str, str]:

@@ -2907,6 +2907,44 @@ def _segment_values_cache_has_rows(segment_type: str, metric_key: str) -> bool:
         return False
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _segment_cache_tickers(segment_type: str, metric_key: str) -> frozenset:
+    """Tickers the segment values cache actually holds, for this type+metric.
+
+    The screening universe is ~4,500 tickers; this cache covers ~390 of them.
+    Sending the other 4,100 as IN-list literals costs a full extra round trip
+    per 500 and buys nothing, because a ticker with no row contributes no row.
+    One small query up front turns ten chunked queries into one.
+    """
+    rows = db_manager.execute_query_readonly(
+        f"""
+        SELECT DISTINCT ticker
+        FROM {SEGMENT_VALUES_CACHE_TABLE}
+        WHERE segment_type = :st AND metric_key = :mk
+        """,
+        {"st": segment_type, "mk": metric_key},
+    ) or []
+    return frozenset(r["ticker"] for r in rows if r.get("ticker"))
+
+
+def _tickers_in_segment_cache(
+    tickers: List[str], segment_type: str, metric_key: str
+) -> List[str]:
+    """`tickers` narrowed to the ones the cache can answer, order preserved.
+
+    Falls back to the caller's list if the lookup fails — a slow correct answer
+    beats a fast empty one.
+    """
+    try:
+        present = _segment_cache_tickers(segment_type, metric_key)
+    except Exception as exc:
+        log_error(f"[SCREENING] segment cache ticker probe failed: {exc}")
+        return tickers
+    if not present:
+        return tickers
+    return [t for t in tickers if t in present]
+
+
 def _segment_values_cache_scope_status(
     tickers: List[str],
     segment_type: str,
@@ -2923,6 +2961,10 @@ def _segment_values_cache_scope_status(
         "max_report_fiscal_year": None,
         "elapsed_ms": 0.0,
     }
+    if not tickers:
+        return out
+
+    tickers = _tickers_in_segment_cache(tickers, segment_type, metric_key)
     if not tickers:
         return out
 
@@ -3001,6 +3043,10 @@ def read_segment_values_cache(
     selected_segments: Optional[List[str]] = None,
 ) -> List[Dict]:
     """Read precomputed latest segment values for screening (fast path)."""
+    if not tickers:
+        return []
+
+    tickers = _tickers_in_segment_cache(tickers, segment_type, metric_key)
     if not tickers:
         return []
 

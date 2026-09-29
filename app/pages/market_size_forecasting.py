@@ -38,6 +38,7 @@ from components.navigation import render_header, render_coresight_footer
 from components.styles import hide_sidebar, render_styles, set_page_layout
 from core.auth_manager import require_auth
 from data import market_size_forecast_service as engine
+from utils.media_url import render_download_buttons
 from utils.server_logger import (
     PageLoadTracker, log_render_complete, log_structured_error, log_timing,
 )
@@ -270,6 +271,29 @@ button[data-testid="stBaseButton-segmented_controlActive"] {{
   border-bottom-color: {BRAND_RED} !important;
 }}
 div[data-testid="stDataFrame"] {{ animation: msf-rise 0.3s ease both; }}
+
+/* ── primary action + progress: Streamlit ships these blue ─────── */
+button[kind="primary"],
+button[data-testid="stBaseButton-primary"] {{
+  background: {BRAND_RED} !important;
+  border-color: {BRAND_RED} !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}}
+button[kind="primary"]:hover,
+button[data-testid="stBaseButton-primary"]:hover {{
+  background: #B82526 !important;
+  border-color: #B82526 !important;
+}}
+button[kind="primary"]:disabled,
+button[data-testid="stBaseButton-primary"]:disabled {{
+  background: #E9E7E6 !important;
+  border-color: #E9E7E6 !important;
+  color: {MUTED} !important;
+}}
+div[data-testid="stProgress"] div[role="progressbar"] > div {{
+  background: linear-gradient(90deg, {BRAND_RED}, #F0605F) !important;
+}}
 </style>
 """,
         unsafe_allow_html=True,
@@ -529,24 +553,23 @@ def _export_frame(forecast: pd.DataFrame) -> pd.DataFrame:
 def _export_buttons(frame: pd.DataFrame, stem: str) -> None:
     """CSV + Excel download for one forecast table.
 
-    Forecast tables are a few kilobytes, so they ride the normal download
-    button; the /media/ route exists for the big workbooks elsewhere.
+    Both go out through the shared Blob downloader rather than
+    ``st.download_button`` -- see ``render_download_buttons`` for why the
+    anchor-plus-rerun widget loses the file on the way to the browser.
     """
-    csv_col, xlsx_col, _ = st.columns([1, 1, 4])
-    csv_col.download_button(
-        "Download CSV", frame.to_csv(index=False).encode("utf-8"),
-        file_name=f"{stem}.csv", mime="text/csv",
-        use_container_width=True, key=f"{KEY}csv_{stem}")
+    files = [("Download CSV", frame.to_csv(index=False).encode("utf-8"),
+              "text/csv", f"{stem}.csv")]
     try:
-        xlsx_col.download_button(
+        files.append((
             "Download Excel", _to_xlsx(frame),
-            file_name=f"{stem}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True, key=f"{KEY}xlsx_{stem}")
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            f"{stem}.xlsx"))
     except Exception as exc:
         log_structured_error(exc, page="market_size_forecasting",
                              component="market_size_forecasting._export_buttons",
                              operation="write_xlsx", context=stem)
+    if not render_download_buttons(files, page="market_size_forecasting"):
+        st.error("Could not prepare these downloads - please rerun the analysis.")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -619,12 +642,23 @@ def _sarima(series: pd.Series, freq_name: str, horizon: int):
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False, max_entries=8)
 def _prophet(series: pd.Series, freq_name: str, horizon: int, seasonality_mode: str,
-             changepoint_prior: float, seasonality_prior: float):
+             changepoint_prior: float, seasonality_prior: float,
+             cross_validate: bool = False):
+    """Prophet, with cross-validation off by default.
+
+    Cross-validation is 26 further Stan fits and costs more than the forecast
+    itself (2,837ms of Prophet's total on a 114-point monthly series). It feeds
+    one card -- "Regressor value" -- so the Prophet tab requests it on demand
+    instead of every run paying for it. Nothing else about the fit changes, and
+    the two variants cache under separate keys.
+    """
     return _through_disk(
         "prophet", (engine.series_fingerprint(series), freq_name, horizon,
-                    seasonality_mode, changepoint_prior, seasonality_prior),
+                    seasonality_mode, changepoint_prior, seasonality_prior,
+                    cross_validate),
         lambda: engine.run_prophet(series, freq_name, horizon, seasonality_mode,
-                                   changepoint_prior, seasonality_prior))
+                                   changepoint_prior, seasonality_prior,
+                                   run_cross_validation=cross_validate))
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False, max_entries=8)
@@ -804,6 +838,33 @@ def _stage(bar, share: float, text: str) -> None:
     bar.progress(min(max(share, 0.0), 1.0), text=text)
 
 
+def _ingestion_diagnosis(loaded, settings: Dict[str, Any], usable: int) -> str:
+    """Say which cells could not be read, rather than only how many survived.
+
+    The old message named no cell and no reason, so an analyst whose file used
+    an unsupported date spelling had nothing to act on.
+    """
+    lines = [f"Only {usable} usable row(s) after cleaning — too few to model."]
+    if loaded.unreadable_dates:
+        shown = ", ".join(repr(v) for v in loaded.unreadable_dates[:6])
+        more = "" if len(loaded.unreadable_dates) <= 6 else f" and {len(loaded.unreadable_dates) - 6} more"
+        lines.append(
+            f"**{loaded.dropped_rows} date(s) could not be read**, starting with {shown}{more}.")
+        lines.append(
+            "Readable spellings include `2020-01-31`, `2020-01`, `Jan 2020`, `Dec '22`, "
+            "`Dec-22`, `2020M01`, `Q1 2020` and `2020`.")
+    elif loaded.dropped_rows:
+        lines.append(f"**{loaded.dropped_rows} row(s)** had no date and were dropped.")
+    else:
+        lines.append(
+            f"Every date was read, but the **{settings['value_col']}** column gave no numbers. "
+            "Check that it holds values rather than text.")
+    lines.append(f"Date column read: **{settings['date_col']}** · "
+                 f"Value column read: **{settings['value_col']}**. "
+                 "Both can be changed above.")
+    return "\n\n".join(lines)
+
+
 def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
     """Run every selected model once and return everything the tabs render.
 
@@ -828,8 +889,7 @@ def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
     sales = loaded.frame
     series = sales[engine.TARGET_COL].dropna()
     if len(series) < 4:
-        return {"error": f"Only {len(series)} usable rows after cleaning — too few to "
-                         "model. Check the date and value columns."}
+        return {"error": _ingestion_diagnosis(loaded, settings, len(series))}
     last_actual = sales.index[-1]
 
     _stage(bar, 0.05, "Reading diagnostics")
@@ -1074,7 +1134,21 @@ def _render_diagnostics_tab(outcome: Dict[str, Any]) -> None:
         st.info(f"{loaded.duplicates_merged} duplicate date(s) — rows sharing a period "
                 "were summed so the series has one value per period.")
     if loaded.dropped_rows:
-        st.info(f"{loaded.dropped_rows} row(s) had unreadable dates and were dropped.")
+        detail = ""
+        if loaded.unreadable_dates:
+            shown = ", ".join(repr(v) for v in loaded.unreadable_dates[:5])
+            detail = f" The first were {shown}."
+        st.warning(f"{loaded.dropped_rows} row(s) had unreadable dates and were dropped.{detail}")
+    if loaded.snapped_to_period_end:
+        st.info(f"{loaded.snapped_to_period_end} date(s) named a period rather than a day "
+                "(for example `Jan 2020`) and were placed at the end of that period.")
+    blanks = outcome["loaded"].frame[engine.TARGET_COL].isna().sum()
+    if blanks:
+        gaps = outcome["loaded"].frame.index[outcome["loaded"].frame[engine.TARGET_COL].isna()]
+        listed = ", ".join(d.strftime("%b %Y") for d in gaps[:6])
+        more = "" if len(gaps) <= 6 else f" and {len(gaps) - 6} more"
+        st.warning(f"{blanks} period(s) have no value and were left blank: {listed}{more}. "
+                   "The models interpolate across them; a long run of gaps weakens the forecast.")
 
     _section("History", "The full uploaded series, after cleaning.")
     st.plotly_chart(_history_chart(series), config=CHART_CONFIG, key=f"{KEY}history")
@@ -1390,8 +1464,10 @@ def _render_prophet_tab(outcome: Dict[str, Any]) -> None:
             improvement = result["cv_baseline_mape"] - result["cv_mape"]
             _card("Regressor value", f"{improvement:+.2f}pp",
                   _verdict(improvement > 0, "COVID regressor helps", "No improvement"))
-        else:
+        elif result.get("cv_requested"):
             _card("Cross-validation", "Skipped", "Not enough history")
+        else:
+            _card("Regressor value", "On request", "Adds ~3s — run it below")
 
     if result["changepoints"]:
         _section("Changepoint analysis", "Where the underlying trend shifted.")
@@ -1400,6 +1476,18 @@ def _render_prophet_tab(outcome: Dict[str, Any]) -> None:
             for c in result["changepoints"]]))
 
     _section("Cross-validation", "Rolling-window accuracy across multiple cutpoints.")
+    if result["cv_table"] is None and not result.get("cv_requested"):
+        st.caption("Cross-validation refits Prophet across several cut-points to measure "
+                   "whether the COVID regressor earns its place. It is the most expensive "
+                   "part of this model, so it is not run with every analysis.")
+        if st.button("Run cross-validation", key=f"{KEY}prophet_cv"):
+            ran = outcome["settings"]
+            with st.spinner("Cross-validating Prophet across cut-points…"):
+                result = _prophet(outcome["series"], outcome["freq_name"], outcome["horizon"],
+                                  ran["seasonality_mode"], ran["changepoint_prior"],
+                                  ran["seasonality_prior"], cross_validate=True)
+            outcome["results"]["Prophet"] = result
+            st.rerun()
     if result["cv_table"] is not None:
         a, b = st.columns(2)
         with a:

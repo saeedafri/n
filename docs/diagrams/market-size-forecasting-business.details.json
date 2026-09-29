@@ -1,0 +1,200 @@
+{
+  "upload": {
+    "layer": "What the analyst does",
+    "title": "Upload the history",
+    "summary": "The analyst uploads a spreadsheet or CSV of the market's history — one row per period, one value per row.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Market size requests arrive from different third-party sources every time and vary by request, so there is no single feed to connect. This was confirmed with the data science team; it is a deliberate choice, not a gap."
+        ]
+      },
+      {
+        "heading": "What it needs",
+        "items": [
+          "Dates stamped at the end of each period — 31 January 2016, not 1 January 2016",
+          "A column of numbers. Text, footnote markers and blanks are handled"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Nothing is calculated on upload. The work starts when the analyst presses Run analysis."
+        ]
+      }
+    ],
+    "source": "app/pages/market_size_forecasting.py"
+  },
+  "prepare": {
+    "layer": "What the analyst does",
+    "title": "Check and choose",
+    "summary": "The tool identifies the date and value columns, works out whether the data is weekly, monthly, quarterly or annual, and cleans it into one value per period with no gaps. The analyst then picks the models and how far ahead to project.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Every model needs exactly one value per period with no holes. Two rows for March, or a missing April, breaks the arithmetic quietly rather than loudly."
+        ]
+      },
+      {
+        "heading": "What it does automatically",
+        "items": [
+          "Reads real dates, bare years and quarter labels",
+          "Merges rows that share a period by adding them together",
+          "Fills the calendar so no period is missing",
+          "Reports how many rows it dropped and how many it merged"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "The cadence choice drives everything downstream — it sets the seasonal length the models look for.",
+          "If a file has one row per region per month, merging gives the national total. That may not be what was wanted."
+        ]
+      }
+    ],
+    "source": "app/data/market_size_forecast_service.py"
+  },
+  "macro": {
+    "layer": "Three models",
+    "title": "US macro drivers",
+    "summary": "32 United States economic indicators are pulled from the Federal Reserve's public data service and tested to see which ones move ahead of this market.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It is what lets one of the three models answer a what-if question rather than only extending a line."
+        ]
+      },
+      {
+        "heading": "What it covers",
+        "items": [
+          "Employment, consumer spending, interest rates, confidence and related series",
+          "Only the indicators whose past movements actually help predict this market are kept"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "These are United States series. A UK or India market size has no appropriate driver here — the other two models still apply.",
+          "If the data service is unavailable, this model is skipped and the other two still run. The page says so."
+        ]
+      }
+    ],
+    "source": "app/data/market_size_forecast_service.py"
+  },
+  "modelA": {
+    "layer": "Three models",
+    "title": "With macro drivers (SARIMAX)",
+    "summary": "Fits the market's history together with the economic indicators that were found to lead it.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It is the only one of the three that can answer a scenario question, and the only one that gives a reason for the forecast rather than just a shape."
+        ]
+      },
+      {
+        "heading": "When to lean on it",
+        "items": [
+          "When the market plausibly moves with employment, rates or consumer spending",
+          "When someone asks what happens if the economy softens"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "If it does not beat the history-only model, the economic drivers added nothing. That is a real finding.",
+          "The far end of its forecast is weaker than the near end, because the driver data runs out first."
+        ]
+      }
+    ],
+    "source": "app/data/market_size_forecast_service.py"
+  },
+  "modelB": {
+    "layer": "Three models",
+    "title": "History only (SARIMA)",
+    "summary": "Fits the market using nothing but its own past. No outside data at all.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It has no external dependency, so it cannot fail because someone else's service is down. It is also the fair baseline the macro model has to beat to justify its complexity."
+        ]
+      },
+      {
+        "heading": "When to lean on it",
+        "items": [
+          "A stable, strongly seasonal market",
+          "Any non-US market size",
+          "When you need a number that will not change for infrastructure reasons"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "It cannot anticipate anything that has not already shown up in the history."
+        ]
+      }
+    ],
+    "source": "app/data/market_size_forecast_service.py"
+  },
+  "modelC": {
+    "layer": "Three models",
+    "title": "Trend shifts (Prophet)",
+    "summary": "Splits the market into an underlying trend plus a repeating seasonal pattern, and reports the dates where the trend changed direction or pace.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It catches trend breaks that the other two smooth over — the clearest example being 2020, which it is explicitly told about."
+        ]
+      },
+      {
+        "heading": "What it gives you",
+        "items": [
+          "The dates the trend actually changed, which are directly quotable in a written market view",
+          "A forecast that does not assume the past rate of growth continues"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Many trend changes on a short history usually means it is reading noise as signal.",
+          "It uses no economic data, so it cannot answer scenario questions."
+        ]
+      }
+    ],
+    "source": "app/data/market_size_forecast_service.py"
+  },
+  "answer": {
+    "layer": "The answer you quote",
+    "title": "Score and compare",
+    "summary": "Every model is tested on recent periods it was never shown, then the three are put side by side and the spread between them is reported.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "How well a model fits data it was trained on tells you almost nothing. Scoring on unseen periods is what makes the comparison meaningful, and the spread between three independent models is the closest thing here to an honest confidence statement."
+        ]
+      },
+      {
+        "heading": "How to read it",
+        "items": [
+          "Models within 5% of each other — quote the midpoint as a working forecast",
+          "More than 5% apart — give a range and say the drivers need a look",
+          "Best means lowest error on history; it does not guarantee best in future"
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Always quote a band across the horizon, never a single number. The confidence interval is part of the answer.",
+          "Everything exports to one spreadsheet with lower and upper bounds per model."
+        ]
+      }
+    ],
+    "source": "app/pages/market_size_forecasting.py"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "8c946eb3-1458-4dd5-b510-76a79ef785d6",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-3-sarima.workflow.json",
+  "output": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-3-sarima.html",
+  "specification": {
+    "sha256": "971e43e0f74d6bace255adfedac96db0816a1a67e1f077e0373bb993c6f43a57",
+    "bytes": 5546
+  },
+  "artifact": {
+    "sha256": "c634fccdb9f088a5280d6f94eb17cdf255c54d74cce5f147e86309f5dae4d471",
+    "bytes": 755280
+  }
+}

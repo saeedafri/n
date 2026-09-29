@@ -1,0 +1,232 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "SARIMA tab — what the series says on its own",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Series / output"
+        },
+        "backend": {
+          "label": "Model step"
+        },
+        "database": {
+          "label": "Chosen order"
+        },
+        "security": {
+          "label": "Quality check"
+        }
+      }
+    },
+    "output": "market-size-forecasting-tab-3-sarima.html",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    }
+  },
+  "lanes": [
+    {
+      "id": "search",
+      "label": "Automatic Order Search"
+    },
+    {
+      "id": "output",
+      "label": "Checks + Output"
+    }
+  ],
+  "mainPath": [
+    "history",
+    "grid",
+    "order",
+    "walkforward",
+    "residuals",
+    "forecast"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "history"
+    ],
+    "allowedTerminals": [
+      "forecast"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "history",
+      "lane": "search",
+      "col": 0,
+      "type": "frontend",
+      "label": "History only",
+      "sublabel": "no external data at all",
+      "tag": "the honest baseline",
+      "width": 145,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 298,
+          "label": "Cleaned series, no external data"
+        }
+      ]
+    },
+    {
+      "id": "grid",
+      "lane": "search",
+      "col": 1,
+      "type": "backend",
+      "label": "Grid search",
+      "sublabel": "many orders, fitted + scored",
+      "tag": "ranked by AIC",
+      "width": 145,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 758,
+          "label": "Order grid search on AIC"
+        }
+      ]
+    },
+    {
+      "id": "order",
+      "lane": "search",
+      "col": 2,
+      "type": "database",
+      "label": "Best order",
+      "sublabel": "ARIMA(p,d,q)x(P,D,Q,s)",
+      "width": 145,
+      "tag": "P,Q=0 if <8y weekly",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 749,
+          "label": "Seasonal term gate for weekly"
+        }
+      ]
+    },
+    {
+      "id": "walkforward",
+      "lane": "output",
+      "col": 3,
+      "type": "backend",
+      "label": "Walk-forward",
+      "sublabel": "MAPE on unseen periods",
+      "width": 145,
+      "tag": "goes to Comparison",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 805,
+          "label": "Walk-forward block",
+          "end_line": 825
+        }
+      ]
+    },
+    {
+      "id": "residuals",
+      "lane": "output",
+      "col": 4,
+      "type": "security",
+      "label": "Residual checks",
+      "sublabel": "Ljung-Box · Shapiro · DW",
+      "width": 145,
+      "tag": "noise = good",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 648,
+          "label": "Ljung-Box, Shapiro, Durbin-Watson"
+        }
+      ]
+    },
+    {
+      "id": "forecast",
+      "lane": "output",
+      "col": 5,
+      "type": "frontend",
+      "label": "Forecast",
+      "sublabel": "with confidence band",
+      "width": 145,
+      "tag": "quote the band",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1210,
+          "label": "Forecast chart and export"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "history",
+      "to": "grid",
+      "label": "try the orders",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "grid",
+      "to": "order",
+      "label": "lowest AIC",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "order",
+      "to": "walkforward",
+      "label": "score",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "walkforward",
+      "to": "residuals",
+      "label": "anything left?",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "residuals",
+      "to": "forecast",
+      "label": "project",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What it signifies",
+      "items": [
+        "The pattern the series can explain using only its own past",
+        "p, d, q = memory, differencing, shock memory",
+        "Capital P, D, Q, s = the same three, repeated each season",
+        "AIC balances fit quality against model complexity"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Why it is used",
+      "items": [
+        "It has no external dependency, so it never breaks on a missing API",
+        "It is the fair baseline SARIMAX must beat to justify macro drivers",
+        "For a stable, seasonal market it is often the most reliable number",
+        "The chosen order is a compact description of the series' behaviour"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Read it this way",
+      "items": [
+        "Residual checks failing means real structure is still unmodelled",
+        "Weekly with under 8 years skips seasonal AR/MA terms — the page says so",
+        "AIC compares orders within this tab only, never across models",
+        "If SARIMA beats SARIMAX, the macro drivers added nothing"
+      ]
+    }
+  ]
+}

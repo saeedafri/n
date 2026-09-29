@@ -1,0 +1,353 @@
+<title>Market Size Forecasting Explained</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: overview strip, then five stage columns of clickable steps on the left
+   and a pinned explanation panel on the right. One column under 940px. */
+:root {
+  --bg: #F6F5F4; --surface: #FFFFFF; --surface-2: #F0EEED;
+  --ink: #232020; --muted: #6E6866; --line: #E3DFDE; --line-strong: #CEC8C6;
+  --accent: #D62E2F; --accent-soft: rgba(214,46,47,.09);
+  --s1: #C2410C; --s2: #15803D; --s3: #6D28D9; --s4: #0E7490; --s5: #B45309;
+  --shadow: 0 1px 2px rgba(35,32,32,.05), 0 8px 24px rgba(35,32,32,.06);
+  --display: 'Archivo','Helvetica Neue',Arial,sans-serif;
+  --body: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono: 'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#171514; --surface:#201D1C; --surface-2:#282423;
+  --ink:#EFEBEA; --muted:#A49D9A; --line:#322D2C; --line-strong:#463F3D;
+  --accent:#FF6B5E; --accent-soft:rgba(255,107,94,.14);
+  --s1:#FB923C; --s2:#4ADE80; --s3:#A78BFA; --s4:#22D3EE; --s5:#FBBF24;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg:#171514; --surface:#201D1C; --surface-2:#282423;
+  --ink:#EFEBEA; --muted:#A49D9A; --line:#322D2C; --line-strong:#463F3D;
+  --accent:#FF6B5E; --accent-soft:rgba(255,107,94,.14);
+  --s1:#FB923C; --s2:#4ADE80; --s3:#A78BFA; --s4:#22D3EE; --s5:#FBBF24;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--body);
+       font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+.wrap { max-width:1500px; margin:0 auto; padding-inline:20px; }
+
+header.top { border-bottom:1px solid var(--line); background:var(--surface); }
+.head-in { padding-block:22px 20px; }
+.eyebrow { font-size:11px; font-weight:600; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); }
+h1 { font-family:var(--display); font-weight:700; font-size:clamp(25px,3.4vw,35px);
+     line-height:1.12; letter-spacing:-.02em; margin:7px 0 10px; text-wrap:balance; }
+.gist { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:10px; margin-top:16px; }
+.gist div { background:var(--surface-2); border:1px solid var(--line); border-radius:9px; padding:11px 13px; }
+.gist b { display:block; font-family:var(--display); font-size:13px; margin-bottom:2px; }
+.gist span { font-size:12.5px; color:var(--muted); line-height:1.45; }
+
+.cols { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:24px;
+        align-items:start; padding-block:24px 46px; }
+@media (max-width:940px) { .cols { grid-template-columns:minmax(0,1fr); } }
+
+.stage { margin-bottom:18px; }
+.stage-h { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+.stage-dot { width:9px; height:9px; border-radius:50%; background:var(--sc); flex:0 0 auto; }
+.stage-h h2 { font-family:var(--display); font-size:13px; font-weight:700; margin:0;
+              letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
+.steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+@media (max-width:1180px) { .steps { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:560px)  { .steps { grid-template-columns:minmax(0,1fr); } }
+
+.step { position:relative; text-align:left; cursor:pointer; font-family:var(--body); color:var(--ink);
+        background:var(--surface); border:1px solid var(--line); border-radius:9px;
+        padding:10px 11px 11px 14px; display:flex; flex-direction:column; gap:2px; min-width:0;
+        transition:border-color .15s, box-shadow .15s, transform .15s; }
+.step::before { content:""; position:absolute; left:0; top:9px; bottom:9px; width:3px;
+                border-radius:0 3px 3px 0; background:var(--sc); }
+.step:hover { border-color:var(--line-strong); box-shadow:var(--shadow); transform:translateY(-1px); }
+.step[aria-pressed="true"] { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+.step:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.step-name { font-family:var(--mono); font-size:12.5px; font-weight:500; letter-spacing:-.01em;
+             line-height:1.3; overflow-wrap:anywhere; }
+.step-sub { font-size:11.5px; color:var(--muted); line-height:1.35; }
+
+.panel { background:var(--surface); border:1px solid var(--line); border-radius:13px;
+         box-shadow:var(--shadow); position:sticky; top:16px;
+         max-height:calc(100vh - 32px); overflow-y:auto; min-width:0; }
+@media (max-width:940px) { .panel { position:static; max-height:none; } }
+.p-head { padding:17px 19px 14px; border-bottom:1px solid var(--line); }
+.chip { display:inline-block; font-size:10px; font-weight:700; letter-spacing:.08em;
+        text-transform:uppercase; padding:3px 8px; border-radius:99px;
+        background:var(--accent-soft); color:var(--sc);
+        border:1px solid color-mix(in srgb, var(--sc) 32%, transparent); }
+.p-name { font-family:var(--mono); font-size:19px; font-weight:500; margin:10px 0 3px;
+          line-height:1.25; overflow-wrap:anywhere; }
+.p-sub { color:var(--muted); font-size:13px; margin:0; }
+.p-body { padding:2px 19px 19px; }
+.sec { padding-block:14px; border-bottom:1px solid var(--line); }
+.sec:last-child { border-bottom:0; padding-bottom:3px; }
+.sec h3 { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+          color:var(--muted); margin:0 0 7px; }
+.sec p { margin:0 0 9px; font-size:14px; }
+.sec p:last-child { margin-bottom:0; }
+.sec ul { margin:0; padding-left:17px; }
+.sec li { margin-bottom:6px; font-size:13.5px; }
+.sec li:last-child { margin-bottom:0; }
+.watch li::marker { color:var(--s5); }
+code { font-family:var(--mono); font-size:.87em; background:var(--surface-2);
+       border:1px solid var(--line); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+.src { font-family:var(--mono); font-size:11.5px; color:var(--muted); line-height:1.75; overflow-wrap:anywhere; }
+footer.foot { border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; padding-block:16px 32px; }
+footer.foot p { margin:0 0 5px; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; } .step:hover { transform:none; } }
+</style>
+
+<header class="top">
+  <div class="wrap head-in">
+    <div class="eyebrow">Coresight Research &middot; Market Size Forecasting</div>
+    <h1>How the forecasting script works</h1>
+    <p style="margin:0;color:var(--muted);max-width:75ch">Twenty-six steps, grouped into five stages. Click any step to read what it does, why it is there, and what can go wrong.</p>
+    <div class="gist">
+      <div><b>1 &middot; You upload</b><span>A spreadsheet of dates and values. Nothing is computed yet.</span></div>
+      <div><b>2 &middot; It reads the shape</b><span>Which column is the date, which is the value, and the cadence.</span></div>
+      <div><b>3 &middot; You choose</b><span>Which models to run and how far ahead to project.</span></div>
+      <div><b>4 &middot; One pass runs</b><span>Diagnostics, macro drivers, then three models fitted and scored.</span></div>
+      <div><b>5 &middot; You compare</b><span>All three judged on unseen periods. Download the numbers.</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="cols">
+    <section id="stages" aria-label="Pipeline steps"></section>
+    <aside class="panel" id="panel" aria-live="polite" aria-label="Step explanation"></aside>
+  </div>
+  <footer class="foot">
+    <p>Engine <code>app/data/market_size_forecast_service.py</code> &middot; UI <code>app/pages/market_size_forecasting.py</code> &middot; Page <code>/market_size_forecasting</code></p>
+    <p>Dates must be stamped at the end of each period. A first-of-period file returns &ldquo;0 usable rows after cleaning&rdquo;.</p>
+  </footer>
+</div>
+
+<script>
+const STAGES = [
+ { id:"s1", label:"Upload and detect", color:"var(--s1)", steps:[
+   { id:"upload", name:"st.file_uploader", sub:"xlsx, xls, csv",
+     what:"The drop zone at the top of the page. It accepts a spreadsheet or CSV up to 200 MB and reads it only far enough to offer you column choices.",
+     why:"Market size requests come from different third-party sources every time and vary by analyst, so the dataset is uploaded rather than read from our database. Only the FRED macro predictors are wired to a live API.",
+     io:[["Takes","A file with at least one date-like column and one numeric column."],["Gives","Raw rows, and the three dropdowns underneath."]],
+     watch:["Nothing is computed on upload. The models only start when you press Run analysis.","200 MB is far more than this needs. A market size history is usually a few hundred rows."],
+     src:"market_size_forecasting.py → _render_controls" },
+   { id:"readfile", name:"read_excel / read_csv", sub:"raw rows only",
+     what:"Pandas reads the file into a table in memory. Every column comes across, whatever is in it.",
+     why:"The page has to see all the columns before it can guess which two matter.",
+     io:[["Takes","The uploaded bytes."],["Gives","A table, untouched."]],
+     watch:["Extra columns are harmless. They are ignored once you pick the two you want.","A merged-cell header row usually reads as a data row. Check the preview table."],
+     src:"market_size_forecasting.py → _render_controls" },
+   { id:"datecol", name:"normalize_dates", sub:"dates, years, quarters",
+     what:"Turns whatever is in your date column into real dates. It understands real dates, bare years like <code>2016</code>, and quarter labels like <code>2024-Q3</code>.",
+     why:"Without this, half the files analysts receive would be rejected. Different sources write periods differently and none of them agree.",
+     io:[["Takes","The column you picked as the date."],["Gives","Real dates, or a blank where a row could not be read."]],
+     watch:["<strong>An all-numeric column is deliberately refused as a date column.</strong> A sales value like <code>90000.0</code> is a perfectly valid date if you read it as epoch nanoseconds, and it would otherwise outscore your real date column.","Rows that cannot be read are dropped and counted. The count is shown on the results header — a large one means the wrong column was picked."],
+     src:"market_size_forecast_service.py → normalize_dates" },
+   { id:"valcol", name:"to_numeric", sub:"non-numeric to blank",
+     what:"Converts your value column to numbers. Anything that is not a number becomes a blank rather than an error.",
+     why:"Real spreadsheets contain <code>n/a</code>, footnote markers, thousands separators and stray text. Failing the whole run on one bad cell would be useless.",
+     io:[["Takes","The column you picked as the value."],["Gives","Numbers, with blanks where a cell was not one."]],
+     watch:["Currency symbols and commas usually convert fine. Text like <code>~12,000 est.</code> becomes a blank.","Blanks survive into the series, so a column of mostly text produces an almost-empty forecast."],
+     src:"market_size_forecast_service.py → load_series" },
+   { id:"cadence", name:"FREQ_CONFIGS", sub:"sets s, lag cap, horizon",
+     what:"The cadence lookup table. Choosing Weekly, Monthly, Quarterly or Annual selects one row of settings that every later stage reads.",
+     why:"This single choice is the most consequential one on the page. It sets the seasonal period <code>s</code>, the ceiling on the Granger lag, the default and maximum horizon, and how long the validation window is.",
+     io:[["Takes","The cadence, detected or overridden by you."],["Gives","<code>s</code>, lag cap, horizon defaults, validation window, decomposition period."]],
+     watch:["Monthly gives <code>s = 12</code>, quarterly <code>4</code>, weekly <code>52</code>. Annual has no within-year cycle at all.","Weekly at <code>s = 52</code> is by far the most expensive to fit. That is why weekly runs feel slow the first time.","If detection picks the wrong cadence, override it. Everything downstream inherits the mistake."],
+     src:"market_size_forecast_service.py → FREQ_CONFIGS" },
+   { id:"clean", name:"load_series", sub:"dedupe, snap calendar",
+     what:"The cleaner. It drops rows whose date could not be read, <strong>sums</strong> rows that share a period, then lays the result on a gap-free calendar at your cadence.",
+     why:"Every model below needs exactly one value per period with no holes. Two rows for March, or a missing April, breaks the maths silently rather than loudly.",
+     io:[["Takes","The parsed dates and numbers."],["Gives","One value per period, in order, no gaps."]],
+     watch:["Duplicate periods are <strong>summed, not averaged</strong>. If your file has one row per region per month, you get the national total — which may or may not be what you wanted.","<strong>Dates must be period-END.</strong> <code>2016-01-31</code>, not <code>2016-01-01</code>. A first-of-period file lands on labels that match nothing and every value becomes blank, which is the <em>0 usable rows after cleaning</em> message."],
+     src:"market_size_forecast_service.py → load_series" },
+ ]},
+ { id:"s2", label:"Configure and orchestrate", color:"var(--s2)", steps:[
+   { id:"models", name:"model toggles", sub:"SARIMAX, SARIMA, Prophet",
+     what:"Three checkboxes choosing which models to fit. Any combination works, including just one.",
+     why:"The three answer different questions. SARIMAX asks whether the economy explains your series, SARIMA asks what the series says alone, Prophet asks where the trend bent. Running all three is what makes the Comparison tab worth reading.",
+     io:[["Gives","Which fits run, and whether the FRED branch runs at all."]],
+     watch:["Untick SARIMAX and the entire FRED pull, Granger scan and combination search are skipped. That is the single biggest speed lever on the page.","One model alone gives you a number with no way to judge it."],
+     src:"market_size_forecasting.py → _render_controls" },
+   { id:"params", name:"horizon + Granger lag", sub:"capped per cadence",
+     what:"Two sliders. <strong>Horizon</strong> is how many periods ahead to project. <strong>Max Granger lag</strong> is how far back to look when testing whether a macro series leads yours.",
+     why:"Both have to be bounded by how much history you actually have. The caps come from the cadence, so you cannot ask for a 60-period weekly forecast off two years of data.",
+     io:[["Takes","Your cadence, which sets both ceilings."],["Gives","Forecast length, and the depth of the driver search."]],
+     watch:["A longer horizon is not more information. Confidence bands widen quickly, and for SARIMAX the macro drivers run out before the end.","A larger Granger lag means many more tests and a slower run, and raises the chance of a coincidental match."],
+     src:"market_size_forecasting.py → _render_controls" },
+   { id:"run", name:"_run_analysis", sub:"one orchestrated pass",
+     what:"The conductor behind the Run analysis button. It runs diagnostics, then the FRED branch if SARIMAX is ticked, then each model, then scores them — in one pass.",
+     why:"Streamlit re-runs the whole script on every widget change. Fitting models on each interaction would cost minutes per click, so the work is deliberately done once and cached.",
+     io:[["Takes","The cleaned series and your settings."],["Gives","Diagnostics, per-model results, and per-stage timings."]],
+     watch:["Nothing at all runs when the page loads. Models start only on the button.","The timing strip at the bottom of the results shows where the time actually went."],
+     src:"market_size_forecasting.py → _run_analysis" },
+   { id:"cachemem", name:"@st.cache_data", sub:"keyed per stage",
+     what:"Each stage is cached on exactly the inputs it depends on, in memory, for an hour.",
+     why:"It is why nudging one Prophet setting refits Prophet only, instead of refitting SARIMA and re-pulling 32 FRED series.",
+     io:[["Takes","The inputs of one stage."],["Gives","That stage's result, instantly on a repeat."]],
+     watch:["A repeat run with identical settings comes back in milliseconds.","In-memory cache dies with the process, which is why there is a disk layer underneath."],
+     src:"market_size_forecasting.py → CACHE_TTL, _through_disk" },
+   { id:"cachedisk", name:"/home disk cache", sub:"survives a deploy",
+     what:"Underneath the memory cache, results are written to the persistent <code>/home</code> share — FRED data for 24 hours, fitted results for a week.",
+     why:"<code>/home</code> survives both a restart and an app deploy. Without it, every deploy would mean every analyst re-pulling FRED and refitting from cold.",
+     io:[["Takes","A fingerprint of the series and settings."],["Gives","A stored result, or a miss that triggers the real work."]],
+     watch:["Oldest entries are evicted once the cache exceeds its cap.","A changed series fingerprint is a miss, so editing one cell in your file means a full refit."],
+     src:"market_size_forecast_service.py → disk_cache_get / disk_cache_put" },
+ ]},
+ { id:"s3", label:"FRED macro branch — SARIMAX only", color:"var(--s3)", steps:[
+   { id:"fredapi", name:"FRED API", sub:"32 series, 16 threads",
+     what:"Pulls 32 US macro indicators from the St. Louis Fed over 16 parallel threads. This is everything SARIMAX needs from outside your file.",
+     why:"SARIMAX is the only model here that uses outside information. These 32 are the indicators the data science team picked as plausible drivers of US retail demand.",
+     io:[["Needs","A FRED API key. It is a free, rate-limited key for public data."],["Gives","32 monthly series, plus a per-variable status list shown at the foot of Diagnostics."]],
+     watch:["<strong>If the key is missing or rejected, SARIMAX is skipped, not failed.</strong> SARIMA and Prophet still run and the comparison still renders — so read the header before treating it as complete.","These are US series. For a UK or India market size there is no appropriate driver here; use SARIMA or Prophet."],
+     src:"market_size_forecast_service.py → fetch_fred_monthly, FRED_VARS" },
+   { id:"fredcache", name:"FRED disk cache", sub:"read before fetch",
+     what:"Checked before any network call. If the stored copy is under 24 hours old it is used and the API is not touched.",
+     why:"Macro data updates monthly at best. Pulling 32 series on every run would waste the rate limit and add seconds for no new information.",
+     io:[["Gives","The cached 32 series, or a miss that triggers the pull."]],
+     watch:["The cache is keyed on the API key, so a key change forces a fresh pull.","It lives on <code>/home</code>, so it survives a deploy."],
+     src:"market_size_forecast_service.py → read_fred_cache / write_fred_cache" },
+   { id:"resample", name:"resample_fred_to_freq", sub:"monthly to cadence",
+     what:"Lines the macro series up with your cadence. Monthly to quarterly averages; monthly to weekly carries each value forward across the weeks of its month.",
+     why:"You cannot regress a weekly series on a monthly one until both sit on the same calendar.",
+     io:[["Takes","32 monthly series and your cadence."],["Gives","32 series on your calendar."]],
+     watch:["<strong>Forward-filling does not create weekly detail.</strong> On a weekly run the macro signal is still monthly in resolution — the page says so. SARIMA and Prophet may read week-level patterns better."],
+     src:"market_size_forecast_service.py → resample_fred_to_freq" },
+   { id:"granger", name:"granger_scan", sub:"which series lead",
+     what:"For each of the 32, tests one question: does this series' <em>past</em> help predict your series, beyond what your own past already predicts? Reports the lag and a p-value.",
+     why:"Handing all 32 predictors to the model would fit the noise beautifully and forecast nothing. This narrows the field before any model is built.",
+     io:[["Takes","Your series and the 32 aligned macro series."],["Gives","A shortlist, each with the lag at which it matters."]],
+     watch:["<strong>This is correlation in time, not proven causation.</strong> With 32 series tested, some will look significant by chance.","Series are differenced to stationarity first, capped at 3 rounds. If the cap is hit the page says the rankings are indicative only.","P-values run to <code>1e-10</code>, which is why they are shown in scientific notation rather than rounded to 0."],
+     src:"market_size_forecast_service.py → granger_scan" },
+   { id:"lagged", name:"build_lagged_frame", sub:"align at best lag",
+     what:"Shifts each surviving driver by the lag the scan found and lines them up as columns beside your series.",
+     why:"A driver that leads by four months is only useful if it is actually offset by four months. This builds the table the model is fitted on.",
+     io:[["Takes","The shortlist and their lags."],["Gives","One table: your series, plus one column per lagged driver."]],
+     watch:["Lagging costs you history at the start of the series. A large lag on a short series leaves less to fit."],
+     src:"market_size_forecast_service.py → build_lagged_frame" },
+   { id:"rank", name:"rank_exog_combinations", sub:"ranked by held-out RMSE",
+     what:"Tries <em>combinations</em> of drivers, fits a model for each, and ranks them by error on data held back from fitting.",
+     why:"The best single predictor is rarely the best set. Two mediocre drivers that disagree with each other often beat one strong driver on its own.",
+     io:[["Gives","A ranked table. Rank 0 is the lowest error."]],
+     watch:["The tab shows the top 10, but the rank box accepts any rank — pick another and SARIMAX refits on it in a few seconds.","The chosen driver list is frequently more useful than the forecast, because it gives a reason for the number."],
+     src:"market_size_forecast_service.py → rank_exog_combinations" },
+ ]},
+ { id:"s4", label:"Diagnostics and fits", color:"var(--s4)", steps:[
+   { id:"diag", name:"data_diagnostics", sub:"ADF, KPSS, seasonality",
+     what:"Measures the series before any model touches it: size and spread, two stationarity tests, seasonal strength and mode, the peak and trough period of the year, and outliers beyond three standard deviations.",
+     why:"It decides how much differencing the models apply, and it is your last chance to catch a data error before it distorts every forecast.",
+     io:[["Gives","The eight cards on the Diagnostics tab."]],
+     watch:["<strong>Both tests reporting Non-stationary is normal for sales data.</strong> It is not a failure — it tells the models to difference.","ADF and KPSS are run together on purpose and can disagree: ADF tests for a unit root, KPSS tests the opposite. Disagreement is informative.","Peak and trough should match what the business actually does. If a retailer peaks in month 4 rather than 11, suspect the date column.","An outlier is far more often a data error than a real event. Open those rows before trusting anything below."],
+     src:"market_size_forecast_service.py → data_diagnostics" },
+   { id:"decomp", name:"seasonal_decompose", sub:"trend, season, resid",
+     what:"Splits the series into three curves: the underlying trend, the repeating seasonal shape, and whatever is left over.",
+     why:"It shows at a glance whether trend or season dominates, and whether the leftover is small (well-behaved) or large (something structural is unmodelled).",
+     io:[["Gives","Three stacked charts on one time axis."]],
+     watch:["Needs at least two full seasonal cycles. On shorter history the page says so instead of drawing something misleading.","Annual data has no within-year cycle, so it is skipped with a note rather than an error."],
+     src:"market_size_forecast_service.py → data_diagnostics" },
+   { id:"sarimax", name:"run_sarimax", sub:"series + macro drivers",
+     what:"Fits your series together with the chosen macro drivers, then projects forward.",
+     why:"It is the only model here that can answer a scenario question, and the only one that gives a <em>reason</em> for the forecast rather than just a shape.",
+     io:[["Takes","The cleaned series and the winning driver combination."],["Gives","A forecast with bounds, residuals, and the exact specification used."]],
+     watch:["<strong>Watch the real macro periods figure.</strong> If it is below your horizon, the drivers run out and later periods fall back to a neutral baseline — the far end is weaker than the near end.","If SARIMAX does not beat SARIMA, the macro drivers added nothing. That is a real finding, not a broken run."],
+     src:"market_size_forecast_service.py → run_sarimax" },
+   { id:"sarima", name:"run_sarima", sub:"AIC grid search",
+     what:"Fits your series using only its own past. Many candidate orders are tried automatically and the one with the lowest AIC wins, written <code>ARIMA(p,d,q)x(P,D,Q,s)</code>.",
+     why:"No external dependency means it cannot break on a missing API key, and it is the fair baseline SARIMAX has to beat to justify its complexity.",
+     io:[["Takes","The cleaned series, nothing else."],["Gives","The chosen order, a forecast with bounds, and residuals."]],
+     watch:["<code>p</code> is how far back it looks, <code>d</code> how many times it differenced, <code>q</code> how long a shock echoes. Capitals repeat those once per season, and <code>s</code> is the season length.","<strong>AIC compares orders within this model only.</strong> Never compare it against another model — use the Comparison tab's MAPE.","On weekly data with under 8 years, seasonal terms <code>P</code> and <code>Q</code> are not searched and come back 0. Seasonal differencing still removes the annual pattern, and the fit is far quicker."],
+     src:"market_size_forecast_service.py → run_sarima, seasonal_terms_supported" },
+   { id:"prophet", name:"run_prophet", sub:"trend + covid_shock",
+     what:"Splits the curve into a bending trend plus a repeating seasonal shape, with one flag marking March to June 2020. Reports where the trend changed and whether that flag helped.",
+     why:"It catches trend <em>bends</em> that SARIMA and SARIMAX smooth over, needs no stationarity and no order selection, and copes with gaps better than the ARIMA family.",
+     io:[["Takes","The cleaned series plus the covid_shock flag. No FRED data."],["Gives","A forecast with bounds, changepoint dates, and a cross-validation score."]],
+     watch:["Without the COVID flag the 2020 collapse and rebound read as a change in the underlying trend, distorting everything after it.","<strong>A negative regressor value means the flag did not help on this series.</strong> That is a legitimate result.","Many changepoints on a short series usually means it is chasing noise.","Its cross-validation number is Prophet's own check and is <em>not</em> comparable to another model's MAPE."],
+     src:"market_size_forecast_service.py → run_prophet" },
+ ]},
+ { id:"s5", label:"Score and deliver", color:"var(--s5)", steps:[
+   { id:"walkfwd", name:"walk-forward", sub:"MAPE on unseen periods",
+     what:"Each model is refitted repeatedly on a growing window and asked to predict the next block, then scored on how close it got.",
+     why:"How well a model fits the data it was trained on tells you almost nothing. This is the only number here measured on periods the model never saw.",
+     io:[["Gives","MAPE and RMSE per model, drawn against actuals."]],
+     watch:["This is the score the Comparison tab ranks on, and the only one comparable across all three models.","Read it beside the residual tests. Good MAPE with failing residuals means the confidence band is too narrow."],
+     src:"market_size_forecast_service.py → validation_window, run_sarima" },
+   { id:"resid", name:"residual_diagnostics", sub:"Ljung-Box, Shapiro, DW",
+     what:"Three tests on what the model could not explain. Ljung-Box looks for leftover pattern, Shapiro-Wilk for non-normal errors, Durbin-Watson for correlation between consecutive errors.",
+     why:"Residuals should look like noise. Structure left in them means real signal is unmodelled and the forecast is more uncertain than it claims.",
+     io:[["Gives","Three statistics with pass or fail, plus suggested fixes."]],
+     watch:["A failing test does not invalidate the forecast, but it does mean the confidence band understates the true uncertainty.","Failing Ljung-Box usually means the order is too small for the seasonality present."],
+     src:"market_size_forecast_service.py → residual_diagnostics" },
+   { id:"compare", name:"comparison tab", sub:"rank + agreement spread",
+     what:"Puts all three models side by side on identical held-out periods with the identical error measure, marks the lowest error BEST, and reports how far apart the three forecasts are.",
+     why:"Three independent models landing in the same place is far stronger evidence than any single model. The spread is the closest thing here to an honest uncertainty estimate.",
+     io:[["Gives","A card per model, a summary table, the period-by-period figures, and an agreement verdict."]],
+     watch:["<strong>Agreement under 5%</strong> — the midpoint is a reasonable working forecast.","<strong>Above 5%</strong> — investigate the drivers before quoting anything.","BEST means lowest error on history. It does not guarantee best in future, so read the spread too."],
+     src:"market_size_forecasting.py → _render_comparison_tab, forecast_spread" },
+   { id:"export", name:"_export_buttons", sub:"CSV + Excel",
+     what:"Download buttons on each model tab, and one on Comparison that exports all three models in a single file with lower and upper bounds.",
+     why:"The forecast has to leave the page to be useful — into a model, a deck, or a client note.",
+     io:[["Gives","<code>Date, Model, Forecast, Lower_CI, Upper_CI</code>."]],
+     watch:["<strong>The Diagnostics tab has no export buttons.</strong> Switch to a model tab or Comparison first.","Files are named for their content, such as <code>prophet_forecast.csv</code>. A long hex filename means an old build.","Quote a band across the horizon, never a single number."],
+     src:"market_size_forecasting.py → _export_buttons" },
+ ]},
+];
+
+const stagesEl = document.getElementById("stages");
+const panel = document.getElementById("panel");
+const ALL = {};
+STAGES.forEach(st => st.steps.forEach(s => { ALL[s.id] = { ...s, stage: st }; }));
+
+STAGES.forEach(st => {
+  const sec = document.createElement("div");
+  sec.className = "stage";
+  sec.style.setProperty("--sc", st.color);
+  const h = document.createElement("div");
+  h.className = "stage-h";
+  h.innerHTML = '<span class="stage-dot"></span><h2></h2>';
+  h.querySelector("h2").textContent = st.label;
+  const grid = document.createElement("div");
+  grid.className = "steps";
+  st.steps.forEach(s => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "step"; b.dataset.id = s.id;
+    b.setAttribute("aria-pressed", "false");
+    b.innerHTML = '<span class="step-name"></span><span class="step-sub"></span>';
+    b.querySelector(".step-name").textContent = s.name;
+    b.querySelector(".step-sub").textContent = s.sub;
+    b.addEventListener("click", () => select(s.id));
+    grid.appendChild(b);
+  });
+  sec.append(h, grid);
+  stagesEl.appendChild(sec);
+});
+
+function select(id) {
+  const s = ALL[id];
+  document.querySelectorAll(".step").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.id === id)));
+  const io = s.io.map(([k, v]) => "<li><strong>" + k + "</strong> &mdash; " + v + "</li>").join("");
+  const watch = s.watch.map(w => "<li>" + w + "</li>").join("");
+  panel.innerHTML =
+    '<div class="p-head" style="--sc:' + s.stage.color + '">' +
+      '<span class="chip">' + s.stage.label + '</span>' +
+      '<div class="p-name"></div><p class="p-sub"></p></div>' +
+    '<div class="p-body">' +
+      '<div class="sec"><h3>What it does</h3><p>' + s.what + '</p></div>' +
+      '<div class="sec"><h3>Why it is there</h3><p>' + s.why + '</p></div>' +
+      '<div class="sec"><h3>In and out</h3><ul>' + io + '</ul></div>' +
+      '<div class="sec"><h3>Watch out for</h3><ul class="watch">' + watch + '</ul></div>' +
+      '<div class="sec"><h3>In the code</h3><p class="src"></p></div>' +
+    '</div>';
+  panel.querySelector(".p-name").textContent = s.name;
+  panel.querySelector(".p-sub").textContent = s.sub;
+  panel.querySelector(".src").textContent = s.src;
+  try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+const hash = (location.hash || "").replace("#", "");
+select(ALL[hash] ? hash : "upload");
+</script>

@@ -1,0 +1,359 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Market Size Forecasting — End-to-End Flow",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Analyst UI"
+        },
+        "backend": {
+          "label": "Pipeline step"
+        },
+        "database": {
+          "label": "Driver ranking"
+        },
+        "external": {
+          "label": "FRED API"
+        }
+      }
+    },
+    "output": "market-size-forecasting-flow.html",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    }
+  },
+  "lanes": [
+    {
+      "id": "analyst",
+      "label": "Analyst · Browser"
+    },
+    {
+      "id": "macro",
+      "label": "FRED Macro Data"
+    },
+    {
+      "id": "pipeline",
+      "label": "Ingest · Compute · Cache"
+    }
+  ],
+  "phases": [
+    {
+      "id": "ingest",
+      "label": "Upload + detect",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "compute",
+      "label": "Configure + compute",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "export",
+      "label": "Review + export",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "exog_pipeline",
+      "label": "SARIMAX only",
+      "lane": "macro",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "upload",
+    "detect",
+    "configure",
+    "analyze",
+    "fit",
+    "deliver"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "upload"
+    ],
+    "allowedTerminals": [
+      "deliver"
+    ],
+    "requiredPaths": [
+      {
+        "from": "upload",
+        "to": "deliver"
+      },
+      {
+        "from": "fred",
+        "to": "fit"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "upload",
+      "lane": "analyst",
+      "col": 0,
+      "type": "frontend",
+      "width": 220,
+      "label": "Upload history",
+      "sublabel": "XLSX · XLS · CSV",
+      "tag": "≤ 200 MB",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "File uploader and column pickers"
+        }
+      ]
+    },
+    {
+      "id": "detect",
+      "lane": "pipeline",
+      "col": 1,
+      "type": "backend",
+      "width": 220,
+      "label": "Detect + clean",
+      "sublabel": "date, value, cadence",
+      "tag": "period-END dates",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 176,
+          "label": "Date parsing, numeric-column guard"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 298,
+          "label": "Clean, dedupe, snap to calendar"
+        }
+      ]
+    },
+    {
+      "id": "configure",
+      "lane": "analyst",
+      "col": 2,
+      "type": "frontend",
+      "width": 220,
+      "label": "Configure run",
+      "sublabel": "models · horizon · lag",
+      "tag": "DS-team defaults",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Model toggles, horizon, Granger lag"
+        }
+      ]
+    },
+    {
+      "id": "analyze",
+      "lane": "pipeline",
+      "col": 3,
+      "type": "backend",
+      "width": 220,
+      "label": "Run analysis",
+      "sublabel": "one cached pass",
+      "tag": "nothing runs on load",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 807,
+          "label": "One cached orchestrated pass"
+        }
+      ]
+    },
+    {
+      "id": "fred",
+      "lane": "macro",
+      "col": 3,
+      "type": "external",
+      "width": 220,
+      "label": "Fetch FRED",
+      "sublabel": "32 series · 16 threads",
+      "tag": "24 h disk cache",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 359,
+          "label": "32 series, 16 threads, disk cache"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 263,
+          "label": "Resample to your cadence"
+        }
+      ]
+    },
+    {
+      "id": "exog",
+      "lane": "macro",
+      "col": 4,
+      "type": "database",
+      "width": 220,
+      "label": "Rank drivers",
+      "sublabel": "Granger → combinations",
+      "tag": "cap: 3 differencings",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1000,
+          "label": "Granger causality scan"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1027,
+          "label": "Align drivers at best lag"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1043,
+          "label": "Rank driver combinations"
+        }
+      ]
+    },
+    {
+      "id": "fit",
+      "lane": "pipeline",
+      "col": 4,
+      "type": "backend",
+      "width": 220,
+      "label": "Fit + score",
+      "sublabel": "3 models, walk-forward",
+      "tag": "cached per stage",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 758,
+          "label": "SARIMA grid search"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1086,
+          "label": "SARIMAX with exogenous drivers"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Prophet and cross-validation"
+        }
+      ]
+    },
+    {
+      "id": "deliver",
+      "lane": "analyst",
+      "col": 5,
+      "type": "frontend",
+      "width": 220,
+      "label": "Review + export",
+      "sublabel": "5 sections · CSV + Excel",
+      "tag": "Blob, no rerun",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 529,
+          "label": "CSV and Excel via Blob download"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "upload",
+      "to": "detect",
+      "label": "file bytes",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "detect",
+      "to": "configure",
+      "label": "columns + cadence",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "configure",
+      "to": "analyze",
+      "label": "Run analysis",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "analyze",
+      "to": "fit",
+      "label": "clean series",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "fit",
+      "to": "deliver",
+      "label": "forecast + diagnostics",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "analyze",
+      "to": "fred",
+      "label": "if SARIMAX ticked",
+      "role": "branch"
+    },
+    {
+      "from": "fred",
+      "to": "exog",
+      "label": "resample to cadence",
+      "role": "branch"
+    },
+    {
+      "from": "exog",
+      "to": "fit",
+      "label": "best exog set",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Run it",
+      "items": [
+        "Drop an XLSX, XLS or CSV into Sales History",
+        "Confirm the detected Date column, Value column and Frequency",
+        "Tick the models, set horizon and Granger lag",
+        "Click Run analysis once, then pick a section"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "One cached pass",
+      "items": [
+        "Diagnostics, FRED pull, driver ranking, three fits, scoring",
+        "Stages cache separately — one changed prior refits one model",
+        "Results persist on /home and survive a deploy",
+        "Second run with the same settings returns in milliseconds"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Known traps",
+      "items": [
+        "Dates must be period-END: 2016-01-31, not 2016-01-01",
+        "No FRED key means SARIMAX is skipped, not failed",
+        "Diagnostics has no exports — switch section first",
+        "FRED drivers are US-only; use SARIMA or Prophet elsewhere"
+      ]
+    }
+  ]
+}

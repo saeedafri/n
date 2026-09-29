@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Market Size Forecasting — How It Works",
+    "output": "market-size-forecasting-business.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    },
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "What you do"
+        },
+        "backend": {
+          "label": "Forecast model"
+        },
+        "external": {
+          "label": "Economic data"
+        },
+        "security": {
+          "label": "Accuracy check"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 5,
+    "cellW": 180,
+    "cellH": 76,
+    "gapX": 110,
+    "gapY": 40
+  },
+  "components": [
+    {
+      "id": "upload",
+      "type": "frontend",
+      "label": "Upload the history",
+      "sublabel": "your spreadsheet",
+      "tag": "xlsx, xls or csv",
+      "col": 0,
+      "row": 1,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Upload and column pickers"
+        }
+      ]
+    },
+    {
+      "id": "prepare",
+      "type": "backend",
+      "label": "Check and choose",
+      "sublabel": "clean it, pick the models",
+      "tag": "one click to run",
+      "col": 1,
+      "row": 1,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 298,
+          "label": "Clean and de-duplicate"
+        },
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 671,
+          "label": "Model and horizon controls"
+        }
+      ]
+    },
+    {
+      "id": "macro",
+      "type": "external",
+      "label": "US macro drivers",
+      "sublabel": "32 economic indicators",
+      "tag": "SARIMAX only",
+      "col": 2,
+      "row": 0,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 359,
+          "label": "Pull the indicators"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1043,
+          "label": "Keep the ones that lead"
+        }
+      ]
+    },
+    {
+      "id": "modelA",
+      "type": "backend",
+      "label": "With macro drivers",
+      "sublabel": "SARIMAX",
+      "tag": "answers what-if",
+      "col": 3,
+      "row": 0,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1086,
+          "label": "SARIMAX fit"
+        }
+      ]
+    },
+    {
+      "id": "modelB",
+      "type": "backend",
+      "label": "History only",
+      "sublabel": "SARIMA",
+      "tag": "the safe baseline",
+      "col": 3,
+      "row": 1,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 758,
+          "label": "SARIMA grid search"
+        }
+      ]
+    },
+    {
+      "id": "modelC",
+      "type": "backend",
+      "label": "Trend shifts",
+      "sublabel": "Prophet",
+      "tag": "catches breaks",
+      "col": 3,
+      "row": 2,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Prophet fit"
+        }
+      ]
+    },
+    {
+      "id": "answer",
+      "type": "security",
+      "label": "Score and compare",
+      "sublabel": "a band, not one number",
+      "tag": "agree under 5%",
+      "col": 4,
+      "row": 1,
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 709,
+          "label": "Scored on unseen periods"
+        },
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1448,
+          "label": "Comparison tab"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1148,
+          "label": "Agreement spread"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "What the analyst does",
+      "wraps": [
+        "upload",
+        "prepare"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Three models, three different questions",
+      "wraps": [
+        "macro",
+        "modelA",
+        "modelB",
+        "modelC"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "The answer you quote",
+      "wraps": [
+        "answer"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "upload",
+      "to": "prepare",
+      "label": "the file",
+      "variant": "emphasis"
+    },
+    {
+      "from": "prepare",
+      "to": "macro",
+      "label": "if SARIMAX",
+      "variant": "dashed"
+    },
+    {
+      "from": "prepare",
+      "to": "modelB",
+      "label": "history",
+      "variant": "emphasis"
+    },
+    {
+      "from": "prepare",
+      "to": "modelC",
+      "label": "+ covid flag"
+    },
+    {
+      "from": "macro",
+      "to": "modelA",
+      "label": "drivers"
+    },
+    {
+      "from": "modelA",
+      "to": "answer",
+      "label": "forecast"
+    },
+    {
+      "from": "modelB",
+      "to": "answer",
+      "label": "forecast",
+      "variant": "emphasis"
+    },
+    {
+      "from": "modelC",
+      "to": "answer",
+      "label": "forecast"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What it is for",
+      "items": [
+        "Turns a market-size history into a forecast the team can quote",
+        "Data comes from the analyst, not our database — every request is different",
+        "Three models run, so a number never rests on one method"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Why three models",
+      "items": [
+        "SARIMAX links the market to the US economy, so it can answer what-if",
+        "SARIMA uses history alone and cannot break on an outage",
+        "Prophet finds where the trend bent, such as 2020"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "How to read the result",
+      "items": [
+        "Every model is scored on periods it never saw, so the ranking is fair",
+        "Models within 5% of each other — quote the midpoint with confidence",
+        "Further apart — give a range and say why"
+      ]
+    }
+  ]
+}

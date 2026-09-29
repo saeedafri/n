@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4c617a1c-8f9c-4474-a741-66b5efc08098",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-2-sarimax.workflow.json",
+  "output": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-2-sarimax.html",
+  "specification": {
+    "sha256": "95ede37bfee714578675e942819a6e8f582fe61b79f949972290f78fdfa833c2",
+    "bytes": 5637
+  },
+  "artifact": {
+    "sha256": "f8cef67592c3162ec946f48aa7a965e9b0f77b5eb3e79b2bea4940417e0ae4a8",
+    "bytes": 754864
+  }
+}

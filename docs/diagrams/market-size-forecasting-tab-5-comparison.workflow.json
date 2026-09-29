@@ -1,0 +1,231 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Comparison tab — which number do you quote?",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Forecast / output"
+        },
+        "backend": {
+          "label": "Scoring step"
+        },
+        "database": {
+          "label": "Ranking"
+        },
+        "security": {
+          "label": "Confidence check"
+        }
+      }
+    },
+    "output": "market-size-forecasting-tab-5-comparison.html",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    }
+  },
+  "lanes": [
+    {
+      "id": "judge",
+      "label": "Like-for-like Scoring"
+    },
+    {
+      "id": "output",
+      "label": "Reporting Output"
+    }
+  ],
+  "mainPath": [
+    "three",
+    "samewindow",
+    "rank",
+    "spread",
+    "periods",
+    "export"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "three"
+    ],
+    "allowedTerminals": [
+      "export"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "three",
+      "lane": "judge",
+      "col": 0,
+      "type": "frontend",
+      "label": "Three forecasts",
+      "sublabel": "SARIMAX · SARIMA · Prophet",
+      "width": 145,
+      "tag": "3 agreeing > 1 best",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1448,
+          "label": "Comparison tab renderer"
+        }
+      ]
+    },
+    {
+      "id": "samewindow",
+      "lane": "judge",
+      "col": 1,
+      "type": "backend",
+      "label": "Same test window",
+      "sublabel": "identical error measure",
+      "tag": "this is what makes it fair",
+      "width": 145,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 709,
+          "label": "Shared validation window"
+        }
+      ]
+    },
+    {
+      "id": "rank",
+      "lane": "judge",
+      "col": 2,
+      "type": "database",
+      "label": "Rank by MAPE",
+      "sublabel": "lowest error is flagged BEST",
+      "width": 145,
+      "tag": "lower MAPE is better",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1448,
+          "label": "MAPE ranking and summary table"
+        }
+      ]
+    },
+    {
+      "id": "spread",
+      "lane": "judge",
+      "col": 3,
+      "type": "security",
+      "label": "Agreement spread",
+      "sublabel": "under 5% = high confidence",
+      "width": 145,
+      "tag": "<5% = quote midpoint",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1148,
+          "label": "Forecast agreement spread"
+        }
+      ]
+    },
+    {
+      "id": "periods",
+      "lane": "output",
+      "col": 4,
+      "type": "frontend",
+      "label": "Period-by-period",
+      "sublabel": "exact figures, side by side",
+      "width": 145,
+      "tag": "for the deck",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1448,
+          "label": "Period-by-period table"
+        }
+      ]
+    },
+    {
+      "id": "export",
+      "lane": "output",
+      "col": 5,
+      "type": "frontend",
+      "label": "Export all",
+      "sublabel": "CSV + Excel, one file",
+      "width": 145,
+      "tag": "all 3 in one file",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 529,
+          "label": "Export all models in one file"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "three",
+      "to": "samewindow",
+      "label": "same window",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "samewindow",
+      "to": "rank",
+      "label": "lowest error",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "rank",
+      "to": "spread",
+      "label": "agree?",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "spread",
+      "to": "periods",
+      "label": "figures",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "periods",
+      "to": "export",
+      "label": "hand over",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What it signifies",
+      "items": [
+        "Every model judged on the same unseen periods, same error measure",
+        "MAPE is average error as a percentage — lower is better",
+        "Spread is how far apart the three forecasts are",
+        "BEST marks the lowest MAPE, nothing more"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Why it is used",
+      "items": [
+        "Three models agreeing is far stronger evidence than one model alone",
+        "It is the only tab that exports all models in a single file",
+        "It shows which model earned its complexity",
+        "It is the tab to screenshot into a client deck"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Read it this way",
+      "items": [
+        "Agreement under 5% — quote the midpoint as a working forecast",
+        "Divergence above 5% — investigate the drivers before quoting anything",
+        "Quote a band across the horizon, never a single number",
+        "BEST on history does not guarantee best in future — check the spread too"
+      ]
+    }
+  ]
+}

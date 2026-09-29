@@ -173,6 +173,51 @@ def _parse_quarter(value) -> Optional[str]:
     return f"{year}{QUARTER_END[quarter]}"
 
 
+MONTH_ABBR = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun",
+     "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
+
+# Apostrophes analysts actually type: ASCII, curly right, curly left, prime.
+APOSTROPHES = "'\u2019\u2018\u02bc\u00b4`"
+
+
+def _parse_month_year(value) -> Optional[str]:
+    """Month-and-year labels that pandas cannot read on its own.
+
+    Covers `Dec '22`, `Dec\u201922`, `Dec' 22`, `Dec-22`, `Dec 22` in any
+    apostrophe style, plus the statistical `2020M01` form. Returns an ISO
+    first-of-month string, which the period snap in load_series then moves to
+    the period end. Two-digit years follow the POSIX rule: 69-99 -> 1900s,
+    00-68 -> 2000s, so `Dec '99` is 1999 and `Dec '22` is 2022.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    for mark in APOSTROPHES:
+        text = text.replace(mark, " ")
+    text = re.sub(r"[\s\-_/.]+", " ", text).strip().lower()
+
+    match = re.fullmatch(r"([a-z]{3,9})\s*(\d{2}|\d{4})", text)
+    if match:
+        name, year = match.group(1)[:3], match.group(2)
+    else:
+        match = re.fullmatch(r"(\d{4})\s*m\s*(\d{1,2})", text)
+        if not match:
+            return None
+        year, month_num = match.group(1), int(match.group(2))
+        if not 1 <= month_num <= 12:
+            return None
+        return f"{year}-{month_num:02d}-01"
+
+    month = MONTH_ABBR.get(name)
+    if month is None:
+        return None
+    if len(year) == 2:
+        number = int(year)
+        year = str(1900 + number if number >= 69 else 2000 + number)
+    return f"{year}-{month:02d}-01"
+
+
 def normalize_dates(series: pd.Series) -> pd.Series:
     """Turn messy period labels into real dates.
 
@@ -192,6 +237,10 @@ def normalize_dates(series: pd.Series) -> pd.Series:
     if len(populated) > 0 and populated.astype(str).apply(
             lambda v: _parse_quarter(v) is not None).mean() >= 0.9:
         return pd.to_datetime(values.apply(_parse_quarter), errors='coerce')
+
+    if len(populated) > 0 and populated.astype(str).apply(
+            lambda v: _parse_month_year(v) is not None).mean() >= 0.9:
+        return pd.to_datetime(values.apply(_parse_month_year), errors='coerce')
 
     # A column of plain numbers that are not years is not a date column.
     # pandas would read 90000 as nanoseconds since the epoch and "parse"
@@ -282,6 +331,8 @@ class LoadedSeries:
     frame: pd.DataFrame              # index=Date, one column ('Sales')
     duplicates_merged: int = 0
     dropped_rows: int = 0
+    unreadable_dates: tuple = ()     # the actual cells that could not be read
+    snapped_to_period_end: int = 0   # rows moved from period start to period end
 
 
 def read_workbook(source) -> pd.DataFrame:
@@ -295,17 +346,56 @@ def read_workbook(source) -> pd.DataFrame:
     return df
 
 
+def to_numeric_values(column: pd.Series) -> pd.Series:
+    """Read a value column that an analyst formatted for reading, not for code.
+
+    Spreadsheets arrive with thousands separators, currency symbols, percent
+    signs, non-breaking spaces and accounting negatives -- `1,234`, `$1,234`,
+    `1 234`, `12.5%`, `(87)`. Plain to_numeric turns every one of those into a
+    blank, which emptied the series and produced the same dead-end "0 usable
+    rows" as an unreadable date. Strip the decoration, keep the number.
+    """
+    numeric = pd.to_numeric(column, errors='coerce')
+    if numeric.notna().mean() >= 0.99:
+        return numeric
+
+    text = column.astype(str)
+    cleaned = (text.str.replace('\u00a0', '', regex=False)
+                   .str.replace(r'[\s,]', '', regex=True)
+                   .str.replace(r'^[\$\u00a3\u20ac\u00a5]', '', regex=True)
+                   .str.replace('%', '', regex=False)
+                   .str.replace(r'^\((.*)\)$', r'-\1', regex=True)
+                   .str.replace(r'^[-\u2013\u2014]$', '', regex=True))
+    recovered = pd.to_numeric(cleaned, errors='coerce')
+    return recovered if recovered.notna().sum() > numeric.notna().sum() else numeric
+
+
 def load_series(df: pd.DataFrame, date_col, value_col, freq_name: str) -> LoadedSeries:
     """Standardise a two-column selection into a dated, gap-free Sales series."""
     config = FREQ_CONFIGS[freq_name]
     frame = df[[date_col, value_col]].rename(
         columns={date_col: 'Date', value_col: TARGET_COL})
-    frame[TARGET_COL] = pd.to_numeric(frame[TARGET_COL], errors='coerce')
+    frame[TARGET_COL] = to_numeric_values(frame[TARGET_COL])
     frame['Date'] = normalize_dates(frame['Date'])
+
+    unreadable = tuple(
+        str(original) for original, parsed in zip(df[date_col], frame['Date'])
+        if pd.isna(parsed) and pd.notna(original))[:12]
 
     before = len(frame)
     frame = frame.dropna(subset=['Date'])
     dropped = before - len(frame)
+
+    # The reindex below uses period-END labels (ME/QE/YE). A label that parses
+    # to the FIRST of its period -- which is what '2020-01', 'Jan 2020',
+    # 'Dec-2020' and '01/2020' all produce -- would match nothing and every
+    # value would silently become blank. Snap each date onto the end of the
+    # period it names, so the label decides the period and never the day.
+    snapped = 0
+    if not frame.empty and config['freq'] in ('ME', 'QE', 'YE'):
+        aligned = frame['Date'].dt.to_period(config['freq'][0]).dt.to_timestamp(how='end').dt.normalize()
+        snapped = int((aligned != frame['Date']).sum())
+        frame['Date'] = aligned
 
     # Repeated periods break the reindexing every model below relies on.
     duplicates = int(frame['Date'].duplicated().sum())
@@ -318,7 +408,8 @@ def load_series(df: pd.DataFrame, date_col, value_col, freq_name: str) -> Loaded
         frame.index.freq = config['freq']
     except Exception:
         frame = frame.asfreq(config['freq'])
-    return LoadedSeries(frame=frame, duplicates_merged=duplicates, dropped_rows=dropped)
+    return LoadedSeries(frame=frame, duplicates_merged=duplicates, dropped_rows=dropped,
+                        unreadable_dates=unreadable, snapped_to_period_end=snapped)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -755,6 +846,29 @@ def seasonal_terms_supported(sample_size: int, season: int) -> bool:
     return sample_size >= MIN_CYCLES_FOR_SEASONAL_TERMS * season
 
 
+def ensure_regular_index(series: pd.Series, freq_name: str) -> pd.Series:
+    """Give a series back the regular period index statsmodels requires.
+
+    Dropping blank periods leaves an irregular DatetimeIndex with no `freq`,
+    and SARIMAX then raises "No supported index is available". Any real file
+    with a hole -- the data team's has four, one February per year -- hit this.
+    Reindexing onto the full period range restores the frequency and leaves the
+    gaps as NaN, which the Kalman filter already treats as missing observations.
+    A series with no gaps is returned unchanged.
+    """
+    if series.empty or not isinstance(series.index, pd.DatetimeIndex):
+        return series
+    if series.index.freq is not None:
+        return series
+    freq = FREQ_CONFIGS[freq_name]['freq']
+    full = pd.date_range(series.index.min(), series.index.max(), freq=freq)
+    if len(full) == len(series) and (full == series.index).all():
+        series = series.copy()
+        series.index = full
+        return series
+    return series.reindex(full)
+
+
 def run_sarima(sales_series: pd.Series, freq_name: str, horizon: int,
                progress: Optional[Callable[[int, int, str], None]] = None) -> Dict[str, Any]:
     """Grid-search the ARIMA order by AIC, validate, then forecast."""
@@ -762,6 +876,7 @@ def run_sarima(sales_series: pd.Series, freq_name: str, horizon: int,
     config = FREQ_CONFIGS[freq_name]
     season = config['s']
 
+    sales_series = ensure_regular_index(sales_series, freq_name)
     window = validation_window(horizon, freq_name, len(sales_series))
     train, test = sales_series[:-window], sales_series[-window:]
 
@@ -944,6 +1059,7 @@ def run_prophet(sales_series: pd.Series, freq_name: str, horizon: int,
         'residuals': residuals,
         'changepoints': changepoints,
         'total_changepoints': int(len(model.changepoints)),
+        'cv_requested': run_cross_validation,
         'cv_mape': cv_mape,
         'cv_baseline_mape': baseline_mape,
         'cv_table': cv_table,

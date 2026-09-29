@@ -473,3 +473,161 @@ def test_short_weekly_drops_seasonal_terms_but_keeps_differencing():
     assert (P, Q) == (0, 0)        # no seasonal AR/MA searched
     assert D == 1 and season == 52  # seasonal differencing still applied
     assert len(result["forecast"]) == 12
+
+
+# ── downloads ──────────────────────────────────────────────────────────
+
+def test_download_buttons_fetch_a_blob_instead_of_linking_to_media(monkeypatch):
+    """The markup must not hand the browser a /media anchor to follow.
+
+    An anchor is what a desktop download manager hooks, and what the
+    end-of-run orphan sweep can delete mid-fetch.
+    """
+    import json
+    import streamlit.components.v1 as components
+    from utils import media_url
+
+    captured = {}
+    monkeypatch.setattr(media_url, "serve_bytes",
+                        lambda data, mimetype, filename, page="", **kw: f"/media/abc.{filename.rsplit('.', 1)[-1]}")
+    monkeypatch.setattr(media_url, "absolute_app_url", lambda path: "https://host" + path)
+    monkeypatch.setattr(components, "html",
+                        lambda markup, **kw: captured.setdefault("markup", markup))
+
+    ok = media_url.render_download_buttons([
+        ("Download CSV", b"a,b\n1,2\n", "text/csv", 'weird "name".csv'),
+        ("Download Excel", b"PK\x03\x04", "application/vnd.ms-excel", "x.xlsx"),
+    ], page="test")
+
+    markup = captured["markup"]
+    assert ok is True
+    assert "createObjectURL" in markup and "fetch(f.url)" in markup
+    assert '<a href="/media' not in markup and "href=\"https://host/media" not in markup
+    assert markup.count("onclick=\"dl(") == 2
+    # The quoted filename survives as JSON, not as a broken JS string literal.
+    assert json.dumps('weird "name".csv') in markup
+    assert 'weird "name".csv</button>' not in markup  # label is HTML-escaped
+
+
+def test_download_buttons_report_failure_when_nothing_can_be_served(monkeypatch):
+    from utils import media_url
+    monkeypatch.setattr(media_url, "serve_bytes", lambda *a, **kw: None)
+    monkeypatch.setattr(media_url, "report_oversized_embed", lambda *a, **kw: None)
+    assert media_url.render_download_buttons(
+        [("CSV", b"x", "text/csv", "x.csv")], page="test") is False
+
+
+# ── ingestion: real-world date labels ───────────────────────────────────
+# Every case below came from a file the data team actually tried to upload,
+# or from the format table in the spec. Before this, five of the six monthly
+# formats parsed and were then silently zeroed by the period-end reindex.
+
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _two_column_frame(dates):
+    return pd.DataFrame({"Date": dates,
+                         "Value": np.arange(len(dates), dtype=float) + 100.0})
+
+
+@pytest.mark.parametrize("label,dates", [
+    ("iso-month-end",   [f"2020-{m:02d}-{d}" for m, d in
+                         [(1,31),(2,29),(3,31),(4,30),(5,31),(6,30),
+                          (7,31),(8,31),(9,30),(10,31),(11,30),(12,31)]]),
+    ("iso-month-start", [f"2020-{m:02d}-01" for m in range(1, 13)]),
+    ("year-month-dash", [f"2020-{m:02d}" for m in range(1, 13)]),
+    ("month-name-year", [f"{m} 2020" for m in MONTH_NAMES]),
+    ("month-name-dash", [f"{m}-2020" for m in MONTH_NAMES]),
+    ("numeric-slash",   [f"{m:02d}/2020" for m in range(1, 13)]),
+])
+def test_every_monthly_label_survives_cleaning(label, dates):
+    """Parsing is not enough: the value must still be there after load_series."""
+    loaded = engine.load_series(_two_column_frame(dates), "Date", "Value", "Monthly")
+    usable = loaded.frame[engine.TARGET_COL].dropna()
+    assert len(usable) == 12, f"{label}: {len(usable)}/12 survived cleaning"
+
+
+@pytest.mark.parametrize("label,dates", [
+    ("straight-apostrophe", ["Dec '22", "Jan '23", "Feb '23"]),
+    ("curly-no-space",      ["Dec’22", "Jan’23", "Feb’23"]),
+    ("curly-with-space",    ["Dec ’22", "Jan ’23", "Feb ’23"]),
+    ("apostrophe-trailing", ["Dec' 22", "Jan' 23", "Feb' 23"]),
+    ("hyphen-two-digit",    ["Dec-22", "Jan-23", "Feb-23"]),
+    ("bare-two-digit",      ["Dec 22", "Jan 23", "Feb 23"]),
+])
+def test_short_year_month_labels_parse(label, dates):
+    got = engine.normalize_dates(pd.Series(dates))
+    assert got.notna().all(), f"{label}: {got.isna().sum()} of {len(dates)} failed"
+    assert [d.year for d in got] == [2022, 2023, 2023]
+    assert [d.month for d in got] == [12, 1, 2]
+
+
+def test_statistical_month_notation_parses():
+    got = engine.normalize_dates(pd.Series(["2020M01", "2020M02", "2020M12"]))
+    assert got.notna().all()
+    assert [d.month for d in got] == [1, 2, 12]
+
+
+def test_a_numeric_column_is_still_refused_as_dates():
+    """The guard that stops a sales column winning date detection must survive."""
+    got = engine.normalize_dates(pd.Series([90000.0, 91000.0, 92000.0]))
+    assert got.isna().all()
+
+
+def test_period_end_files_are_untouched_by_the_snap():
+    """A file that already worked must produce byte-identical dates."""
+    dates = ["2020-01-31", "2020-02-29", "2020-03-31"]
+    loaded = engine.load_series(_two_column_frame(dates), "Date", "Value", "Monthly")
+    assert [str(d.date()) for d in loaded.frame.index] == dates
+
+
+def test_unreadable_cells_are_reported_not_just_counted():
+    frame = _two_column_frame(["2020-01-31", "not a date", "2020-03-31", "???"])
+    loaded = engine.load_series(frame, "Date", "Value", "Monthly")
+    assert loaded.dropped_rows == 2
+    assert "not a date" in loaded.unreadable_dates
+    assert "???" in loaded.unreadable_dates
+
+
+# ── ingestion: values an analyst formatted for reading ──────────────────
+
+@pytest.mark.parametrize("label,raw,expected", [
+    ("thousands",  ["1,234", "5,678"],      [1234.0, 5678.0]),
+    ("currency",   ["$1,234", "$5,678"],    [1234.0, 5678.0]),
+    ("percent",    ["12.5%", "-0.4%"],      [12.5, -0.4]),
+    ("accounting", ["(87)", "1,200"],       [-87.0, 1200.0]),
+    ("spaced",     ["1 234", "5 678"],      [1234.0, 5678.0]),
+    ("nbsp",       ["1 234", "5 678"], [1234.0, 5678.0]),
+])
+def test_formatted_numbers_are_recovered(label, raw, expected):
+    got = engine.to_numeric_values(pd.Series(raw))
+    assert list(got) == expected, label
+
+
+def test_plain_numbers_are_left_alone():
+    got = engine.to_numeric_values(pd.Series([1234.0, 5678.0, 9012.0]))
+    assert list(got) == [1234.0, 5678.0, 9012.0]
+
+
+def test_a_gap_does_not_crash_sarima():
+    """A file with a missing period lost its index freq and SARIMAX raised
+    'No supported index is available'. The data team's file has four."""
+    idx = pd.date_range("2016-01-31", periods=60, freq="ME")
+    values = 1000 + np.arange(60) * 5.0
+    series = pd.Series(values, index=idx).drop(idx[13]).drop(idx[25])
+    assert series.index.freq is None
+    restored = engine.ensure_regular_index(series, "Monthly")
+    assert restored.index.freq is not None
+    assert restored.isna().sum() == 2
+    result = engine.run_sarima(series, "Monthly", 3)
+    assert result["forecast"]["mean"].notna().all()
+
+
+def test_a_gapless_series_is_unchanged_by_the_index_repair():
+    idx = pd.date_range("2016-01-31", periods=24, freq="ME")
+    series = pd.Series(np.arange(24, dtype=float), index=idx)
+    restored = engine.ensure_regular_index(series, "Monthly")
+    assert len(restored) == 24
+    assert restored.notna().all()
+    assert list(restored.values) == list(series.values)

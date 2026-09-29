@@ -25,7 +25,9 @@ Use ``embed_is_safe`` before falling back to inlining anything.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
+import json
+from html import escape
+from typing import Optional, Sequence, Tuple
 
 from utils.server_logger import log_structured_error, log_warning
 
@@ -126,3 +128,90 @@ def report_oversized_embed(byte_count: int, what: str, page: str = "") -> None:
         f"{WEBSOCKET_SAFE_BYTES/1e6:.2f} MB websocket-safe limit; "
         f"page={page or 'unknown'}"
     )
+
+
+def render_download_buttons(
+    files: Sequence[Tuple[str, bytes, str, str]],
+    page: str = "",
+    height: int = 52,
+    align: str = "flex-start",
+) -> bool:
+    """Render one row of download buttons that fetch into a Blob.
+
+    ``files`` is a sequence of ``(label, data, mimetype, filename)``. Returns
+    False when nothing could be served.
+
+    Why not ``st.download_button``. That widget renders a real
+    ``<a href="/media/..." download>`` anchor and reruns the script on click.
+    Two things go wrong with it. A desktop download manager that hooks anchor
+    clicks refetches the URL as a fresh request with no session cookie and
+    reports a connection failure instead of saving the file. And the rerun
+    re-registers the payload, so bytes that are not identical run to run --
+    an openpyxl workbook stamps the current time into its zip entries -- land
+    on a new ``/media`` hash while the browser is still fetching the old one,
+    which the end-of-run orphan sweep has just deleted.
+
+    A button inside a component iframe reruns nothing, and the bytes are
+    already in the page by the time the anchor is clicked, so neither applies.
+    This is the pattern the filings, transcript, market-data and forecasting
+    exports already use.
+    """
+    entries = []
+    for label, data, mimetype, filename in files:
+        url = serve_bytes(data, mimetype, filename, page=page)
+        if not url:
+            report_oversized_embed(len(data or b""), f"{label} {filename}", page=page)
+            continue
+        entries.append({"url": absolute_app_url(url), "name": filename, "label": label})
+    if not entries:
+        return False
+
+    buttons = "".join(
+        f'<button onclick="dl({i})">'
+        f'<span class="material-symbols-outlined">download</span>'
+        f'&nbsp;&nbsp;{escape(e["label"])}</button>'
+        for i, e in enumerate(entries)
+    )
+    payload = json.dumps([{"url": e["url"], "name": e["name"]} for e in entries])
+    markup = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=download" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{display:flex;justify-content:{align};align-items:center;gap:10px;height:{height}px;
+  background:transparent;font-family:'Inter','Roboto',Helvetica,Arial,sans-serif;}}
+button{{background:transparent;border:1px solid #D62E2F;color:#D62E2F;border-radius:4px;
+  padding:7px 12px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;
+  transition:background 0.15s,color 0.15s;letter-spacing:0.01em;
+  display:flex;align-items:center;gap:6px;}}
+button:hover{{background:#D62E2F;color:#fff;}}
+button:active{{opacity:0.85;}}
+.material-symbols-outlined{{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;font-size:18px;}}
+</style></head><body>
+{buttons}
+<script>
+var FILES={payload};
+function dl(i){{
+  var f=FILES[i];
+  fetch(f.url).then(function(r){{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.blob();
+  }}).then(function(blob){{
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url; a.download=f.name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){{URL.revokeObjectURL(url);}},200);
+  }}).catch(function(e){{console.error("Download failed:",f.name,e);}});
+}}
+</script></body></html>"""
+    try:
+        from streamlit.components.v1 import html as component_html
+        component_html(markup, height=height, scrolling=False)
+        return True
+    except Exception as exc:
+        log_structured_error(
+            exc, page=page or "media_url", component="render_download_buttons",
+            operation="render_component", context=", ".join(e["name"] for e in entries),
+        )
+        return False

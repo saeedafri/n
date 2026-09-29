@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "2a1b3663-4e3d-475e-9aed-a0d5592a46fb",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-4-prophet.workflow.json",
+  "output": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-tab-4-prophet.html",
+  "specification": {
+    "sha256": "3c3f6dcf31dc15f58b5e31561c4cceb9859723af5c477d6b9790ffbc6a9b8ce2",
+    "bytes": 5879
+  },
+  "artifact": {
+    "sha256": "31b770096d4eee9b7ce62ae4726cd99ffbd1caa84281f6c7f2b19445277bd0a2",
+    "bytes": 755233
+  }
+}

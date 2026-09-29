@@ -230,6 +230,28 @@ def test_a_raw_filing_label_resolves_like_its_display_name():
         assert node_for_label(raw) == node_for_label(shown)
 
 
+def test_a_generic_tail_does_not_hide_a_known_place():
+    """A filer writing "APAC Region" means APAC. The workbook had "APAC
+    Geographic Region" but not this spelling, and both new labels that arrived
+    in the 2026-09-27 cache rebuild were of exactly this shape."""
+    for label, expected in [
+        ("APAC Region", "APAC (Asia-Pacific)"),
+        ("EMEA Region", "EMEA (Europe, Middle East, and Africa)"),
+        ("Europe Segment", "Europe"),
+        ("Japan Operations", "Japan"),
+    ]:
+        node = node_for_label(label)
+        assert node and node["node"] == expected, f"{label} -> {node}"
+
+
+def test_trimming_never_steals_a_real_name():
+    """'Andean Region' is a place in its own right — the trim must not turn it
+    into 'Andean'. Every node name has to still resolve to itself."""
+    for name in HIERARCHY["nodes"]:
+        node = node_for_label(name)
+        assert node and node["node"] == name, f"{name} -> {node}"
+
+
 def test_non_places_are_flagged_as_excluded():
     assert is_excluded("Corporate Segment")
     assert not is_excluded("United States")

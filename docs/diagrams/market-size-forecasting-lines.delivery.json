@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "63590e22-3a83-45a6-953f-fa6b850f7bc8",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-lines.architecture.json",
+  "output": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/docs/diagrams/market-size-forecasting-lines.html",
+  "specification": {
+    "sha256": "e6c01864e3eca092201921ee08f099f17cd47ca21a431028cbbba197c43fbfa6",
+    "bytes": 17213
+  },
+  "artifact": {
+    "sha256": "22db4ecafba33ed7d42ef03352b17119a06e244929307d567a26bf80d17a941f",
+    "bytes": 809171
+  }
+}

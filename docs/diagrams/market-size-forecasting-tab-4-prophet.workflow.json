@@ -1,0 +1,241 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Prophet tab — trend shifts and seasonality, no macro data",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Series / output"
+        },
+        "backend": {
+          "label": "Model step"
+        },
+        "database": {
+          "label": "Trend shifts"
+        },
+        "security": {
+          "label": "Quality check"
+        }
+      }
+    },
+    "output": "market-size-forecasting-tab-4-prophet.html",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    }
+  },
+  "lanes": [
+    {
+      "id": "inputs",
+      "label": "Inputs"
+    },
+    {
+      "id": "model",
+      "label": "Prophet Model"
+    }
+  ],
+  "mainPath": [
+    "inputs",
+    "fit",
+    "changepoints",
+    "crossval",
+    "validate",
+    "forecast"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "inputs"
+    ],
+    "allowedTerminals": [
+      "forecast"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "inputs",
+      "lane": "inputs",
+      "col": 0,
+      "type": "frontend",
+      "width": 140,
+      "label": "Series + flag",
+      "sublabel": "series + covid_shock",
+      "tag": "no FRED on this tab",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 298,
+          "label": "Cleaned series"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "covid_shock regressor"
+        }
+      ]
+    },
+    {
+      "id": "fit",
+      "lane": "model",
+      "col": 1,
+      "type": "backend",
+      "label": "Fit Prophet",
+      "sublabel": "trend + seasonality",
+      "width": 140,
+      "tag": "mode from the data",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Trend and seasonality fit"
+        }
+      ]
+    },
+    {
+      "id": "changepoints",
+      "lane": "model",
+      "col": 2,
+      "type": "database",
+      "label": "Changepoints",
+      "sublabel": "where the trend shifted",
+      "width": 140,
+      "tag": "rate change, not spike",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Changepoint extraction"
+        }
+      ]
+    },
+    {
+      "id": "crossval",
+      "lane": "model",
+      "col": 3,
+      "type": "backend",
+      "label": "Rolling CV",
+      "sublabel": "with vs without the flag",
+      "width": 140,
+      "tag": "negative = didn't help",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Rolling cross-validation"
+        }
+      ]
+    },
+    {
+      "id": "validate",
+      "lane": "model",
+      "col": 4,
+      "type": "security",
+      "width": 140,
+      "label": "Walk-forward",
+      "sublabel": "+ residual checks",
+      "tag": "compare this, not CV",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 850,
+          "label": "Walk-forward block"
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 648,
+          "label": "Ljung-Box, Shapiro, Durbin-Watson"
+        }
+      ]
+    },
+    {
+      "id": "forecast",
+      "lane": "model",
+      "col": 5,
+      "type": "frontend",
+      "label": "Forecast",
+      "sublabel": "with confidence band",
+      "width": 140,
+      "tag": "quote the band",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1210,
+          "label": "Forecast chart and export"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "inputs",
+      "to": "fit",
+      "label": "decompose the curve",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "fit",
+      "to": "changepoints",
+      "label": "date the shifts",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "changepoints",
+      "to": "crossval",
+      "label": "flag worth it?",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "crossval",
+      "to": "validate",
+      "label": "score on equal terms",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "validate",
+      "to": "forecast",
+      "label": "project",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What it signifies",
+      "items": [
+        "A curve split into a bending trend plus a repeating seasonal shape",
+        "Changepoints are dates where the growth rate actually changed",
+        "covid_shock marks Mar–Jun 2020 so the crash is not read as trend",
+        "Regressor value in points is how much that flag improved accuracy"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Why it is used",
+      "items": [
+        "It handles trend breaks that SARIMA and SARIMAX smooth over",
+        "It needs no stationarity and no order selection — nothing to tune",
+        "It copes with gaps and irregular history better than the ARIMA family",
+        "Changepoint dates are directly useful in a written market narrative"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Read it this way",
+      "items": [
+        "A negative regressor value means the COVID flag did not help here",
+        "Cross-validation is skipped on short history — walk-forward still runs",
+        "Many changepoints on a short series usually means it is overfitting",
+        "No FRED data is used, so this tab cannot answer scenario questions"
+      ]
+    }
+  ]
+}

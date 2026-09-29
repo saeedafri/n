@@ -1,0 +1,231 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Diagnostics tab — what the models are being asked to fit",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Your data"
+        },
+        "backend": {
+          "label": "Statistical test"
+        },
+        "database": {
+          "label": "Signal split"
+        },
+        "security": {
+          "label": "Data warning"
+        }
+      }
+    },
+    "output": "market-size-forecasting-tab-1-diagnostics.html",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    }
+  },
+  "lanes": [
+    {
+      "id": "data",
+      "label": "Your Series"
+    },
+    {
+      "id": "checks",
+      "label": "Pre-modelling Checks"
+    }
+  ],
+  "mainPath": [
+    "series",
+    "stationarity",
+    "seasonality",
+    "outliers",
+    "decomposition",
+    "fredstatus"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "series"
+    ],
+    "allowedTerminals": [
+      "fredstatus"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "series",
+      "lane": "data",
+      "col": 0,
+      "type": "frontend",
+      "label": "Cleaned series",
+      "sublabel": "records · mean · range",
+      "tag": "after dedupe + gap fill",
+      "width": 175,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "Records, mean, range, date span"
+        }
+      ]
+    },
+    {
+      "id": "stationarity",
+      "lane": "checks",
+      "col": 1,
+      "type": "backend",
+      "label": "ADF + KPSS",
+      "sublabel": "does the level drift?",
+      "tag": "two tests, on purpose",
+      "width": 175,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "ADF and KPSS tests"
+        }
+      ]
+    },
+    {
+      "id": "seasonality",
+      "lane": "checks",
+      "col": 2,
+      "type": "backend",
+      "label": "Seasonality",
+      "sublabel": "strength · peak · trough",
+      "tag": "additive or multiplicative",
+      "width": 175,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "Strength, mode, peak and trough"
+        }
+      ]
+    },
+    {
+      "id": "outliers",
+      "lane": "checks",
+      "col": 3,
+      "type": "security",
+      "label": "Outliers",
+      "sublabel": "anything beyond |z| > 3",
+      "width": 175,
+      "tag": "check these rows first",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "Detection beyond three sigma"
+        }
+      ]
+    },
+    {
+      "id": "decomposition",
+      "lane": "checks",
+      "col": 4,
+      "type": "database",
+      "label": "Decomposition",
+      "sublabel": "trend · seasonal · leftover",
+      "width": 175,
+      "tag": "needs 2 full cycles",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 589,
+          "label": "Trend, season, residual split"
+        }
+      ]
+    },
+    {
+      "id": "fredstatus",
+      "lane": "data",
+      "col": 5,
+      "type": "frontend",
+      "label": "FRED pull status",
+      "sublabel": "how many of 32 loaded",
+      "width": 175,
+      "tag": "SARIMAX runs only",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1030,
+          "label": "Pull-status expander"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "series",
+      "to": "stationarity",
+      "label": "stationary?",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "stationarity",
+      "to": "seasonality",
+      "label": "a cycle?",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "seasonality",
+      "to": "outliers",
+      "label": "any shocks?",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "outliers",
+      "to": "decomposition",
+      "label": "split it",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "decomposition",
+      "to": "fredstatus",
+      "label": "then the macro pull",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What it signifies",
+      "items": [
+        "The shape of your data before any model touches it",
+        "Stationary means the level and spread stay put over time",
+        "Seasonal strength is how much of the movement is a repeating cycle",
+        "Outliers are single periods far outside the normal range"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Why it is used",
+      "items": [
+        "Non-stationary data needs differencing — this is where that is decided",
+        "The seasonal period s comes from here and drives every model",
+        "An unexplained outlier usually means a data problem, not a real event",
+        "Decomposition shows whether trend or season dominates"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Read it this way",
+      "items": [
+        "Both tests saying Non-stationary is normal for sales — not a failure",
+        "Peak and trough month should match what the business actually does",
+        "Outliers listed? Check those rows in your file before trusting anything",
+        "No export buttons here — this tab is context, not output"
+      ]
+    }
+  ]
+}

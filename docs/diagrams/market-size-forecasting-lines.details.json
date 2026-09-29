@@ -1,0 +1,728 @@
+{
+  "upload": {
+    "layer": "Upload and detect",
+    "title": "st.file_uploader",
+    "summary": "The drop zone at the top of the page. It accepts a spreadsheet or CSV up to 200 MB and reads it only far enough to offer you column choices.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Market size requests come from different third-party sources every time and vary by analyst, so the dataset is uploaded rather than read from our database. Only the FRED macro predictors are wired to a live API."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — A file with at least one date-like column and one numeric column.",
+          "Gives — Raw rows, and the three dropdowns underneath."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Nothing is computed on upload. The models only start when you press Run analysis.",
+          "200 MB is far more than this needs. A market size history is usually a few hundred rows."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _render_controls"
+  },
+  "readfile": {
+    "layer": "Upload and detect",
+    "title": "read_excel / read_csv",
+    "summary": "Pandas reads the file into a table in memory. Every column comes across, whatever is in it.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "The page has to see all the columns before it can guess which two matter."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The uploaded bytes.",
+          "Gives — A table, untouched."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Extra columns are harmless. They are ignored once you pick the two you want.",
+          "A merged-cell header row usually reads as a data row. Check the preview table."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _render_controls"
+  },
+  "datecol": {
+    "layer": "Upload and detect",
+    "title": "normalize_dates",
+    "summary": "Turns whatever is in your date column into real dates. It understands real dates, bare years like 2016, and quarter labels like 2024-Q3.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Without this, half the files analysts receive would be rejected. Different sources write periods differently and none of them agree."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The column you picked as the date.",
+          "Gives — Real dates, or a blank where a row could not be read."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "An all-numeric column is deliberately refused as a date column. A sales value like 90000.0 is a perfectly valid date if you read it as epoch nanoseconds, and it would otherwise outscore your real date column.",
+          "Rows that cannot be read are dropped and counted. The count is shown on the results header — a large one means the wrong column was picked."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → normalize_dates"
+  },
+  "valcol": {
+    "layer": "Upload and detect",
+    "title": "to_numeric",
+    "summary": "Converts your value column to numbers. Anything that is not a number becomes a blank rather than an error.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Real spreadsheets contain n/a, footnote markers, thousands separators and stray text. Failing the whole run on one bad cell would be useless."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The column you picked as the value.",
+          "Gives — Numbers, with blanks where a cell was not one."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Currency symbols and commas usually convert fine. Text like ~12,000 est. becomes a blank.",
+          "Blanks survive into the series, so a column of mostly text produces an almost-empty forecast."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → load_series"
+  },
+  "cadence": {
+    "layer": "Upload and detect",
+    "title": "FREQ_CONFIGS",
+    "summary": "The cadence lookup table. Choosing Weekly, Monthly, Quarterly or Annual selects one row of settings that every later stage reads.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "This single choice is the most consequential one on the page. It sets the seasonal period s, the ceiling on the Granger lag, the default and maximum horizon, and how long the validation window is."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The cadence, detected or overridden by you.",
+          "Gives — s, lag cap, horizon defaults, validation window, decomposition period."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Monthly gives s = 12, quarterly 4, weekly 52. Annual has no within-year cycle at all.",
+          "Weekly at s = 52 is by far the most expensive to fit. That is why weekly runs feel slow the first time.",
+          "If detection picks the wrong cadence, override it. Everything downstream inherits the mistake."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → FREQ_CONFIGS"
+  },
+  "clean": {
+    "layer": "Upload and detect",
+    "title": "load_series",
+    "summary": "The cleaner. It drops rows whose date could not be read, sums rows that share a period, then lays the result on a gap-free calendar at your cadence.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Every model below needs exactly one value per period with no holes. Two rows for March, or a missing April, breaks the maths silently rather than loudly."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The parsed dates and numbers.",
+          "Gives — One value per period, in order, no gaps."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Duplicate periods are summed, not averaged. If your file has one row per region per month, you get the national total — which may or may not be what you wanted.",
+          "Dates must be period-END. 2016-01-31, not 2016-01-01. A first-of-period file lands on labels that match nothing and every value becomes blank, which is the 0 usable rows after cleaning message."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → load_series"
+  },
+  "models": {
+    "layer": "Configure and orchestrate",
+    "title": "model toggles",
+    "summary": "Three checkboxes choosing which models to fit. Any combination works, including just one.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "The three answer different questions. SARIMAX asks whether the economy explains your series, SARIMA asks what the series says alone, Prophet asks where the trend bent. Running all three is what makes the Comparison tab worth reading."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — Which fits run, and whether the FRED branch runs at all."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Untick SARIMAX and the entire FRED pull, Granger scan and combination search are skipped. That is the single biggest speed lever on the page.",
+          "One model alone gives you a number with no way to judge it."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _render_controls"
+  },
+  "params": {
+    "layer": "Configure and orchestrate",
+    "title": "horizon + Granger lag",
+    "summary": "Two sliders. Horizon is how many periods ahead to project. Max Granger lag is how far back to look when testing whether a macro series leads yours.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Both have to be bounded by how much history you actually have. The caps come from the cadence, so you cannot ask for a 60-period weekly forecast off two years of data."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — Your cadence, which sets both ceilings.",
+          "Gives — Forecast length, and the depth of the driver search."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "A longer horizon is not more information. Confidence bands widen quickly, and for SARIMAX the macro drivers run out before the end.",
+          "A larger Granger lag means many more tests and a slower run, and raises the chance of a coincidental match."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _render_controls"
+  },
+  "run": {
+    "layer": "Configure and orchestrate",
+    "title": "_run_analysis",
+    "summary": "The conductor behind the Run analysis button. It runs diagnostics, then the FRED branch if SARIMAX is ticked, then each model, then scores them — in one pass.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Streamlit re-runs the whole script on every widget change. Fitting models on each interaction would cost minutes per click, so the work is deliberately done once and cached."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The cleaned series and your settings.",
+          "Gives — Diagnostics, per-model results, and per-stage timings."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Nothing at all runs when the page loads. Models start only on the button.",
+          "The timing strip at the bottom of the results shows where the time actually went."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _run_analysis"
+  },
+  "cachemem": {
+    "layer": "Configure and orchestrate",
+    "title": "@st.cache_data",
+    "summary": "Each stage is cached on exactly the inputs it depends on, in memory, for an hour.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It is why nudging one Prophet setting refits Prophet only, instead of refitting SARIMA and re-pulling 32 FRED series."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The inputs of one stage.",
+          "Gives — That stage's result, instantly on a repeat."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "A repeat run with identical settings comes back in milliseconds.",
+          "In-memory cache dies with the process, which is why there is a disk layer underneath."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → CACHE_TTL, _through_disk"
+  },
+  "cachedisk": {
+    "layer": "Configure and orchestrate",
+    "title": "/home disk cache",
+    "summary": "Underneath the memory cache, results are written to the persistent /home share — FRED data for 24 hours, fitted results for a week.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "/home survives both a restart and an app deploy. Without it, every deploy would mean every analyst re-pulling FRED and refitting from cold."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — A fingerprint of the series and settings.",
+          "Gives — A stored result, or a miss that triggers the real work."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Oldest entries are evicted once the cache exceeds its cap.",
+          "A changed series fingerprint is a miss, so editing one cell in your file means a full refit."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → disk_cache_get / disk_cache_put"
+  },
+  "fredapi": {
+    "layer": "FRED macro branch — SARIMAX only",
+    "title": "FRED API",
+    "summary": "Pulls 32 US macro indicators from the St. Louis Fed over 16 parallel threads. This is everything SARIMAX needs from outside your file.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "SARIMAX is the only model here that uses outside information. These 32 are the indicators the data science team picked as plausible drivers of US retail demand."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Needs — A FRED API key. It is a free, rate-limited key for public data.",
+          "Gives — 32 monthly series, plus a per-variable status list shown at the foot of Diagnostics."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "If the key is missing or rejected, SARIMAX is skipped, not failed. SARIMA and Prophet still run and the comparison still renders — so read the header before treating it as complete.",
+          "These are US series. For a UK or India market size there is no appropriate driver here; use SARIMA or Prophet."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → fetch_fred_monthly, FRED_VARS"
+  },
+  "fredcache": {
+    "layer": "FRED macro branch — SARIMAX only",
+    "title": "FRED disk cache",
+    "summary": "Checked before any network call. If the stored copy is under 24 hours old it is used and the API is not touched.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Macro data updates monthly at best. Pulling 32 series on every run would waste the rate limit and add seconds for no new information."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — The cached 32 series, or a miss that triggers the pull."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "The cache is keyed on the API key, so a key change forces a fresh pull.",
+          "It lives on /home, so it survives a deploy."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → read_fred_cache / write_fred_cache"
+  },
+  "resample": {
+    "layer": "FRED macro branch — SARIMAX only",
+    "title": "resample_fred_to_freq",
+    "summary": "Lines the macro series up with your cadence. Monthly to quarterly averages; monthly to weekly carries each value forward across the weeks of its month.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "You cannot regress a weekly series on a monthly one until both sit on the same calendar."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — 32 monthly series and your cadence.",
+          "Gives — 32 series on your calendar."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Forward-filling does not create weekly detail. On a weekly run the macro signal is still monthly in resolution — the page says so. SARIMA and Prophet may read week-level patterns better."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → resample_fred_to_freq"
+  },
+  "granger": {
+    "layer": "FRED macro branch — SARIMAX only",
+    "title": "granger_scan",
+    "summary": "For each of the 32, tests one question: does this series' past help predict your series, beyond what your own past already predicts? Reports the lag and a p-value.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Handing all 32 predictors to the model would fit the noise beautifully and forecast nothing. This narrows the field before any model is built."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — Your series and the 32 aligned macro series.",
+          "Gives — A shortlist, each with the lag at which it matters."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "This is correlation in time, not proven causation. With 32 series tested, some will look significant by chance.",
+          "Series are differenced to stationarity first, capped at 3 rounds. If the cap is hit the page says the rankings are indicative only.",
+          "P-values run to 1e-10, which is why they are shown in scientific notation rather than rounded to 0."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → granger_scan"
+  },
+  "lagged": {
+    "layer": "FRED macro branch — SARIMAX only",
+    "title": "build_lagged_frame",
+    "summary": "Shifts each surviving driver by the lag the scan found and lines them up as columns beside your series.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "A driver that leads by four months is only useful if it is actually offset by four months. This builds the table the model is fitted on."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The shortlist and their lags.",
+          "Gives — One table: your series, plus one column per lagged driver."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Lagging costs you history at the start of the series. A large lag on a short series leaves less to fit."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → build_lagged_frame"
+  },
+  "rank": {
+    "layer": "FRED macro branch — SARIMAX only",
+    "title": "rank_exog_combinations",
+    "summary": "Tries combinations of drivers, fits a model for each, and ranks them by error on data held back from fitting.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "The best single predictor is rarely the best set. Two mediocre drivers that disagree with each other often beat one strong driver on its own."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — A ranked table. Rank 0 is the lowest error."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "The tab shows the top 10, but the rank box accepts any rank — pick another and SARIMAX refits on it in a few seconds.",
+          "The chosen driver list is frequently more useful than the forecast, because it gives a reason for the number."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → rank_exog_combinations"
+  },
+  "diag": {
+    "layer": "Diagnostics and fits",
+    "title": "data_diagnostics",
+    "summary": "Measures the series before any model touches it: size and spread, two stationarity tests, seasonal strength and mode, the peak and trough period of the year, and outliers beyond three standard deviations.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It decides how much differencing the models apply, and it is your last chance to catch a data error before it distorts every forecast."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — The eight cards on the Diagnostics tab."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Both tests reporting Non-stationary is normal for sales data. It is not a failure — it tells the models to difference.",
+          "ADF and KPSS are run together on purpose and can disagree: ADF tests for a unit root, KPSS tests the opposite. Disagreement is informative.",
+          "Peak and trough should match what the business actually does. If a retailer peaks in month 4 rather than 11, suspect the date column.",
+          "An outlier is far more often a data error than a real event. Open those rows before trusting anything below."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → data_diagnostics"
+  },
+  "decomp": {
+    "layer": "Diagnostics and fits",
+    "title": "seasonal_decompose",
+    "summary": "Splits the series into three curves: the underlying trend, the repeating seasonal shape, and whatever is left over.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It shows at a glance whether trend or season dominates, and whether the leftover is small (well-behaved) or large (something structural is unmodelled)."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — Three stacked charts on one time axis."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Needs at least two full seasonal cycles. On shorter history the page says so instead of drawing something misleading.",
+          "Annual data has no within-year cycle, so it is skipped with a note rather than an error."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → data_diagnostics"
+  },
+  "sarimax": {
+    "layer": "Diagnostics and fits",
+    "title": "run_sarimax",
+    "summary": "Fits your series together with the chosen macro drivers, then projects forward.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It is the only model here that can answer a scenario question, and the only one that gives a reason for the forecast rather than just a shape."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The cleaned series and the winning driver combination.",
+          "Gives — A forecast with bounds, residuals, and the exact specification used."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Watch the real macro periods figure. If it is below your horizon, the drivers run out and later periods fall back to a neutral baseline — the far end is weaker than the near end.",
+          "If SARIMAX does not beat SARIMA, the macro drivers added nothing. That is a real finding, not a broken run."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → run_sarimax"
+  },
+  "sarima": {
+    "layer": "Diagnostics and fits",
+    "title": "run_sarima",
+    "summary": "Fits your series using only its own past. Many candidate orders are tried automatically and the one with the lowest AIC wins, written ARIMA(p,d,q)x(P,D,Q,s).",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "No external dependency means it cannot break on a missing API key, and it is the fair baseline SARIMAX has to beat to justify its complexity."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The cleaned series, nothing else.",
+          "Gives — The chosen order, a forecast with bounds, and residuals."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "p is how far back it looks, d how many times it differenced, q how long a shock echoes. Capitals repeat those once per season, and s is the season length.",
+          "AIC compares orders within this model only. Never compare it against another model — use the Comparison tab's MAPE.",
+          "On weekly data with under 8 years, seasonal terms P and Q are not searched and come back 0. Seasonal differencing still removes the annual pattern, and the fit is far quicker."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → run_sarima, seasonal_terms_supported"
+  },
+  "prophet": {
+    "layer": "Diagnostics and fits",
+    "title": "run_prophet",
+    "summary": "Splits the curve into a bending trend plus a repeating seasonal shape, with one flag marking March to June 2020. Reports where the trend changed and whether that flag helped.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "It catches trend bends that SARIMA and SARIMAX smooth over, needs no stationarity and no order selection, and copes with gaps better than the ARIMA family."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Takes — The cleaned series plus the covid_shock flag. No FRED data.",
+          "Gives — A forecast with bounds, changepoint dates, and a cross-validation score."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Without the COVID flag the 2020 collapse and rebound read as a change in the underlying trend, distorting everything after it.",
+          "A negative regressor value means the flag did not help on this series. That is a legitimate result.",
+          "Many changepoints on a short series usually means it is chasing noise.",
+          "Its cross-validation number is Prophet's own check and is not comparable to another model's MAPE."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → run_prophet"
+  },
+  "walkfwd": {
+    "layer": "Score and deliver",
+    "title": "walk-forward",
+    "summary": "Each model is refitted repeatedly on a growing window and asked to predict the next block, then scored on how close it got.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "How well a model fits the data it was trained on tells you almost nothing. This is the only number here measured on periods the model never saw."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — MAPE and RMSE per model, drawn against actuals."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "This is the score the Comparison tab ranks on, and the only one comparable across all three models.",
+          "Read it beside the residual tests. Good MAPE with failing residuals means the confidence band is too narrow."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → validation_window, run_sarima"
+  },
+  "resid": {
+    "layer": "Score and deliver",
+    "title": "residual_diagnostics",
+    "summary": "Three tests on what the model could not explain. Ljung-Box looks for leftover pattern, Shapiro-Wilk for non-normal errors, Durbin-Watson for correlation between consecutive errors.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Residuals should look like noise. Structure left in them means real signal is unmodelled and the forecast is more uncertain than it claims."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — Three statistics with pass or fail, plus suggested fixes."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "A failing test does not invalidate the forecast, but it does mean the confidence band understates the true uncertainty.",
+          "Failing Ljung-Box usually means the order is too small for the seasonality present."
+        ]
+      }
+    ],
+    "source": "market_size_forecast_service.py → residual_diagnostics"
+  },
+  "compare": {
+    "layer": "Score and deliver",
+    "title": "comparison tab",
+    "summary": "Puts all three models side by side on identical held-out periods with the identical error measure, marks the lowest error BEST, and reports how far apart the three forecasts are.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "Three independent models landing in the same place is far stronger evidence than any single model. The spread is the closest thing here to an honest uncertainty estimate."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — A card per model, a summary table, the period-by-period figures, and an agreement verdict."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "Agreement under 5% — the midpoint is a reasonable working forecast.",
+          "Above 5% — investigate the drivers before quoting anything.",
+          "BEST means lowest error on history. It does not guarantee best in future, so read the spread too."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _render_comparison_tab, forecast_spread"
+  },
+  "export": {
+    "layer": "Score and deliver",
+    "title": "_export_buttons",
+    "summary": "Download buttons on each model tab, and one on Comparison that exports all three models in a single file with lower and upper bounds.",
+    "sections": [
+      {
+        "heading": "Why it is there",
+        "items": [
+          "The forecast has to leave the page to be useful — into a model, a deck, or a client note."
+        ]
+      },
+      {
+        "heading": "In and out",
+        "items": [
+          "Gives — Date, Model, Forecast, Lower_CI, Upper_CI."
+        ]
+      },
+      {
+        "heading": "Watch out for",
+        "items": [
+          "The Diagnostics tab has no export buttons. Switch to a model tab or Comparison first.",
+          "Files are named for their content, such as prophet_forecast.csv. A long hex filename means an old build.",
+          "Quote a band across the horizon, never a single number."
+        ]
+      }
+    ],
+    "source": "market_size_forecasting.py → _export_buttons"
+  }
+}

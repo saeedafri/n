@@ -1,0 +1,237 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "SARIMAX tab — does US macro data explain this series?",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "external": {
+          "label": "FRED API"
+        },
+        "backend": {
+          "label": "Model step"
+        },
+        "database": {
+          "label": "Driver ranking"
+        },
+        "frontend": {
+          "label": "Output"
+        }
+      }
+    },
+    "output": "market-size-forecasting-tab-2-sarimax.html",
+    "repository": {
+      "url": "https://github.com/saeedafri/n",
+      "revision": "267d4de37100bf4cb9d9f9213c3cb973fbacb6ce",
+      "link_mode": "local-only"
+    }
+  },
+  "lanes": [
+    {
+      "id": "macro",
+      "label": "FRED Macro Drivers"
+    },
+    {
+      "id": "model",
+      "label": "SARIMAX Model"
+    }
+  ],
+  "mainPath": [
+    "fred",
+    "granger",
+    "combos",
+    "fit",
+    "walkforward",
+    "forecast"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "fred"
+    ],
+    "allowedTerminals": [
+      "forecast"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "fred",
+      "lane": "macro",
+      "col": 0,
+      "type": "external",
+      "label": "32 FRED series",
+      "sublabel": "US macro indicators",
+      "tag": "cached 24 h",
+      "width": 145,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 359,
+          "label": "FRED pull and disk cache"
+        }
+      ]
+    },
+    {
+      "id": "granger",
+      "lane": "macro",
+      "col": 1,
+      "type": "backend",
+      "label": "Granger test",
+      "sublabel": "whose past predicts yours?",
+      "tag": "p-value per lag",
+      "width": 145,
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1000,
+          "label": "Granger causality scan"
+        }
+      ]
+    },
+    {
+      "id": "combos",
+      "lane": "macro",
+      "col": 2,
+      "type": "database",
+      "label": "Rank combos",
+      "sublabel": "ranked by held-out RMSE",
+      "width": 145,
+      "tag": "rank 0 = lowest RMSE",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1043,
+          "label": "Combination ranking by RMSE"
+        }
+      ]
+    },
+    {
+      "id": "fit",
+      "lane": "model",
+      "col": 3,
+      "type": "backend",
+      "label": "Fit SARIMAX",
+      "sublabel": "your series + drivers",
+      "width": 145,
+      "tag": "watch macro coverage",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1086,
+          "label": "SARIMAX fit with drivers"
+        }
+      ]
+    },
+    {
+      "id": "walkforward",
+      "lane": "model",
+      "col": 4,
+      "type": "backend",
+      "label": "Walk-forward",
+      "sublabel": "MAPE on unseen periods",
+      "width": 145,
+      "tag": "goes to Comparison",
+      "sources": [
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 1104,
+          "label": "Walk-forward block",
+          "end_line": 1106
+        },
+        {
+          "path": "app/data/market_size_forecast_service.py",
+          "line": 709,
+          "label": "Validation window size"
+        }
+      ]
+    },
+    {
+      "id": "forecast",
+      "lane": "model",
+      "col": 5,
+      "type": "frontend",
+      "label": "Forecast",
+      "sublabel": "with confidence band",
+      "width": 145,
+      "tag": "quote the band",
+      "sources": [
+        {
+          "path": "app/pages/market_size_forecasting.py",
+          "line": 1210,
+          "label": "Forecast chart and export"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "fred",
+      "to": "granger",
+      "label": "test each",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "granger",
+      "to": "combos",
+      "label": "keep significant",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "combos",
+      "to": "fit",
+      "label": "best set",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "fit",
+      "to": "walkforward",
+      "label": "score",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "walkforward",
+      "to": "forecast",
+      "label": "project",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What it signifies",
+      "items": [
+        "Your series explained partly by outside economic conditions",
+        "Granger significance = that series' past helps predict yours",
+        "The combination table is every driver set tried, best first",
+        "You can refit on any rank to see a different driver set"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Why it is used",
+      "items": [
+        "It is the only model here that can answer scenario questions",
+        "Macro drivers give a reason for the forecast, not just a shape",
+        "Useful when the market moves with employment, rates or spending",
+        "The driver list itself is often the insight, not the number"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Read it this way",
+      "items": [
+        "Granger shows correlation in time, not proven causation",
+        "Real macro periods < horizon means later periods use a neutral baseline",
+        "FRED is monthly, so weekly runs get forward-filled macro values",
+        "Predictors are US-only — ignore this tab for non-US market sizes"
+      ]
+    }
+  ]
+}
