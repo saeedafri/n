@@ -1142,6 +1142,14 @@ try:
             _logout_guard = True
             slog_warning("[LOGIN] __logout_guard set")
         if not _logout_guard and not st.session_state.get("_auth_invalidated"):
+            # Local dev bypass (APP_ENV=LOCAL + DEBUG — the same gate as require_auth;
+            # never true on STG/PROD). There is no login cookie locally, so the
+            # restore below never fired and the root URL always stopped here.
+            if (os.getenv("APP_ENV", "").upper() == "LOCAL"
+                    and os.getenv("DEBUG", "").lower() in ("true", "1", "yes")):
+                from core.auth_manager import require_auth as _require_auth
+                if _require_auth():
+                    st.switch_page("pages/home.py")
             # ── FAST RESTORE: st.context.cookies sync read with timing + overlay ──
             import urllib.parse as _urlparse
             _t_restore_start = perf_counter()

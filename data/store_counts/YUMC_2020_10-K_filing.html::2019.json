@@ -1,0 +1,14 @@
+{
+ "ticker": "YUMC",
+ "fiscal_year": 2019,
+ "value": 9200,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "nd “units” are used interchangeably. General We are the largest restaurant company in China in terms of system sales, with $8.8 billion of revenues and 9,200 restaurants as of year-end 2019. Our growing restaurant base consists o",
+ "fye_date": "2019-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YUMC/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

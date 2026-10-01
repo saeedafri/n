@@ -24,6 +24,7 @@ import re
 import textwrap
 import threading
 import time
+import uuid
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
@@ -190,8 +191,7 @@ if HAS_AGGRID:
           return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
         });
         this.values = order;
-        var pre = (fp && fp.preselected) ? fp.preselected : null;
-        this.selected = pre ? pre.slice() : null;
+        this.selected = null;
       }
       render(term) {
         var self = this;
@@ -274,6 +274,11 @@ if HAS_AGGRID:
           this.openSnapshot = now;
           window.__agFilterFlush = true;
           this.params.filterChangedCallback();
+          try {
+            var ctx = this.params.context || {};
+            window.parent.sessionStorage.setItem('mdp-grid-filter:' + ctx.gridKey,
+              JSON.stringify({sig: ctx.dataSig, model: this.params.api.getFilterModel()}));
+          } catch (e) {}
         }
       }
     }
@@ -386,6 +391,15 @@ from data.watchlist_service import (
 # Remove this block once the DB is stable / always reachable.
 # ---------------------------------------------------------------------------
 
+@st.cache_resource(show_spinner=False)
+def _watchlist_db_reachable() -> bool:
+    """Once per process. This page re-runs top to bottom, so the class flag below
+    resets every rerun and the SELECT 1 (3 round trips on the main engine) ran on
+    every watchlist access. A failure raises and is not cached, so it is retried."""
+    from core.database import db_manager
+    return bool(db_manager.execute_query_readonly_raising("SELECT 1 AS ok"))
+
+
 class _InMemoryWatchlistStore:
     """Thread-safe in-memory watchlist store for local dev fallback.
 
@@ -409,9 +423,7 @@ class _InMemoryWatchlistStore:
         if _InMemoryWatchlistStore._db_ok is not None:
             return _InMemoryWatchlistStore._db_ok
         try:
-            from core.database import db_manager
-            result = db_manager.execute_query("SELECT 1 AS ok")
-            _InMemoryWatchlistStore._db_ok = bool(result)
+            _InMemoryWatchlistStore._db_ok = _watchlist_db_reachable()
         except Exception:
             _InMemoryWatchlistStore._db_ok = False
         return _InMemoryWatchlistStore._db_ok
@@ -630,7 +642,6 @@ def _init_state():
             # ── DB bootstrap flag ──
             "scr_db_tables_ready":       False,
             "scr_results_loading":       False,
-            "scr_results_pending_paint": False,
             "scr_show_results_requested": False,
             "scr_results_error":         None,
             "scr_criteria_fingerprint":    None,
@@ -940,7 +951,7 @@ def _cached_user_criteria(user_email: str):
     return svc_get_criteria(user_email)
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def _cached_user_watchlists(user_email: str):
     """Cached wrapper for wl_get_all — keyed per user_email."""
     return wl_get_all(user_email)
@@ -3813,16 +3824,12 @@ def _render_geo_hierarchy_filters(
         level_options,
     )
 
-    include_broader = st.checkbox(
-        "Include broader segments",
-        value=st.session_state.get("scr_geo_include_broader", True),
-        key="scr_geo_include_broader",
-        help=(
-            "Keeps a filer that reports only a wider area — 'Americas' when you "
-            "filter to United States — in the list. Untick for strictly the "
-            "place you picked and what sits inside it."
-        ),
-    )
+    # Broader segments are always included: a filer that reports only "Americas"
+    # still shows when you filter to United States, because the filing gives no
+    # country and dropping it would silently lose a company that does operate
+    # there. This was a checkbox; the business team wants the safe behaviour
+    # always on and the choice off the screen.
+    include_broader = True
 
     selections: dict = {}
     columns = st.columns(len(LEVELS))
@@ -6754,58 +6761,49 @@ def _render_filterable_results_grid(
     # calls the public api.hideColumnFilter(). Wired once per grid iframe.
     #
     # ── Keep the header filter after the user touches it ────────────────────
-    # `GridUpdateMode.FILTERING_CHANGED` round-trips every toggle to Streamlit, which
-    # REMOUNTS this component. The rebuilt DistinctValuesFilter used to start with
-    # `selected = null`, so the funnel forgot what the user had ticked the moment they
-    # ticked it — and the export then disagreed with the grid.
+    # Closing a filter popup round-trips the model to Streamlit (one rerun). The same
+    # grid instance survives that rerun; a grid that is really rebuilt (leaving and
+    # returning to the results) starts with no filter, and the export then disagreed
+    # with what the user had ticked. Restoring it:
     #
-    # The restore needs BOTH halves, because a column filter has two very different
-    # states to recover:
+    #   1. `api.setFilterModel()` — what the GRID is filtered by. With the popup
+    #      closed there is no filter instance, so without it a remounted grid
+    #      rendered UNFILTERED while Python still reported the filtered count. It
+    #      also creates the filter, so a reopened popup shows the same ticks.
+    #   2. It goes in onFirstDataRendered, not onGridReady: at grid-ready there are
+    #      no rows yet and the call was measured doing nothing. Its filterChanged is
+    #      let through once (the same flag a closing popup sets), so Python learns the
+    #      restored filter and the Key Devs export matches the grid. That rerun
+    #      changes no gridOptions, so the grid is not rebuilt and it cannot loop.
     #
-    #   1. `filterParams.preselected` — what the popup shows as ticked when the user
-    #      REOPENS it. Read by our own buildValues(), so it works whenever AG Grid
-    #      gets around to instantiating the filter (it does so lazily, on first open).
-    #
-    #   2. `api.setFilterModel()` — what the GRID is actually filtered by. This is the
-    #      half that was missing, and it is why the rows looked wrong after a rerun:
-    #      with the popup closed there is no filter instance, so nothing read
-    #      `preselected` and the grid re-rendered UNFILTERED while Python still
-    #      reported the filtered count. Measured: banner said "6 of 500 shown rows"
-    #      while the grid displayed 13 unrelated industries.
-    #
-    # It goes in onFirstDataRendered, not onGridReady: at grid-ready there are no rows
-    # yet and the call was measured doing nothing. setFilterModel also FORCES the
-    # filter to be created, which is exactly what defeats the lazy instantiation.
-    # The filterChanged it raises is swallowed by shouldGridReturn (only an explicit
-    # afterGuiDetached flush passes), so restoring cannot loop into another rerun.
-    #
-    # The selection is read from the component's own incoming value
-    # (`st.session_state[key]`), which already holds the interaction that caused this
-    # rerun — so the filter is restored on the SAME run the user toggled it, not one
-    # run late.
-    _incoming = _incoming_grid_filter(key)
-    _restore_model = (_incoming if _incoming is not None
-                      else (st.session_state.get(f"_grid_filter_raw_{key}") or {}))
-    if _restore_model:
-        for _cd in grid_options.get("columnDefs", []):
-            _spec = _restore_model.get(_cd.get("field"))
-            if isinstance(_spec, dict) and isinstance(_spec.get("values"), list):
-                _cd.setdefault("filterParams", {})["preselected"] = list(_spec["values"])
+    # The model is kept in the browser (sessionStorage, written when the popup
+    # closes), NOT sent back from Python. st_aggrid pushes any change in gridOptions
+    # into the live grid with updateGridOptions, which re-creates the JsCode filter
+    # class, and a new filter class makes AG Grid drop that column's filter. Closing
+    # a popup reruns the page; when the rerun carried the selection back in
+    # gridOptions, the grid lost the filter the user had just applied (8 rows → all
+    # 558). So gridOptions must be identical between reruns of the same results:
+    # `dataSig` changes only with the rows, so a stale filter is never applied to a
+    # different result set. The key carries a per-session token: a reload is a new
+    # session that knows no filter, so restoring one there would make the grid and
+    # the Key Devs export disagree.
+    _session_token = st.session_state.setdefault("_grid_session_token", uuid.uuid4().hex[:12])
+    grid_options["context"] = {
+        "gridKey": f"{key}:{_session_token}",
+        "dataSig": str(int(pd.util.hash_pandas_object(display_df, index=False).sum() & 0x7FFFFFFFFFFF)),
+    }
 
     # Auto-size each column to its content, clamped to the minWidth above so the
     # full header always fits; the grid scrolls horizontally past the viewport.
-    # Same hook re-applies the saved filter (see the two halves above).
-    _restore_js = json.dumps({
-        _col: {"values": list(_spec["values"])}
-        for _col, _spec in _restore_model.items()
-        if isinstance(_spec, dict) and isinstance(_spec.get("values"), list)
-    })
     grid_options["onFirstDataRendered"] = JsCode(
         "function(p){var a=p.api;"
         "if(a&&a.autoSizeAllColumns){a.autoSizeAllColumns(false);}"
         "else if(p.columnApi&&p.columnApi.autoSizeAllColumns){p.columnApi.autoSizeAllColumns(false);}"
-        "try{var m=" + _restore_js + ";"
-        "if(a&&a.setFilterModel&&m&&Object.keys(m).length){a.setFilterModel(m);}}catch(e){}}"
+        "try{var c=p.context||{};"
+        "var s=JSON.parse(window.parent.sessionStorage.getItem('mdp-grid-filter:'+c.gridKey)||'null');"
+        "if(a&&a.setFilterModel&&s&&s.sig===c.dataSig&&s.model&&Object.keys(s.model).length){"
+        "window.__agFilterFlush=true;a.setFilterModel(s.model);}"
+        "}catch(e){}}"
     )
 
     # Close an open column-menu when the user clicks anywhere in the parent
@@ -7160,7 +7158,6 @@ def _render_results():
                     f"page_rerun#={_rerun_n} watchlist={wl_active}"
                 )
                 st.session_state.scr_results_loading = True
-                st.session_state.scr_results_pending_paint = True
                 st.session_state.scr_show_results_requested = True
                 st.session_state.pop("scr_results_error", None)
                 st.rerun()
@@ -7185,10 +7182,6 @@ def _render_results():
                     else "Preparing your results."
                 ),
             )
-            if st.session_state.get("scr_results_pending_paint"):
-                st.session_state.scr_results_pending_paint = False
-                time.sleep(0.6)
-                st.rerun()
             try:
                 if criteria and _needs_results_recompute():
                     _trigger_recompute()

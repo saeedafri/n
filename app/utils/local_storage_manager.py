@@ -1,16 +1,12 @@
 """
 Local Storage Manager - Syncs session state with browser local storage
-This module provides utilities to persist session state across page refreshes using streamlit-local-storage
+This module persists session state across page refreshes in the browser.
 """
 import streamlit as st
 import json
 import logging
+from urllib.parse import unquote
 import streamlit.components.v1 as components
-
-try:
-    from streamlit_local_storage import LocalStorage
-except ImportError:
-    LocalStorage = None
 
 # Import server logger for error logging only
 try:
@@ -24,6 +20,98 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+# The script runs as soon as it is inserted; its element container is then hidden so
+# it takes no space. Called from widget callbacks it lands at the top of the page, and
+# a visible empty container there pushed the header down 16px.
+_HIDE_OWN_CONTAINER = (
+    '<span data-mdp-browser-store></span>'
+    '<style>[data-testid="stElementContainer"]:has([data-mdp-browser-store])'
+    '{display:none!important}</style>'
+)
+
+
+def _write_browser_item(key: str, value):
+    """Write (or delete, value=None) one saved item in the browser: a cookie, so the
+    next session can read it on its first run, mirrored to localStorage. A plain
+    inline script: nothing is sent back, so no rerun."""
+    value_js = "null" if value is None else json.dumps(value).replace("</", "<\\/")
+    st.html(
+        _HIDE_OWN_CONTAINER +
+        "<script>(function(){"
+        f"var k={json.dumps(key)},v={value_js};"
+        "try{if(v===null){localStorage.removeItem(k);}else{localStorage.setItem(k,v);}}catch(e){}"
+        "document.cookie=k+'='+(v===null?'':encodeURIComponent(v))+'; path=/; max-age='"
+        "+(v===null?0:31536000)+'; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');"
+        "})();</script>",
+        unsafe_allow_javascript=True,
+    )
+
+
+class _BrowserStore:
+    """Saved UI state for LocalStorageManager, read from a cookie on the session's
+    first run.
+
+    The streamlit-local-storage component it replaces could only deliver the stored
+    value by sending it back from the browser after the page had rendered, and
+    Streamlit reruns the whole script to deliver a component value: every new session
+    ran Market Data / Home / Earnings Calls twice (~250-350 ms). A cookie arrives
+    with the page request, so it is readable on the first run.
+
+    Items live in session state for the rest of the session, so a value written in
+    this session is what later reads see (the cookie only refreshes on a new session).
+    """
+
+    _SS_KEY = "_browser_store_items"
+    _KEYS = ("sip_app_state",)
+
+    def __init__(self):
+        if self._SS_KEY not in st.session_state:
+            items = {}
+            try:
+                cookies = st.context.cookies
+                for key in self._KEYS:
+                    if cookies.get(key):
+                        items[key] = unquote(cookies[key])
+            except Exception:
+                pass
+            st.session_state[self._SS_KEY] = items
+            if len(items) < len(self._KEYS):
+                self._migrate_from_local_storage()
+        self.storedItems = st.session_state[self._SS_KEY]
+
+    def _migrate_from_local_storage(self):
+        """One-time copy of state saved by the old component (localStorage only)
+        into the cookie, so it is restored from the next session on."""
+        st.html(
+            _HIDE_OWN_CONTAINER +
+            "<script>(function(){"
+            f"var keys={json.dumps(list(self._KEYS))};"
+            "keys.forEach(function(k){"
+            "if(document.cookie.split('; ').some(function(c){return c.indexOf(k+'=')===0;}))return;"
+            "var v=null;try{v=localStorage.getItem(k);}catch(e){}"
+            "if(!v)return;"
+            "try{var p=JSON.parse(v);if(typeof p==='string')v=p;}catch(e){}"
+            "document.cookie=k+'='+encodeURIComponent(v)+'; path=/; max-age=31536000; SameSite=Lax'"
+            "+(location.protocol==='https:'?'; Secure':'');"
+            "});})();</script>",
+            unsafe_allow_javascript=True,
+        )
+
+    def getItem(self, key):
+        return self.storedItems.get(key)
+
+    def setItem(self, key, value):
+        if self.storedItems.get(key) == value:
+            return
+        self.storedItems[key] = value
+        _write_browser_item(key, value)
+
+    def removeItem(self, key):
+        self.storedItems.pop(key, None)
+        _write_browser_item(key, None)
+
+
 class LocalStorageManager:
     """Manages syncing between Streamlit session state and browser local storage"""
 
@@ -35,15 +123,9 @@ class LocalStorageManager:
         Args:
             page_name: Page name to identify which page data to manage (e.g., 'market_data', 'home')
         """
+        self.page_name = page_name
         try:
-            if LocalStorage is None:
-                self.local_storage = None
-                self.page_name = page_name
-                log_error("streamlit-local-storage not installed; browser persistence disabled")
-                return
-            # Initialize with a unique key to avoid conflicts
-            self.local_storage = LocalStorage(key=f"sip_local_storage_{page_name or 'default'}")
-            self.page_name = page_name
+            self.local_storage = _BrowserStore()
         except Exception as e:
             log_structured_error(
                 e,
@@ -53,7 +135,6 @@ class LocalStorageManager:
                 context=f"page_name={page_name}",
             )
             self.local_storage = None
-            self.page_name = page_name
 
     # Session-state key for caching the full all-pages blob (avoids blocking getItem on saves)
     _SS_CACHE_KEY = "_ls_all_pages_raw_cache"

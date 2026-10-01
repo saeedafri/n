@@ -1,0 +1,13 @@
+{
+ "ticker": "WK",
+ "fiscal_year": 2021,
+ "value": null,
+ "confidence": "none",
+ "basis": "no store count found in this filing",
+ "fye_date": "2021-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WK/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

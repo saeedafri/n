@@ -1840,16 +1840,14 @@ def _load_companies_from_db():
                 if ticker and ticker not in seen_tickers:
                     seen_tickers[ticker] = True
 
-            # Parallel Azure Blob scan — discovers which tickers actually have files.
-            # Also warms the per-ticker blob cache so the first selection is instant.
-            blob_results = scan_all_non_sec_tickers_parallel(non_sec_ticker_list)
-            for ticker, blob_data in blob_results.items():
-                # Add blob-discovered tickers not yet in the list
-                if ticker not in seen_tickers:
-                    seen_tickers[ticker] = True
-                    # No DB name available — use ticker as display name
-                    if ticker not in _built_names:
-                        _built_names[ticker] = ticker
+            # Parallel Azure Blob scan — warms the per-ticker blob cache so the first
+            # selection is instant. It can only return tickers from
+            # non_sec_ticker_list, which are all in the dropdown already, so it runs
+            # in the background: waiting for it held the first Filings load after
+            # each deploy for up to 46s (one Azure listing alone took 38s).
+            threading.Thread(target=scan_all_non_sec_tickers_parallel,
+                             args=(non_sec_ticker_list,), daemon=True,
+                             name="non-sec-blob-scan").start()
         except Exception as _nse:
             log_structured_error(
                 _nse, page="company_filings",

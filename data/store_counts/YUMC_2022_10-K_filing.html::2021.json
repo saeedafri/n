@@ -1,0 +1,14 @@
+{
+ "ticker": "YUMC",
+ "fiscal_year": 2021,
+ "value": 10051,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "of the common stock. 64 2021 Form 10-K | Item 1B. | Unresolved Staff Comments. Not applicable. | Item 2. | Properties. As of year-end 2021, the Company had 10,051 Company-owned units in China. Of these Company-owned units,",
+ "fye_date": "2021-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YUMC/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

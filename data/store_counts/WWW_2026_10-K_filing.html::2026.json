@@ -1,0 +1,14 @@
+{
+ "ticker": "WWW",
+ "fiscal_year": 2026,
+ "value": 128,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "Company relies on a network of third-party distributors, licensees and joint ventures. At January 3, 2026, the Company operated 128 retail stores in the U.S., United Kingdom, and Italy and 39 direct-to-con",
+ "fye_date": "2026-01-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WWW/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

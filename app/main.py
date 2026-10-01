@@ -462,10 +462,17 @@ if _auth_ready_for_bg:
                 from data.saved_criteria_service import ensure_tables as _sc_ensure
                 from data.portal_users_service import ensure_tables as _pu_ensure
                 from data.earnings_alert_service import ensure_tables as _ea_ensure
+                from data.screening_service import (
+                    ensure_segment_member_cache_table,
+                    ensure_segment_values_cache_table,
+                )
                 _wl_ensure()
                 _sc_ensure()
                 _pu_ensure()
                 _ea_ensure()
+                # Screening's first visit checked these two on the request path.
+                ensure_segment_member_cache_table()
+                ensure_segment_values_cache_table()
             except Exception:
                 log_exception("ERROR in background screening-tables prewarm")
 

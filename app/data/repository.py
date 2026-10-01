@@ -1726,19 +1726,20 @@ class NewsRepository:
 
         Called once per process at newsroom startup to feed merge_yf_topics().
         Any new category added to the YF table is automatically picked up here.
-        6-hour cache — topics change rarely; UNION of two covering-index scans is ~1-2ms.
+        Persisted to disk: the DISTINCT walks every row of both topic indexes
+        (571k rows, 10.4s cold on STG) to find ~16 values. The source signature is a
+        date token, not a COUNT(*) of the news table, so reads never scan it and the
+        list rebuilds in the background once a day.
         """
         import time as _t
-        _t0 = _t.perf_counter()
-        try:
+        from utils.materialize import materialized_or_build
+
+        def _build_topic_keys() -> List[str]:
             from utils.server_logger import log_db_timing as _ldt
+            _t0 = _t.perf_counter()
             # USE INDEX forces a covering index scan instead of a full table scan.
             # idx_yf_pub_topic_v1 (published_at, primary_topic_v1) covers v1 reads,
             # idx_yf_pub_topic_v2 (published_at, primary_topic_v2) covers v2 reads.
-            # MySQL reads only the index pages (~1/10th the data of a table scan).
-            # Without leading-column index on topic alone, DISTINCT still scans all
-            # index entries — but index pages are much smaller than row pages.
-            # Estimated: ~500ms index scan vs ~5000ms table scan (10× improvement).
             sql = """
                 SELECT DISTINCT primary_topic_v1 AS topic
                 FROM coreiq_yf_market_news_sentiment
@@ -1750,10 +1751,21 @@ class NewsRepository:
                      USE INDEX (idx_yf_pub_topic_v2)
                 WHERE primary_topic_v2 IS NOT NULL AND primary_topic_v2 != ''
             """
-            rows = db_manager.execute_query_readonly(sql, {})
+            rows = db_manager.execute_query_readonly_raising(sql, {})
             result = [r['topic'] for r in rows if r.get('topic')]
             _ldt("get_yf_topic_keys", "coreiq_yf_market_news_sentiment", (_t.perf_counter() - _t0) * 1000, len(result))
             return result
+
+        try:
+            return materialized_or_build(
+                "yf_topic_keys",
+                _build_topic_keys,
+                # Rebuilt when a new article arrives (MAX(id), a primary-key lookup),
+                # not on a timer. The WHERE keeps the signature's COUNT(*) to one row:
+                # counting all 572k rows cost up to 2.9s, and ingested_at has no index.
+                [{"table": "coreiq_yf_market_news_sentiment", "signal": "MAX(id)",
+                  "where": "id = (SELECT MAX(id) FROM coreiq_yf_market_news_sentiment)"}],
+            )
         except Exception as exc:
             try:
                 from utils.server_logger import log_structured_error as _lse
@@ -1900,10 +1912,15 @@ class NewsRepository:
         # Deferred join (two-step), same rationale as the AV method: selecting the
         # payload columns for every row the ORDER BY…LIMIT scan touches blew past the
         # 6s cap → 0 rows for common terms over wide ranges (STG: yf=0 for 'revenue').
-        # Step 1 fetches only ids (fast), step 2 hydrates them by PK. No index hint.
+        # Step 1 fetches only ids (fast), step 2 hydrates them by PK.
+        # FORCE INDEX: left alone the optimizer picks idx_yf_pub_nid_ticker, which has
+        # no title, so every row in the range is fetched from the table to test the
+        # LIKE — 3.1s (8 days) / 14.5s (90 days) cold on STG, and the 10s cap then
+        # returns 0 rows. idx_yf_time_title_icp (published_at, title) tests the LIKE
+        # inside the index: 0.9s / 1.8s cold, identical rows.
         id_sql = f"""
             SELECT /*+ MAX_EXECUTION_TIME(10000) */ id
-            FROM coreiq_yf_market_news_sentiment
+            FROM coreiq_yf_market_news_sentiment FORCE INDEX (idx_yf_time_title_icp)
             WHERE published_at >= :d1 AND published_at < :d2
               AND {like_where}
             ORDER BY published_at {date_sort}
@@ -2586,7 +2603,10 @@ class EarningsCallRepository:
             return None
 
     @staticmethod
-    @st.cache_data(ttl=60, show_spinner=False)  # Reduced from 300 to 60 seconds for fresher data
+    # 1h: a (ticker, year, quarter) transcript does not change once ingested and a
+    # new quarter is a new key; at 60s nearly every visit re-read the full
+    # transcript text (~0.9s) before the page could render.
+    @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
     def get_earnings_calls(
         ticker: Optional[str] = None,
@@ -2892,7 +2912,13 @@ class EarningsCallRepository:
         # LIMIT, which costs 30–260s for a common term. We fetch only light columns
         # here (sorted page of ids), then look up transcript_text for the page's
         # ids by primary key below — a cheap, bounded second query.
-        if len(keyword) >= 3:
+        # One company: LIKE on the ticker index instead. FULLTEXT scores every
+        # matching transcript in the table before the ticker filter applies, so a
+        # common word ('inventory' = 14,479 matches) took 110s cold for one
+        # company's ~60 transcripts; LIKE reads just those (~0.3s). The page's
+        # substring match is what LIKE does, so no result is lost.
+        single_ticker = bool(ticker and ticker != 'ALL')
+        if len(keyword) >= 3 and not single_ticker:
             base_query = """
                 SELECT id, ticker, year, quarter, q
                 FROM coreiq_av_earnings_call_transcripts
@@ -2901,7 +2927,7 @@ class EarningsCallRepository:
             """
             params['kw'] = keyword
         else:
-            # Short keyword: LIKE fallback (no index, but rare)
+            # Short keyword or one company: LIKE
             base_query = """
                 SELECT id, ticker, year, quarter, q
                 FROM coreiq_av_earnings_call_transcripts
@@ -2956,7 +2982,7 @@ class EarningsCallRepository:
         log_db_timing("search_transcripts_fulltext.main_query", "coreiq_av_earnings_call_transcripts", query_ms, rows=len(results), ticker=str(ticker or ''))
 
         # FULLTEXT stopword fallback: if no results and keyword >= 3 chars, try LIKE
-        if not results and len(keyword) >= 3:
+        if not results and len(keyword) >= 3 and not single_ticker:
             used_fallback = True
             fallback = """
                 SELECT id, ticker, year, quarter, q
@@ -8475,10 +8501,13 @@ class EarningsCalendarRepository:
         Return {ticker: fiscal_year_end_month_name} from AV and YF overviews.
         e.g. {'M': 'January', 'LULU': 'January', 'AAPL': 'September'}
         Used to correctly label fiscal quarters for non-December FY companies.
-        Cached for 1 hour — fiscal year ends rarely change.
+        Persisted to disk (survives deploys) and refreshed in the background when
+        either overview table changes — a cold build took 30s on STG.
         """
-        try:
-            av_rows = db_manager.execute_query_readonly(
+        from utils.materialize import materialized_or_build
+
+        def _build_fye_map() -> Dict[str, str]:
+            av_rows = db_manager.execute_query_readonly_raising(
                 """
                 SELECT ticker, fiscal_year_end
                 FROM coreiq_av_company_overview
@@ -8494,38 +8523,44 @@ class EarningsCalendarRepository:
                 if r.get("ticker") and r.get("fiscal_year_end")
             }
 
-            try:
-                yf_rows = db_manager.execute_query_readonly(
-                    """
-                    SELECT ticker, payload_json
-                    FROM (
-                        SELECT
-                            ticker,
-                            payload_json,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY ticker
-                                ORDER BY ingested_at DESC
-                            ) AS rn
-                        FROM coreiq_yf_company_overview
-                        WHERE ticker IS NOT NULL
-                          AND payload_json IS NOT NULL
-                          AND payload_json != ''
-                    ) ranked
-                    WHERE rn = 1
-                    """,
-                    {},
-                )
-                for row in yf_rows:
-                    ticker = row.get("ticker")
-                    fiscal_year_end = _extract_yf_fiscal_year_end(row.get("payload_json"))
-                    if ticker and fiscal_year_end:
-                        fye_map.setdefault(ticker, fiscal_year_end)
-            except Exception as yf_exc:
-                log_structured_error(yf_exc, page="repository", component="EarningsCalendarRepository",
-                                     operation="_get_fiscal_year_end_map_yf",
-                                     context="YF fiscal year end map fetch failed; using AV-only map")
+            # No AV-only fallback here: a partial map would be persisted to disk. A
+            # failed build raises, and materialize keeps serving the previous map.
+            # Latest snapshot per ticker via idx_ticker_ingested, THEN its payload.
+            # Ranking every snapshot with ROW_NUMBER() dragged each snapshot's
+            # payload_json through the window: 30s cold for 75 rows.
+            yf_rows = db_manager.execute_query_readonly_raising(
+                """
+                SELECT o.ticker, o.payload_json
+                FROM coreiq_yf_company_overview o
+                JOIN (
+                    SELECT ticker, MAX(ingested_at) AS latest
+                    FROM coreiq_yf_company_overview
+                    WHERE ticker IS NOT NULL
+                    GROUP BY ticker
+                ) l ON o.ticker = l.ticker AND o.ingested_at = l.latest
+                WHERE o.payload_json IS NOT NULL
+                  AND o.payload_json != ''
+                """,
+                {},
+            )
+            for row in yf_rows:
+                ticker = row.get("ticker")
+                fiscal_year_end = _extract_yf_fiscal_year_end(row.get("payload_json"))
+                if ticker and fiscal_year_end:
+                    fye_map.setdefault(ticker, fiscal_year_end)
 
             return fye_map
+
+        try:
+            return materialized_or_build(
+                "fiscal_year_end_map",
+                _build_fye_map,
+                # Checksum of the two columns read, so an edited fiscal_year_end
+                # rebuilds too, not only an added row (covering index, ~0.3s).
+                [{"table": "coreiq_av_company_overview",
+                  "signal": "SUM(CRC32(CONCAT_WS('|', ticker, fiscal_year_end)))"},
+                 {"table": "coreiq_yf_company_overview", "signal": "MAX(ingested_at)"}],
+            )
         except Exception as exc:
             log_structured_error(exc, page="repository", component="EarningsCalendarRepository",
                                  operation="_get_fiscal_year_end_map",
@@ -10534,21 +10569,49 @@ class SegmentDataRepository:
     def _fetch_all_db_rows(ticker: str) -> List[Dict[str, Any]]:
         """Fetch ALL dimensioned + consolidated rows for a ticker.
 
-        One dim query + one ndim query covering every fiscal year (was 2
+        Persisted per ticker on disk (survives deploys): the two queries return
+        ~2k dimensioned + ~9k consolidated rows and cost 3-5s cold, paid by the
+        first viewer of every ticker after each deploy. Refreshed in the background
+        when the ticker's 10-K rows change.
+        """
+        from utils.materialize import materialized_or_build
+        if not re.fullmatch(r"[A-Za-z0-9.^-]{1,20}", ticker or ""):
+            return SegmentDataRepository._query_all_db_rows(ticker)
+        return materialized_or_build(
+            f"segment_rows_{ticker}",
+            lambda: {"rows": SegmentDataRepository._query_all_db_rows(ticker, raising=True)},
+            # MAX(id) moves on a new filing and on a re-ingest (new ids), not only
+            # when the row count changes; covered by idx_v2_ticker_doctype.
+            [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
+              "where": f"ticker = '{ticker}' AND doc_type = '10-K'"}],
+        )["rows"]
+
+    @staticmethod
+    def _query_all_db_rows(ticker: str, raising: bool = False) -> List[Dict[str, Any]]:
+        """One dim query + one ndim query covering every fiscal year (was 2
         queries × N years through a 6-worker pool — 5.2s inside TAB_Segments
         on STG 03-Jul; now 3 round-trips total). The deterministic sort below
         is unchanged, so downstream classification sees identical input.
+        raising=True: DB errors raise instead of returning [], so an error is
+        never persisted as "no segment data".
         """
         from utils.constants import SEGMENT_ALL_AXES
         from utils.server_logger import log_db_timing
         import time as _t
         _t0 = _t.perf_counter()
-        years = SegmentDataRepository._fetch_db_years(ticker)
+        _query = (db_manager.execute_query_readonly_raising if raising
+                  else db_manager.execute_query_readonly)
+        clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
+        years = sorted(
+            r['report_fiscal_year']
+            for r in _query(SegmentDataRepository._YEAR_SQL_TPL.format(dim_clause=clause),
+                            {"ticker": ticker, **params})
+            if r.get('report_fiscal_year')
+        )
         if not years:
             return []
         year_keys = {f"y{i}": y for i, y in enumerate(years)}
         year_ph = ", ".join(f":{k}" for k in year_keys)
-        clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
         dim_sql = f"""
             SELECT original_label, numeric_value, unit_ref, report_fiscal_year,
                    dimension_label, dimension_member_label, concept,
@@ -10564,7 +10627,7 @@ class SegmentDataRepository:
             ORDER BY report_fiscal_year ASC, full_dimension_label ASC, original_label ASC
         """
         all_rows: List[Dict[str, Any]] = [
-            dict(r) for r in db_manager.execute_query_readonly(
+            dict(r) for r in _query(
                 dim_sql, {"ticker": ticker, **year_keys, **params},
             ) or []
         ]
@@ -10582,7 +10645,7 @@ class SegmentDataRepository:
             ORDER BY report_fiscal_year ASC, original_label ASC
         """
         ndim_rows = [
-            dict(r) for r in db_manager.execute_query_readonly(
+            dict(r) for r in _query(
                 ndim_sql, {"ticker": ticker, **year_keys},
             ) or []
         ]

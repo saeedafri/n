@@ -1,0 +1,14 @@
+{
+ "ticker": "XOM",
+ "fiscal_year": 2023,
+ "value": 4463,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "| Total Worldwide | | | | | | | | 4,463 | | 11.9 | | 11.2 | | 3.3 |",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "XOM/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

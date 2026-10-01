@@ -185,6 +185,10 @@ def backfill_company_info() -> int:
     if _BACKFILL_DONE:
         log_timing("backfill_company_info", 0.0, "skipped=process_flag", level="INFO")
         return 0
+    from data.forecast_store import _writes_disabled
+    if _writes_disabled():
+        _BACKFILL_DONE = True
+        return 0
 
     try:
         # Fast null check using idx_null_company prefix index (~300ms vs 6700ms full scan)
@@ -260,8 +264,10 @@ def backfill_company_info() -> int:
                 {"ticker": ticker, "company_name": company_name, "exchange": exchange},
             )
             updated += int(n or 0)
-        if updated == 0:
-            _BACKFILL_DONE = True
+        # One pass per process. The UPDATE's rowcount counts MATCHED rows, so tickers
+        # whose best-known exchange is '' re-match forever: gating on updated == 0
+        # rewrote the same 400 rows (3.6-4.6s) on every /forecasting render.
+        _BACKFILL_DONE = True
         log_timing("backfill_company_info", (perf_counter() - _t0) * 1000,
                    f"updated={updated} tickers_checked={len(missing)}", level="INFO")
         return updated

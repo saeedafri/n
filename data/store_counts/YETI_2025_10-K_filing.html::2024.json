@@ -1,0 +1,14 @@
+{
+ "ticker": "YETI",
+ "fiscal_year": 2024,
+ "value": 24,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "in Salt Lake City, Utah, Memphis, Tennessee, Sumner, Washington, Australia, Canada, the United Kingdom, New Zealand, Vietnam, and the Netherlands. In addition, as of December 28, 2024, we leased and operated 24 retail stores across the United States. We believe",
+ "fye_date": "2024-12-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YETI/2025/10-K/filing.html::2024",
+ "extractor_version": 5
+}

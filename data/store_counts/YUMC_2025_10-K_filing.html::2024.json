@@ -1,0 +1,14 @@
+{
+ "ticker": "YUMC",
+ "fiscal_year": 2024,
+ "value": 10296,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | | | 10,296 | | | | 1,707 | | | | (355 | ) | | | — | | | | 11,648 |",
+ "fye_date": "2024-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YUMC/2025/10-K/filing.html::2024",
+ "extractor_version": 5
+}

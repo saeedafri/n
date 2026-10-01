@@ -57,6 +57,21 @@ PATH_COLUMNS = {
     "city": "City",
 }
 
+# The business team reads Region as "where in the world". Three of the workbook's
+# top-level values are not places: labels spanning two real regions ("EMEA and
+# APAC"), economic groupings ("Emerging Markets"), and buckets with no geography
+# at all ("Domestic", "International"). Between them they cover 17 of the 94
+# members a screener sees, so they took half the Region picker while none of them
+# answered the question it asks. They fold into one Region and keep the
+# workbook's own word as the Sub-region, which stays empty on every one of them.
+MULTI_REGIONAL = "Multi-Regional"
+
+FOLDED_REGIONS = {
+    "Multi-region": "Multi-Region",
+    "Market grouping": "Market Grouping",
+    "Non-regional": "Non-Regional",
+}
+
 # Labels the workbook has no node for yet. Every one spans places the workbook
 # keeps apart, so its own Rule 4 ("labels spanning regions go to a Multi-region
 # node, never to one of the regions they span") decides them. Two are ordinary
@@ -102,6 +117,28 @@ def build_nodes(workbook) -> Dict[str, Dict]:
             "notes": row.get("Definition / Notes", ""),
             **path,
         }
+    return fold_multi_regional(nodes)
+
+
+def fold_multi_regional(nodes: Dict[str, Dict]) -> Dict[str, Dict]:
+    """Move the three non-place Regions under one, as its Sub-regions.
+
+    Every folded node has an empty Sub-region today — that is what makes the slot
+    free. If the data team ever fills one in, that is real information and
+    overwriting it would lose it, so stop rather than guess.
+    """
+    for node in nodes.values():
+        sub_region = FOLDED_REGIONS.get(node.get("region", ""))
+        if not sub_region:
+            continue
+        if node.get("sub_region"):
+            raise SystemExit(
+                f"{node['node']!r} sits under {node['region']!r} but already has "
+                f"Sub-region {node['sub_region']!r}. Folding it into "
+                f"{MULTI_REGIONAL!r} would erase that — decide where it belongs."
+            )
+        node["region"] = MULTI_REGIONAL
+        node["sub_region"] = sub_region
     return nodes
 
 

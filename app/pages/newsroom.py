@@ -1995,12 +1995,29 @@ def render_page():
         with st.container(border=False, height=900):
             if articles:
                 _total_matched = len(articles)
-                _render_articles = articles
+                # Paint the feed in batches, like the search panel: rendering all
+                # ~7,000 cards at once was 85k DOM nodes / 7.9 MB over the websocket
+                # (3.5-5s in the browser warm, far more over the India link). Always
+                # at least as many as the search panel shows, so its click-to-scroll
+                # targets (#article-N) exist.
+                _FEED_BATCH = 200
+                _feed_key = (active_keyword, _view_key, _total_matched)
+                if st.session_state.get('_news_feed_key') != _feed_key:
+                    st.session_state['_news_feed_key'] = _feed_key
+                    st.session_state['news_feed_shown'] = _FEED_BATCH
+                _feed_shown = max(int(st.session_state.get('news_feed_shown', _FEED_BATCH)),
+                                  int(st.session_state.get('news_left_shown', 0)) if active_keyword else 0)
+                _render_articles = articles[:_feed_shown]
 
                 _render_cards_chunked(
                     _render_articles, company_map,
                     keyword=active_keyword, chunk_size=500,
                 )
+                if _total_matched > len(_render_articles):
+                    if st.button(f"Show more articles ({_total_matched - len(_render_articles):,} more)",
+                                 key="news_feed_more", width="stretch"):
+                        st.session_state['news_feed_shown'] = _feed_shown + _FEED_BATCH
+                        st.rerun()
             else:
                 if active_keyword and _kw_server_mode:
                     st.info(

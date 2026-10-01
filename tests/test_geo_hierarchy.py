@@ -88,8 +88,26 @@ def test_label_map_only_points_at_defined_nodes():
 
 def test_regions_cover_the_live_members():
     assert level_options(LIVE_MEMBERS, "region") == [
-        "AMER", "APAC", "EMEA", "Market grouping", "Multi-region", "Non-regional",
+        "AMER", "APAC", "EMEA", "Multi-Regional",
     ]
+
+
+def test_the_three_non_place_regions_became_one():
+    """Multi-region, Market grouping and Non-regional answer "what kind of label
+    is this", not "where". They are one Region now, and the workbook's own three
+    words are its Sub-regions — every member they held is still reachable."""
+    assert level_options(LIVE_MEMBERS, "sub_region", {"region": ["Multi-Regional"]}) == [
+        "Market Grouping", "Multi-Region", "Non-Regional",
+    ]
+    folded = filter_members(LIVE_MEMBERS, {"region": ["Multi-Regional"]}, False)
+    parts = sum(
+        len(filter_members(
+            LIVE_MEMBERS, {"region": ["Multi-Regional"], "sub_region": [sub]}, False
+        ))
+        for sub in ("Market Grouping", "Multi-Region", "Non-Regional")
+    )
+    assert len(folded) == parts == 17
+    assert "International" in folded and "Emerging Markets" in folded
 
 
 def test_sub_regions_narrow_to_the_chosen_region():
@@ -206,8 +224,8 @@ def test_an_unknown_label_is_reachable_not_dropped():
     ("Mid-Atlantic", "AMER > North America (NORAM) > United States"),
     ("Mountain", "AMER > North America (NORAM) > United States"),
     ("Greater China", "APAC > East Asia"),
-    ("International", "Non-regional"),
-    ("EMEA And Asia Pacific", "Multi-region"),
+    ("International", "Multi-Regional > Non-Regional"),
+    ("EMEA And Asia Pacific", "Multi-Regional > Multi-Region"),
 ])
 def test_paths_for_the_labels_that_caused_trouble(label, expected):
     assert describe_label(label) == expected

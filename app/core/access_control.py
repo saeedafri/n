@@ -5,6 +5,7 @@ Table: coreiq_page_access_control
 - user_email: user's email
 - permission_level: allow, deny, upload_only, delete_admin, view_only, edit
 """
+import time
 import streamlit as st
 from typing import List, Dict, Optional, Tuple
 from core.database import DatabaseManager
@@ -202,22 +203,32 @@ class UserRolesManager:
         "shashankgupta@coresight.com",
     }
 
+    # Role lookups are reused for this long (the header/footer ask on every page
+    # render: ~1.5s of DB round trips per warm pass). Changes made through
+    # set_user_role/delete_user apply at once; changes from elsewhere within 60s.
+    _ROLE_TTL_S = 60.0
+    _role_memo: Dict[str, Tuple[float, Optional[str]]] = {}
+
     @staticmethod
     def get_user_role(user_email: str) -> Optional[str]:
         """Get role for a user. Returns None if not found."""
         if not user_email:
             return None
+        email = user_email.strip().lower()
+        memo = UserRolesManager._role_memo.get(email)
+        if memo and time.monotonic() - memo[0] < UserRolesManager._ROLE_TTL_S:
+            return memo[1]
         try:
             query = """
                 SELECT role FROM coreiq_user_roles
                 WHERE user_email = :user_email LIMIT 1
             """
             results = db.execute_query_readonly(
-                query, {"user_email": user_email.strip().lower()}
+                query, {"user_email": email}
             )
-            if results:
-                return results[0].get("role")
-            return None
+            role = results[0].get("role") if results else None
+            UserRolesManager._role_memo[email] = (time.monotonic(), role)
+            return role
         except Exception as exc:
             log_structured_error(
                 exc, page="access_control", operation="get_user_role",
@@ -273,11 +284,7 @@ class UserRolesManager:
                 "role":         role,
                 "created_by":   created_by,
             })
-            # Bust session-level role cache
-            import streamlit as _st
-            _st.session_state.pop(
-                f"_urm_role_{user_email.strip().lower()}", None
-            )
+            UserRolesManager._role_memo.pop(user_email.strip().lower(), None)
             return True, f"Role set: {user_email} → {role}"
         except Exception as exc:
             log_structured_error(
@@ -292,10 +299,7 @@ class UserRolesManager:
         try:
             query = "DELETE FROM coreiq_user_roles WHERE user_email = :user_email"
             db.execute_insert(query, {"user_email": user_email.strip().lower()})
-            import streamlit as _st
-            _st.session_state.pop(
-                f"_urm_role_{user_email.strip().lower()}", None
-            )
+            UserRolesManager._role_memo.pop(user_email.strip().lower(), None)
             return True, f"User deleted: {user_email}"
         except Exception as exc:
             log_structured_error(

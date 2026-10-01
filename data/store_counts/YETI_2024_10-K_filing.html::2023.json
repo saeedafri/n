@@ -1,0 +1,14 @@
+{
+ "ticker": "YETI",
+ "fiscal_year": 2023,
+ "value": 18,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "ember 30, 2023, were located in Salt Lake City, Utah, Memphis, Tennessee, Australia, Canada, the United Kingdom, New Zealand, and the Netherlands. In addition, as of December 30, 2023, we leased and operated 18 retail stores across the United States. We believe",
+ "fye_date": "2023-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YETI/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

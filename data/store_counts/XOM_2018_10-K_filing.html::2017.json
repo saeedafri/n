@@ -1,0 +1,13 @@
+{
+ "ticker": "XOM",
+ "fiscal_year": 2017,
+ "value": null,
+ "confidence": "none",
+ "basis": "no store count found in this filing",
+ "fye_date": "2017-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "XOM/2018/10-K/filing.html::2017",
+ "extractor_version": 5
+}

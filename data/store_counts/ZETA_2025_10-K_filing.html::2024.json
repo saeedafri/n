@@ -1,0 +1,14 @@
+{
+ "ticker": "ZETA",
+ "fiscal_year": 2024,
+ "value": 52341,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | | | 52,341 | | | | | | | | 26,675 |",
+ "fye_date": "2024-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ZETA/2025/10-K/filing.html::2024",
+ "extractor_version": 5
+}

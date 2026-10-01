@@ -20,6 +20,12 @@ def _clean_sec_html(html_content: str) -> str:
                 r'<(div|span|p)[^>]*style=["\'][^"\']*display\s*:\s*none[^"\']*["\'][^>]*>.*?</\1>',
                 '', html_content, flags=re.DOTALL | re.IGNORECASE
             )
+        # PyMuPDF's Story never advances past a forced page break: place() keeps
+        # returning "more" without placing anything, so the page loop below made
+        # blank pages forever (a 10-Q ran 15+ min holding the GIL, freezing the
+        # whole server). Story paginates on its own.
+        html_content = re.sub(r'(?:page-)?break-(?:before|after)\s*:\s*[a-z-]+\s*;?', '',
+                              html_content, flags=re.IGNORECASE)
         html_content = re.sub(r'<img[^>]*>', '', html_content, flags=re.IGNORECASE)
         html_content = re.sub(r'<ix:[^/][^>]*>', '', html_content, flags=re.IGNORECASE)
         html_content = re.sub(r'</ix:[^>]+>', '', html_content, flags=re.IGNORECASE)
@@ -86,12 +92,21 @@ def generate_filing_pdf(company_name: str, ticker: str, year: str,
         margin = 50
         where = mediabox + (margin, margin, -margin, -margin)
 
+        # Backstop for any other construct Story cannot get past: the longest
+        # 10-K renders well under this, a runaway loop hits it in about a second.
+        max_pages = 3000
+        pages = 0
         more = 1
         while more:
             device = writer.begin_page(mediabox)
             more, _ = story.place(where)
             story.draw(device)
             writer.end_page()
+            pages += 1
+            if pages >= max_pages:
+                log_error(f"[PDF] {ticker} {doc_type} {year}: stopped at {max_pages} pages "
+                          f"(layout not advancing)")
+                break
 
         writer.close()
         return buf.getvalue()

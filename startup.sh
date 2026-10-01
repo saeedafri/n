@@ -32,6 +32,11 @@ set -u
 # a line in .streamlit/config.toml, so the config file stays untouched.
 export STREAMLIT_SERVER_SCRIPT_HEALTH_CHECK_ENABLED=true
 
+# Stop every user's browser posting Streamlit usage telemetry (data.streamlit.io /
+# webhooks.fivetran.com). .streamlit/config.toml sets this too, but .streamlit/ is
+# gitignored and never deployed, so STG ran with Streamlit's default: on.
+export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
 # WEBSITES_PORT is unset on MDP STG today, so this is 8000 — the same port the
 # previous startup command hardcoded. If Azure ever sets it, we follow it.
 PORT="${WEBSITES_PORT:-8000}"

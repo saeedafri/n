@@ -121,6 +121,15 @@ def _cached_download_logs(_sig):
     return download_logs()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def _cached_segment_cache_status():
+    """The Segment Cache tab's status counts: a full-table COUNT/SUM/COUNT DISTINCT
+    (3.2-3.6s). st.tabs runs every tab's body, so uncached it slowed every Logs
+    render, not just visits to that tab. The counts only move during a rebuild."""
+    from data.screening_service import get_segment_values_cache_status
+    return get_segment_values_cache_status()
+
+
 def _log_download_bytes():
     try:
         _sig = (os.path.getmtime(SERVER_LOG_FILE), os.path.getsize(SERVER_LOG_FILE)) \
@@ -672,7 +681,6 @@ def main():
         with tab_seg:
             try:
                 from data.screening_service import (
-                    get_segment_values_cache_status,
                     get_segment_cache_build_state,
                     rebuild_segment_values_cache_async,
                     populate_segment_member_cache_from_presets,
@@ -680,8 +688,10 @@ def main():
                 st.markdown("#### Screening Segment Cache")
                 st.caption("The segment values cache powers the Business/Geographical Segments screening filter. It must be built before full-universe segment screening works. Build runs in the background — do not close the page while building.")
 
-                status = get_segment_values_cache_status()
                 build_state = get_segment_cache_build_state()
+                if build_state.get("running"):
+                    _cached_segment_cache_status.clear()
+                status = _cached_segment_cache_status()
 
                 # Status metrics
                 c1, c2, c3, c4 = st.columns(4)

@@ -1,0 +1,14 @@
+{
+ "ticker": "YETI",
+ "fiscal_year": 2021,
+ "value": 8,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "in Dallas, Texas, Salt Lake City, Utah, Australia, Canada, New Zealand, and the Netherlands. In addition, we lease and operate eight retails stores across the United States. We believe that our facilities,",
+ "fye_date": "2021-01-02",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YETI/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}

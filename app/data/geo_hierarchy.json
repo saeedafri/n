@@ -4147,9 +4147,9 @@
    "node": "APAC and Latin America",
    "notes": "Covers APLA and LAAP segment labels",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "APAC, Middle East and Africa (APMEA)": {
    "city": "",
@@ -4159,9 +4159,9 @@
    "node": "APAC, Middle East and Africa (APMEA)",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "Aargau": {
    "city": "",
@@ -4531,9 +4531,9 @@
    "node": "Americas and APAC",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "Americas and EMEA": {
    "city": "",
@@ -4543,9 +4543,9 @@
    "node": "Americas and EMEA",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "Amsterdam": {
    "city": "Amsterdam",
@@ -4927,9 +4927,9 @@
    "node": "Asia, Middle East and Africa (AMEA)",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "Asir Province": {
    "city": "",
@@ -5155,9 +5155,9 @@
    "node": "BRIC",
    "notes": "Members: Brazil, Russia, India, China",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "BRICS": {
    "city": "",
@@ -5167,9 +5167,9 @@
    "node": "BRICS",
    "notes": "Members: Brazil, Russia, India, China, South Africa, Egypt, Ethiopia, Iran, United Arab Emirates, Indonesia (expanded membership)",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "Baden-Württemberg": {
    "city": "",
@@ -7771,9 +7771,9 @@
    "node": "Developed Markets",
    "notes": "Economic, not geographic, grouping",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "Dhaka": {
    "city": "Dhaka",
@@ -7843,9 +7843,9 @@
    "node": "Domestic",
    "notes": "Filer's home market; resolves to the filer's HQ country",
    "parent": "Global",
-   "region": "Non-regional",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Non-Regional"
   },
   "Dominica": {
    "city": "",
@@ -7975,9 +7975,9 @@
    "node": "EMEA and APAC",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "East Africa": {
    "city": "",
@@ -8287,9 +8287,9 @@
    "node": "Emerging Markets",
    "notes": "Economic, not geographic, grouping",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "Emilia-Romagna": {
    "city": "",
@@ -8455,9 +8455,9 @@
    "node": "Europe, Asia and Middle East (EAME)",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "Europe, Middle East, India and Africa (EMEIA)": {
    "city": "",
@@ -8467,9 +8467,9 @@
    "node": "Europe, Middle East, India and Africa (EMEIA)",
    "notes": "",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "European Union": {
    "city": "",
@@ -8731,9 +8731,9 @@
    "node": "Frontier Markets",
    "notes": "Economic, not geographic, grouping",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "Fujairah": {
    "city": "",
@@ -8803,9 +8803,9 @@
    "node": "G7",
    "notes": "Members: United States, Canada, United Kingdom, Germany, France, Italy, Japan",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "GCC (Gulf Cooperation Council)": {
    "city": "",
@@ -10135,9 +10135,9 @@
    "node": "International",
    "notes": "All markets outside the filer's home market (usually the US). Replaces 'Foreign' and 'Non-US'",
    "parent": "Global",
-   "region": "Non-regional",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Non-Regional"
   },
   "Iowa": {
    "city": "",
@@ -12727,9 +12727,9 @@
    "node": "Multi-region (Other)",
    "notes": "One-off combinations that span regions",
    "parent": "Global",
-   "region": "Multi-region",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Multi-Region"
   },
   "Mumbai": {
    "city": "Mumbai",
@@ -14035,9 +14035,9 @@
    "node": "OECD",
    "notes": "38 member countries (see Groupings column)",
    "parent": "Global",
-   "region": "Market grouping",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Market Grouping"
   },
   "Oaxaca": {
    "city": "",
@@ -14311,9 +14311,9 @@
    "node": "Other",
    "notes": "Unallocated residual with no geographic parent",
    "parent": "Global",
-   "region": "Non-regional",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Non-Regional"
   },
   "Ottawa": {
    "city": "Ottawa",
@@ -15199,9 +15199,9 @@
    "node": "Rest of World (RoW)",
    "notes": "",
    "parent": "Global",
-   "region": "Non-regional",
+   "region": "Multi-Regional",
    "state": "",
-   "sub_region": ""
+   "sub_region": "Non-Regional"
   },
   "Rhineland-Palatinate": {
    "city": "",
@@ -20391,6 +20391,11 @@
     "Africa",
     "Europe",
     "Middle East"
+   ],
+   "Multi-Regional": [
+    "Market Grouping",
+    "Multi-Region",
+    "Non-Regional"
    ]
   },
   "state": {

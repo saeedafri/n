@@ -1,0 +1,14 @@
+{
+ "ticker": "WING",
+ "fiscal_year": 2015,
+ "value": 845,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of system-wide stores at period end | 845 | | | 712 | | | 614 |",
+ "fye_date": "2015-12-26",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WING/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

@@ -56,7 +56,15 @@ def _cache_dir():
     return None
 
 
-def _live_signature(sources):
+# Signature results are reused for this long. Every read of a cache (the screening
+# universe is read on EVERY screening rerun) paid a COUNT(*) round trip for it —
+# 5.7s of a 20s warm profile. Sources change about daily, so a minute of
+# staleness costs nothing; writes always take a fresh signature.
+_SIG_TTL_S = float(os.getenv("MAT_SIGNATURE_TTL_S", "60"))
+_SIG_MEMO = {}
+
+
+def _live_signature(sources, fresh=False):
     if not sources:
         return []
     parts = []
@@ -78,12 +86,17 @@ def _live_signature(sources):
             f"SELECT '{_tab}' AS t, CAST(({_sig}) AS CHAR) AS sig, COUNT(*) AS c FROM {_from}"
         )
     _sql = " UNION ALL ".join(parts)
+    _memo = _SIG_MEMO.get(_sql)
+    if not fresh and _memo and time.monotonic() - _memo[0] < _SIG_TTL_S:
+        return _memo[1]
     rows = db_manager.execute_query_readonly(_sql, params)
     _by_tab = {
         str(r["t"]): [str(r["t"]), (None if r["sig"] is None else str(r["sig"])), int(r["c"])]
         for r in rows
     }
-    return [_by_tab[_s["table"]] for _s in sources]
+    _result = [_by_tab[_s["table"]] for _s in sources]
+    _SIG_MEMO[_sql] = (time.monotonic(), _result)
+    return _result
 
 
 def _fingerprint(obj):
@@ -212,7 +225,7 @@ def write_materialized(name, obj, sources):
         _d = _cache_dir()
         if not _d:
             return
-        _sig = _live_signature(sources)
+        _sig = _live_signature(sources, fresh=True)
         _fp = _fingerprint(obj)
         with _MAT_LOCK:
             _pk = os.path.join(_d, f"{name}.pkl.gz")

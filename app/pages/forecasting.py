@@ -3523,7 +3523,10 @@ def main() -> None:
         _render_card('Forecast Horizon', f"{_fmt_int(summary.get('forecast_periods'))} {_unit_plural}",
                      f"Through {_through}")
 
-    tabs = st.tabs(['Overview', 'Models', 'Test'])
+    # Lazy tabs: st.tabs sends every tab's charts up front (11 Plotly charts,
+    # 869 KB, 0.4-0.6s browser long tasks on each load). With on_change="rerun"
+    # only the selected tab's charts are built; .open says which one that is.
+    tabs = st.tabs(['Overview', 'Models', 'Test'], key='fc_main_tabs', on_change='rerun')
 
     with tabs[0]:
         st.markdown('<h3 class="rev-section-title">Forecast overview</h3>', unsafe_allow_html=True)
@@ -3531,12 +3534,13 @@ def main() -> None:
             '<p class="rev-section-copy">The chart shows the cleaned historical series that feeds the engine, then overlays every model output. The table below is the full forecast from all models.</p>',
             unsafe_allow_html=True,
         )
-        st.plotly_chart(
-            _build_overview_chart(training_df, actual_df, forecast_df, model_keys, scenario_keys,
-                                  period_labels=_period_labels, period_unit=_period_unit),
-            use_container_width=True,
-            config={'displayModeBar': False},
-        )
+        if tabs[0].open is not False:
+            st.plotly_chart(
+                _build_overview_chart(training_df, actual_df, forecast_df, model_keys, scenario_keys,
+                                      period_labels=_period_labels, period_unit=_period_unit),
+                use_container_width=True,
+                config={'displayModeBar': False},
+            )
         forecast_table = _forecast_table(forecast_df, model_keys, scenario_keys, period_unit=_period_unit)
         if not forecast_table.empty:
             st.dataframe(forecast_table, use_container_width=True, hide_index=True)
@@ -3569,11 +3573,12 @@ def main() -> None:
         if not nested_labels:
             st.info('No model forecasts are available for this ticker yet.')
         else:
-            model_tabs = st.tabs(nested_labels)
+            model_tabs = st.tabs(nested_labels, key='fc_model_tabs', on_change='rerun')
             for idx, key in enumerate(model_keys):
                 with model_tabs[idx]:
-                    _render_model_panel(key, payload, training_df, actual_df, forecast_df, model_keys,
-                                        period_labels=_period_labels, period_unit=_period_unit)
+                    if tabs[1].open is not False and model_tabs[idx].open is not False:
+                        _render_model_panel(key, payload, training_df, actual_df, forecast_df, model_keys,
+                                            period_labels=_period_labels, period_unit=_period_unit)
             if scenario_keys:
                 with model_tabs[-1]:
                     st.markdown('<h3 class="rev-section-title">Scenarios</h3>', unsafe_allow_html=True)
@@ -3584,7 +3589,8 @@ def main() -> None:
                         '</p>',
                         unsafe_allow_html=True,
                     )
-                    st.plotly_chart(_scenario_chart(forecast_df, period_labels=_period_labels, period_unit=_period_unit), use_container_width=True, config={'displayModeBar': False})
+                    if tabs[1].open is not False and model_tabs[-1].open is not False:
+                        st.plotly_chart(_scenario_chart(forecast_df, period_labels=_period_labels, period_unit=_period_unit), use_container_width=True, config={'displayModeBar': False})
 
     with tabs[2]:
         st.markdown('<h3 class="rev-section-title">Backtesting</h3>', unsafe_allow_html=True)
@@ -3595,7 +3601,8 @@ def main() -> None:
         if backtest_df.empty:
             st.info('Backtest results are not available for this ticker.')
         else:
-            st.plotly_chart(_build_backtest_chart(backtest_df), use_container_width=True, config={'displayModeBar': False})
+            if tabs[2].open is not False:
+                st.plotly_chart(_build_backtest_chart(backtest_df), use_container_width=True, config={'displayModeBar': False})
             display = backtest_df.copy()
             display['Method'] = display['display']
             display['MAPE'] = display['mape'].apply(lambda value: _fmt_pct(value))
@@ -3614,7 +3621,8 @@ def main() -> None:
                 '<p class="rev-section-copy">Scenarios are derived from historical growth percentiles — not from model fitting. Pessimistic = 25th percentile growth; Baseline = 50th percentile (median); Optimistic = 75th percentile. The Ensemble line is overlaid for comparison.</p>',
                 unsafe_allow_html=True,
             )
-            st.plotly_chart(_scenario_chart(forecast_df, training_df, actual_df, period_labels=_period_labels, period_unit=_period_unit), use_container_width=True, config={'displayModeBar': False})
+            if tabs[2].open is not False:
+                st.plotly_chart(_scenario_chart(forecast_df, training_df, actual_df, period_labels=_period_labels, period_unit=_period_unit), use_container_width=True, config={'displayModeBar': False})
 
             # Exact-millions table: year | ensemble | pessimistic | baseline | optimistic
             _scen_cols = {'Year': forecast_df['year'].astype(int)}
