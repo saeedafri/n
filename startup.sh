@@ -37,6 +37,11 @@ export STREAMLIT_SERVER_SCRIPT_HEALTH_CHECK_ENABLED=true
 # gitignored and never deployed, so STG ran with Streamlit's default: on.
 export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
+# No source-file watching on a server: the default polls every imported file every
+# 0.2 s and re-walks every loaded module after each page run (realpath on each),
+# per session. Measured at 10 users: 1.85 → 1.48 CPU-s per page, median wait −22%.
+export STREAMLIT_SERVER_FILE_WATCHER_TYPE=none
+
 # WEBSITES_PORT is unset on MDP STG today, so this is 8000 — the same port the
 # previous startup command hardcoded. If Azure ever sets it, we follow it.
 PORT="${WEBSITES_PORT:-8000}"

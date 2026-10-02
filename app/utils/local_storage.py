@@ -62,9 +62,10 @@ class LocalStorageManager:
     Provides safe get/set/update operations with type validation.
     """
 
-    def __init__(self):
-        self._cache: Dict[str, Any] = {}
-        self._initialized = False
+    # One instance serves every session in the process, so it must hold no state of
+    # its own: values live only in each session's st.session_state. It used to keep a
+    # process-wide dict that get() read first, which handed the last ticker/tab any
+    # user picked to every other user's new session.
 
     def _get_from_st_state(self, key: str) -> Optional[Any]:
         """Retrieve value from streamlit session state."""
@@ -82,7 +83,6 @@ class LocalStorageManager:
         try:
             storage_key = f"ls_{key}"
             st.session_state[storage_key] = value
-            self._cache[key] = value
         except Exception as e:
             log_structured_error(e, page="local_storage", component="_set_to_st_state", operation="writing_session_state")
 
@@ -106,14 +106,9 @@ class LocalStorageManager:
         key_str = key.value if isinstance(key, StorageKey) else key
 
         try:
-            # Check cache first
-            if key_str in self._cache:
-                value = self._cache[key_str]
-            else:
-                value = self._get_from_st_state(key_str)
-                if value is None:
-                    return default
-                self._cache[key_str] = value
+            value = self._get_from_st_state(key_str)
+            if value is None:
+                return default
 
             # Type validation
             if validate_type is not None and value is not None:
@@ -200,13 +195,8 @@ class LocalStorageManager:
 
         try:
             storage_key = f"ls_{key_str}"
-            had_in_session = storage_key in st.session_state
-            had_in_cache = key_str in self._cache
-
             if storage_key in st.session_state:
                 del st.session_state[storage_key]
-            if key_str in self._cache:
-                del self._cache[key_str]
 
             return True
         except Exception as e:
@@ -219,7 +209,6 @@ class LocalStorageManager:
             keys_to_remove = [k for k in st.session_state.keys() if k.startswith("ls_")]
             for key in keys_to_remove:
                 del st.session_state[key]
-            self._cache.clear()
             return True
         except Exception as e:
             log_error(f"Error clearing local storage: {e}")
