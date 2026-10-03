@@ -338,6 +338,42 @@ def _refresh_in_background(name, build_fn, sources, clear=None, inputs=None):
     _th.start()
 
 
+_CHECKED = set()               # names whose disk copy was signature-checked this process
+_CHECKED_LOCK = threading.Lock()
+
+
+def _disk_copy(name):
+    """The materialized object from disk with no database round trip, or None."""
+    try:
+        if not _materialize_on():
+            return None
+        _d = _cache_dir()
+        if not _d:
+            return None
+        _pk = os.path.join(_d, f"{name}.pkl.gz")
+        if not (os.path.exists(_pk) and os.path.exists(os.path.join(_d, f"{name}.meta.json"))):
+            return None
+        return pd.read_pickle(_pk, compression="gzip")
+    except Exception:
+        return None
+
+
+def _check_once_in_background(name, build_fn, sources, clear, inputs):
+    with _CHECKED_LOCK:
+        if name in _CHECKED:
+            return
+        _CHECKED.add(name)
+
+    def _run():
+        try:
+            _obj = read_materialized(name, sources, allow_stale=True)
+            if isinstance(_obj, _STALE) or _obj is None:
+                _refresh_in_background(name, build_fn, sources, clear, inputs)
+        except Exception as _e:
+            slog_warning(f"[MAT][{name}] background check failed ({type(_e).__name__})")
+    threading.Thread(target=_run, name=f"mat-check-{name}", daemon=True).start()
+
+
 def materialized_or_build(name, build_fn, sources, clear=None, inputs=None):
     """Return the cache, never blocking a request on a rebuild.
 
@@ -363,6 +399,15 @@ def materialized_or_build(name, build_fn, sources, clear=None, inputs=None):
         register(name, build_fn, sources, clear, inputs)
     except Exception:
         pass
+    # First read in this process: serve the disk copy now and check its signature
+    # behind the request. The check is a COUNT/checksum per source over the network
+    # (~3 s for ipo_events on a cold pool) and its only outcomes were "serve this
+    # copy" or "serve this copy and refresh in the background" — the same copy either
+    # way, so the visitor no longer waits for it. Later freshness is the watcher's job.
+    _obj = _disk_copy(name)
+    if _obj is not None:
+        _check_once_in_background(name, build_fn, sources, clear, inputs)
+        return _obj
     _obj = read_materialized(name, sources, allow_stale=True)
     if isinstance(_obj, _STALE):
         _refresh_in_background(name, build_fn, sources, clear, inputs)

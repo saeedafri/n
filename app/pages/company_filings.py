@@ -463,6 +463,29 @@ def _get_optimized_container_client():
     return svc.get_container_client(container_name)
 
 
+_MISSING_BLOB_TTL_S = 60
+
+
+@st.cache_resource(show_spinner=False)
+def _missing_blobs() -> Dict[str, float]:
+    """Blob name -> when Azure last said it does not exist (shared by all sessions).
+
+    A filing missing from Azure was asked for ~6 times on EVERY rerun of the page
+    (two download paths, the /tmp retry, the year-1 10-Q fallback), 1.5-4 s each
+    rerun, always with the same answer. Within _MISSING_BLOB_TTL_S of that answer the
+    same "not found" is returned without asking again; "Retry Download" forgets it."""
+    return {}
+
+
+def _blob_known_missing(blob_name: str) -> bool:
+    seen = _missing_blobs().get(blob_name)
+    return seen is not None and _perf_time.time() - seen < _MISSING_BLOB_TTL_S
+
+
+def _is_blob_not_found(exc: Exception) -> bool:
+    return type(exc).__name__ == "ResourceNotFoundError"
+
+
 def _ensure_local_blob_optimized(blob_name: str, use_temp: bool = False) -> Optional[str]:
     """
     Optimized blob download with parallel chunks and tuned settings.
@@ -479,6 +502,8 @@ def _ensure_local_blob_optimized(blob_name: str, use_temp: bool = False) -> Opti
     download_start = _perf_time.time()
 
     if not blob_name:
+        return None
+    if _blob_known_missing(blob_name):
         return None
 
     if use_temp:
@@ -1495,6 +1520,8 @@ def _ensure_local_blob(blob_name: str) -> Optional[str]:
         return local_path
     except Exception as e:
         log_structured_error(e, page="company_filings", component="_ensure_local_blob", operation="DOWNLOAD_BLOB")
+        if _is_blob_not_found(e):
+            _missing_blobs()[blob_name] = _perf_time.time()   # both download paths said so
         return None
 
 
@@ -4133,6 +4160,7 @@ def main():
                 # Show error with retry button
                 st.error(f"⚠️ **Filing not found in Azure**: `{blob_name}`")
                 if st.button("🔄 Retry Download", key="retry_download"):
+                    _missing_blobs().clear()
                     st.rerun()
 
                 document = FilingDocument(

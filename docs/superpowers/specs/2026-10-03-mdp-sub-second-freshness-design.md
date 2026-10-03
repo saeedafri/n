@@ -137,6 +137,18 @@ Edits/deletes leave no new id → all results of those tables are rebuilt every 
 (`PERSIST_SCOPED_FULL_S`). `non_sec_transcript_companies` got a content checksum signal
 instead of count-only (it was rebuilt on every v5 write).
 
+### 2.3c Round 2 (approved: Company Filings speed-only)
+* Missing filing blob: once BOTH download paths got "blob does not exist", that answer is
+  reused for 60 s process-wide (`_missing_blobs`) instead of ~6 Azure calls on every rerun;
+  "Retry Download" clears it. Found files: unchanged (already served from the disk cache).
+* Filing search with no metric match: the LLM-cache status ("not_found", or nothing cached and
+  no SECTION_CACHE.json) is read on the read engine first; the BEGIN/COMMIT transaction
+  (~0.8 s) only opens when extraction can actually run. Same return values.
+  `_prefetch_filing_metrics` persisted (2 s on the first search per filing after a restart).
+* Materialized caches: the first read in a process serves the disk copy immediately and checks
+  its signature in a background thread (it previously blocked the first visitor ~3 s, then
+  served the same copy). Calendar first visit after restart 4.0 s → 1.3 s.
+
 ### 2.4 Other fixes
 * Filings search returns the prefetch answer even when empty (no FULLTEXT fallback); phrase match
   across punctuation; 0 lost results vs DB LIKE.

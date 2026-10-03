@@ -7563,6 +7563,7 @@ class FilingMetricRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("filing_metrics_prefetch")
     def _prefetch_filing_metrics(ticker: str, report_fiscal_year: int, doc_type: str) -> List[Dict[str, Any]]:
         """
         Fetch ALL numeric, non-TextBlock rows for one filing into memory (cached 5 min).
@@ -7872,12 +7873,26 @@ class FilingMetricRepository:
             return [], False
 
         try:
-            from core.llm_extractor import LLMExtractor
+            from core.llm_extractor import LLMExtractor, _normalize_query, _get_section_cache_path
             from core.database import db_manager as _dbm
 
             engine = _dbm._engine
             if engine is None:
                 return [], False
+
+            # The two answers LLMExtractor.extract() gives without doing any work —
+            # cached "not_found", or nothing cached and no SECTION_CACHE.json to read —
+            # read on the 1-round-trip read engine first. The transaction below
+            # (BEGIN + query + COMMIT, ~0.8 s) cost every search that matched nothing.
+            _status_rows = _dbm.execute_query_readonly(
+                "SELECT status FROM filing_llm_cache WHERE ticker = :ticker AND fiscal_year = :fy "
+                "AND doc_type = :dt AND query_normalized = :q LIMIT 1",
+                {"ticker": ticker, "fy": report_fiscal_year, "dt": doc_type, "q": _normalize_query(query)})
+            _status = _status_rows[0].get("status") if _status_rows else None
+            if _status == "not_found":
+                return [], True
+            if _status is None and not _get_section_cache_path(ticker, report_fiscal_year, doc_type):
+                return [], True
 
             with engine.begin() as conn:
                 llm_results = LLMExtractor.extract(
@@ -14587,3 +14602,4 @@ bind_ram_clear("exec_compensation", lambda: ExecutiveCompensationRepository.get_
 bind_ram_clear("segment_intl_count", lambda: SegmentDataRepository._international_geo_member_count.clear())
 bind_ram_clear("segment_annual_revenue", lambda: SegmentDataRepository._annual_revenue_rows.clear())
 bind_ram_clear("ec_event_dates", lambda: EarningsCalendarRepository.get_earnings_event_dates.clear())
+bind_ram_clear("filing_metrics_prefetch", lambda: FilingMetricRepository._prefetch_filing_metrics.clear())
