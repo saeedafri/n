@@ -10736,11 +10736,39 @@ class SegmentDataRepository:
         return materialized_or_build(
             f"segment_rows_{ticker}",
             lambda: {"rows": SegmentDataRepository._query_all_db_rows(ticker, raising=True)},
-            # MAX(id) moves on a new filing and on a re-ingest (new ids), not only
-            # when the row count changes; covered by idx_v2_ticker_doctype.
-            [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
-              "where": f"ticker = '{ticker}' AND doc_type = '10-K'"}],
+            SegmentDataRepository._segment_rows_sources(ticker),
         clear=lambda: SegmentDataRepository._fetch_all_db_rows.clear())["rows"]
+
+    @staticmethod
+    def _segment_rows_sources(ticker: str) -> List[Dict[str, str]]:
+        # MAX(id) moves on a new filing and on a re-ingest (new ids), not only
+        # when the row count changes; covered by idx_v2_ticker_doctype.
+        return [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
+                 "where": f"ticker = '{ticker}' AND doc_type = '10-K'"}]
+
+    @staticmethod
+    def build_segment_rows_on_disk(tickers: List[str]) -> int:
+        """Write the segment-rows disk cache for every ticker that has none yet.
+
+        The first view of a ticker's Segment tab otherwise builds it live (STG
+        03-Oct: 2.7s ADT, 12s M). Disk only — nothing is kept in RAM — and the
+        cache dir survives deploys, so later boots skip every ticker already
+        built; the freshness check on first read refreshes changed ones.
+        Returns how many tickers were built.
+        """
+        from utils.materialize import on_disk, write_materialized
+        built = 0
+        for ticker in tickers:
+            name = f"segment_rows_{ticker}"
+            if not re.fullmatch(r"[A-Za-z0-9.^-]{1,20}", ticker or "") or on_disk(name):
+                continue
+            try:
+                rows = SegmentDataRepository._query_all_db_rows(ticker, raising=True)
+            except Exception:
+                continue
+            write_materialized(name, {"rows": rows}, SegmentDataRepository._segment_rows_sources(ticker))
+            built += 1
+        return built
 
     @staticmethod
     def _query_all_db_rows(ticker: str, raising: bool = False) -> List[Dict[str, Any]]:
@@ -11794,11 +11822,15 @@ class SegmentDataRepository:
     @st.cache_data(ttl=21600, show_spinner=False)
     @persistent("segment_has_quarterly")
     def has_quarterly_segment_data(ticker: str) -> bool:
-        """Quick check: does this ticker have any quarterly segment rows in the DB?"""
+        """Quick check: does this ticker have any quarterly segment rows in the DB?
+
+        SELECT 1 stops at the first match; COUNT(*) read every matching row
+        first (STG 03-Oct: 2.4-3.8s per ticker on first view, 1 row-fetch now).
+        """
         from utils.constants import SEGMENT_ALL_AXES
         clause, params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
         sql = f"""
-            SELECT COUNT(*) as cnt
+            SELECT 1 AS found
             FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND is_dimensioned = 1
@@ -11810,7 +11842,7 @@ class SegmentDataRepository:
             LIMIT 1
         """
         r = db_manager.execute_query_readonly(sql, {"ticker": ticker, **params})
-        return bool(r and r[0].get('cnt', 0) > 0)
+        return bool(r)
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)  # 1h — segment data is pre-ingested, not live
@@ -12378,6 +12410,12 @@ class RatingsDataRepository:
         r = str(rating).strip()
         r = RatingsDataRepository._MOODYS_TO_SP.get(r, r)
         return RatingsDataRepository._SP_NOTCHES.get(r)
+
+    # Longest a render waits on one EDGAR lookup. Disk-cache hits take
+    # milliseconds; a cold lookup takes 4-60s and keeps running in the background,
+    # and the tab's poll picks the result up. Was 2-4s per wait, repeated on every
+    # poll: STG 03-Oct ADT Additional Data = 14.2s first render, 6s per poll.
+    _EDGAR_WAIT_S = 0.4
 
     _ALL_ROWS_QUERY = """
         SELECT ticker, company_name, report_fiscal_year, doc_type,
@@ -13565,7 +13603,7 @@ class RatingsDataRepository:
         try:
             _f_tot = _pool.submit(RatingsDataRepository._edgartools_store_totals, ticker)
             try:
-                years |= set((_f_tot.result(timeout=3) or {}).get("totals", {}))
+                years |= set((_f_tot.result(timeout=RatingsDataRepository._EDGAR_WAIT_S) or {}).get("totals", {}))
             except Exception:
                 pass
         finally:
@@ -13610,7 +13648,7 @@ class RatingsDataRepository:
         try:
             _f_cr = _pool.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
             try:
-                edgar_data = _f_cr.result(timeout=3) or {}
+                edgar_data = _f_cr.result(timeout=RatingsDataRepository._EDGAR_WAIT_S) or {}
                 edgar_years = [k for k in edgar_data if isinstance(k, int)]
                 if edgar_years:
                     _dates = RatingsDataRepository._fiscal_dates(
@@ -13658,6 +13696,12 @@ class RatingsDataRepository:
         # running in the background, so the UI can retry-rerun to pick up the
         # completed result instead of leaving a silently incomplete table.
         _pending_fetches: List[str] = []
+        # One shared EDGAR wait budget for the whole render (both phases), so a
+        # poll rerun with fetches still running costs _EDGAR_WAIT_S, not 2x.
+        import time as _t_mod
+        _deadline = _t_mod.monotonic() + RatingsDataRepository._EDGAR_WAIT_S
+        def _left() -> float:
+            return max(0.02, _deadline - _t_mod.monotonic())
         _pool1 = ThreadPoolExecutor(max_workers=2)
         _f_db = _pool1.submit(RatingsDataRepository._fetch_all_rows, ticker)
         _f_cr = _pool1.submit(RatingsDataRepository._edgartools_credit_ratings, ticker)
@@ -13668,10 +13712,10 @@ class RatingsDataRepository:
             _pending_fetches.append("db_rows")
         _edgar_data_raw: Dict[str, Any] = {}
         try:
-            # 2s: warm hits are disk-cache milliseconds; a cold section-text fetch
+            # Warm hits are disk-cache milliseconds; a cold section-text fetch
             # takes 30-60s so waiting longer only delays the render. The fetch
             # keeps running in the background and fills on the next rerun.
-            _edgar_data_raw = _f_cr.result(timeout=2) or {}
+            _edgar_data_raw = _f_cr.result(timeout=_left()) or {}
         except Exception:
             _pending_fetches.append("credit_ratings")
         _pool1.shutdown(wait=False)
@@ -14007,12 +14051,8 @@ class RatingsDataRepository:
         _f_sqft = _pool2.submit(RatingsDataRepository.get_square_footage_data, ticker, 2000, end_year)
         # Short SHARED deadline — NO LAG on ticker switch. Warm tickers resolve
         # from the 24h disk caches in milliseconds; a cold ticker renders what it
-        # has within ~4s total (not 3+3+6 sequential) while the fetches keep
-        # running in the background. Never make the user wait for EDGAR.
-        import time as _t_mod
-        _deadline = _t_mod.monotonic() + 4.0
-        def _left() -> float:
-            return max(0.1, _deadline - _t_mod.monotonic())
+        # has within the shared budget while the fetches keep running in the
+        # background. Never make the user wait for EDGAR.
         try:
             _xbrl_totals_raw = _f_tot.result(timeout=_left()) or {}
         except Exception:

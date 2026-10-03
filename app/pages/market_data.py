@@ -2319,8 +2319,13 @@ def render_page():
                 available_dates = SegmentDataRepository.get_available_dates(selected_ticker, _period_type_db)
             elif selected_tab == "ratings":
                 from data.repository import RatingsDataRepository
-                min_date, max_date = RatingsDataRepository.get_date_range(selected_ticker)
+                # Range = first/last available date (same _fiscal_dates rule), so
+                # the year list and its EDGAR wait are paid once, not twice.
                 available_dates = RatingsDataRepository.get_available_dates(selected_ticker)
+                if available_dates:
+                    min_date, max_date = available_dates[0], available_dates[-1]
+                else:
+                    min_date, max_date = RatingsDataRepository.get_date_range(selected_ticker)
             elif selected_tab == "estimates":
                 _est_min, _est_max = AnalystEstimatesRepository.get_date_range(selected_ticker, _period_type_db)
                 _est_dates = AnalystEstimatesRepository.get_available_dates(selected_ticker, _period_type_db)

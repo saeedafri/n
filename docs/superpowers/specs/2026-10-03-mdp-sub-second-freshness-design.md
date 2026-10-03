@@ -175,6 +175,26 @@ instead of count-only (it was rebuilt on every v5 write).
   its signature in a background thread (it previously blocked the first visitor ~3 s, then
   served the same copy). Calendar first visit after restart 4.0 s → 1.3 s.
 
+### 2.3d Round 3: Market Data Segment and Additional Data tabs (STG log 03-Oct)
+Evidence (STG, first view of ADT after the round-2 deploy): Segment 7.8 s (quarterly check
+2.9 s, live segment-row build 2.75 s), Additional Data 14.2 s first render, then 4.5–6.6 s per
+1.5 s poll. The Excel button is drawn after the table, so it was missing for the whole wait.
+* Quarterly check (`has_quarterly_segment_data`): `SELECT 1 … LIMIT 1` instead of `COUNT(*)`
+  (same answer; COUNT read every matching row first). ADT 0.74 → 0.28 s, AMZN 3.9 → 0.27 s.
+* Segment rows: background warm-up track 2b writes `segment_rows_<ticker>` to the persistent
+  cache dir for every company that has none (`build_segment_rows_on_disk`, disk only, nothing
+  kept in RAM, sequential). Later boots skip tickers already on disk; the first read still
+  checks the signature (MAX(id) of the ticker's 10-K rows) in the background. The first
+  Segment view then reads disk instead of 3 live queries (M: 12 s build → 0.06 s read).
+* Additional Data: one shared 0.4 s EDGAR wait per render (`_EDGAR_WAIT_S`), was 3 s + 3 s in
+  the date range and 2 s + 4 s in the data fetch, repeated on every poll. Disk-cache hits take
+  milliseconds and still land in the first render; cold lookups keep running in the background
+  and the existing poll fills them in. The page builds the year list once (range = first/last
+  available date, same `_fiscal_dates` rule) instead of twice. Laptop: render 6.5 s → 0.41 s.
+* No data or logic change: 8 Segment/Additional Data workbooks (M, WMT, KSS, ADT, AMZN) are
+  cell-identical between the old and new code. Tickers with no Additional Data (ADT, AMZN) show
+  "No extracted data" and no Excel, as before.
+
 ### 2.4 Other fixes
 * Filings search returns the prefetch answer even when empty (no FULLTEXT fallback); phrase match
   across punctuation; 0 lost results vs DB LIKE.

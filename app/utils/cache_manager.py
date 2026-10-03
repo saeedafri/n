@@ -612,6 +612,24 @@ def _background_warmup_thread():
         except Exception as e:
             log_error(f"[CACHE_WARM_BG] Buffer-pool warmup error: {e}")
 
+        # ── Track 2b: Segment rows for every company, on disk ─────────────────
+        # Track 1c warms AMZN only; every other ticker's first Segment view built
+        # its rows live (STG 03-Oct: ADT 7.8s, M 12s fetch). One sequential pass
+        # writes the missing ones to the persistent cache dir and keeps nothing
+        # in RAM; later boots find them on disk and skip them.
+        try:
+            from data.repository import CompanyRepository, SegmentDataRepository
+            from utils.server_logger import log_timing as _seg_log
+            _seg_t0 = time.time()
+            _seg_tickers = sorted({str(r.get("ticker") or "").upper()
+                                   for r in (CompanyRepository.get_companies_rows() or [])
+                                   if r.get("ticker")})
+            _seg_built = SegmentDataRepository.build_segment_rows_on_disk(_seg_tickers)
+            _seg_log("SEGMENT_ROWS_DISK_WARM", (time.time() - _seg_t0) * 1000,
+                     details=f"built={_seg_built} tickers={len(_seg_tickers)}")
+        except Exception as e:
+            log_error(f"[CACHE_WARM_BG] Segment rows warmup error: {e}")
+
         # ── Track 3: Additional Data (ratings) full-universe warm sweep ───────
         # STG evidence (15-Jul): the first open of the Additional Data tab per
         # ticker burns 2-4.3s in bounded waits on cold EDGAR fetches, while a

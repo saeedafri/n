@@ -342,18 +342,19 @@ _CHECKED = set()               # names whose disk copy was signature-checked thi
 _CHECKED_LOCK = threading.Lock()
 
 
+def on_disk(name):
+    """True when a materialized copy of `name` is on disk (read with no DB trip)."""
+    _d = _cache_dir() if _materialize_on() else None
+    return bool(_d) and os.path.exists(os.path.join(_d, f"{name}.pkl.gz")) \
+        and os.path.exists(os.path.join(_d, f"{name}.meta.json"))
+
+
 def _disk_copy(name):
     """The materialized object from disk with no database round trip, or None."""
     try:
-        if not _materialize_on():
+        if not on_disk(name):
             return None
-        _d = _cache_dir()
-        if not _d:
-            return None
-        _pk = os.path.join(_d, f"{name}.pkl.gz")
-        if not (os.path.exists(_pk) and os.path.exists(os.path.join(_d, f"{name}.meta.json"))):
-            return None
-        return pd.read_pickle(_pk, compression="gzip")
+        return pd.read_pickle(os.path.join(_cache_dir(), f"{name}.pkl.gz"), compression="gzip")
     except Exception:
         return None
 
