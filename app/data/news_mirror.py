@@ -43,6 +43,8 @@ TABLES = {
         # (time, norm_title): the keyword search tests the title inside the index
         # instead of reading every wide row — a 5-year no-hit search 1.4 s → 0.18 s.
         "indexes": ["time_published_utc, id", "ticker, time_published_utc", "time_published_utc, norm_title"],
+        "chunk": 100000,   # ids per first-copy work unit (~85k rows, ~90 MB)
+        "workers": 3,
     },
     "yf": {
         "source": "coreiq_yf_market_news_sentiment",
@@ -50,6 +52,8 @@ TABLES = {
         "columns": ["id", "news_id", "published_at", "ticker", "title", "publisher", "link",
                     "primary_topic_v1", "primary_topic_v2"],
         "indexes": ["published_at, id", "news_id", "published_at, norm_title"],
+        "chunk": 250000,   # YF ids are sparse: ~40k rows per unit
+        "workers": 1,
     },
     "tx": {
         "source": "coreiq_av_earnings_call_transcripts",
@@ -63,6 +67,8 @@ TABLES = {
                      "event_datetime_utc", "fetched_at_utc", "raw_json_sha1",
                      "CHAR_LENGTH(transcript_text)"],
         "batch": 500,
+        "chunk": 10000,    # ids per first-copy work unit (~2,200 transcripts, ~55 MB)
+        "workers": 2,
         "block": 2000,     # ~450 transcripts: one checksum query stays well under the read timeout
         # Transcripts are re-fetched IN PLACE (~1,700 old ids a day), which a check of
         # the newest blocks never sees; every re-fetch stamps fetched_at_utc.
@@ -71,6 +77,7 @@ TABLES = {
 }
 COMPANIES = {"source": "coreiq_av_companies_all", "columns": ["symbol", "sector"]}
 BATCH = 20000          # rows per copy round trip
+FIRST_COPY_BATCH = 5000  # per round trip while the parallel first copy runs
 BLOCK = 10000          # ids per reconciliation block (a 10k block checks in ~0.4 s)
 HOT_BLOCKS = int(os.getenv("NEWS_MIRROR_HOT_BLOCKS", "2"))   # newest blocks checked on every write (~13 days of AV)
 RESTORE_HOT_BLOCKS = 5                                          # …and once after a restore
@@ -79,6 +86,13 @@ RESTORE_HOT_BLOCKS = 5                                          # …and once af
 RECONCILE_EVERY_S = float(os.getenv("NEWS_MIRROR_RECONCILE_S", "21600"))
 SWEEP_DUTY = float(os.getenv("NEWS_MIRROR_SWEEP_DUTY", "0.25"))     # max share of time spent querying
 SNAPSHOT_EVERY_S = float(os.getenv("NEWS_MIRROR_SNAPSHOT_S", "21600"))
+CHECKPOINT_S = float(os.getenv("NEWS_MIRROR_CHECKPOINT_S", "600"))   # snapshot cadence DURING the first copy
+# Date windows a partial copy can serve as soon as every row published inside them is
+# local (newest windows complete first). Older ranges keep using MySQL until done.
+COVER_TIERS_DAYS = (7, 30, 90, 365)
+_COPYING = {}                       # key -> running first-copy thread
+_COVERED = {}                       # key -> 'YYYY-MM-DD HH:MM:SS': rows published since are all local
+_PARTIAL_OK = {}                    # key -> partial copy brought up to date this process
 _SNAPSHOT_LOCK = threading.Lock()
 _BLOCK_LOCK = threading.Lock()     # one block re-copy at a time (sweep vs hot check)
 _SWEEP_LOCK = threading.Lock()     # one full sweep at a time, across tables
@@ -90,6 +104,7 @@ _SYNC_LOCK = threading.Lock()
 _WANT = {"run": False, "all": False, "reconcile": False, "tables": set()}   # queued sync request
 _ON_CHANGE = {}        # name -> (keys, fn): in-memory caches to clear when the copy changes
 _STARTED = False
+_BOOT = time.time()
 
 
 def enabled():
@@ -105,9 +120,11 @@ def normalize(text):
 
 
 def _snapshot_path():
+    """The snapshot on the persistent dir, gzip-compressed (4.8 GB → ~1.3 GB): /home on
+    Azure is network storage, so the smaller file restores and saves ~3x faster."""
     from utils.materialize import _cache_dir
     d = _cache_dir()
-    return os.path.join(d, "news_mirror.sqlite") if d else None
+    return os.path.join(d, "news_mirror.sqlite.gz") if d else None
 
 
 def _path():
@@ -117,23 +134,55 @@ def _path():
     snap = _snapshot_path()
     local = os.getenv("NEWS_MIRROR_DIR", "").strip()
     if not local:
-        if not (snap and snap.startswith("/home/")):
-            return snap
+        if not snap:
+            return None
+        if not snap.startswith("/home/"):
+            return snap[:-len(".gz")]           # local dev: work file next to the snapshot
         local = "/tmp/mdp-news"
     os.makedirs(local, exist_ok=True)
     return os.path.join(local, "news_mirror.sqlite")
 
 
+def _fetch_seed(snap):
+    """No snapshot yet (first deploy): fetch a prepared one from Azure Blob if
+    NEWS_MIRROR_SEED_BLOB names it (same storage account/container as the filings)."""
+    name = os.getenv("NEWS_MIRROR_SEED_BLOB", "").strip()
+    if not name or os.path.exists(snap):
+        return False
+    started = time.perf_counter()
+    try:
+        from utils.azure_blob import get_container_client
+        container = get_container_client()
+        if container is None:
+            return False
+        tmp = snap + ".seed"
+        with open(tmp, "wb") as f:
+            for chunk in container.get_blob_client(name).download_blob(max_concurrency=4).chunks():
+                f.write(chunk)
+        os.replace(tmp, snap)
+        slog_warning(f"[NEWS_MIRROR] seed {name} fetched in {time.perf_counter() - started:.0f}s")
+        return True
+    except Exception as exc:
+        slog_warning(f"[NEWS_MIRROR] seed fetch failed, building the copy instead: "
+                     f"{type(exc).__name__}: {str(exc)[:160]}")
+        return False
+
+
 def _restore_snapshot():
     """First sync after a deploy/restart: start from the /home snapshot instead of a
-    40-minute full copy. Rows changed since the snapshot are unknown, so each table is
-    marked for a full checksum pass before it may be served (see ready())."""
+    full copy. Rows changed since the snapshot are unknown, so each table is checked
+    (new rows, re-fetched rows, newest blocks) before it is served again."""
     work, snap = _path(), _snapshot_path()
-    if not snap or work == snap or os.path.exists(work) or not os.path.exists(snap):
+    if not snap or not work or os.path.exists(work):
+        return False
+    _fetch_seed(snap)
+    if not os.path.exists(snap):
         return False
     started = time.perf_counter()
     tmp = work + ".restore"
-    shutil.copyfile(snap, tmp)
+    import gzip
+    with gzip.open(snap, "rb") as src, open(tmp, "wb") as dst:
+        shutil.copyfileobj(src, dst, 16 * 1024 * 1024)
     os.replace(tmp, work)
     c = _conn()
     _schema(c)
@@ -147,9 +196,9 @@ def _restore_snapshot():
 
 def _write_snapshot():
     """Consistent copy of the working file onto the persistent dir (backup API → local
-    temp → one sequential write to /home → atomic rename)."""
+    temp → gzip stream to /home → atomic rename)."""
     work, snap = _path(), _snapshot_path()
-    if not snap or work == snap:
+    if not snap or not work:
         return
     started = time.perf_counter()
     local_tmp, snap_tmp = work + ".snap", snap + ".tmp"
@@ -159,7 +208,9 @@ def _write_snapshot():
     finally:
         dst.close()
         src.close()
-    shutil.copyfile(local_tmp, snap_tmp)
+    import gzip
+    with open(local_tmp, "rb") as fin, gzip.open(snap_tmp, "wb", compresslevel=1) as fout:
+        shutil.copyfileobj(fin, fout, 16 * 1024 * 1024)
     os.replace(snap_tmp, snap)
     os.remove(local_tmp)
     slog_warning(f"[NEWS_MIRROR] snapshot written in {time.perf_counter() - started:.0f}s")
@@ -276,7 +327,7 @@ def _insert(c, key, rows, replace=True):
                    for r in rows])
 
 
-def _copy_range(c, key, where, params, order, progress=None):
+def _copy_range(c, key, where, params, order, progress=None, batch=None):
     """Copy rows matching `where` in id order, BATCH at a time. Returns rows copied.
     `progress`: state key that records the last id copied, so a copy interrupted by a
     restart resumes where it stopped."""
@@ -286,7 +337,7 @@ def _copy_range(c, key, where, params, order, progress=None):
     cursor_id = params.pop("_start")
     while True:
         cmp = ">" if order == "ASC" else "<"
-        batch = t.get("batch", BATCH)
+        batch = batch or t.get("batch", BATCH)
         rows = _db_rows(f"SELECT {sel} FROM {t['source']} WHERE id {cmp} :cur {where} "
                         f"ORDER BY id {order} LIMIT {batch}", {**params, "cur": cursor_id})
         if not rows:
@@ -315,20 +366,131 @@ def _copy_companies(c):
     return True
 
 
-def _full_copy(c, key):
-    """First copy: newest ids first so the recent range is usable soonest is not
-    needed (we serve only when complete), so copy ascending — resumable via state."""
+def _tiers(key, top):
+    """{window start: lowest id published since} for COVER_TIERS_DAYS, read once when
+    the first copy starts (indexed range reads on the time column)."""
+    import json
+    from datetime import timedelta, timezone
     t = TABLES[key]
+    out = {}
+    for days in COVER_TIERS_DAYS:
+        since = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).replace(microsecond=0)
+        # No id cap here: it turns this indexed time-range read into a primary-key scan
+        # (timed out at 120 s). Ids above `top` are the tail's anyway.
+        try:
+            r = _db_rows(f"SELECT MIN(id) AS m FROM {t['source']} WHERE {t['ts']} >= :since", {"since": since})
+        except Exception as exc:
+            slog_warning(f"[NEWS_MIRROR][{key}] window {days}d not resolved ({type(exc).__name__}); "
+                         f"it is served once the copy completes")
+            continue
+        if r and r[0]["m"] is not None:
+            out[since.strftime("%Y-%m-%d %H:%M:%S")] = int(r[0]["m"])
+    return json.dumps(out)
+
+
+def _update_coverage(c, key):
+    """Oldest window start whose rows are all in the copy (every chunk from the top
+    down to that window's lowest id is done)."""
+    import json
+    if key not in ("av", "yf"):
+        return
+    top = int(_get_state(c, f"{key}:max_id", 0) or 0)
+    size = TABLES[key]["chunk"]
+    done = set(json.loads(_get_state(c, f"{key}:chunks_done", "[]")))
+    lo = top + 1
+    for start in sorted(range(0, top, size), reverse=True):
+        if start not in done:
+            break
+        lo = start + 1
+    tiers = json.loads(_get_state(c, f"{key}:tiers", "{}"))
+    covered = [since for since, min_id in tiers.items() if min_id >= lo]
+    with _STATE_LOCK:
+        _COVERED[key] = min(covered) if covered else None
+
+
+def _copy_table(key):
+    """First copy of one table: id chunks, NEWEST first, `workers` at a time (MySQL
+    reads in parallel — measured 2.5x one stream), each chunk recorded when done so a
+    restart or redeploy resumes. Recent windows become servable as they complete."""
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+    t = TABLES[key]
+    c = _conn()
     started = time.perf_counter()
-    top = _db_rows(f"SELECT MAX(id) AS mx FROM {t['source']}", {})[0]["mx"] or 0
-    resume = int(_get_state(c, f"{key}:copied_to", 0) or 0)
-    n = _copy_range(c, key, "AND id <= :top", {"_start": resume, "top": top}, "ASC",
-                    progress=f"{key}:copied_to")
+    top = int(_get_state(c, f"{key}:max_id", 0) or 0)
+    if not top:
+        top = _db_rows(f"SELECT MAX(id) AS mx FROM {t['source']}", {})[0]["mx"] or 0
+        _set_state(c, f"{key}:max_id", top)
+        c.commit()
+    if key in ("av", "yf") and _get_state(c, f"{key}:tiers") is None:
+        _set_state(c, f"{key}:tiers", _tiers(key, top))
+        c.commit()
+    size = t["chunk"]
+    done_lock = threading.Lock()
+    done = set(json.loads(_get_state(c, f"{key}:chunks_done", "[]")))
+    todo = [st for st in sorted(range(0, top, size), reverse=True) if st not in done]
+    _update_coverage(c, key)
+    rows = [0]
+
+    def one(start):
+        wc = _conn()
+        for attempt in range(3):
+            try:
+                # Smaller reads than steady-state: several streams share MySQL's disk
+                # here, and one 20k-row read of cold pages passed the 120 s timeout.
+                n = _copy_range(wc, key, "AND id <= :hi", {"_start": start, "hi": min(start + size, top)},
+                                "ASC", batch=min(t.get("batch", BATCH), FIRST_COPY_BATCH))
+                break
+            except Exception as exc:
+                if attempt == 2:
+                    raise
+                slog_warning(f"[NEWS_MIRROR][{key}] chunk {start} retry {attempt + 1}: {type(exc).__name__}")
+                time.sleep(10 * (attempt + 1))
+        with done_lock:
+            done.add(start)
+            rows[0] += n
+            _set_state(wc, f"{key}:chunks_done", json.dumps(sorted(done)))
+            wc.commit()
+            _update_coverage(wc, key)
+        _maybe_snapshot(wc)
+
+    with ThreadPoolExecutor(max_workers=t.get("workers", 1), thread_name_prefix=f"news-mirror-{key}") as ex:
+        list(ex.map(one, todo))
     _set_state(c, f"{key}:copied_to", top)
-    _set_state(c, f"{key}:max_id", top)
     _set_state(c, f"{key}:complete", "1")
+    # Rows copied early may have been edited while the rest copied: check the newest
+    # blocks before serving (verify) and sweep the rest in the background.
+    _set_state(c, f"{key}:verify", "1")
+    _set_state(c, f"{key}:reconciled_at", 0)
     c.commit()
-    slog_warning(f"[NEWS_MIRROR][{key}] full copy {n:,} rows to id {top} in {time.perf_counter() - started:.0f}s")
+    with _STATE_LOCK:
+        _READY.pop(key, None)
+    slog_warning(f"[NEWS_MIRROR][{key}] first copy {rows[0]:,} rows to id {top} in "
+                 f"{time.perf_counter() - started:.0f}s")
+
+
+def _start_copy(key):
+    with _STATE_LOCK:
+        th = _COPYING.get(key)
+        if th is not None and th.is_alive():
+            return
+    def run():
+        try:
+            _copy_table(key)
+        except Exception as exc:
+            slog_warning(f"[NEWS_MIRROR][{key}] first copy stopped (resumes in 30 s): "
+                         f"{type(exc).__name__}: {str(exc)[:160]}")
+            time.sleep(30)
+        sync(None)          # verify + serve right away (or resume) instead of waiting for a write
+    th = threading.Thread(target=run, name=f"news-mirror-copy-{key}", daemon=True)
+    with _STATE_LOCK:
+        _COPYING[key] = th
+    th.start()
+
+
+def copying():
+    with _STATE_LOCK:
+        return any(th.is_alive() for th in _COPYING.values())
 
 
 def _tail(c, key):
@@ -521,9 +683,18 @@ def _sync_pass(changed_tables, reconcile):
                 changed.add("companies")
         for key, t in TABLES.items():
             if _get_state(c, f"{key}:complete") != "1":
-                _full_copy(c, key)
-                with _STATE_LOCK:
-                    _READY.pop(key, None)
+                _start_copy(key)
+                if _get_state(c, f"{key}:max_id") and (changed_tables is None or t["source"] in changed_tables):
+                    # Partial copy serving recent windows: new rows and edits to the
+                    # newest blocks are applied before (and while) it serves them.
+                    if _tail(c, key):
+                        changed.add(key)
+                    hi = int(_get_state(c, f"{key}:max_id", 0) or 0)
+                    if _reconcile(c, key, from_id=max(1, hi - RESTORE_HOT_BLOCKS * _block(key))):
+                        changed.add(key)
+                    with _STATE_LOCK:
+                        _PARTIAL_OK[key] = True
+                    _update_coverage(c, key)
                 continue
             moved = changed_tables is None or t["source"] in changed_tables
             verify = _get_state(c, f"{key}:verify") == "1"
@@ -559,9 +730,15 @@ def _maybe_snapshot(c):
     snap = _snapshot_path()
     if not snap or snap == _path():
         return
-    if any(_get_state(c, f"{k}:complete") != "1" or _get_state(c, f"{k}:verify") == "1" for k in TABLES):
+    in_progress = any(_get_state(c, f"{k}:complete") != "1" for k in TABLES)
+    if not in_progress and any(_get_state(c, f"{k}:verify") == "1" for k in TABLES):
         return
-    if os.path.exists(snap) and time.time() - os.path.getmtime(snap) < SNAPSHOT_EVERY_S:
+    # During the first copy: a checkpoint every CHECKPOINT_S, so a redeploy resumes
+    # from it instead of starting the copy again.
+    every = CHECKPOINT_S if in_progress else SNAPSHOT_EVERY_S
+    if os.path.exists(snap) and time.time() - os.path.getmtime(snap) < every:
+        return
+    if in_progress and not os.path.exists(snap) and time.time() - _BOOT < CHECKPOINT_S:
         return
     if not _SNAPSHOT_LOCK.acquire(blocking=False):
         return
@@ -793,14 +970,51 @@ def transcript_like_ids(keyword):
         return None
 
 
+_DATE_FROM_PARAMS = ("date_from", "d1")
+_ID_PARAM = re.compile(r"^i\d+$")
+
+
+def _partial_covers(key, params):
+    """While the first copy is still running: True if this query only reads rows the
+    copy already holds — a news query starting inside a fully copied recent window, or
+    a by-id lookup of rows that are all present."""
+    if key not in ("av", "yf") or not enabled():
+        return False
+    with _STATE_LOCK:
+        frm, ok = _COVERED.get(key), _PARTIAL_OK.get(key)
+    if not ok:
+        return False
+    try:
+        c = _conn()
+        if _get_state(c, "companies:complete") != "1":
+            return False
+        if params and all(_ID_PARAM.match(k) for k in params):
+            ids = list(params.values())
+            got = c.execute(f"SELECT COUNT(*) FROM {TABLES[key]['source']} WHERE id IN "
+                            f"({', '.join('?' * len(ids))})", ids).fetchone()[0]
+            return got == len(set(ids))
+        if not frm:
+            return False
+        lo = next((params[k] for k in _DATE_FROM_PARAMS if params.get(k) is not None), None)
+        if lo is None:
+            return False
+        lo = _sqlite_value(lo)
+        if len(lo) == 10:
+            lo += " 00:00:00"
+        return lo >= frm
+    except Exception:
+        return False
+
+
 def run(sql, params, key):
-    """MySQL result for `sql`, served from the copy when it is complete."""
+    """MySQL result for `sql`, served from the copy when it is complete (or, during the
+    first copy, when it only reads rows already copied)."""
     try:
         from utils.persist import record
         record(sql)        # a persisted result read from the copy still tracks its tables
     except Exception:
         pass
-    if ready(key):
+    if ready(key) or _partial_covers(key, params):
         try:
             return query(sql, params)
         except Exception as exc:

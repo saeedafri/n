@@ -113,6 +113,32 @@ dashboards. Display mappings read from repo files (geo label map) are deliberate
   serve → throttled full sweep in the background. First copy ever: ~45 min in the background,
   MySQL serves meanwhile.
 
+### 2.3-bis First copy: parallel, newest first, checkpointed (no DB change)
+Measured cause of the 44-min first copy: MySQL reads its disk at ~4-15 MB/s cold
+(`innodb_io_capacity=200`, 4 GB buffer pool < 4.8 GB copied); indexes cannot help (the copy
+already reads in primary-key order). Code changes:
+* Id chunks per table, newest first, several workers per table, all tables at once
+  (AV 3, YF 1, transcripts 2 streams); 5,000-row reads during the first copy; each chunk
+  retried 3x; completed chunks recorded in the file (resume).
+* Progressive serving: at start, the lowest id published in the last 7/30/90/365 days is
+  read (indexed); once every chunk from the top down to it is copied, news queries whose
+  start date lies in that window (and by-id lookups of present rows) are served locally.
+  Older ranges stay on MySQL until the copy completes. New rows + newest blocks are kept
+  exact meanwhile.
+* Checkpoint snapshot every 10 min during the first copy → a redeploy resumes.
+* Snapshot gzip-compressed: 4.9 GB → 1.36 GB on /home.
+* Optional seed: `NEWS_MIRROR_SEED_BLOB=<blob name>` fetches a prepared snapshot from the
+  filings storage container when /home has none.
+
+Measured (laptop over VPN, 300 ms RTT — STG same-region should be faster):
+
+| Event | Before | Now |
+|---|---|---|
+| Yahoo news, last 90 days served locally | 44 min | 1.8 min |
+| AV news, last 30 / 90 days served locally | 44 min | 2.6 / 2.9 min |
+| Everything copied | 44 min | 21.7 min |
+| Redeploy (restore + verify, all tables local) | — | 26 s (+ /home read on Azure) |
+
 ### 2.3a Transcript keyword search from the copy
 * `tx_words` — an FTS5 word index (unicode61, accents removed, case-folded = the column's
   `_ai_ci` comparison) over the copied transcripts, kept in step by triggers.

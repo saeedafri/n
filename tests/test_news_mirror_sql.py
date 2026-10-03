@@ -279,3 +279,29 @@ def test_transcript_ties_follow_order_direction():
     assert "ORDER BY year DESC, q DESC, id DESC LIMIT" in sql
     sql, _ = nm._to_sqlite("SELECT DISTINCT q FROM coreiq_av_earnings_call_transcripts WHERE ticker = :t ORDER BY q", {"t": "M"})
     assert sql.rstrip().endswith("ORDER BY q")              # DISTINCT: no ties to break
+
+
+def test_partial_copy_serves_only_fully_copied_recent_windows(monkeypatch):
+    import json
+    c = local_db(monkeypatch)
+    monkeypatch.setattr(nm, "_COVERED", {})
+    monkeypatch.setattr(nm, "_PARTIAL_OK", {"av": True})
+    monkeypatch.setattr(nm, "enabled", lambda: True)
+    nm._set_state(c, "companies:complete", "1")
+    nm._set_state(c, "av:max_id", 4)
+    monkeypatch.setitem(nm.TABLES["av"], "chunk", 2)            # chunks: ids 1-2 (start 0), 3-4 (start 2)
+    # rows published since 2026-09-03 all have id >= 3; since 2026-09-01: id >= 1
+    nm._set_state(c, "av:tiers", json.dumps({"2026-09-03 00:00:00": 3, "2026-09-01 00:00:00": 1}))
+    nm._set_state(c, "av:chunks_done", json.dumps([2]))         # newest chunk only
+    nm._update_coverage(c, "av")
+    assert nm._COVERED["av"] == "2026-09-03 00:00:00"
+    assert nm._partial_covers("av", {"date_from": date(2026, 9, 3), "date_to_excl": date(2026, 9, 5)})
+    assert not nm._partial_covers("av", {"date_from": date(2026, 9, 2)})          # older → MySQL
+    assert not nm._partial_covers("av", {})                                       # unbounded → MySQL
+    assert nm._partial_covers("av", {"i0": 3, "i1": 4})                           # by-id, all present
+    assert not nm._partial_covers("av", {"i0": 3, "i1": 99})                      # one missing → MySQL
+    nm._set_state(c, "av:chunks_done", json.dumps([0, 2]))
+    nm._update_coverage(c, "av")
+    assert nm._COVERED["av"] == "2026-09-01 00:00:00"
+    monkeypatch.setattr(nm, "_PARTIAL_OK", {})                  # not yet brought up to date
+    assert not nm._partial_covers("av", {"date_from": date(2026, 9, 3)})
