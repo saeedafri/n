@@ -7,6 +7,7 @@ six-model forecasting engine that powers the CIQ Estimates notebook.
 
 from __future__ import annotations
 
+from utils.persist import persistent, bind_ram_clear
 import json
 import threading
 from datetime import date
@@ -320,6 +321,7 @@ class RevenueForecastService:
 
     @staticmethod
     @st.cache_data(ttl=86400 * 7, show_spinner=False)  # 1-week TTL; engine version bumps via DB fast path
+    @persistent("forecast_dashboard")
     def get_company_dashboard(ticker: str, periods: int = 5) -> Dict[str, Any]:
         start = perf_counter()
         source = get_company_source(ticker)
@@ -784,6 +786,7 @@ class RevenueForecastService:
 
     @staticmethod
     @st.cache_data(ttl=86400 * 7, show_spinner=False)
+    @persistent("forecast_dashboard_q")
     def get_quarterly_dashboard(ticker: str, periods: int = 20) -> Dict[str, Any]:
         """Quarterly revenue forecast dashboard. Same shape as get_company_dashboard,
         with forecast rows carrying fiscal_quarter + a 'Qx YYYY' label."""
@@ -1116,3 +1119,7 @@ class RevenueForecastService:
 
 # Backward-compatible alias for older imports.
 RevenueEstimatesService = RevenueForecastService
+
+
+bind_ram_clear("forecast_dashboard", lambda: RevenueForecastService.get_company_dashboard.clear())
+bind_ram_clear("forecast_dashboard_q", lambda: RevenueForecastService.get_quarterly_dashboard.clear())

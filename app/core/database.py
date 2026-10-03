@@ -38,6 +38,11 @@ def _install_db_slow_query_logging(engine, engine_label: str) -> None:
     @event.listens_for(engine, "before_cursor_execute")
     def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
         conn.info["_q_start"] = time.perf_counter()
+        try:
+            from utils.persist import record as _persist_record
+            _persist_record(statement)   # which tables a persisted build reads
+        except Exception:
+            pass
 
     @event.listens_for(engine, "after_cursor_execute")
     def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001

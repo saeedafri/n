@@ -23,6 +23,10 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any, Tuple
 
+import streamlit as st
+
+from utils.persist import persistent, bind_ram_clear
+
 _logger = logging.getLogger(__name__)
 
 try:
@@ -454,6 +458,8 @@ def is_non_sec_source_company(ticker: str) -> bool:
         return False
 
 
+@st.cache_data(ttl=21600, show_spinner=False)
+@persistent("non_sec_tickers")
 def get_non_sec_tickers_from_db() -> List[Tuple[str, str]]:
     """
     Return [(ticker, display_name), ...] for all NON-SEC companies in coreiq_companies.
@@ -475,3 +481,6 @@ def get_non_sec_tickers_from_db() -> List[Tuple[str, str]]:
                                  component="get_non_sec_tickers_from_db",
                                  operation="DB_FETCH")
         return []
+
+
+bind_ram_clear("non_sec_tickers", lambda: get_non_sec_tickers_from_db.clear())

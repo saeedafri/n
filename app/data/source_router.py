@@ -1,11 +1,13 @@
 """Source detection for SEC vs YFinance companies."""
 import streamlit as st
+from utils.persist import persistent, bind_ram_clear
 from typing import Literal, Optional
 from core.database import db_manager
 from utils.server_logger import log_structured_error, log_error
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
+@persistent("company_source")
 def get_company_source(ticker: str) -> Optional[Literal['SEC', 'YFinance']]:
     """
     Detect data source for a ticker.
@@ -59,3 +61,6 @@ def is_yf_company(ticker: str) -> bool:
     except Exception as e:
         log_structured_error(e, page="source_router", component="is_yf_company", operation="checking_yf_status")
         return False
+
+
+bind_ram_clear("company_source", lambda: get_company_source.clear())

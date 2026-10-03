@@ -18,6 +18,7 @@ import streamlit as st
 
 from core.database import db_manager
 from utils.server_logger import log_error, log_structured_error
+from utils.persist import persistent, bind_ram_clear
 from utils.constants import get_exchange_code, is_yahoo_suffix, yahoo_symbol
 
 
@@ -298,6 +299,7 @@ class CompanyRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("company_by_ticker")
     def get_company_by_ticker(ticker: str) -> Optional[Company]:
         """Get single company by ticker (cached 10 min)."""
         companies_map = CompanyRepository.get_companies_map()
@@ -324,6 +326,7 @@ class CompanyRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("companies_list")
     def get_companies() -> List[Dict[str, str]]:
         """Get all companies from cached map.
 
@@ -374,6 +377,7 @@ class CompanyRepository:
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)  # 1 hour cache
+    @persistent("companies_map", strict=True)
     def get_companies_map() -> Dict[str, Dict[str, Any]]:
         """Get all companies as a dictionary keyed by ticker (cached 1 hour).
 
@@ -433,6 +437,7 @@ class CompanyRepository:
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)  # 1 hour cache
+    @persistent("companies_rows", strict=True)
     def get_companies_rows() -> List[Dict[str, Any]]:
         """Get ALL company rows as a flat list — no deduplication by ticker.
 
@@ -548,6 +553,7 @@ class CompanyRepository:
 # =============================================================================
 
 @st.cache_data(ttl=21600, show_spinner=False)  # 30 min cache
+@persistent("fiscal_year_end")
 def _get_fiscal_year_end_cached(ticker: str) -> Optional[str]:
     """Get fiscal_year_end for a ticker (cached 30 min) - ZERO LAG optimization.
 
@@ -670,6 +676,7 @@ class IncomeStatementRepository:
     # ── Cached single-query: fetches ALL rows for a ticker in one go ──
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("is_rows")
     def _fetch_all_annual_rows(ticker: str, period_type: str = "annual") -> List[Dict[str, Any]]:
         """Fetch all income statement rows for a ticker (cached 5 min).
 
@@ -864,6 +871,7 @@ class IncomeStatementRepository:
 
     @staticmethod
     @_log_query_time
+    @persistent("reported_currency")
     def get_reported_currency(ticker: str, fiscal_date: date, period_type: str = "annual") -> str:
         """Get the reported currency for a specific fiscal period (from cache)."""
         rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, period_type)
@@ -885,6 +893,12 @@ class IncomeStatementRepository:
             if _is_valid_currency(row.get('reported_currency')):
                 return row['reported_currency']
         return "USD"
+
+def _news_run(sql, params, key):
+    """News SQL served from the local copy when complete (data/news_mirror.py)."""
+    from data import news_mirror
+    return news_mirror.run(sql, params, key)
+
 
 class NewsRepository:
     """Repository for coreiq_av_market_news_sentiment table.
@@ -1172,7 +1186,7 @@ class NewsRepository:
             _t = time.perf_counter()
             _db_start = _t
             try:
-                results = db_manager.execute_query_readonly(query, params)
+                results = _news_run(query, params, "av")
                 _ms = (time.perf_counter() - _t) * 1000
                 _db_time = (time.perf_counter() - _db_start) * 1000
                 log_db_timing("SELECT_KEYWORD", "coreiq_av_market_news_sentiment", _db_time, len(results))
@@ -1231,7 +1245,7 @@ class NewsRepository:
                     ) id_page ON outer_n.id = id_page.id
                     ORDER BY outer_n.time_published_utc {date_sort}
                 """
-                return db_manager.execute_query_readonly(_hq, _hp)
+                return _news_run(_hq, _hp, "av")
 
             _t = time.perf_counter()
 
@@ -1270,7 +1284,7 @@ class NewsRepository:
                 """
                 params['fetch_limit'] = fetch_limit
                 params['offset'] = offset
-                results = db_manager.execute_query_readonly(query, params)
+                results = _news_run(query, params, "av")
 
             _ms = (time.perf_counter() - _t) * 1000
             log_db_timing("SELECT_NOKEY", "coreiq_av_market_news_sentiment", _ms, len(results))
@@ -1497,10 +1511,10 @@ class NewsRepository:
         # All 4 queries fire simultaneously — AV and YF are independent tables
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=4) as pool:
-            av_min_fut = pool.submit(db_manager.execute_query_readonly, av_min_query)
-            av_max_fut = pool.submit(db_manager.execute_query_readonly, av_max_query)
-            yf_min_fut = pool.submit(db_manager.execute_query_readonly, yf_min_query)
-            yf_max_fut = pool.submit(db_manager.execute_query_readonly, yf_max_query)
+            av_min_fut = pool.submit(_news_run, av_min_query, {}, "av")
+            av_max_fut = pool.submit(_news_run, av_max_query, {}, "av")
+            yf_min_fut = pool.submit(_news_run, yf_min_query, {}, "yf")
+            yf_max_fut = pool.submit(_news_run, yf_max_query, {}, "yf")
             av_min_r = av_min_fut.result()
             av_max_r = av_max_fut.result()
             yf_min_r = yf_min_fut.result()
@@ -1559,7 +1573,7 @@ class NewsRepository:
 
         query += " ORDER BY ticker"
 
-        results = db_manager.execute_query_readonly(query, params)
+        results = _news_run(query, params, "av")
         return [row['ticker'] for row in results if row['ticker']]
 
     @staticmethod
@@ -1590,7 +1604,7 @@ class NewsRepository:
             WHERE ticker IS NOT NULL
             ORDER BY ticker
         """
-        results = db_manager.execute_query_readonly(query, {})
+        results = _news_run(query, {}, "news")
         return [row['ticker'] for row in results if row['ticker']]
 
     @staticmethod
@@ -1613,7 +1627,7 @@ class NewsRepository:
               AND UPPER(sector) != 'NONE'
             ORDER BY sector
         """
-        results = db_manager.execute_query_readonly(query, {})
+        results = _news_run(query, {}, "av")
         seen: set = set()
         sectors: List[str] = []
         for row in results:
@@ -1647,7 +1661,7 @@ class NewsRepository:
             SELECT symbol, sector
             FROM coreiq_av_companies_all
         """
-        results = db_manager.execute_query_readonly(query, {})
+        results = _news_run(query, {}, "av")
         ticker_map: Dict[str, str] = {}
         for row in results:
             sym = row['symbol']
@@ -1765,7 +1779,7 @@ class NewsRepository:
                 # counting all 572k rows cost up to 2.9s, and ingested_at has no index.
                 [{"table": "coreiq_yf_market_news_sentiment", "signal": "MAX(id)",
                   "where": "id = (SELECT MAX(id) FROM coreiq_yf_market_news_sentiment)"}],
-            )
+            clear=lambda: NewsRepository.get_yf_topic_keys.clear())
         except Exception as exc:
             try:
                 from utils.server_logger import log_structured_error as _lse
@@ -1821,7 +1835,7 @@ class NewsRepository:
             LIMIT :lim
         """
         _t0 = _t.perf_counter()
-        _id_rows = db_manager.execute_query_readonly(id_sql, params)
+        _id_rows = _news_run(id_sql, params, "av")
         _ids = [r["id"] for r in _id_rows]
         if not _ids:
             log_db_timing("SELECT_AV_TITLE_LIKE", "coreiq_av_market_news_sentiment",
@@ -1842,7 +1856,7 @@ class NewsRepository:
             FROM coreiq_av_market_news_sentiment
             WHERE id IN ({_in})
         """
-        rows = db_manager.execute_query_readonly(hyd_sql, _hyd_params)
+        rows = _news_run(hyd_sql, _hyd_params, "av")
         rows.sort(key=lambda r: (r["time_published"] or datetime.min),
                   reverse=(date_sort == "DESC"))
         log_db_timing(
@@ -1927,7 +1941,7 @@ class NewsRepository:
             LIMIT :lim
         """
         _t0 = _t.perf_counter()
-        _id_rows = db_manager.execute_query_readonly(id_sql, params)
+        _id_rows = _news_run(id_sql, params, "yf")
         _ids = [r["id"] for r in _id_rows]
         if not _ids:
             log_db_timing("SELECT_YF_TITLE_LIKE", "coreiq_yf_market_news_sentiment",
@@ -1942,7 +1956,7 @@ class NewsRepository:
             FROM coreiq_yf_market_news_sentiment
             WHERE id IN ({_in})
         """
-        rows = db_manager.execute_query_readonly(hyd_sql, _hyd_params)
+        rows = _news_run(hyd_sql, _hyd_params, "yf")
         rows.sort(key=lambda r: (r["published_at"] or datetime.min),
                   reverse=(date_sort == "DESC"))
         log_db_timing(
@@ -2100,7 +2114,7 @@ class NewsRepository:
                 ) d ON y.id = d.min_id
                 ORDER BY d.published_at {date_sort}
             """
-            return db_manager.execute_query_readonly(_hq, _hp)
+            return _news_run(_hq, _hp, "yf")
 
         _clean_yf_kw = (keyword or "").strip()
         if _clean_yf_kw and len(_clean_yf_kw) < 3:
@@ -2135,8 +2149,8 @@ class NewsRepository:
                     ) d ON y.id = d.min_id
                     ORDER BY d.published_at {date_sort}
                 """
-                results = db_manager.execute_query_readonly(
-                    kw_query, {**params, 'yf_ft_kw': _yf_ft},
+                results = _news_run(
+                    kw_query, {**params, 'yf_ft_kw': _yf_ft}, "yf",
                 )
                 _q_ms = (time.perf_counter() - _t_q) * 1000
                 log_db_timing("SELECT_YF_KEYWORD", "coreiq_yf_market_news_sentiment", _q_ms, len(results))
@@ -2173,7 +2187,7 @@ class NewsRepository:
                     ) d ON y.id = d.min_id
                     ORDER BY d.published_at {date_sort}
                 """
-                results = db_manager.execute_query_readonly(query, params)
+                results = _news_run(query, params, "yf")
 
             if not _clean_yf_kw:
                 _q_ms = (time.perf_counter() - _t_q) * 1000
@@ -2262,6 +2276,7 @@ class CompanyOverviewRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("company_overview")
     def get_company_overview(ticker: str) -> Optional[CompanyOverview]:
         """
         Get company overview by ticker (cached 10 min).
@@ -2534,7 +2549,7 @@ class EarningsCallRepository:
                 ORDER BY ticker
             """
             _t0 = time.perf_counter()
-            results = db_manager.execute_query_readonly(query)
+            results = _news_run(query, {}, "tx")
             tickers = [row['ticker'] for row in results if row['ticker']]
             log_db_timing(
                 "get_companies_with_earnings.distinct_tickers",
@@ -2549,7 +2564,7 @@ class EarningsCallRepository:
         _sources = [{"table": "coreiq_av_earnings_call_transcripts", "signal": None}]
         tickers_df = materialized_or_build(
             "earnings_transcript_tickers", _build_earnings_tickers_df, _sources
-        )
+        , clear=lambda: EarningsCallRepository.get_companies_with_earnings.clear())
         tickers = tickers_df['ticker'].tolist()
         step1_ms = (time.perf_counter() - step_start) * 1000
         log_db_timing(
@@ -2672,7 +2687,7 @@ class EarningsCallRepository:
 
         # Execute query
         query_start = time.perf_counter()
-        results = db_manager.execute_query_readonly(query, params)
+        results = _news_run(query, params, "tx")
         query_ms = (time.perf_counter() - query_start) * 1000
         log_db_timing("get_earnings_calls.query", "coreiq_av_earnings_call_transcripts", query_ms, rows=len(results), ticker=str(ticker or ''))
 
@@ -2721,7 +2736,7 @@ class EarningsCallRepository:
             WHERE id = :id
             LIMIT 1
         """
-        results = db_manager.execute_query_readonly(query, {"id": earnings_id})
+        results = _news_run(query, {"id": earnings_id}, "tx")
 
         if not results:
             return None
@@ -2764,7 +2779,7 @@ class EarningsCallRepository:
               AND ticker = :ticker
             ORDER BY year DESC
         """
-        results = db_manager.execute_query_readonly(query, {'ticker': ticker})
+        results = _news_run(query, {'ticker': ticker}, "tx")
         years = [row['year'] for row in results]
         elapsed_ms = (time.perf_counter() - start) * 1000
         log_db_timing("get_available_years", "coreiq_av_earnings_call_transcripts", elapsed_ms, rows=len(years), ticker=ticker)
@@ -2797,7 +2812,7 @@ class EarningsCallRepository:
               AND year = :year
             ORDER BY q
         """
-        results = db_manager.execute_query_readonly(query, {'ticker': ticker, 'year': year_int})
+        results = _news_run(query, {'ticker': ticker, 'year': year_int}, "tx")
         quarters = [f"Q{row['q']}" for row in results]
         elapsed_ms = (time.perf_counter() - start) * 1000
         log_db_timing("get_available_quarters", "coreiq_av_earnings_call_transcripts", elapsed_ms, rows=len(quarters), ticker=ticker)
@@ -2807,6 +2822,7 @@ class EarningsCallRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("ec_years_quarters")
     def get_years_and_quarters(ticker: str) -> Dict[int, List[str]]:
         """Get all year→quarters combos for a ticker in ONE query (saves 1 round-trip).
 
@@ -2825,7 +2841,7 @@ class EarningsCallRepository:
               AND ticker = :ticker
             ORDER BY year DESC, q ASC
         """
-        results = db_manager.execute_query_readonly(query, {'ticker': ticker})
+        results = _news_run(query, {'ticker': ticker}, "tx")
         mapping: Dict[int, List[str]] = {}
         for row in results:
             yr = row['year']
@@ -2852,12 +2868,50 @@ class EarningsCallRepository:
             WHERE has_transcript = 1
             ORDER BY year DESC
         """
-        results = db_manager.execute_query_readonly(query, {})
+        results = _news_run(query, {}, "tx")
         years = [row['year'] for row in results]
         elapsed_ms = (time.perf_counter() - start) * 1000
         log_db_timing("get_all_available_years", "coreiq_av_earnings_call_transcripts", elapsed_ms, rows=len(years))
 
         return years
+
+    @staticmethod
+    def _like_page_from_word_index(keyword, scoped_tickers, year, q, limit, offset, cap=500):
+        """The cross-company LIKE '%keyword%' page, answered from the local copy's word
+        index instead of scanning every transcript on MySQL (6-14 s for a rare word).
+        Same rows: the matching ids are exactly LIKE's; the 500-candidate cap keeps them
+        in the order MySQL reads them (idx_has_transcript_year → year, id; with a
+        ticker list idx_has_transcript_ticker → ticker, id). None → use MySQL."""
+        from data import news_mirror
+        ids = news_mirror.transcript_like_ids(keyword)
+        if ids is None:
+            return None
+        if not ids:
+            return []
+        import json as _json
+        where = ["id IN (SELECT value FROM json_each(:ids))"]
+        p: Dict = {"ids": _json.dumps(ids), "limit": limit, "offset": offset or 0}
+        if scoped_tickers:
+            where.append("ticker IN (SELECT value FROM json_each(:tickers))")
+            p["tickers"] = _json.dumps(list(scoped_tickers))
+        if year:
+            where.append("year = :year")
+            p["year"] = year
+        if q:
+            where.append("q = :q")
+            p["q"] = q
+        scan = "ticker, id" if scoped_tickers else "year, id"
+        p["cap"] = cap
+        inner = ("SELECT id, ticker, year, quarter, q FROM coreiq_av_earnings_call_transcripts "
+                 f"WHERE {' AND '.join(where)} ORDER BY {scan} LIMIT :cap")
+        try:
+            if limit is None:       # export: MySQL's unsorted LIMIT, in its read order
+                return news_mirror.query(inner, p)
+            return news_mirror.query(
+                f"SELECT id, ticker, year, quarter, q FROM ({inner}) s "
+                "ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset", p)
+        except Exception:
+            return None
 
     @staticmethod
     @st.cache_data(ttl=120, show_spinner=False)
@@ -2975,9 +3029,17 @@ class EarningsCallRepository:
         params['limit'] = limit
         params['offset'] = offset
 
+        _year_f = (int(year) if isinstance(year, str) else year) if year and str(year) != 'ALL' else None
+        _q_f = EarningsCallRepository._parse_quarter_param(quarter) if quarter and quarter != 'ALL' else None
+
         # Execute main query
         query_start = time.perf_counter()
-        results = db_manager.execute_query_readonly(base_query, params)
+        results = None
+        if len(keyword) < 3 and not single_ticker:
+            results = EarningsCallRepository._like_page_from_word_index(
+                keyword, scoped_tickers, _year_f, _q_f, limit, offset)
+        if results is None:
+            results = db_manager.execute_query_readonly(base_query, params)
         query_ms = (time.perf_counter() - query_start) * 1000
         log_db_timing("search_transcripts_fulltext.main_query", "coreiq_av_earnings_call_transcripts", query_ms, rows=len(results), ticker=str(ticker or ''))
 
@@ -3021,7 +3083,10 @@ class EarningsCallRepository:
             fb_params['offset'] = offset
 
             fb_start = time.perf_counter()
-            results = db_manager.execute_query_readonly(fallback, fb_params)
+            results = EarningsCallRepository._like_page_from_word_index(
+                keyword, scoped_tickers, _year_f, _q_f, limit, offset)
+            if results is None:
+                results = db_manager.execute_query_readonly(fallback, fb_params)
             fb_ms = (time.perf_counter() - fb_start) * 1000
             log_db_timing("search_transcripts_fulltext.LIKE_fallback", "coreiq_av_earnings_call_transcripts", fb_ms, rows=len(results), ticker=str(ticker or ''))
 
@@ -3038,11 +3103,10 @@ class EarningsCallRepository:
                 key = f"tid_{idx}"
                 id_keys.append(f":{key}")
                 text_params[key] = pid
-            text_rows = db_manager.execute_query_readonly(
+            text_rows = _news_run(
                 "SELECT id, transcript_text FROM coreiq_av_earnings_call_transcripts "
                 f"WHERE id IN ({', '.join(id_keys)})",
-                text_params,
-            )
+                text_params, "tx")
             text_by_id = {tr["id"]: tr.get("transcript_text") for tr in text_rows}
             for r in rows:
                 r["transcript_text"] = text_by_id.get(r.get("id"))
@@ -3092,7 +3156,11 @@ class EarningsCallRepository:
         # every matched row (~150s+ for a word in every transcript). Light columns
         # return in ~2s; the keyword windows are fetched by primary key in pass 2.
         _LIGHT = "SELECT id, ticker, year, quarter, q FROM coreiq_av_earnings_call_transcripts "
-        if len(keyword) >= 3:
+        # One company: the ticker index + LIKE, same reason as search_transcripts_fulltext
+        # (FULLTEXT scored every matching transcript before the ticker filter: 19.6s
+        # for 2 rows). The windows below are cut on the same substring LIKE matches.
+        single_ticker = bool(ticker and ticker != 'ALL')
+        if len(keyword) >= 3 and not single_ticker:
             # NATURAL LANGUAGE mode — BOOLEAN mode is 30–230s on this table.
             base_query = _LIGHT + (
                 "WHERE MATCH(transcript_text) AGAINST (:kw IN NATURAL LANGUAGE MODE) "
@@ -3132,11 +3200,19 @@ class EarningsCallRepository:
         # relevance (fast) and sort by date in Python below.
         base_query += " LIMIT :limit"
 
+        _year_f = (int(year) if isinstance(year, str) else year) if year and str(year) != 'ALL' else None
+        _q_f = EarningsCallRepository._parse_quarter_param(quarter) if quarter and quarter != 'ALL' else None
+
         metadata_start = time.perf_counter()
-        metadata_rows = db_manager.execute_query_readonly(base_query, params)
+        metadata_rows = None
+        if len(keyword) < 3 and not single_ticker:
+            metadata_rows = EarningsCallRepository._like_page_from_word_index(
+                keyword, scoped_tickers, _year_f, _q_f, None, 0, cap=limit)
+        if metadata_rows is None:
+            metadata_rows = db_manager.execute_query_readonly(base_query, params)
         metadata_ms = (time.perf_counter() - metadata_start) * 1000
 
-        if not metadata_rows and len(keyword) >= 3:
+        if not metadata_rows and len(keyword) >= 3 and not single_ticker:
             fallback = _LIGHT + "WHERE transcript_text LIKE :kw AND has_transcript = 1"
             fb_params: Dict = {"kw": f"%{keyword}%", "limit": limit}
             if ticker and ticker != 'ALL':
@@ -3162,7 +3238,10 @@ class EarningsCallRepository:
                     fb_params["quarter_q"] = q_int
             fallback += " LIMIT :limit"
             fb_start = time.perf_counter()
-            metadata_rows = db_manager.execute_query_readonly(fallback, fb_params)
+            metadata_rows = EarningsCallRepository._like_page_from_word_index(
+                keyword, scoped_tickers, _year_f, _q_f, None, 0, cap=limit)
+            if metadata_rows is None:
+                metadata_rows = db_manager.execute_query_readonly(fallback, fb_params)
             metadata_ms += (time.perf_counter() - fb_start) * 1000
 
         if not metadata_rows:
@@ -3183,6 +3262,19 @@ class EarningsCallRepository:
         _BEFORE, _WINDOW = 3000, 8000
 
         def _fetch_window_batch(batch_ids: List[int]) -> List[Dict]:
+            # Windows the local copy can cut exactly as MySQL's LOCATE would
+            # (verified identical on 12,000 transcripts); the rest from MySQL.
+            from data import news_mirror
+            local = news_mirror.transcript_windows(batch_ids, needle, _BEFORE, _WINDOW)
+            out: List[Dict] = []
+            for rid in batch_ids:
+                if rid in local:
+                    meta = rows_by_id.get(int(rid), {}).copy()
+                    meta["transcript_text"] = local[rid] or ""
+                    out.append(meta)
+            batch_ids = [rid for rid in batch_ids if rid not in local]
+            if not batch_ids:
+                return out
             batch_params: Dict = {"needle": needle, "bc": _BEFORE, "wc": _WINDOW}
             id_keys = []
             for idx, row_id in enumerate(batch_ids):
@@ -3194,7 +3286,6 @@ class EarningsCallRepository:
                 "GREATEST(1, LOCATE(:needle, transcript_text) - :bc), :wc) AS transcript_text "
                 f"FROM coreiq_av_earnings_call_transcripts WHERE id IN ({', '.join(id_keys)})"
             )
-            out: List[Dict] = []
             for row in db_manager.execute_query_readonly(batch_sql, batch_params):
                 meta = rows_by_id.get(int(row["id"]), {}).copy()
                 meta["transcript_text"] = row.get("transcript_text") or ""
@@ -3279,9 +3370,11 @@ class EarningsCallRepository:
             "table": "coreiq_filing_metrics_v5",
             "where": ("doc_type IN ('transcript-Q1','transcript-Q2',"
                       "'transcript-Q3','transcript-Q4')"),
-            "signal": None,
+            # Content checksum of those rows: v5 is written every few seconds by the
+            # filings ingest, and a count-only signal made every write a rebuild.
+            "signal": "SUM(CRC32(CONCAT_WS('|', id, ticker, IFNULL(company_name, ''), doc_type)))",
         }]
-        df = materialized_or_build("non_sec_transcript_companies", _build_non_sec_df, _sources)
+        df = materialized_or_build("non_sec_transcript_companies", _build_non_sec_df, _sources, clear=lambda: EarningsCallRepository.get_non_sec_transcript_companies.clear())
 
         companies = []
         _seen_tickers = set()
@@ -3386,6 +3479,7 @@ class BalanceSheetRepository:
     # ── Cached single-query: fetches ALL rows for a ticker in one go ──
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("bs_rows")
     def _fetch_all_annual_rows(ticker: str, period_type: str = "annual") -> List[Dict[str, Any]]:
         """Fetch all balance sheet rows for a ticker (cached 5 min).
 
@@ -3810,6 +3904,7 @@ class CashFlowRepository:
     # ── Cached single-query: fetches ALL rows for a ticker in one go ──
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("cf_rows")
     def _fetch_all_annual_rows(ticker: str, period_type: str = "annual") -> List[Dict[str, Any]]:
         """Fetch all cash flow rows for a ticker (cached 5 min).
 
@@ -4186,6 +4281,7 @@ class KeyStatsRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("key_stats")
     def get_key_stats_data(
         ticker: str,
         start_date: date,
@@ -4968,6 +5064,7 @@ class AnalystEstimatesRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("est_date_range")
     def get_date_range(ticker: str, period_type: str = "annual") -> Tuple[Optional[date], Optional[date]]:
         """Min/max estimate_date for AV companies; (None, None) for YF."""
         from data.source_router import get_company_source
@@ -4990,6 +5087,7 @@ class AnalystEstimatesRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("est_dates")
     def get_available_dates(ticker: str, period_type: str = "annual") -> List[date]:
         """Distinct estimate_dates for AV; [] for YF."""
         from data.source_router import get_company_source
@@ -5013,6 +5111,7 @@ class AnalystEstimatesRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("est_data")
     def get_estimates_data(ticker: str, start_date, end_date, period_type: str = "annual") -> Dict[str, Any]:
         """Return structured estimates for the Estimates tab.
 
@@ -5341,6 +5440,7 @@ class ModelForecastsRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("mf_date_range")
     def get_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5353,6 +5453,7 @@ class ModelForecastsRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("mf_dates")
     def get_available_dates(ticker: str) -> List[date]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5363,6 +5464,7 @@ class ModelForecastsRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("mf_data")
     def get_forecasts_data(ticker: str, start_year: Optional[int] = None, end_year: Optional[int] = None) -> Dict[str, Any]:
         """Return forecast data; sections has one section (Revenue Forecast) with one row per model."""
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
@@ -5494,6 +5596,7 @@ class ModelForecastsRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("mf_q_date_range")
     def get_quarterly_date_range(ticker: str) -> Tuple[Optional[date], Optional[date]]:
         ticker = ModelForecastsRepository._resolve_forecast_ticker(ticker)
         rows = db_manager.execute_query_readonly(
@@ -5634,6 +5737,7 @@ class RatiosRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("ratios_date_range")
     def get_date_range(ticker: str, period_type: str = "annual") -> Tuple[Optional[date], Optional[date]]:
         """Get min and max fiscal dates from cached income rows."""
         rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, period_type)
@@ -5646,6 +5750,7 @@ class RatiosRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("ratios_dates")
     def get_available_dates(ticker: str, period_type: str = "annual") -> List[date]:
         """Get all fiscal dates from cached income rows."""
         rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, period_type)
@@ -6077,6 +6182,7 @@ class ForexRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("fx_to_currencies")
     def get_to_currencies(from_currency: str) -> List[str]:
         """Currencies that from_currency can be directly converted TO (no reverse/bridge).
         The from_currency itself is always included first (= no conversion, rate 1.0).
@@ -6184,6 +6290,7 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
+    @persistent("latest_quote")
     def get_latest_quote(ticker: str) -> Optional[Dict[str, Any]]:
         """
         Fetch the most recent day's bar data (cached 5 min).
@@ -6302,6 +6409,7 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
+    @persistent("price_history", daily=True)
     def get_price_history(ticker: str, days: int = 365) -> List[Dict[str, Any]]:
         """
         Fetch daily close prices for charting (last `days` calendar days, cached 5 min).
@@ -6402,6 +6510,7 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
+    @persistent("shares_with_price")
     def get_shares_with_price(ticker: str) -> Dict[str, Any]:
         """
         Fetch shares outstanding history joined with exact-match close price.
@@ -6486,6 +6595,7 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
+    @persistent("quote_overview")
     def get_overview_data(ticker: str) -> Optional[Dict[str, Any]]:
         """
         Fetch company overview fields needed for the Stock Quote table (cached 10 min).
@@ -6662,6 +6772,7 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
+    @persistent("market_cap_chart", daily=True)
     def get_market_cap_chart_data(ticker: str, months: int = 12) -> List[Dict[str, Any]]:
         """
         Fetch Market Cap chart data aggregated by period.
@@ -6900,6 +7011,7 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
+    @persistent("stock_price_chart", daily=True)
     def get_stock_price_chart_data(ticker: str, months: int = 12) -> List[Dict[str, Any]]:
         """
         Fetch Stock Price chart data - simple daily close prices.
@@ -7186,6 +7298,7 @@ class FilingMetricRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("filing_header")
     def get_header_metadata(
         ticker: str,
         effective_year: int,
@@ -7488,6 +7601,10 @@ class FilingMetricRepository:
           • ORDER BY: priority label CASE, then dimensioned/dim_label/len/alpha
         """
         terms = [p.strip("%").lower() for p in patterns]
+        # A multi-word term also matches across punctuation ("net, sales" for
+        # "net sales"), as the FULLTEXT phrase search this replaces did.
+        words = lambda t: " ".join(re.findall(r"[a-z0-9]+", t))  # noqa: E731
+        phrases = [words(t) for t in terms if " " in t.strip()]
 
         # ── Filter ───────────────────────────────────────────────────────────
         matched: List[Dict[str, Any]] = []
@@ -7495,10 +7612,12 @@ class FilingMetricRepository:
             label = (row.get("original_label") or "").lower()
             concept = (row.get("standard_concept") or "").lower()
             dim = (row.get("dimension_label") or "").lower()
-            for term in terms:
-                if term and (term in label or term in concept or term in dim):
-                    matched.append(row)
-                    break
+            hit = any(term and (term in label or term in concept or term in dim) for term in terms)
+            if not hit and phrases:
+                fields = (words(label), words(concept), words(dim))
+                hit = any(ph and ph in f for ph in phrases for f in fields)
+            if hit:
+                matched.append(row)
 
         # ── Dedup: keep latest period per (label, dimension, dimension_label) ─
         best: Dict[tuple, Dict[str, Any]] = {}
@@ -7641,12 +7760,14 @@ class FilingMetricRepository:
                     # Prefetch confirmed this filing has zero metrics in DB — skip
                     # the slow FULLTEXT/LIKE fallback (saves ~20s Azure round-trip).
                     return []
-                results = FilingMetricRepository._python_search(all_rows, patterns, limit)
-                if results:
-                    return results
-                # Filing has rows but this query matched nothing — try DB FULLTEXT
+                # The prefetch IS this filing's full searchable row set (same WHERE as
+                # the DB queries below) and _python_search applies the same match, so
+                # "no hit" here is final. Re-asking the DB ran a FULLTEXT over all of
+                # coreiq_filing_metrics_v5 (12.5M rows): 55-127s to return 0 rows.
+                return FilingMetricRepository._python_search(all_rows, patterns, limit)
         except Exception as exc:
-            pass  # logging removed
+            log_structured_error(exc, page="repository", component="FilingMetricRepository.search",
+                                 operation="prefetch_search", context=f"{ticker} {report_fiscal_year} {doc_type}")
 
         # ── DB fallback: FULLTEXT then LIKE ───────────────────────────────────
         ft_query = FilingMetricRepository._build_fulltext_query(patterns)
@@ -7902,6 +8023,20 @@ class AVFinancialsEarningsRepository:
             if fde and rd and fde in end_set:
                 return (rd, fde)
         return None
+
+
+def _clear_fiscal_year_end_dependents():
+    """The fiscal-year-end map feeds these per-ticker caches; drop them with it."""
+    for fn in (EarningsCalendarRepository._get_fiscal_year_end_map,
+               EarningsCalendarRepository.get_calendar_events,
+               EarningsCalendarRepository.get_earnings_event_dates,
+               EarningsCalendarRepository.get_earnings_display_period,
+               EarningsCalendarRepository.get_transcript_for_calendar_event,
+               _get_fiscal_year_end_cached):
+        try:
+            fn.clear()
+        except Exception:
+            pass
 
 
 class EarningsCalendarRepository:
@@ -8489,7 +8624,8 @@ class EarningsCalendarRepository:
             {"table": "coreiq_nasdaq_earnings_calendar", "signal": None},
             {"table": "coreiq_yf_earnings_calendar", "signal": None},
         ]
-        _df = materialized_or_build("calendar_events_full", _build, _sources)
+        _df = materialized_or_build("calendar_events_full", _build, _sources, clear=lambda: EarningsCalendarRepository.get_calendar_events_full.clear(),
+                                      inputs=lambda: EarningsCalendarRepository.get_calendar_events.clear())
         if _df is None or _df.empty:
             return []
         return _df.to_dict("records")
@@ -8560,7 +8696,7 @@ class EarningsCalendarRepository:
                 [{"table": "coreiq_av_company_overview",
                   "signal": "SUM(CRC32(CONCAT_WS('|', ticker, fiscal_year_end)))"},
                  {"table": "coreiq_yf_company_overview", "signal": "MAX(ingested_at)"}],
-            )
+            clear=_clear_fiscal_year_end_dependents)
         except Exception as exc:
             log_structured_error(exc, page="repository", component="EarningsCalendarRepository",
                                  operation="_get_fiscal_year_end_map",
@@ -8666,7 +8802,7 @@ class EarningsCalendarRepository:
                 # count-only signature would serve stale garbage forever.
                 "signal": "MAX(updated_at)",
             }]
-            _df = materialized_or_build("ma_completion_events", _build_ma_df, _ma_sources)
+            _df = materialized_or_build("ma_completion_events", _build_ma_df, _ma_sources, clear=lambda: EarningsCalendarRepository.get_ma_completion_events.clear())
             rows = _df.to_dict("records") if _df is not None and not _df.empty else []
             # to_dict("records") turns NULL / NaT DB cells into float('nan'). Downstream
             # (_ma_to_fullcalendar `.title()`, streamlit_calendar JSON) expects None or a
@@ -8925,7 +9061,8 @@ class EarningsCalendarRepository:
                 {"table": "coreiq_yf_earnings_calendar",
                  "where": "ticker IS NOT NULL", "signal": None},
             ]
-            _df = materialized_or_build("ipo_events", _build_ipo_df, _ipo_sources)
+            _df = materialized_or_build("ipo_events", _build_ipo_df, _ipo_sources, clear=lambda: EarningsCalendarRepository.get_ipo_events.clear(),
+                                          inputs=lambda: CompanyRepository.get_companies_map.clear())
             if _df is None or _df.empty:
                 return []
             return _df.to_dict("records")
@@ -9006,7 +9143,7 @@ class EarningsCalendarRepository:
                 "where": "listing_status IN ('Private','Delisted')",
                 "signal": None,
             }]
-            _df = materialized_or_build("delisted_events", _build_delisted_df, _sources)
+            _df = materialized_or_build("delisted_events", _build_delisted_df, _sources, clear=lambda: EarningsCalendarRepository.get_delisted_events.clear())
             if _df is None or _df.empty:
                 return []
             return _df.to_dict("records")
@@ -9020,6 +9157,7 @@ class EarningsCalendarRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)  # 6h: ticker list changes slowly; avoids 10-min re-cold (warmed on boot)
     @_log_query_time
+    @persistent("ec_available_tickers")
     def get_available_tickers() -> List[Dict[str, str]]:
         """Return distinct tickers + company names from both calendar tables.
 
@@ -9553,6 +9691,7 @@ class EarningsCalendarRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("ec_event_dates")
     def get_earnings_event_dates(
         ticker: str,
         fiscal_q: int,
@@ -9651,6 +9790,7 @@ class EarningsCalendarRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @_log_query_time
+    @persistent("ec_display_period")
     def get_earnings_display_period(
         ticker: str,
         earnings_date,
@@ -10566,6 +10706,7 @@ class SegmentDataRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("segment_rows")
     def _fetch_all_db_rows(ticker: str) -> List[Dict[str, Any]]:
         """Fetch ALL dimensioned + consolidated rows for a ticker.
 
@@ -10584,7 +10725,7 @@ class SegmentDataRepository:
             # when the row count changes; covered by idx_v2_ticker_doctype.
             [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
               "where": f"ticker = '{ticker}' AND doc_type = '10-K'"}],
-        )["rows"]
+        clear=lambda: SegmentDataRepository._fetch_all_db_rows.clear())["rows"]
 
     @staticmethod
     def _query_all_db_rows(ticker: str, raising: bool = False) -> List[Dict[str, Any]]:
@@ -10685,6 +10826,7 @@ class SegmentDataRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("segment_rows_q")
     def _fetch_all_db_rows_quarterly(ticker: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         """Fetch all 3-month dimensioned rows from 10-Q filings for a date range."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10933,6 +11075,48 @@ class SegmentDataRepository:
         return biz_data, geo_data, metric_totals
 
     @staticmethod
+    @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("segment_intl_count")
+    def _international_geo_member_count(ticker: str) -> Optional[int]:
+        """Rows naming a clearly non-US member on a geographic axis (US-only
+        fallback guard below). None when the query failed — never stored."""
+        rows = db_manager.execute_query_readonly("""
+                    SELECT COUNT(*) as cnt
+                    FROM coreiq_filing_metrics_v5
+                    WHERE ticker = :ticker
+                      AND is_dimensioned = 1
+                      AND doc_type = '10-K'
+                      AND dimension_member_label IS NOT NULL
+                      AND LOWER(dimension_member_label) NOT IN (
+                          'united states', 'u.s.', 'us', 'domestic',
+                          'united states operations', 'us operations',
+                          'united states pooled funds',
+                          'international', 'foreign',
+                          'all other', 'other', 'other international'
+                      )
+                      AND LOWER(dimension_member_label) NOT LIKE '%pooled%'
+                      AND LOWER(dimension_member_label) NOT LIKE '%pension%'
+                      AND LOWER(dimension_member_label) NOT LIKE '%benefit%'
+                      AND (dimension LIKE '%Geograph%' OR dimension LIKE '%Geographic%'
+                           OR dimension LIKE '%StatementGeograph%')
+                    LIMIT 1
+                """, {"ticker": ticker})
+        return int(rows[0].get('cnt') or 0) if rows else None
+
+    @staticmethod
+    @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("segment_annual_revenue")
+    def _annual_revenue_rows(ticker: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+        return db_manager.execute_query_readonly("""
+            SELECT fiscal_date_ending, total_revenue
+            FROM coreiq_av_financials_income_statement
+            WHERE ticker = :ticker
+              AND report_type = 'annual'
+              AND fiscal_date_ending BETWEEN :start_date AND :end_date
+            ORDER BY fiscal_date_ending ASC
+        """, {"ticker": ticker, "start_date": start_date, "end_date": end_date})
+
+    @staticmethod
     def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
         """Process DB rows into CapIQ-style Business + Geographic tables."""
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
@@ -10995,31 +11179,7 @@ class SegmentDataRepository:
                 # and store counts — no revenue — but clearly international).
                 # We exclude generic/ambiguous labels like "International", "Foreign",
                 # and pension/pool labels that appear in US-only companies.
-                _intl_check_sql = """
-                    SELECT COUNT(*) as cnt
-                    FROM coreiq_filing_metrics_v5
-                    WHERE ticker = :ticker
-                      AND is_dimensioned = 1
-                      AND doc_type = '10-K'
-                      AND dimension_member_label IS NOT NULL
-                      AND LOWER(dimension_member_label) NOT IN (
-                          'united states', 'u.s.', 'us', 'domestic',
-                          'united states operations', 'us operations',
-                          'united states pooled funds',
-                          'international', 'foreign',
-                          'all other', 'other', 'other international'
-                      )
-                      AND LOWER(dimension_member_label) NOT LIKE '%pooled%'
-                      AND LOWER(dimension_member_label) NOT LIKE '%pension%'
-                      AND LOWER(dimension_member_label) NOT LIKE '%benefit%'
-                      AND (dimension LIKE '%Geograph%' OR dimension LIKE '%Geographic%'
-                           OR dimension LIKE '%StatementGeograph%')
-                    LIMIT 1
-                """
-                _intl_rows = db_manager.execute_query_readonly(
-                    _intl_check_sql, {"ticker": ticker}
-                )
-                _is_international = bool(_intl_rows and _intl_rows[0].get('cnt', 0) > 0)
+                _is_international = bool(SegmentDataRepository._international_geo_member_count(ticker))
 
                 if not _is_international:
                     _us_wide_start = start_date.replace(year=max(start_date.year - 1, 1900))
@@ -11027,18 +11187,7 @@ class SegmentDataRepository:
                         _us_wide_end = end_date.replace(year=end_date.year + 1)
                     except ValueError:
                         _us_wide_end = end_date
-                    _rev_sql = """
-                        SELECT fiscal_date_ending, total_revenue
-                        FROM coreiq_av_financials_income_statement
-                        WHERE ticker = :ticker
-                          AND report_type = 'annual'
-                          AND fiscal_date_ending BETWEEN :start_date AND :end_date
-                        ORDER BY fiscal_date_ending ASC
-                    """
-                    _rev_rows = db_manager.execute_query_readonly(
-                        _rev_sql,
-                        {"ticker": ticker, "start_date": _us_wide_start, "end_date": _us_wide_end},
-                    )
+                    _rev_rows = SegmentDataRepository._annual_revenue_rows(ticker, _us_wide_start, _us_wide_end)
                     _us_rev: Dict[int, Optional[float]] = {y: None for y in years}
                     for _rr in (_rev_rows or []):
                         _fe = _rr.get('fiscal_date_ending')
@@ -11627,6 +11776,8 @@ class SegmentDataRepository:
         return [SegmentDataRepository._fye_display_date(y, _fye_m) for y in years]
 
     @staticmethod
+    @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("segment_has_quarterly")
     def has_quarterly_segment_data(ticker: str) -> bool:
         """Quick check: does this ticker have any quarterly segment rows in the DB?"""
         from utils.constants import SEGMENT_ALL_AXES
@@ -12229,6 +12380,7 @@ class RatingsDataRepository:
 
     @staticmethod
     @st.cache_data(ttl=46800, show_spinner=False)
+    @persistent("ratings_rows")
     def _fetch_all_rows(ticker: str) -> List[Dict[str, Any]]:
         """Fetch ALL credit_rating + store_count rows in ONE round trip.
 
@@ -14096,6 +14248,7 @@ class ExecutiveCompensationRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
+    @persistent("exec_compensation")
     def get_sec_latest_compensation(ticker: str) -> List[Dict[str, Any]]:
         """Return all executives for the latest compensation_year for a SEC ticker.
 
@@ -14369,3 +14522,68 @@ def warmup_ec_caches() -> None:
             pass
 
     _th.Thread(target=_run, daemon=True, name="ec-cache-warmup").start()
+
+
+# In-memory caches in front of the persisted per-company results (utils/persist.py).
+bind_ram_clear("key_stats", lambda: KeyStatsRepository.get_key_stats_data.clear())
+bind_ram_clear("price_history", lambda: StockQuoteRepository.get_price_history.clear())
+bind_ram_clear("latest_quote", lambda: StockQuoteRepository.get_latest_quote.clear())
+bind_ram_clear("shares_with_price", lambda: StockQuoteRepository.get_shares_with_price.clear())
+bind_ram_clear("quote_overview", lambda: StockQuoteRepository.get_overview_data.clear())
+bind_ram_clear("stock_price_chart", lambda: StockQuoteRepository.get_stock_price_chart_data.clear())
+bind_ram_clear("market_cap_chart", lambda: StockQuoteRepository.get_market_cap_chart_data.clear())
+bind_ram_clear("company_overview", lambda: CompanyOverviewRepository.get_company_overview.clear())
+bind_ram_clear("reported_currency", lambda: IncomeStatementRepository.get_reported_currency.clear())
+bind_ram_clear("fx_to_currencies", lambda: ForexRepository.get_to_currencies.clear())
+bind_ram_clear("ec_years_quarters", lambda: EarningsCallRepository.get_years_and_quarters.clear())
+bind_ram_clear("ec_display_period", lambda: EarningsCalendarRepository.get_earnings_display_period.clear())
+bind_ram_clear("ec_available_tickers", lambda: EarningsCalendarRepository.get_available_tickers.clear())
+bind_ram_clear("companies_rows", lambda: CompanyRepository.get_companies_rows.clear())
+bind_ram_clear("companies_map", lambda: CompanyRepository.get_companies_map.clear())
+bind_ram_clear("company_by_ticker", lambda: CompanyRepository.get_company_by_ticker.clear())
+bind_ram_clear("companies_list", lambda: CompanyRepository.get_companies.clear())
+
+
+def _clear_cached(cls, names):
+    for name in names:
+        fn = getattr(cls, name, None)
+        if hasattr(fn, "clear"):
+            fn.clear()
+
+
+# The local news/transcript copy took new or corrected rows (data/news_mirror.py):
+# drop the in-memory results built from it so the next read sees them.
+from data import news_mirror as _news_mirror  # noqa: E402
+_news_mirror.on_change("news_repository", {"av", "yf"}, lambda: _clear_cached(NewsRepository, [
+    "get_articles", "get_articles_metadata_only", "get_news_date_range", "get_news_tickers",
+    "_get_news_tickers_impl", "get_all_news_tickers", "_get_all_news_tickers_impl",
+    "search_av_articles_by_title", "search_yf_articles_by_title", "get_yf_articles"]))
+_news_mirror.on_change("news_sectors", {"companies"}, lambda: _clear_cached(NewsRepository, [
+    "get_sectors", "_get_sectors_impl", "get_ticker_sector_map", "_get_ticker_sector_map_impl",
+    "get_articles"]))
+_news_mirror.on_change("transcripts_repository", {"tx"}, lambda: _clear_cached(EarningsCallRepository, [
+    "get_earnings_calls", "get_earnings_call_by_id", "get_available_years", "get_available_quarters",
+    "get_years_and_quarters", "get_all_available_years", "search_transcripts_fulltext",
+    "get_companies_with_earnings"]))
+bind_ram_clear("fiscal_year_end", lambda: _get_fiscal_year_end_cached.clear())
+bind_ram_clear("is_rows", lambda: IncomeStatementRepository._fetch_all_annual_rows.clear())
+bind_ram_clear("bs_rows", lambda: BalanceSheetRepository._fetch_all_annual_rows.clear())
+bind_ram_clear("cf_rows", lambda: CashFlowRepository._fetch_all_annual_rows.clear())
+bind_ram_clear("est_date_range", lambda: AnalystEstimatesRepository.get_date_range.clear())
+bind_ram_clear("est_dates", lambda: AnalystEstimatesRepository.get_available_dates.clear())
+bind_ram_clear("est_data", lambda: AnalystEstimatesRepository.get_estimates_data.clear())
+bind_ram_clear("mf_date_range", lambda: ModelForecastsRepository.get_date_range.clear())
+bind_ram_clear("mf_dates", lambda: ModelForecastsRepository.get_available_dates.clear())
+bind_ram_clear("mf_data", lambda: ModelForecastsRepository.get_forecasts_data.clear())
+bind_ram_clear("mf_q_date_range", lambda: ModelForecastsRepository.get_quarterly_date_range.clear())
+bind_ram_clear("ratios_date_range", lambda: RatiosRepository.get_date_range.clear())
+bind_ram_clear("ratios_dates", lambda: RatiosRepository.get_available_dates.clear())
+bind_ram_clear("filing_header", lambda: FilingMetricRepository.get_header_metadata.clear())
+bind_ram_clear("segment_has_quarterly", lambda: SegmentDataRepository.has_quarterly_segment_data.clear())
+bind_ram_clear("ratings_rows", lambda: RatingsDataRepository._fetch_all_rows.clear())
+bind_ram_clear("segment_rows", lambda: SegmentDataRepository._fetch_all_db_rows.clear())
+bind_ram_clear("segment_rows_q", lambda: SegmentDataRepository._fetch_all_db_rows_quarterly.clear())
+bind_ram_clear("exec_compensation", lambda: ExecutiveCompensationRepository.get_sec_latest_compensation.clear())
+bind_ram_clear("segment_intl_count", lambda: SegmentDataRepository._international_geo_member_count.clear())
+bind_ram_clear("segment_annual_revenue", lambda: SegmentDataRepository._annual_revenue_rows.clear())
+bind_ram_clear("ec_event_dates", lambda: EarningsCalendarRepository.get_earnings_event_dates.clear())

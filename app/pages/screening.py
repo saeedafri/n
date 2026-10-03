@@ -5511,6 +5511,9 @@ def _render_keydevs_results():
                         f"to all {_kd_total:,}.</span>")
             st.markdown(f"<p class='results-header'>{_hdr_txt}</p>", unsafe_allow_html=True)
 
+        if 0 < (_kd_total or 0) <= _KD_PREFETCH_MAX_EVENTS:
+            _prefetch_keydevs_pages(_tickers, _cats, _window)
+
         with _dl_slot:
             # The workbook is built ON CLICK, never while the user waits for the
             # grid: measured on STG for the 146k-event all-history screen, the grid
@@ -5693,28 +5696,8 @@ def _build_full_keydevs_workbook(tickers, categories, window, criteria_count,
     10k-row page stays well under the timeout, so the workbook always holds the
     complete set, newest-first.
     """
-    page_size = 10000
-    runaway_limit = 500000   # safety backstop far above any real dataset
-    frames: list = []
-    cursor = None
-    row_count = 0
     try:
-        while True:
-            page, cursor = get_keydevs_events_for_tickers(
-                tickers, categories, days=window.get("days"),
-                start_date=window.get("start_date"), end_date=window.get("end_date"),
-                limit=page_size,
-                before_date=(cursor[0] if cursor else None),
-                before_id=(cursor[1] if cursor else None),
-            )
-            if page is None or page.empty:
-                break
-            frames.append(page)
-            row_count += len(page)
-            if cursor is None or row_count >= runaway_limit:
-                if row_count >= runaway_limit:
-                    log_warning(f"[KEYDEVS_EXPORT] runaway guard hit at {row_count} rows")
-                break
+        frames = list(_keydevs_export_pages(tickers, categories, window))
         full = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
         if full.empty:
             return b""
@@ -5750,6 +5733,63 @@ def _build_full_keydevs_workbook(tickers, categories, window, criteria_count,
         log_structured_error(exc, page="screening", component="keydevs_full_export",
                              operation="build_full_excel")
         return b""
+
+
+_KD_PREFETCH_MAX_EVENTS = 20000
+_KD_PREFETCHED: set = set()
+_KD_PREFETCH_LOCK = threading.Lock()
+
+
+def _keydevs_export_pages(tickers, categories, window, page_size=10000, runaway_limit=500000):
+    """The export's keyset pages, in order. Shared by the export and its prefetch so
+    both ask get_keydevs_events_for_tickers for exactly the same (cached) pages."""
+    cursor = None
+    row_count = 0
+    while True:
+        page, cursor = get_keydevs_events_for_tickers(
+            tickers, categories, days=window.get("days"),
+            start_date=window.get("start_date"), end_date=window.get("end_date"),
+            limit=page_size,
+            before_date=(cursor[0] if cursor else None),
+            before_id=(cursor[1] if cursor else None),
+        )
+        if page is None or page.empty:
+            return
+        yield page
+        row_count += len(page)
+        if cursor is None or row_count >= runaway_limit:
+            if row_count >= runaway_limit:
+                log_warning(f"[KEYDEVS_EXPORT] runaway guard hit at {row_count} rows")
+            return
+
+
+def _prefetch_keydevs_pages(tickers, categories, window):
+    """Fetch the export's pages in the background while the user reads the grid, so
+    a click on Excel only writes the workbook (the fetch was 2-3 s of the click).
+    Small sets only: for the 146k-event screens this would be minutes of DB work for
+    a file most users never open."""
+    sig = repr((tickers, categories, sorted((window or {}).items())))
+    with _KD_PREFETCH_LOCK:
+        if sig in _KD_PREFETCHED:
+            return
+        _KD_PREFETCHED.add(sig)
+        if len(_KD_PREFETCHED) > 200:
+            _KD_PREFETCHED.clear()
+
+    def _run():
+        try:
+            for _ in _keydevs_export_pages(tickers, categories, window):
+                pass
+        except Exception:
+            with _KD_PREFETCH_LOCK:
+                _KD_PREFETCHED.discard(sig)
+    th = threading.Thread(target=_run, name="kd-export-prefetch", daemon=True)
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_ctx
+        add_script_run_ctx(th)
+    except Exception:
+        pass
+    th.start()
 
 
 def _build_keydevs_excel_fast(

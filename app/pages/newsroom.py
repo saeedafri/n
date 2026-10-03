@@ -427,6 +427,11 @@ def _keyword_search_serverside(
     return av_all, yf_all, meta
 
 
+# New or corrected articles in the local news copy → drop cached search results.
+from data import news_mirror as _news_mirror  # noqa: E402
+_news_mirror.on_change("newsroom_keyword_search", {"av", "yf"}, _keyword_search_serverside.clear)
+
+
 def _spawn_background_prefetch(
     base_date_from: date,
     base_date_to: date,

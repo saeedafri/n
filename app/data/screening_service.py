@@ -29,6 +29,7 @@ import re
 import time
 import pandas as pd
 import streamlit as st
+from utils.persist import persistent, bind_ram_clear
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -212,6 +213,7 @@ def get_all_biz_segment_names(ticker_tuple: tuple = ()) -> List[str]:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
+@persistent("countries")
 def get_all_countries() -> List[str]:
     """Return sorted list of distinct non-null country_of_incorporation values.
 
@@ -291,7 +293,8 @@ def get_base_company_universe() -> pd.DataFrame:
         "signal": ("SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight, "
                    "country_of_incorporation, exchange, exchange_acronym, name_coresight)))"),
     }]
-    return materialized_or_build("screening_universe", _build_universe, _sources)
+    return materialized_or_build("screening_universe", _build_universe, _sources,
+                                 clear=lambda: get_all_companies_universe.clear())
 
 
 # Which of Alpha Vantage's two names to trust, decided by listing_status.
@@ -445,7 +448,7 @@ def get_all_companies_universe() -> pd.DataFrame:
          "signal": "SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight)))"},
     ]
     try:
-        return materialized_or_build("screening_all_companies_universe", _build, _sources)
+        return materialized_or_build("screening_all_companies_universe", _build, _sources, clear=lambda: get_all_companies_universe.clear())
     except Exception as exc:
         log_error(f"[SCREENING] get_all_companies_universe failed: {exc}")
         return get_base_company_universe()
@@ -2821,6 +2824,7 @@ def ensure_segment_values_cache_table() -> bool:
 
 
 @st.cache_data(ttl=60, show_spinner=False)
+@persistent("segment_cache_status", store_if=lambda status: status.get("is_healthy"))
 def get_segment_values_cache_status() -> dict:
     """Return health metadata for the screening segment values cache."""
     t0 = time.perf_counter()
@@ -4781,7 +4785,7 @@ def get_keydev_subtypes_by_category() -> Dict[str, List[str]]:
         return materialized_or_build(
             "keydev_subtype_taxonomy", _build,
             [{"table": "coreiq_company_events", "signal": "MAX(event_id)"}],
-        )
+        clear=lambda: get_keydev_subtypes_by_category.clear())
     except Exception as exc:
         log_error(f"[SCREENING] get_keydev_subtypes_by_category failed: {exc}")
         return {}
@@ -4968,6 +4972,7 @@ KEYDEV_PER_INDUSTRY = 8
 
 
 @st.cache_data(ttl=900, show_spinner=False)
+@persistent("keydevs_events")
 def get_keydevs_events_by_industry(
     categories: tuple,
     days: Optional[int] = None,
@@ -6680,3 +6685,12 @@ def keydevs_period_display_label(criterion: Dict) -> str:
         if start and end:
             return f"{start} to {end}"
     return criterion.get("timeframe_label", "")
+
+
+bind_ram_clear("countries", lambda: get_all_countries.clear())
+
+
+bind_ram_clear("segment_cache_status", lambda: get_segment_values_cache_status.clear())
+
+
+bind_ram_clear("keydevs_events", lambda: get_keydevs_events_by_industry.clear())

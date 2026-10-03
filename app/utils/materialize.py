@@ -218,6 +218,46 @@ def read_materialized(name, sources, allow_stale=False):
         return None
 
 
+def _source_update_times(sources):
+    """Last-write time of each source table, recorded with the copy so the freshness
+    watcher can tell whether anything moved since. {} when unavailable."""
+    try:
+        from utils.freshness import update_times
+        return update_times(sorted({_s["table"] for _s in sources or ()}))
+    except Exception:
+        return {}
+
+
+def read_meta(name):
+    _d = _cache_dir()
+    if not _d:
+        return None
+    try:
+        with open(os.path.join(_d, f"{name}.meta.json")) as _f:
+            return json.load(_f)
+    except Exception:
+        return None
+
+
+def update_meta(name, **fields):
+    """Merge fields into a cache's meta.json (atomic replace)."""
+    _d = _cache_dir()
+    if not _d:
+        return
+    _meta_p = os.path.join(_d, f"{name}.meta.json")
+    with _MAT_LOCK:
+        try:
+            with open(_meta_p) as _f:
+                meta = json.load(_f)
+        except Exception:
+            return
+        meta.update(fields)
+        _tmp = _meta_p + f".tmp{threading.get_ident()}"
+        with open(_tmp, "w") as _f:
+            json.dump(meta, _f)
+        os.replace(_tmp, _meta_p)
+
+
 def write_materialized(name, obj, sources):
     try:
         if not _materialize_on():
@@ -225,6 +265,9 @@ def write_materialized(name, obj, sources):
         _d = _cache_dir()
         if not _d:
             return
+        # Times first: a write landing during the build moves them past what is
+        # recorded, so the next watcher pass rebuilds again rather than missing it.
+        _times = _source_update_times(sources)
         _sig = _live_signature(sources, fresh=True)
         _fp = _fingerprint(obj)
         with _MAT_LOCK:
@@ -233,7 +276,7 @@ def write_materialized(name, obj, sources):
             _tmp_pk, _tmp_meta = _pk + ".tmp", _meta_p + ".tmp"
             pd.to_pickle(obj, _tmp_pk, compression={"method": "gzip", "compresslevel": 1})
             with open(_tmp_meta, "w") as _f:
-                json.dump({"signature": _sig, "fingerprint": _fp}, _f)
+                json.dump({"signature": _sig, "fingerprint": _fp, "update_times": _times}, _f)
             os.replace(_tmp_pk, _pk)
             os.replace(_tmp_meta, _meta_p)
             try:
@@ -250,7 +293,7 @@ _REBUILDING = set()
 _REBUILD_LOCK = threading.Lock()
 
 
-def _refresh_in_background(name, build_fn, sources):
+def _refresh_in_background(name, build_fn, sources, clear=None, inputs=None):
     """Rebuild one cache off the request path. At most one thread per name."""
     with _REBUILD_LOCK:
         if name in _REBUILDING:
@@ -260,8 +303,20 @@ def _refresh_in_background(name, build_fn, sources):
     def _run():
         _t = time.perf_counter()
         try:
+            if inputs is not None:
+                try:
+                    inputs()
+                except Exception:
+                    pass
             _fresh = build_fn()
             write_materialized(name, _fresh, sources)
+            if clear is not None:
+                # Disk copy first, THEN drop the stale in-memory one (it was handed
+                # out as the "previous generation" and would otherwise live for its TTL).
+                try:
+                    clear()
+                except Exception:
+                    pass
             slog_warning(f"[MAT][{name}] background refresh done in "
                          f"{time.perf_counter() - _t:.1f}s")
         except Exception as _e:
@@ -283,18 +338,34 @@ def _refresh_in_background(name, build_fn, sources):
     _th.start()
 
 
-def materialized_or_build(name, build_fn, sources):
+def materialized_or_build(name, build_fn, sources, clear=None, inputs=None):
     """Return the cache, never blocking a request on a rebuild.
 
       fresh on disk   -> return it
       stale on disk   -> return the previous generation NOW, refresh in background
       nothing on disk -> build synchronously (there is nothing to serve)
+
+    `clear` is the in-memory cache in front of this one (an st.cache_data .clear);
+    the freshness watcher calls it after writing a newer copy to disk.
     """
+    try:
+        # A persisted result built from this cache depends on its source tables,
+        # even when the copy comes from disk with no SQL run (utils/persist.py).
+        from utils.persist import record
+        for s in sources:
+            record(s["table"])
+    except Exception:
+        pass
     if not _materialize_on():
         return build_fn()
+    try:
+        from utils.freshness import register
+        register(name, build_fn, sources, clear, inputs)
+    except Exception:
+        pass
     _obj = read_materialized(name, sources, allow_stale=True)
     if isinstance(_obj, _STALE):
-        _refresh_in_background(name, build_fn, sources)
+        _refresh_in_background(name, build_fn, sources, clear, inputs)
         return _obj.obj
     if _obj is not None:
         return _obj

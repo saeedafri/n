@@ -11,6 +11,7 @@ OPTIMIZATION NOTES (2024):
 - Red spinner matching Coresight brand (#D62E2F)
 - Non-breaking: Falls back to original behavior if cache miss
 """
+from utils.persist import persistent, bind_ram_clear
 import os
 import json
 import html
@@ -1936,6 +1937,7 @@ def _quarter_label_from_doc_type(doc_type: str) -> Optional[str]:
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
+@persistent("filings_ticker_filter")
 def _prefetch_ticker_filter_data(ticker: str):
     """Prefetch all doc_type + storage_year combos for a ticker in ONE DB query.
 
@@ -4173,3 +4175,6 @@ try:
 except Exception as _exc:
     log_structured_error(_exc, page="company_filings", component="main", operation="PAGE_RENDER")
     st.error("An unexpected error occurred. Please refresh the page.")
+
+
+bind_ram_clear("filings_ticker_filter", lambda: _prefetch_ticker_filter_data.clear())

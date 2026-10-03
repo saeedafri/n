@@ -38,6 +38,7 @@ from utils.local_storage import (
 )
 from utils.local_storage_manager import sync_market_data_state, save_market_data_state, get_persistent_state, set_persistent_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
+from utils.persist import persistent, bind_ram_clear
 from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
 
 
@@ -326,6 +327,7 @@ def has_balance_sheet_grey_separator(label: str) -> bool:
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
+@persistent("md_period_types")
 def get_available_period_types(ticker: str, tab: str) -> list:
     """Get available period types (Annual/Quarterly) for a company based on data availability.
 
@@ -429,6 +431,37 @@ def get_available_period_types(ticker: str, tab: str) -> list:
         available_types = ["Annual"]  # Safe fallback
 
     return available_types
+
+
+bind_ram_clear("md_period_types", lambda: get_available_period_types.clear())
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+@persistent("md_shares_price")
+def fetch_shares_price_rows(ticker: str, is_sec: bool) -> list:
+    """Shares outstanding joined to the close on the same day, newest first (the
+    Market Cap sheet). Ran uncached on every render of the page."""
+    from core.database import db_manager
+    if is_sec:
+        return db_manager.execute_query_readonly("""
+            SELECT s.report_date, s.shares_outstanding_basic, s.shares_outstanding_diluted, ts.close
+            FROM coreiq_av_shares_outstanding s
+            INNER JOIN coreiq_av_time_series_daily ts
+                ON ts.ticker = s.ticker AND ts.day_date = s.report_date
+            WHERE s.ticker = :ticker
+            ORDER BY s.report_date DESC
+        """, {"ticker": ticker})
+    return db_manager.execute_query_readonly("""
+        SELECT s.asof_date, s.shares_outstanding, ts.close
+        FROM coreiq_yf_shares_outstanding s
+        INNER JOIN coreiq_yf_time_series_daily ts
+            ON ts.ticker = s.ticker AND ts.day_date = s.asof_date
+        WHERE s.ticker = :ticker
+        ORDER BY s.asof_date DESC
+    """, {"ticker": ticker})
+
+
+bind_ram_clear("md_shares_price", lambda: fetch_shares_price_rows.clear())
 
 
 def get_balance_sheet_indent_level(label: str) -> int:
@@ -3547,8 +3580,6 @@ def render_page():
             _shares_price_data = None
             try:
                 from data.source_router import get_company_source as _gcs
-                from core.database import DatabaseManager as _DBM
-                _db = _DBM()
                 _src = _gcs(selected_ticker) or "SEC"
                 _is_sec = (_src != "YFinance")
 
@@ -3558,14 +3589,7 @@ def render_page():
                     except Exception: return None
 
                 if _is_sec:
-                    _sp_rows_raw = _db.execute_query_readonly("""
-                        SELECT s.report_date, s.shares_outstanding_basic, s.shares_outstanding_diluted, ts.close
-                        FROM coreiq_av_shares_outstanding s
-                        INNER JOIN coreiq_av_time_series_daily ts
-                            ON ts.ticker = s.ticker AND ts.day_date = s.report_date
-                        WHERE s.ticker = :ticker
-                        ORDER BY s.report_date DESC
-                    """, {"ticker": selected_ticker})
+                    _sp_rows_raw = fetch_shares_price_rows(selected_ticker, True)
                     _sp_rows = []
                     for _r in _sp_rows_raw:
                         _c = _ff(_r.get("close")); _b = _ff(_r.get("shares_outstanding_basic")); _d = _ff(_r.get("shares_outstanding_diluted"))
@@ -3573,14 +3597,7 @@ def render_page():
                                          "mktcap_basic": (_c * _b) if _c and _b else None,
                                          "mktcap_diluted": (_c * _d) if _c and _d else None})
                 else:
-                    _sp_rows_raw = _db.execute_query_readonly("""
-                        SELECT s.asof_date, s.shares_outstanding, ts.close
-                        FROM coreiq_yf_shares_outstanding s
-                        INNER JOIN coreiq_yf_time_series_daily ts
-                            ON ts.ticker = s.ticker AND ts.day_date = s.asof_date
-                        WHERE s.ticker = :ticker
-                        ORDER BY s.asof_date DESC
-                    """, {"ticker": selected_ticker})
+                    _sp_rows_raw = fetch_shares_price_rows(selected_ticker, False)
                     _sp_rows = []
                     for _r in _sp_rows_raw:
                         _c = _ff(_r.get("close")); _sh = _ff(_r.get("shares_outstanding"))

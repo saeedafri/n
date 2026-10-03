@@ -43,6 +43,11 @@ except ImportError:
 
 _WL_CACHE_KEY = "_coreiq_wl_cache_v1"
 _WL_CACHE_TTL = 120  # seconds
+# Process-wide (was per session, so every new page load queried): keyed by user, as
+# the rows carry that user's is_owner / can_edit flags. Every write clears all of it —
+# all watchlists are visible to all users — and so does a write from outside the app.
+_WL_PROCESS_CACHE = {}
+_WL_TABLES = {"coreiq_watchlists", "coreiq_watchlist_access", "coreiq_watchlist_companies"}
 
 
 # =============================================================================
@@ -171,8 +176,10 @@ def create_watchlist(
 # READ
 # =============================================================================
 
-def _invalidate_watchlist_cache(user_email: str) -> None:
-    """Clear the TTL cache entry for a user after any write operation."""
+def _invalidate_watchlist_cache(user_email: str = "") -> None:
+    """Clear the TTL cache after any write operation (every user's entry: a write
+    to a shared watchlist changes what all of them see)."""
+    _WL_PROCESS_CACHE.clear()
     if not _HAS_STREAMLIT:
         return
     try:
@@ -201,16 +208,9 @@ def get_user_watchlists(user_email: str) -> List[Dict]:
     key = (user_email or "").strip().lower()
 
     # TTL cache check
-    if _HAS_STREAMLIT:
-        try:
-            cache = _st.session_state.get(_WL_CACHE_KEY, {})
-            entry = cache.get(key)
-            if entry is not None:
-                cached_at, cached_val = entry
-                if _wl_time.time() - cached_at < _WL_CACHE_TTL:
-                    return list(cached_val)
-        except Exception:
-            pass
+    entry = _WL_PROCESS_CACHE.get(key)
+    if entry is not None and _wl_time.time() - entry[0] < _WL_CACHE_TTL:
+        return [dict(r) for r in entry[1]]
 
     _require_tables()
     sql = """
@@ -241,6 +241,7 @@ def get_user_watchlists(user_email: str) -> List[Dict]:
     """
     try:
         result = [dict(r) for r in db_manager.execute_query_readonly(sql, {"email": user_email})]
+        _WL_PROCESS_CACHE[key] = (_wl_time.time(), [dict(r) for r in result])
         if _HAS_STREAMLIT:
             try:
                 cache = _st.session_state.get(_WL_CACHE_KEY, {})
@@ -750,3 +751,10 @@ def _get_watchlist_acl(watchlist_id: int, user_email: str) -> Optional[Dict]:
         log_structured_error(exc, page="watchlist_service",
                              component="_get_watchlist_acl", operation="select")
         return None
+
+
+try:
+    from utils.freshness import listen as _fresh_listen
+    _fresh_listen(_WL_TABLES, lambda changed: _invalidate_watchlist_cache())
+except Exception:
+    pass

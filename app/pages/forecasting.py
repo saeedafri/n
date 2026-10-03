@@ -8,6 +8,8 @@ writes back to the database.
 
 from __future__ import annotations
 
+import hashlib
+import pickle
 from time import perf_counter, time_ns
 from typing import Any, Dict, List, Optional
 
@@ -2410,6 +2412,12 @@ def _mm(v) -> Optional[float]:
     return float(v) * 1000.0
 
 
+@st.cache_resource(show_spinner=False)
+def _single_excel_store() -> Dict[str, bytes]:
+    """Built single-company workbooks by content digest, shared by every session."""
+    return {}
+
+
 def _build_forecast_excel_single(
     ticker: str,
     company_name: str,
@@ -3454,15 +3462,20 @@ def main() -> None:
     outlier_years = payload.get('outlier_years', [])
     total_runtime = timings.get('total') or dashboard_elapsed
 
-    # Build Excel bytes once per ticker+periods, cache in session_state for true 1-click download
+    # Build Excel bytes once per ticker+periods, cache in session_state for true 1-click download.
+    # The bytes are also kept process-wide under a digest of everything they are built
+    # from: each page load is a new session, so session_state alone rebuilt the
+    # workbook (~90 ms of openpyxl) on every visit. Same inputs → same file.
     _sgl_key = f'_est_sgl_xl_{selected_ticker}_{forecast_periods}'
     if _sgl_key not in st.session_state:
         try:
-            st.session_state[_sgl_key] = _build_forecast_excel_single(
-                selected_ticker, company_name,
-                training_df, actual_df, forecast_df,
-                backtest_df, model_keys, scenario_keys, payload,
-            )
+            _xl_inputs = (selected_ticker, company_name, training_df, actual_df, forecast_df,
+                          backtest_df, model_keys, scenario_keys, payload)
+            _xl_digest = hashlib.sha1(pickle.dumps(_xl_inputs, protocol=pickle.HIGHEST_PROTOCOL)).hexdigest()
+            _xl_store = _single_excel_store()
+            if _xl_digest not in _xl_store:
+                _xl_store[_xl_digest] = _build_forecast_excel_single(*_xl_inputs)
+            st.session_state[_sgl_key] = _xl_store[_xl_digest]
         except Exception as _exc:
             log_structured_error(_exc, page='forecasting', component='main', operation='BUILD_SINGLE_EXCEL_EAGER')
             st.session_state[_sgl_key] = None

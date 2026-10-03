@@ -438,6 +438,86 @@ if not _auth_ready_for_bg and os.environ.get("APP_DB_WARMUP_STARTED") != "1":
         pass
 
 # =============================================================================
+# BACKGROUND SERVICES (once per process, signed in or not)
+# Not behind the sign-in gate: the boot warm (startup.sh) runs this script with no
+# user, so behind it the table checks, the local news copy and the freshness
+# watcher waited for the first person to sign in after every deploy — who then
+# got MySQL-speed news and waited on the table checks.
+# =============================================================================
+try:
+    if os.environ.get("APP_SCREENING_PREWARM_STARTED") == "1":
+        raise RuntimeError("screening prewarm already started")
+    import threading as _threading
+
+    def _prewarm_screening_tables():
+        try:
+            from core.database import init_database as _init_db
+            _init_db()
+            from data.watchlist_service import ensure_tables as _wl_ensure
+            from data.saved_criteria_service import ensure_tables as _sc_ensure
+            from data.portal_users_service import ensure_tables as _pu_ensure
+            from data.earnings_alert_service import ensure_tables as _ea_ensure
+            from data.screening_service import (
+                ensure_segment_member_cache_table,
+                ensure_segment_values_cache_table,
+            )
+            _wl_ensure()
+            _sc_ensure()
+            _pu_ensure()
+            _ea_ensure()
+            # Screening's first visit checked these two on the request path.
+            ensure_segment_member_cache_table()
+            ensure_segment_values_cache_table()
+        except Exception:
+            log_exception("ERROR in background screening-tables prewarm")
+
+    os.environ["APP_SCREENING_PREWARM_STARTED"] = "1"
+    _prewarm_start = perf_counter()
+    _threading.Thread(target=_prewarm_screening_tables, daemon=True).start()
+    try:
+        from utils.freshness import start as _start_freshness, listen as _fresh_listen
+        from data import news_mirror as _news_mirror
+        _fresh_listen({t["source"] for t in _news_mirror.TABLES.values()}
+                      | {_news_mirror.COMPANIES["source"]}, _news_mirror.sync)
+        _news_mirror.start_background_copy()
+        _start_freshness()   # persisted caches follow DB writes within ~15 s
+    except Exception:
+        log_exception("ERROR starting freshness watcher")
+    log_timing("MAIN_SCREENING_PREWARM_THREAD", (perf_counter() - _prewarm_start) * 1000)
+    del _threading
+except RuntimeError:
+    pass
+except Exception:
+    pass
+
+# FULLTEXT + earnings-call warmups: in the background, once per process. They ran
+# on the first signed-in page request after every deploy (1.4-9 s for that user).
+if os.environ.get("APP_AV_FT_WARMED") != "1":
+    os.environ["APP_AV_FT_WARMED"] = "1"
+    os.environ["APP_EC_WARMED"] = "1"
+
+    def _warm_fulltext_and_ec():
+        try:
+            _ft_start = perf_counter()
+            from core.database import init_database as _init_db, warmup_av_fulltext
+            _init_db()
+            warmup_av_fulltext()
+            log_timing("MAIN_AV_FT_WARMUP", (perf_counter() - _ft_start) * 1000)
+        except Exception:
+            pass
+        if os.getenv("ENABLE_EC_WARMUP", "1").strip() != "0":
+            try:
+                _ec_warm_start = perf_counter()
+                from data.repository import warmup_ec_caches
+                warmup_ec_caches()
+                log_timing("MAIN_EC_WARMUP", (perf_counter() - _ec_warm_start) * 1000)
+            except Exception:
+                pass
+    import threading as _warm_threading
+    _warm_threading.Thread(target=_warm_fulltext_and_ec, name="fulltext-ec-warmup", daemon=True).start()
+
+
+# =============================================================================
 # DATABASE INITIALIZATION + WARMUPS (authenticated-only)
 # Avoids paying Azure DB setup on unauthenticated login and logout requests.
 # Login callback still works because auth_manager/login_user lazily opens DB.
@@ -451,63 +531,6 @@ if _auth_ready_for_bg:
     except Exception as e:
         log_exception("ERROR in database initialization")
 
-    try:
-        if os.environ.get("APP_SCREENING_PREWARM_STARTED") == "1":
-            raise RuntimeError("screening prewarm already started")
-        import threading as _threading
-
-        def _prewarm_screening_tables():
-            try:
-                from data.watchlist_service import ensure_tables as _wl_ensure
-                from data.saved_criteria_service import ensure_tables as _sc_ensure
-                from data.portal_users_service import ensure_tables as _pu_ensure
-                from data.earnings_alert_service import ensure_tables as _ea_ensure
-                from data.screening_service import (
-                    ensure_segment_member_cache_table,
-                    ensure_segment_values_cache_table,
-                )
-                _wl_ensure()
-                _sc_ensure()
-                _pu_ensure()
-                _ea_ensure()
-                # Screening's first visit checked these two on the request path.
-                ensure_segment_member_cache_table()
-                ensure_segment_values_cache_table()
-            except Exception:
-                log_exception("ERROR in background screening-tables prewarm")
-
-        os.environ["APP_SCREENING_PREWARM_STARTED"] = "1"
-        _prewarm_start = perf_counter()
-        _threading.Thread(target=_prewarm_screening_tables, daemon=True).start()
-        log_timing("MAIN_SCREENING_PREWARM_THREAD", (perf_counter() - _prewarm_start) * 1000)
-        del _threading
-    except RuntimeError:
-        pass
-    except Exception:
-        pass
-
-    try:
-        if os.environ.get("APP_AV_FT_WARMED") == "1":
-            raise RuntimeError("av ft already warmed")
-        _ft_start = perf_counter()
-        from core.database import warmup_av_fulltext
-        warmup_av_fulltext()
-        os.environ["APP_AV_FT_WARMED"] = "1"
-        log_timing("MAIN_AV_FT_WARMUP", (perf_counter() - _ft_start) * 1000)
-    except RuntimeError:
-        pass
-    except Exception:
-        pass
-
-    if os.getenv("ENABLE_EC_WARMUP", "1").strip() != "0" and os.environ.get("APP_EC_WARMED") != "1":
-        try:
-            _ec_warm_start = perf_counter()
-            from data.repository import warmup_ec_caches
-            warmup_ec_caches()
-            os.environ["APP_EC_WARMED"] = "1"
-            log_timing("MAIN_EC_WARMUP", (perf_counter() - _ec_warm_start) * 1000)
-        except Exception:
-            pass
 
     # =========================================================================
     # COMPANY-FILINGS PREFETCH WARMUP (authenticated-only, BACKGROUND)
