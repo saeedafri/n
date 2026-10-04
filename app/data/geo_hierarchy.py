@@ -117,6 +117,25 @@ def is_excluded(label: str) -> bool:
     return normalize_geo_key(label) in _hierarchy()["excluded"]
 
 
+# The workbook files this under a region, but as a SEGMENT name it is a
+# catch-all rather than a place: "Other" is what a filer calls the revenue left
+# over after naming its real segments. 141 companies use it as a business
+# segment, and reading it as geography would empty their business list.
+_CATCH_ALL_NODES = frozenset({"Other"})
+
+
+def names_a_place(label: str) -> bool:
+    """Is this segment name a place rather than a line of business?
+
+    A filer that tags "United States" on a business axis has filed geography in
+    the wrong place. This is how the Business Segments list keeps it out, and it
+    reads the same hierarchy the Geographical Segments cascade does, so the two
+    screens can never disagree about what counts as a place.
+    """
+    node = node_for_label(label)
+    return bool(node) and node.get("node") not in _CATCH_ALL_NODES
+
+
 def _index(members: Sequence[str]) -> List[Tuple[str, Dict[str, str]]]:
     return [(member, path_for_label(member)) for member in members]
 

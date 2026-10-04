@@ -2742,7 +2742,25 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
     out = read_segment_member_labels_raw(segment_type)
     if segment_type == "geographical":
         out = _collapse_geo_canonical_options(out)
+    else:
+        out = _drop_places_from_business_options(out)
     return out
+
+
+def _drop_places_from_business_options(
+    raw_opts: List[Tuple[str, int]],
+) -> List[Tuple[str, int]]:
+    """Keep geography out of the Business Segments dropdown.
+
+    ``_classify_member`` already stops these at the root, but the screening
+    cache is a table that rebuilds on its own schedule, so rows written before
+    that rule existed are still in it. Filtering on the way out means the list
+    is right now rather than after the next rebuild. Pure dict work over a few
+    thousand cached labels — microseconds, no query.
+    """
+    from data.geo_hierarchy import names_a_place
+
+    return [(label, count) for label, count in raw_opts if not names_a_place(label)]
 
 
 def _collapse_geo_canonical_options(
@@ -3119,6 +3137,15 @@ def read_segment_values_cache(
         except Exception as exc:
             log_error(f"[SCREENING] read_segment_values_cache chunk failed: {exc}")
             return []
+
+    if segment_type != "geographical":
+        # Same rule as the dropdown: a place is not a line of business. Rows
+        # written before _classify_member learned that are still in the cache
+        # until it rebuilds, and they would otherwise reach the results grid as
+        # a "United States" business-segment column.
+        from data.geo_hierarchy import names_a_place
+        all_rows = [row for row in all_rows
+                    if not names_a_place(row.get("member_label") or "")]
 
     ms = (time.perf_counter() - t0) * 1000
     log_timing(

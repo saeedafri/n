@@ -308,7 +308,33 @@ def test_display_map_cannot_leak_a_name_across_sections():
     display = SegmentDataRepository._member_display_map(rows, set())
     key = SegmentDataRepository._member_key("Middle East and Africa")
     assert display[("geo", key)] == "Middle East and Africa"
-    assert display[("business", key)] == "Middle East & Africa"
+    # The business spelling now gets no entry at all: a place on a business axis
+    # is geography filed in the wrong place and is dropped (see
+    # tests/test_business_segments_have_no_places.py). That is a stronger
+    # guarantee than the per-section key this test was written to protect — the
+    # business spelling cannot win because it is no longer there.
+    assert ("business", key) not in display
+
+
+def test_the_per_section_key_still_holds_for_a_real_business_segment():
+    """Dropping places must not collapse the two sections back into one key: a
+    genuine business segment keeps its own entry alongside any geographic one."""
+    from datetime import date
+    from data.repository import SegmentDataRepository
+
+    def row(member, axis, filed):
+        return {"dimension": axis, "dimension_label": member,
+                "dimension_member_label": member,
+                "full_dimension_label":
+                    ("Geographical: " if "Geographical" in axis else "Business Segments: ") + member,
+                "filing_date": date.fromisoformat(filed)}
+
+    display = SegmentDataRepository._member_display_map([
+        row("Wholesale", "us-gaap:StatementBusinessSegmentsAxis", "2025-02-10"),
+        row("United States", "srt:StatementGeographicalAxis", "2025-02-10"),
+    ], set())
+    assert display[("business", SegmentDataRepository._member_key("Wholesale"))] == "Wholesale"
+    assert display[("geo", SegmentDataRepository._member_key("United States"))] == "United States"
 
 
 @pytest.mark.parametrize("raw,expected", [

@@ -4149,7 +4149,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "APAC, Middle East and Africa (APMEA)": {
    "city": "",
@@ -4161,7 +4161,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "Aargau": {
    "city": "",
@@ -4533,7 +4533,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "Americas and EMEA": {
    "city": "",
@@ -4545,7 +4545,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "Amsterdam": {
    "city": "Amsterdam",
@@ -4929,7 +4929,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "Asir Province": {
    "city": "",
@@ -5157,7 +5157,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "BRICS": {
    "city": "",
@@ -5169,7 +5169,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "Baden-Württemberg": {
    "city": "",
@@ -7773,7 +7773,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "Dhaka": {
    "city": "Dhaka",
@@ -7845,7 +7845,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Non-Regional"
+   "sub_region": ""
   },
   "Dominica": {
    "city": "",
@@ -7977,7 +7977,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "East Africa": {
    "city": "",
@@ -8289,7 +8289,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "Emilia-Romagna": {
    "city": "",
@@ -8457,7 +8457,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "Europe, Middle East, India and Africa (EMEIA)": {
    "city": "",
@@ -8469,7 +8469,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "European Union": {
    "city": "",
@@ -8733,7 +8733,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "Fujairah": {
    "city": "",
@@ -8805,7 +8805,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "GCC (Gulf Cooperation Council)": {
    "city": "",
@@ -10137,7 +10137,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Non-Regional"
+   "sub_region": ""
   },
   "Iowa": {
    "city": "",
@@ -12729,7 +12729,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Multi-Region"
+   "sub_region": ""
   },
   "Mumbai": {
    "city": "Mumbai",
@@ -14037,7 +14037,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Market Grouping"
+   "sub_region": ""
   },
   "Oaxaca": {
    "city": "",
@@ -14313,7 +14313,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Non-Regional"
+   "sub_region": ""
   },
   "Ottawa": {
    "city": "Ottawa",
@@ -15201,7 +15201,7 @@
    "parent": "Global",
    "region": "Multi-Regional",
    "state": "",
-   "sub_region": "Non-Regional"
+   "sub_region": ""
   },
   "Rhineland-Palatinate": {
    "city": "",
@@ -20391,11 +20391,6 @@
     "Africa",
     "Europe",
     "Middle East"
-   ],
-   "Multi-Regional": [
-    "Market Grouping",
-    "Multi-Region",
-    "Non-Regional"
    ]
   },
   "state": {

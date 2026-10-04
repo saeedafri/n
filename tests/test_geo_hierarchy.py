@@ -92,22 +92,36 @@ def test_regions_cover_the_live_members():
     ]
 
 
-def test_the_three_non_place_regions_became_one():
+def test_the_three_non_place_regions_became_one_flat_region():
     """Multi-region, Market grouping and Non-regional answer "what kind of label
-    is this", not "where". They are one Region now, and the workbook's own three
-    words are its Sub-regions — every member they held is still reachable."""
-    assert level_options(LIVE_MEMBERS, "sub_region", {"region": ["Multi-Regional"]}) == [
-        "Market Grouping", "Multi-Region", "Non-Regional",
-    ]
+    is this", not "where". They are one flat Region now — the business team asked
+    for those three words to leave the screen, not to move down a level, so
+    Multi-Regional offers nothing below it."""
     folded = filter_members(LIVE_MEMBERS, {"region": ["Multi-Regional"]}, False)
-    parts = sum(
-        len(filter_members(
-            LIVE_MEMBERS, {"region": ["Multi-Regional"], "sub_region": [sub]}, False
-        ))
-        for sub in ("Market Grouping", "Multi-Region", "Non-Regional")
-    )
-    assert len(folded) == parts == 17
-    assert "International" in folded and "Emerging Markets" in folded
+    assert len(folded) == 17
+    assert "International" in folded          # was Non-regional
+    assert "Emerging Markets" in folded       # was Market grouping
+    assert "EMEA And Asia Pacific" in folded  # was Multi-region
+
+    for level in ("sub_region", "country", "state", "city"):
+        assert level_options(LIVE_MEMBERS, level, {"region": ["Multi-Regional"]}) == [], \
+            f"{level} must be empty under a flat Multi-Regional"
+
+
+def test_the_folded_names_appear_nowhere_in_the_cascade():
+    """'Market Grouping' and 'Non-Regional' are gone from the UI, at every level."""
+    gone = {"Market Grouping", "Market grouping", "Multi-Region", "Multi-region",
+            "Non-Regional", "Non-regional"}
+    for level in LEVELS:
+        offered = set(level_options(LIVE_MEMBERS, level))
+        assert offered & gone == set(), f"{level} still offers {offered & gone}"
+
+
+def test_a_real_region_keeps_its_sub_regions():
+    """Flattening Multi-Regional must not flatten anything else."""
+    assert level_options(LIVE_MEMBERS, "sub_region", {"region": ["AMER"]}) == [
+        "Latin America (LATAM)", "North America (NORAM)",
+    ]
 
 
 def test_sub_regions_narrow_to_the_chosen_region():
@@ -224,8 +238,8 @@ def test_an_unknown_label_is_reachable_not_dropped():
     ("Mid-Atlantic", "AMER > North America (NORAM) > United States"),
     ("Mountain", "AMER > North America (NORAM) > United States"),
     ("Greater China", "APAC > East Asia"),
-    ("International", "Multi-Regional > Non-Regional"),
-    ("EMEA And Asia Pacific", "Multi-Regional > Multi-Region"),
+    ("International", "Multi-Regional"),
+    ("EMEA And Asia Pacific", "Multi-Regional"),
 ])
 def test_paths_for_the_labels_that_caused_trouble(label, expected):
     assert describe_label(label) == expected

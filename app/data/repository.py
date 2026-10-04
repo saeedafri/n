@@ -10292,6 +10292,7 @@ class SegmentDataRepository:
         quarterly builder and the screening cache, so member routing cannot drift
         between the Segments tab and the screener."""
         from utils.constants import SEGMENT_SKIP_MEMBERS, SEGMENT_RECONCILIATION_MEMBERS
+        from data.geo_hierarchy import names_a_place
         from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
 
         member_raw = row.get('dimension_member_label') or ''
@@ -10335,6 +10336,17 @@ class SegmentDataRepository:
         else:
             heading = SegmentDataRepository._get_heading(row.get('full_dimension_label') or '')
             section = SegmentDataRepository._classify_heading(heading)
+            # The heading is the filer's prose and it is not always the word the
+            # classifier looks for: "Geographic Area", "Geographic Areas
+            # Financial Data", "Revenue From Customers Based In Different
+            # Geographic Regions", and "Pf0" — a namespace prefix that leaks
+            # through because the heading is everything before the first colon
+            # of "pf0:StatementGeographicalAxis: CHINA". 108 of 8,914 geo-axis
+            # rows land this way, carrying real countries. The `dimension`
+            # column names the axis itself and does not drift, so it has the
+            # final say.
+            if section != "geo" and SegmentDataRepository._is_geographic_axis(row):
+                section = "geo"
         # Canonicalise geographic labels so filing-to-filing drift collapses to one
         # member ("United States Operations" → "United States"), and drop the ones
         # the business team ruled are not places at all — facility descriptions
@@ -10348,6 +10360,15 @@ class SegmentDataRepository:
             if is_geo_excluded_label(member):
                 return None
             member = canonicalize_geo_label(member)
+        elif names_a_place(member):
+            # A place tagged on a BUSINESS axis is geography filed in the wrong
+            # place — "United States", "EMEA", "Asia" are not lines of business.
+            # 86 companies do this. 79 of them already report the same places on
+            # the geographic axis, so the business copy is a duplicate; the other
+            # 7 are a coverage gap for the data team, not something to invent
+            # here by moving facts between axes. Either way it does not belong in
+            # the Business Segments list, so it goes.
+            return None
         return section, member
 
     @staticmethod
@@ -10918,6 +10939,21 @@ class SegmentDataRepository:
         return all_rows
 
     # ── DB → structured output ─────────────────────────────────────────────
+
+    @staticmethod
+    def _is_geographic_axis(row) -> bool:
+        """Does this fact sit on a geographic axis, whatever the heading says?
+
+        SEGMENT_GEO_AXES is the same list the screener's SQL filters on, so the
+        two cannot drift. Matching is on the axis qname in `dimension`, which is
+        machine-written, rather than on `full_dimension_label`, which is prose.
+        """
+        from utils.constants import SEGMENT_GEO_AXES
+
+        dimension = (row.get('dimension') or '').lower()
+        if not dimension:
+            return False
+        return any(axis.strip('%').lower() in dimension for axis in SEGMENT_GEO_AXES)
 
     @staticmethod
     def _classify_heading(heading: str) -> str:
