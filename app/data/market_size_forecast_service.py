@@ -307,6 +307,21 @@ def guess_date_column(df: pd.DataFrame) -> Optional[str]:
     return best_col if best_score >= 0.6 else None
 
 
+def _value_score(series: pd.Series) -> float:
+    """Fraction of a column's values that read as numbers.
+
+    Scored with `to_numeric_values`, the same reader `load_series` uses, so a
+    column of `$243,826` or `(87)` is detected as numeric instead of being
+    refused one step before the parser that handles it would have run. Plain
+    to_numeric here meant the page said "no numeric value column found" about a
+    file it could in fact read.
+    """
+    try:
+        return float(to_numeric_values(series).notna().mean())
+    except Exception:
+        return 0.0
+
+
 def guess_value_column(df: pd.DataFrame, date_col) -> Optional[str]:
     """Pick the likeliest sales column: name hints first, then most-numeric."""
     hints = ['sales', 'revenue', 'value', 'amount', 'demand', 'units',
@@ -315,11 +330,11 @@ def guess_value_column(df: pd.DataFrame, date_col) -> Optional[str]:
     for col in candidates:
         name = str(col).strip().lower()
         if any(h == name or h in name for h in hints):
-            if pd.to_numeric(df[col], errors='coerce').notna().mean() >= 0.6:
+            if _value_score(df[col]) >= 0.6:
                 return col
     best_col, best_score = None, 0.0
     for col in candidates:
-        score = pd.to_numeric(df[col], errors='coerce').notna().mean()
+        score = _value_score(df[col])
         if score > best_score:
             best_col, best_score = col, score
     return best_col if best_score >= 0.6 else None
@@ -1194,11 +1209,14 @@ def rank_exog_combinations(lagged: pd.DataFrame, candidates: List[str], max_lag:
     config = FREQ_CONFIGS[freq_name]
     trimmed = lagged[candidates + [TARGET_COL]].iloc[max_lag:].dropna()
     window = max(1, min(horizon, max(config['s'], 12), len(trimmed) // 3))
+    actual_test = trimmed[-window:][TARGET_COL].values
+    trimmed = positional_if_irregular(trimmed)
     train, test = trimmed[:-window], trimmed[-window:]
 
     all_combos = [list(c) for size in range(1, max_combo + 1)
                   for c in combinations(candidates, size)]
     rows = []
+    first_failure = None
     # Same reasoning as the SARIMA grid: at lag 52 the seasonal AR/MA terms are
     # both unidentifiable and ~90x more expensive per fit.
     seasonal = _seasonal_order(
@@ -1213,20 +1231,46 @@ def rank_exog_combinations(lagged: pd.DataFrame, candidates: List[str], max_lag:
                           order=(1, 1, 1), seasonal_order=seasonal,
                           validate_specification=False).fit(disp=False, cov_type='none')
             predicted = fit.forecast(steps=window, exog=test[combo])
-            mape, rmse = _accuracy(test[TARGET_COL].values, predicted)
+            mape, rmse = _accuracy(actual_test, predicted)
             # Keep the orders, not the fitted model: the page holds this table
             # in session state and a list of fitted SARIMAX objects is dead
             # weight there. Every combo is fit at the same order anyway.
             rows.append({'rmse': rmse, 'mape': mape, 'predvars': combo,
                          'order': fit.model.order,
                          'seasonal_order': fit.model.seasonal_order})
-        except Exception:
-            pass
+        except Exception as exc:
+            # The original swallowed every one of these, so "every combination
+            # failed to fit" was all anyone ever saw. Keep the first reason.
+            if first_failure is None:
+                first_failure = f"{type(exc).__name__}: {exc}"
         if progress:
             progress(position, len(all_combos), ', '.join(combo))
     if not rows:
+        log_structured_error(
+            RuntimeError(first_failure or "no combinations to score"),
+            page="market_size_forecasting",
+            component="market_size_forecast_service.rank_exog_combinations",
+            operation="fit_combination",
+            context=f"freq={freq_name} combos={len(all_combos)} rows={len(trimmed)} "
+                    f"window={window} max_lag={max_lag}")
         return pd.DataFrame(columns=['rmse', 'mape', 'predvars', 'order', 'seasonal_order'])
     return pd.DataFrame(rows).sort_values('rmse').reset_index(drop=True)
+
+
+def positional_if_irregular(frame: pd.DataFrame) -> pd.DataFrame:
+    """Number the rows when their dates no longer form a regular series.
+
+    Dropping blank periods leaves a DatetimeIndex with no `freq`, and SARIMAX
+    answers that with "No supported index is available" instead of fitting — so
+    a single missing month disabled SARIMAX for the whole file. Here the index
+    only ever labels output, and both callers relabel the result from the dated
+    frame themselves; the likelihood depends on the order of the values, not on
+    their dates. Numbering the rows therefore changes no number, and a frame
+    whose dates are still regular is handed back untouched.
+    """
+    if isinstance(frame.index, pd.DatetimeIndex) and frame.index.freq is None:
+        return frame.reset_index(drop=True)
+    return frame
 
 
 def run_sarimax(lagged: pd.DataFrame, predvars: List[str], order, seasonal_order,
@@ -1243,19 +1287,22 @@ def run_sarimax(lagged: pd.DataFrame, predvars: List[str], order, seasonal_order
 
     clean = lagged[[TARGET_COL] + predvars].iloc[max_lag:].dropna()
     window = max(1, min(horizon, max(config['s'], 12), len(clean) // 3))
-    fit = SARIMAX(clean[:-window][TARGET_COL], exog=clean[:-window][predvars],
+    fitting = positional_if_irregular(clean)
+    fit = SARIMAX(fitting[:-window][TARGET_COL], exog=fitting[:-window][predvars],
                   order=order, seasonal_order=seasonal_order).fit(disp=False)
-    predicted = fit.forecast(steps=window, exog=clean[-window:][predvars])
+    predicted = fit.forecast(steps=window, exog=fitting[-window:][predvars])
     mape, rmse = _accuracy(clean[-window:][TARGET_COL].values, predicted.values)
     walkforward = fit.get_forecast(
-        steps=window, exog=clean[-window:][predvars]).summary_frame(alpha=0.05)
+        steps=window, exog=fitting[-window:][predvars]).summary_frame(alpha=0.05)
     walkforward.index = clean[-window:].index
+    predicted.index = clean[-window:].index
 
     full_slice = lagged[[TARGET_COL] + predvars].iloc[max_lag:]
     actual = full_slice[full_slice.index <= last_actual].dropna()
     future = full_slice[full_slice.index > last_actual].dropna(subset=predvars)
 
-    final = SARIMAX(actual[TARGET_COL], exog=actual[predvars],
+    history = positional_if_irregular(actual)
+    final = SARIMAX(history[TARGET_COL], exog=history[predvars],
                     order=order, seasonal_order=seasonal_order).fit(disp=0)
 
     future_index = pd.date_range(last_actual + _offset(freq_name),

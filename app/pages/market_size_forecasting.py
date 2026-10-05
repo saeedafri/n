@@ -291,9 +291,6 @@ button[data-testid="stBaseButton-primary"]:disabled {{
   border-color: #E9E7E6 !important;
   color: {MUTED} !important;
 }}
-div[data-testid="stProgress"] div[role="progressbar"] > div {{
-  background: linear-gradient(90deg, {BRAND_RED}, #F0605F) !important;
-}}
 </style>
 """,
         unsafe_allow_html=True,
@@ -315,6 +312,48 @@ def _card(kicker: str, value: str, meta: str = "", small: bool = False) -> None:
         f'</div>',
         unsafe_allow_html=True,
     )
+
+
+def _percent(value, places: int = 2) -> str:
+    """A percentage, or 'n/a' when the series made it undefined.
+
+    MAPE divides by each actual value, so a series containing a true zero gives
+    infinity. That is a property of the measure, not a fault in the fit — but
+    printing `inf%` and `Accuracy -inf%` reads as a broken page, so say n/a and
+    let the RMSE card carry the accuracy.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    return f"{number:.{places}f}%" if np.isfinite(number) else "n/a"
+
+
+def _ranking_metric(result: Dict[str, Any]) -> float:
+    """What to rank models on: MAPE normally, RMSE when MAPE is undefined.
+
+    With a zero in the series every model's MAPE is infinity, so `min` picked
+    whichever happened to come first and the page declared a "best" model on a
+    comparison that carried no information. RMSE is already computed, is finite
+    here, and is in the series' own units.
+    """
+    mape = result.get("mape")
+    try:
+        mape = float(mape)
+    except (TypeError, ValueError):
+        mape = float("inf")
+    return mape if np.isfinite(mape) else float(result.get("rmse", float("inf")))
+
+
+def _mape_is_usable(results: Dict[str, Any]) -> bool:
+    return all(np.isfinite(_as_float(r.get("mape"))) for r in results.values())
+
+
+def _as_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
 
 
 def _chips(*chips: str) -> str:
@@ -505,7 +544,7 @@ def _comparison_chart(results: Dict[str, Dict[str, Any]]) -> go.Figure:
             mode="lines", hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter(
             x=forecast.index, y=forecast["mean"], mode="lines+markers",
-            name=f"{name} · MAPE {result['mape']:.2f}%",
+            name=f"{name} · MAPE {_percent(result['mape'])}",
             line=dict(color=color, width=3, dash="dash"), marker=dict(size=7),
             hovertemplate="%{x|%b %Y}<br>%{y:,.0f}<extra></extra>"))
     _forecast_begins(fig, history.index[-1])
@@ -850,9 +889,17 @@ def _render_controls() -> Dict[str, Any]:
 #  ANALYSIS
 # ═══════════════════════════════════════════════════════════════════
 
-def _stage(bar, share: float, text: str) -> None:
-    """Move the overall bar to the named stage."""
-    bar.progress(min(max(share, 0.0), 1.0), text=text)
+def _stage(loader, share: float, text: str) -> None:
+    """Name the current stage inside the branded loader.
+
+    This used to drive an st.progress bar. That widget is painted from
+    Streamlit's theme primaryColor, which is blue, and no stylesheet of ours
+    reached inside it -- so a red-branded page ran a blue bar underneath a red
+    spinner. Re-rendering the loader card instead keeps one indicator, on
+    brand, and still names the stage and its share of the run.
+    """
+    percent = int(round(min(max(share, 0.0), 1.0) * 100))
+    render_page_loader(f"{text} · {percent}%", placeholder=loader)
 
 
 def _ingestion_diagnosis(loaded, settings: Dict[str, Any], usable: int) -> str:
@@ -882,7 +929,7 @@ def _ingestion_diagnosis(loaded, settings: Dict[str, Any], usable: int) -> str:
     return "\n\n".join(lines)
 
 
-def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
+def _run_analysis(settings: Dict[str, Any], loader) -> Dict[str, Any]:
     """Run every selected model once and return everything the tabs render.
 
     Deliberately a single pass: Streamlit reruns the whole script on any widget
@@ -909,7 +956,7 @@ def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
         return {"error": _ingestion_diagnosis(loaded, settings, len(series))}
     last_actual = sales.index[-1]
 
-    _stage(bar, 0.05, "Reading diagnostics")
+    _stage(loader, 0.05, "Reading diagnostics")
     diagnostics = timed("diagnostics",
                         lambda: _diagnostics(series, freq_name, settings["season_mode"]))
 
@@ -930,7 +977,7 @@ def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
     # it afterwards — on a cold cache that hides most of a ~8s wait.
     fred_pool = fred_future = None
     if settings["run_sarimax"] and len(series) >= engine.SARIMAX_MIN_OBS and _fred_key():
-        _stage(bar, cursor, "Pulling FRED macro data")
+        _stage(loader, cursor, "Pulling FRED macro data")
         fred_pool = ThreadPoolExecutor(max_workers=1)
         api_key = _fred_key()
         script_ctx = get_script_run_ctx()
@@ -949,7 +996,7 @@ def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
     if settings["run_sarima"] or settings["run_prophet"]:
         label = " and ".join(m for m in ("SARIMA", "Prophet")
                              if settings[f"run_{m.lower()}"])
-        _stage(bar, cursor, f"Fitting {label}")
+        _stage(loader, cursor, f"Fitting {label}")
         script_ctx = get_script_run_ctx()
 
         def fit_sarima():
@@ -984,16 +1031,16 @@ def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
         cursor += slice_size * len(jobs)
 
     if settings["run_sarimax"]:
-        _stage(bar, cursor, "SARIMAX")
+        _stage(loader, cursor, "SARIMAX")
         try:
             timed("sarimax", lambda: _run_sarimax_stage(
-                outcome, sales, series, last_actual, settings, config, bar, cursor,
+                outcome, sales, series, last_actual, settings, config, loader, cursor,
                 slice_size, fred_future))
         finally:
             if fred_pool is not None:
                 fred_pool.shutdown(wait=False)
 
-    bar.progress(1.0, text="Done")
+    _stage(loader, 1.0, "Done")
     total_ms = (perf_counter() - started) * 1000
     outcome["stage_times"] = stage_times
     outcome["total_ms"] = total_ms
@@ -1005,7 +1052,7 @@ def _run_analysis(settings: Dict[str, Any], bar) -> Dict[str, Any]:
 
 def _run_sarimax_stage(outcome: Dict[str, Any], sales: pd.DataFrame, series: pd.Series,
                        last_actual, settings: Dict[str, Any], config: Dict[str, Any],
-                       bar, cursor: float, slice_size: float, fred_future=None) -> None:
+                       loader, cursor: float, slice_size: float, fred_future=None) -> None:
     """FRED pull → stationarity → Granger → combination search → fit."""
     freq_name = settings["freq_name"]
     horizon = settings["horizon"]
@@ -1026,7 +1073,7 @@ def _run_sarimax_stage(outcome: Dict[str, Any], sales: pd.DataFrame, series: pd.
             "an admin to set the `FRED_API_KEY` app setting."))
         return
 
-    _stage(bar, cursor, "SARIMAX — collecting FRED macro data")
+    _stage(loader, cursor, "SARIMAX — collecting FRED macro data")
     try:
         monthly, status = (fred_future.result() if fred_future is not None
                            else _fred_monthly(api_key))
@@ -1052,7 +1099,7 @@ def _run_sarimax_stage(outcome: Dict[str, Any], sales: pd.DataFrame, series: pd.
             pd.date_range(sales.index[0], pd.Timestamp.today().date(), freq=config["freq"]),
             config["resample"]))
 
-    _stage(bar, cursor + slice_size * 0.35, "SARIMAX — Granger causality")
+    _stage(loader, cursor + slice_size * 0.35, "SARIMAX — Granger causality")
     granger, rounds, hit_cap = _granger(frame, freq_name, settings["max_lag"])
     outcome["granger"] = granger
     outcome["sarimax_diffs"] = rounds
@@ -1068,7 +1115,7 @@ def _run_sarimax_stage(outcome: Dict[str, Any], sales: pd.DataFrame, series: pd.
                       .iloc[:settings["max_exog"]]["xlabel"])
     lagged = engine.build_lagged_frame(frame, granger, last_actual, horizon, freq_name)
 
-    _stage(bar, cursor + slice_size * 0.55, "SARIMAX — searching combinations")
+    _stage(loader, cursor + slice_size * 0.55, "SARIMAX — searching combinations")
     ranked = _combinations(lagged, candidates, settings["max_lag"],
                            settings["max_combo"], horizon, freq_name)
     if ranked.empty:
@@ -1080,7 +1127,7 @@ def _run_sarimax_stage(outcome: Dict[str, Any], sales: pd.DataFrame, series: pd.
     outcome["sarimax_ranked"] = ranked
     outcome["sarimax_lagged"] = lagged
     outcome["sarimax_candidates"] = candidates
-    _stage(bar, cursor + slice_size * 0.85, "SARIMAX — fitting the best combination")
+    _stage(loader, cursor + slice_size * 0.85, "SARIMAX — fitting the best combination")
     _fit_sarimax_rank(outcome, 0)
 
 
@@ -1291,7 +1338,7 @@ def _render_fix_suggestions(stats_: Dict[str, Any], model_name: str) -> None:
 def _render_accuracy(result: Dict[str, Any]) -> None:
     a, b, c = st.columns(3)
     with a:
-        _card("Walk-forward MAPE", f"{result['mape']:.2f}%", "Mean absolute % error")
+        _card("Walk-forward MAPE", _percent(result['mape']), "Mean absolute % error")
     with b:
         _card("RMSE", f"{result['rmse']:,.0f}", "In the series' own units")
     with c:
@@ -1511,10 +1558,10 @@ def _render_prophet_tab(outcome: Dict[str, Any]) -> None:
     if result["cv_table"] is not None:
         a, b = st.columns(2)
         with a:
-            _card("CV MAPE — with regressor", f"{result['cv_mape']:.2f}%",
+            _card("CV MAPE — with regressor", _percent(result['cv_mape']),
                   "Rolling window across cutpoints")
         with b:
-            _card("CV MAPE — baseline", f"{result['cv_baseline_mape']:.2f}%",
+            _card("CV MAPE — baseline", _percent(result['cv_baseline_mape']),
                   "Without covid_shock")
         _table(result["cv_table"][["horizon", "mape", "rmse", "mae"]]
                .round({"mape": 4, "rmse": 0, "mae": 0}).reset_index(drop=True))
@@ -1560,12 +1607,19 @@ def _render_comparison_tab(outcome: Dict[str, Any]) -> None:
     _section("Model comparison",
              "Every model on identical terms — same held-out window, same error measure.")
 
-    winner = min(results, key=lambda m: results[m]["mape"])
+    if not _mape_is_usable(results):
+        st.info(
+            "This series contains zero values, and MAPE divides by each actual value — "
+            "so the percentage is undefined and shows as **n/a** for every model. "
+            "The models themselves are unaffected; the ranking below uses **RMSE**, "
+            "which is in the same units as your data.")
+
+    winner = min(results, key=lambda m: _ranking_metric(results[m]))
     cards = st.columns(len(results))
     for column, (name, result) in zip(cards, results.items()):
         with column:
             _card(name + ("  ·  BEST" if name == winner else ""),
-                  f"{result['mape']:.2f}%",
+                  _percent(result['mape']),
                   f"RMSE {result['rmse']:,.0f} · {result['label']}")
 
     st.plotly_chart(_comparison_chart(results), config=CHART_CONFIG,
@@ -1573,9 +1627,9 @@ def _render_comparison_tab(outcome: Dict[str, Any]) -> None:
 
     summary = pd.DataFrame({
         name: {
-            "Walk-forward MAPE": f"{r['mape']:.2f}%",
+            "Walk-forward MAPE": _percent(r['mape']),
             "Walk-forward RMSE": f"{r['rmse']:,.0f}",
-            "Accuracy": f"{100 - r['mape']:.1f}%",
+            "Accuracy": _percent(100 - _as_float(r['mape']), 1),
             "Uses FRED": "Yes" if name == "SARIMAX" else "No",
             "Exogenous": ("Granger-selected" if name == "SARIMAX"
                           else "None" if name == "SARIMA" else "covid_shock"),
@@ -1631,8 +1685,11 @@ def _hero(outcome: Dict[str, Any]) -> None:
         _chip(f"Horizon {outcome['horizon']} {config['unit']}", quiet=True),
     ]
     if outcome["results"]:
-        best = min(outcome["results"], key=lambda m: outcome["results"][m]["mape"])
-        chips.insert(0, _chip(f"Best: {best} · {outcome['results'][best]['mape']:.2f}% MAPE"))
+        best = min(outcome["results"], key=lambda m: _ranking_metric(outcome["results"][m]))
+        measure = ("MAPE" if _mape_is_usable(outcome["results"]) else "RMSE")
+        score = (_percent(outcome["results"][best]["mape"]) if measure == "MAPE"
+                 else f"{outcome['results'][best]['rmse']:,.0f}")
+        chips.insert(0, _chip(f"Best: {best} · {score} {measure}"))
     st.markdown(
         f'<div class="msf-hero">'
         f'<div class="msf-hero-lead">Forecast ready</div>'
@@ -1692,20 +1749,18 @@ def main() -> None:
     run_clicked = st.button("Run analysis", type="primary", key=f"{KEY}run",
                             disabled=not any_model)
 
-    # Progress renders inside a container created on EVERY run, so the element
+    # The loader is held in a container created on EVERY run, so the element
     # tree above the tabs never shifts — otherwise the tabs remount and the
     # first combination-rank change bounces the user back to Diagnostics.
     status_area = st.container()
     if run_clicked:
         tracker.step_start("ANALYSIS")
-        loader = render_page_loader("Running forecast models")
         with status_area:
-            bar = st.progress(0.0, text="Starting…")
+            loader = render_page_loader("Running forecast models · 0%")
             try:
-                st.session_state[f"{KEY}outcome"] = _run_analysis(settings, bar)
+                st.session_state[f"{KEY}outcome"] = _run_analysis(settings, loader)
             finally:
-                bar.empty()
-        loader.empty()
+                loader.empty()
         tracker.step_end("ANALYSIS")
 
     outcome = st.session_state.get(f"{KEY}outcome")

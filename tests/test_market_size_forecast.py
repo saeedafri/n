@@ -671,3 +671,113 @@ def test_real_short_year_series_still_read_as_years(labels):
 def test_an_annual_series_on_one_month_reads_as_years():
     got = engine.normalize_dates(pd.Series(["Dec 20", "Dec 21", "Dec 22", "Dec 23"])).dropna()
     assert [d.year for d in got] == [2020, 2021, 2022, 2023]
+
+
+# ── value columns an analyst formatted for reading ──────────────────
+
+@pytest.mark.parametrize("values, note", [
+    (["1,234", "2,345", "3,456"], "thousands separators"),
+    (["$1,234", "$2,345", "$3,456"], "currency symbols"),
+    (["(87)", "1,234", "2,345"], "accounting negatives"),
+    (["1 234", "2 345", "3 456"], "space separators"),
+])
+def test_a_formatted_value_column_is_still_detected(values, note):
+    """Detection scored with plain to_numeric refused files the parser could read."""
+    frame = pd.DataFrame({
+        "Date": ["2020-01-31", "2020-02-29", "2020-03-31"],
+        "Sales": values,
+    })
+    assert engine.guess_value_column(frame, "Date") == "Sales", note
+
+
+def test_a_text_column_is_not_mistaken_for_values():
+    frame = pd.DataFrame({
+        "Date": ["2020-01-31", "2020-02-29", "2020-03-31"],
+        "Region": ["National", "National", "National"],
+    })
+    assert engine.guess_value_column(frame, "Date") is None
+
+
+# ── gapped series reach every model, not just SARIMA ────────────────
+
+def _gapped_frame(periods=96, missing=(13, 25, 37)):
+    """A monthly model frame with blank target periods and complete exog."""
+    index = pd.date_range("2017-01-31", periods=periods, freq="ME")
+    rng = np.random.default_rng(11)
+    sales = pd.Series(np.linspace(100.0, 260.0, periods)
+                      * (1 + 0.09 * np.sin(np.arange(periods) / 12 * 2 * np.pi)),
+                      index=index)
+    sales.iloc[list(missing)] = np.nan
+    driver = pd.Series(np.linspace(40.0, 90.0, periods)
+                       + rng.normal(0, 1.5, periods), index=index)
+    return pd.DataFrame({engine.TARGET_COL: sales, "driver (2m ago)": driver})
+
+
+def test_blank_periods_do_not_disable_the_combination_search():
+    frame = _gapped_frame()
+    ranked = engine.rank_exog_combinations(frame, ["driver (2m ago)"], 3, 1, 6, "Monthly")
+    assert len(ranked) == 1, "every combination failed to fit on a gapped series"
+    assert np.isfinite(ranked.iloc[0]["rmse"])
+
+
+def test_blank_periods_do_not_disable_sarimax():
+    frame = _gapped_frame()
+    last_actual = frame[engine.TARGET_COL].last_valid_index()
+    outcome = engine.run_sarimax(frame, ["driver (2m ago)"], (1, 1, 1), (1, 1, 1, 12),
+                                 last_actual, 6, 3, "Monthly")
+    assert len(outcome["forecast"]) == 6
+    assert np.isfinite(outcome["mape"])
+    # the walk-forward table must still be labelled with real dates
+    assert outcome["walkforward"].index.dtype.kind == "M"
+    assert outcome["wf_predicted"].index.dtype.kind == "M"
+
+
+def test_a_gapless_frame_keeps_its_dated_index_through_sarimax():
+    """The repair must be inert when there is nothing to repair."""
+    frame = _gapped_frame(missing=())
+    before = frame[["driver (2m ago)"]].copy()
+    engine.run_sarimax(frame, ["driver (2m ago)"], (1, 1, 1), (0, 1, 0, 12),
+                       frame.index[-1], 4, 3, "Monthly")
+    pd.testing.assert_frame_equal(before, frame[["driver (2m ago)"]])
+    assert engine.positional_if_irregular(frame) is frame
+
+
+# ── a series containing zeros makes MAPE undefined, not the page broken ──
+
+def test_mape_is_undefined_when_the_series_contains_a_zero():
+    """Their formula divides by each actual; a true zero gives infinity."""
+    actual = np.array([100.0, 0.0, 120.0])
+    predicted = np.array([101.0, 2.0, 119.0])
+    mape, rmse = engine._accuracy(actual, predicted)
+    assert not np.isfinite(mape), "a zero actual must still produce a non-finite MAPE"
+    assert np.isfinite(rmse), "RMSE stays usable and is what the page ranks on"
+
+
+def test_undefined_mape_reads_as_not_available():
+    from pages import market_size_forecasting as page
+    assert page._percent(float("inf")) == "n/a"
+    assert page._percent(float("nan")) == "n/a"
+    assert page._percent(None) == "n/a"
+    assert page._percent(1.3817) == "1.38%"
+    assert page._percent(98.6, 1) == "98.6%"
+
+
+def test_the_best_model_falls_back_to_rmse_when_every_mape_is_undefined():
+    from pages import market_size_forecasting as page
+    results = {
+        "SARIMAX": {"mape": float("inf"), "rmse": 9100.0},
+        "SARIMA": {"mape": float("inf"), "rmse": 4200.0},
+        "Prophet": {"mape": float("inf"), "rmse": 6300.0},
+    }
+    assert not page._mape_is_usable(results)
+    assert min(results, key=lambda m: page._ranking_metric(results[m])) == "SARIMA"
+
+
+def test_a_usable_mape_still_decides_the_best_model():
+    from pages import market_size_forecasting as page
+    results = {
+        "SARIMA": {"mape": 2.4, "rmse": 100.0},      # worse MAPE, better RMSE
+        "Prophet": {"mape": 1.1, "rmse": 900.0},
+    }
+    assert page._mape_is_usable(results)
+    assert min(results, key=lambda m: page._ranking_metric(results[m])) == "Prophet"
