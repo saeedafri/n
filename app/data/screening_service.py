@@ -528,7 +528,7 @@ def apply_industry_criterion(
 def apply_geography_criterion(
     countries: List[str],
     working_df: pd.DataFrame,
-    display_col: str = "Country",
+    display_col: str = "Country of Incorporation",
 ) -> Tuple[pd.DataFrame, Dict]:
     """Keep only companies incorporated in `countries`, and show that country.
 
@@ -6084,7 +6084,7 @@ def recompute_working_set(
         # computed under a filter that had since been removed:
         #   add Key Devs -> Industry=Healthcare -> Geography=US   (8 companies)
         #   remove Industry                                       (should widen to 396)
-        # still reported "Geographic Locations: United States — 8 companies matched",
+        # still reported "Country of Incorporation: United States — 8 companies matched",
         # because Geography's 8-row result was cached under the same key. Every
         # downstream count and the whole results grid inherited that stale narrowing.
         #
@@ -6146,7 +6146,7 @@ def recompute_working_set(
             primary = criterion.get("display_col")
             # Industry/geography default annotation column names
             if not primary:
-                primary = {"industry": "Industry", "geography": "Country"}.get(ctype)
+                primary = {"industry": "Industry", "geography": "Country of Incorporation"}.get(ctype)
             if primary and primary in full_df.columns:
                 with_data = int(full_df[primary].notna().sum())
             # Trailing-quarters: display_col is a friendly label (not a data
@@ -6796,10 +6796,10 @@ def build_industry_summary(industries: List[str]) -> str:
 
 def build_geography_summary(countries: List[str]) -> str:
     if not countries:
-        return "Geographic Locations: (none)"
+        return "Country of Incorporation: (none)"
     if len(countries) <= 3:
-        return f"Geographic Locations: {', '.join(countries)}"
-    return f"Geographic Locations: {len(countries)} countries"
+        return f"Country of Incorporation: {', '.join(countries)}"
+    return f"Country of Incorporation: {len(countries)} countries"
 
 
 def build_financial_summary(

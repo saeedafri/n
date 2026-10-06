@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2026,
+ "value": 55,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "| Total Vince Stores (55) | | | | | | | | | 133,986 | | | | 94,864 |",
+ "fye_date": "2026-01-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VNCE/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

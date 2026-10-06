@@ -64,7 +64,7 @@ def test_geography_criterion_filters_to_the_selected_countries():
     out, meta = apply_geography_criterion(["United Kingdom"], COMPANIES)
 
     assert list(out["ticker"]) == ["TSCO"]
-    assert list(out["Country"]) == ["United Kingdom"]
+    assert list(out["Country of Incorporation"]) == ["United Kingdom"]
     assert meta["rows_in"] == 3 and meta["rows_out"] == 1
 
 
@@ -168,14 +168,14 @@ def test_multiple_criterion_columns_keep_their_order():
     grid = events("SBUX")
     working = universe([
         {"ticker": "SBUX", "Industry": "Coffee & Beverage",
-         "Country": "United States", "Revenue FY2025": 36176.0},
+         "Country of Incorporation": "United States", "Revenue FY2025": 36176.0},
     ])
 
     out = merge_company_columns(
-        grid, working, ["Industry", "Country", "Revenue FY2025"], after=ANCHOR)
+        grid, working, ["Industry", "Country of Incorporation", "Revenue FY2025"], after=ANCHOR)
 
     assert list(out.columns)[:4] == [
-        ANCHOR, "Industry", "Country", "Revenue FY2025"]
+        ANCHOR, "Industry", "Country of Incorporation", "Revenue FY2025"]
 
 
 def test_no_event_column_is_lost_when_columns_are_reordered():
@@ -228,18 +228,18 @@ def test_same_ticker_two_companies_each_get_their_own_attributes():
     ])
     working = universe([
         {"ticker": "TSCO", "company_name": "Tractor Supply Company",
-         "Industry": None, "Country": "United States"},
+         "Industry": None, "Country of Incorporation": "United States"},
         {"ticker": "TSCO", "company_name": "Tesco PLC",
-         "Industry": "Food Retail", "Country": "United Kingdom"},
+         "Industry": "Food Retail", "Country of Incorporation": "United Kingdom"},
     ])
 
-    out = merge_company_columns(grid, working, ["Industry", "Country"], after=ANCHOR)
+    out = merge_company_columns(grid, working, ["Industry", "Country of Incorporation"], after=ANCHOR)
 
     tractor = out[out["_CompanyName"] == "Tractor Supply Company"].iloc[0]
     tesco = out[out["_CompanyName"] == "Tesco PLC"].iloc[0]
-    assert tractor["Country"] == "United States"
+    assert tractor["Country of Incorporation"] == "United States"
     assert tractor["Industry"] == "N/A"          # did not match the criterion
-    assert tesco["Country"] == "United Kingdom"
+    assert tesco["Country of Incorporation"] == "United Kingdom"
     assert tesco["Industry"] == "Food Retail"
 
 

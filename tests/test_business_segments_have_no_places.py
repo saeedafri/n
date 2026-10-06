@@ -239,6 +239,85 @@ def test_the_axis_check_does_not_rescue_a_business_axis():
          "dimension_member_label": "United States", "dimension_label": ""}, set()) is None
 
 
+# ── the inner axis of a multi-dimensional fact ───────────────────────────────
+
+# J&J's 10-K files its regions as a ConsolidationItems wrapper whose SECOND axis
+# is the geographic one; the geographic copy exists only in its 10-Qs, which the
+# screening cache never reads. `dimension` names the wrapper's axis, so neither
+# _is_geographic_axis nor geo_member_set could see the geography, the heading
+# before the first colon reads "Consolidation Items", and the compound names are
+# not in the workbook so names_a_place could not drop them either. All three
+# missed and "Asia-Pacific, Africa" showed up in the Business Segments dropdown.
+WRAPPER_ROWS_WHOSE_INNER_AXIS_IS_GEOGRAPHIC = [
+    ("Consolidation Items: Operating Segments, Geographical: Asia-Pacific, Africa",
+     "Asia-Pacific, Africa"),
+    ("Consolidation Items: Operating Segments, Statement, Geographical: Asia-Pacific, Africa",
+     "Asia-Pacific, Africa"),
+    ("Consolidation Items: Operating Segments, Geographical: Europe", "Europe"),
+    ("Consolidation Items: Operating Segments, Statement, Geographical: "
+     "Western Hemisphere excluding U.S.", "Western Hemisphere excluding U.S."),
+]
+
+# The same wrapper shape, but the inner axis is the filer's own segment axis.
+# PepsiCo's reportable segments and Mondelez's AMEA are named after places but
+# declared as business segments, and they must stay in the Business list.
+WRAPPER_ROWS_WHOSE_INNER_AXIS_IS_BUSINESS = [
+    ("Consolidation Items: Operating Segments, Segments: Asia Pacific Foods (Segment)",
+     "Asia Pacific Foods (Segment)"),
+    ("Consolidation Items: Operating Segments, Segments: "
+     "Asia Pacific, Australia and New Zealand, and China Region",
+     "Asia Pacific, Australia and New Zealand, and China Region"),
+    ("Consolidation Items: Operating Segments, Segments: AMEA", "AMEA"),
+    ("Consolidation Items: Operating Segments, Segments: Data Center", "Data Center"),
+]
+
+# ConsolidationItems is a genuine segment axis, so a place recovered from it is
+# kept as a segment (the McDonald's rule) unless the inner heading says geography.
+SEGMENT_AXES = frozenset({"srt:ConsolidationItemsAxis", "us-gaap:ConsolidationItemsAxis"})
+
+
+def _wrapper_row(full_dimension_label, inner):
+    return {"dimension": "srt:ConsolidationItemsAxis",
+            "dimension_member_label": "Operating Segments",
+            "dimension_label": inner,
+            "full_dimension_label": full_dimension_label}
+
+
+@pytest.mark.parametrize("fdl, inner", WRAPPER_ROWS_WHOSE_INNER_AXIS_IS_GEOGRAPHIC)
+def test_a_wrappers_inner_geographic_axis_routes_to_geo(fdl, inner):
+    from data.repository import SegmentDataRepository
+
+    result = SegmentDataRepository._classify_member(
+        _wrapper_row(fdl, inner), set(), SEGMENT_AXES)
+    assert result is not None, f"{inner!r} was dropped entirely"
+    assert result[0] == "geo", f"{inner!r} landed in {result[0]}"
+
+
+@pytest.mark.parametrize("fdl, inner", WRAPPER_ROWS_WHOSE_INNER_AXIS_IS_BUSINESS)
+def test_a_wrappers_inner_segment_axis_stays_in_business(fdl, inner):
+    """A geographically-named segment the filer declares on its segment axis is
+    still a segment. Moving these would delete PepsiCo's real reportable segments."""
+    from data.repository import SegmentDataRepository
+
+    result = SegmentDataRepository._classify_member(
+        _wrapper_row(fdl, inner), set(), SEGMENT_AXES)
+    assert result is not None, f"{inner!r} was dropped entirely"
+    assert result[0] == "business", f"{inner!r} landed in {result[0]}"
+
+
+def test_the_inner_heading_is_read_from_the_right_axis():
+    """The heading belongs to the member that follows it, not to any other part
+    of the label — otherwise a fact with one geographic and one business axis
+    would be read as geography whichever member it carries."""
+    from data.repository import SegmentDataRepository as repo
+
+    fdl = "Geographical: Europe, Segments: Beverages"
+    assert repo._inner_heading_is_geographic({"full_dimension_label": fdl}, "Europe") is True
+    assert repo._inner_heading_is_geographic({"full_dimension_label": fdl}, "Beverages") is False
+    assert repo._inner_heading_is_geographic({"full_dimension_label": ""}, "Europe") is False
+    assert repo._inner_heading_is_geographic({}, "") is False
+
+
 def test_a_row_with_no_axis_is_not_treated_as_geographic():
     from data.repository import SegmentDataRepository
 

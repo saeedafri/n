@@ -13,7 +13,7 @@ Architecture:
 
 This iteration implements: Companies flow only.
   • Industry Classifications
-  • Geographic Locations
+  • Country of Incorporation
   • Financial Information (Income Statement, Balance Sheet, Cash Flow)
 """
 
@@ -608,7 +608,7 @@ _SCREEN_FOR_OPTIONS = [
 
 _CRITERIA_OPTIONS = [
     ("Industry Classifications",       "industry",   True),
-    ("Geographic Locations",           "geography",  True),
+    ("Country of Incorporation",       "geography",  True),
     ("Financial Information",          "financial",  True),
     ("Key Developments by Category",   "keydevs",    True),
     ("People Attributes",              "people",     True),
@@ -732,7 +732,7 @@ def _filter_criteria_for_mode(criteria: List[dict], screen_for: str) -> tuple:
         allowed = _allowed_criteria_types(screen_for)
         labels = {
             "industry": "Industry Classifications",
-            "geography": "Geographic Locations",
+            "geography": "Country of Incorporation",
             "financial": "Financial Information",
             "keydevs": "Key Developments by Category",
             "people": "People Attributes",
@@ -759,6 +759,10 @@ def _filter_criteria_for_mode(criteria: List[dict], screen_for: str) -> tuple:
                 continue
             old_to_new[old_idx] = len(final)
             final.append(dict(criterion))
+            # Saved before the rename, the stored summary still says
+            # "Geographic Locations: …".
+            if criterion.get("type") == "geography":
+                final[-1]["summary"] = build_geography_summary(criterion.get("countries", []))
         for criterion in final:
             parent = criterion.get("parent_idx")
             if parent is not None:
@@ -1222,7 +1226,7 @@ def _criteria_display_cols(
     if any(c.get("type") == "industry" for c in criteria):
         cols.append("Industry")
     if any(c.get("type") == "geography" for c in criteria):
-        cols.append("Country")
+        cols.append("Country of Incorporation")
     cols += _get_financial_metric_cols(criteria)
     if include_keydevs:
         cols += _get_keydevs_cols(criteria)
@@ -2020,7 +2024,7 @@ def _render_criteria_detail_panel(cid: int, cr: dict, user_email: str,
             # ── header row with optional remove-filter button ──
             type_label = {
                 "industry":     "Industry Classifications",
-                "geography":    "Geographic Locations",
+                "geography":    "Country of Incorporation",
                 "financial":    "Financial Information",
                 "keydevs":      "Key Developments",
                 "biz_segments": "Business Segments",
@@ -2511,7 +2515,7 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
     # palette button gone.
     _type_labels = {
         "industry":  "Industry",
-        "geography": "Geography",
+        "geography": "Country of Incorporation",
         "financial": "Financial",
         "keydevs":   "Key Developments",
         "people":    "People Attributes",
@@ -2536,7 +2540,7 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
     active_form = st.session_state.get(show_form_key)
     if active_form == "Industry":
         _inline_add_industry(cid, working, wk_key, show_form_key)
-    elif active_form == "Geography":
+    elif active_form == "Country of Incorporation":
         _inline_add_geography(cid, working, wk_key, show_form_key)
     elif active_form == "Financial":
         _inline_add_financial(cid, working, wk_key, show_form_key)
@@ -2602,7 +2606,7 @@ def _inline_add_geography(cid, working, wk_key, show_form_key):
         return
 
     with st.container(border=True):
-        st.markdown("**New Geography Filter**")
+        st.markdown("**New Country of Incorporation Filter**")
         selected = st.multiselect(
             "Select countries", options=available,
             key=f"_scr_ng_{cid}", placeholder="Select countries…",
@@ -3383,7 +3387,7 @@ def _dialog_watchlist_manager():
         col_ratios = [1.5, 3.5, 3, 2, 0.8] if can_edit else [1.5, 3.5, 3, 2]
         # Fixed header (always visible)
         hc = st.columns(col_ratios)
-        for _h, _lbl in zip(hc, ["Ticker", "Company", "Sector", "Country", ""]):
+        for _h, _lbl in zip(hc, ["Ticker", "Company", "Sector", "Country of Incorporation", ""]):
             _h.markdown(f'<div class="co-table-header">{_lbl}</div>',
                         unsafe_allow_html=True)
 
@@ -3866,12 +3870,12 @@ def _render_industry_form():
 
 
 def _render_geography_form():
-    """Render the Geographic Locations criterion form."""
+    """Render the Country of Incorporation criterion form."""
     try:
         prefill = st.session_state.get("scr_prefill")
         is_edit  = prefill and prefill.get("type") == "geography"
 
-        with st.expander("Geographic Locations", expanded=True):
+        with st.expander("Country of Incorporation", expanded=True):
             countries = get_all_countries()
 
             if not countries:
@@ -5599,6 +5603,8 @@ def _render_active_criteria():
             dbg      = trace_by_idx.get(i, {})
             rows_out = dbg.get("rows_out")
             details_html = _build_criterion_details_html(criterion)
+            card_label = ("COUNTRY OF INCORPORATION" if ctype == "geography"
+                          else ctype.upper())
             # Industry / Geography narrow the set, so rows_out IS the match count.
             # Financial / Key-Dev / segment criteria deliberately keep every company
             # (a non-reporting company must stay, showing N/A), so rows_out is always
@@ -5625,7 +5631,7 @@ def _render_active_criteria():
             card_html = textwrap.dedent(
                 f"""
                 <div class="criterion-card">
-                  <span class="criterion-card-num">#{card_num} · {ctype.upper()}</span>
+                  <span class="criterion-card-num">#{card_num} · {card_label}</span>
                   <br>
                   <span class="criterion-card-summary">{summary}</span>
                   {count_html}
@@ -5929,7 +5935,7 @@ def _render_keydevs_results():
                 st.warning(
                     "This screen was too large for the database to return in time. "
                     "Narrow it — a shorter timeframe, fewer categories, or an "
-                    "Industry / Geographic Locations criterion — then press "
+                    "Industry / Country of Incorporation criterion — then press "
                     "**Show Results** again."
                 )
                 return
@@ -6585,7 +6591,7 @@ def _people_company_meta(company_df: pd.DataFrame) -> pd.DataFrame:
     if "sector" in company_df.columns:
         cols["sector"] = "Industry"
     if "country" in company_df.columns:
-        cols["country"] = "Country"
+        cols["country"] = "Country of Incorporation"
     meta = company_df[list(cols.keys())].rename(columns=cols)
     return meta.drop_duplicates(subset=["ticker"])
 
@@ -6627,8 +6633,8 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = out[col].apply(
                 lambda v: "" if pd.isna(v) else str(int(v)))
 
-    for col in ("Executive Name", "Email", "Title", "Role", "Source",
-                "Filing Form", "Source Filing", "Company", "Industry", "Country"):
+    for col in ("Executive Name","Email","Title", "Role", "Source",
+                "Filing Form", "Source Filing", "Company", "Industry", "Country of Incorporation"):
         if col in out.columns:
             # astype(object) FIRST. Role / Source / Filing Form are categorical
             # in the materialized frame (they are low-cardinality and that is
@@ -6645,7 +6651,7 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
     # than silent, and nothing has to change in the UI when the data lands.
     keep = []
     for col in ordered:
-        if col in ("Country", "Industry", "Source Filing") and \
+        if col in ("Country of Incorporation", "Industry", "Source Filing") and \
                 not out[col].astype(str).str.strip().ne("").any():
             continue
         keep.append(col)
@@ -6824,7 +6830,7 @@ def _render_people_results():
                     (v for v in display_df[_col].astype(str).unique() if v.strip()),
                     reverse=True,
                 )
-        for _col, _src in (("Industry", "Industry"), ("Country", "Country"),
+        for _col, _src in (("Industry", "Industry"), ("Country of Incorporation", "Country of Incorporation"),
                            ("Company", "Company")):
             if _col in display_df.columns and _col in merged.columns:
                 _domains[_col] = sorted(

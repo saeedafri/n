@@ -10315,8 +10315,16 @@ class SegmentDataRepository:
             if not inner or inner.lower() == member_raw.lower().strip():
                 return None
             member_raw = inner
-            if (inner.lower() in geo_member_set
-                    and SegmentDataRepository._looks_geographic(inner)):
+            # geo_member_set only sees axes named in the `dimension` column, and on
+            # a wrapper row that column names the WRAPPER's axis, never the inner
+            # one. J&J's 10-K files "Consolidation Items: Operating Segments,
+            # Geographical: Asia-Pacific, Africa" and nothing else — the geographic
+            # copy lives only in its 10-Qs, which the screening cache never reads —
+            # so the set came up empty and three of its regions landed in Business.
+            # full_dimension_label carries the inner axis's own heading, so read it.
+            if SegmentDataRepository._looks_geographic(inner) and (
+                    inner.lower() in geo_member_set
+                    or SegmentDataRepository._inner_heading_is_geographic(row, inner)):
                 forced_section = "geo"
         # Compare on a dash/whitespace-normalised name so one spelling of each rule
         # covers a filer's variants ("Corporate, Non -Segment" vs "Corporate Non-Segment").
@@ -11041,6 +11049,35 @@ class SegmentDataRepository:
         if not dimension:
             return False
         return any(axis.strip('%').lower() in dimension for axis in SEGMENT_GEO_AXES)
+
+    @staticmethod
+    def _inner_heading_is_geographic(row, inner: str) -> bool:
+        """Is a wrapper fact's inner member filed under a Geographical heading?
+
+        `dimension` names the wrapper's own axis (ConsolidationItems), so
+        _is_geographic_axis cannot see the second axis the real member sits on.
+        full_dimension_label does: it joins one "Heading: Member" per axis. Both
+        halves can contain commas — "Consolidation Items: Operating Segments,
+        Statement, Geographical: Asia-Pacific, Africa" — so the heading is found
+        by walking back from the member, not by splitting the whole string.
+        """
+        label = row.get('full_dimension_label') or ''
+        if not label or not inner:
+            return False
+        lowered, needle = label.lower(), f": {inner.lower()}"
+        at = lowered.find(needle)
+        while at != -1:
+            heading = label[:at]
+            while heading:
+                if SegmentDataRepository._classify_heading(
+                        SegmentDataRepository._normalize_heading(heading)) == "geo":
+                    return True
+                cut = heading.find(", ")
+                if cut == -1:
+                    break
+                heading = heading[cut + 2:]
+            at = lowered.find(needle, at + 1)
+        return False
 
     @staticmethod
     def _classify_heading(heading: str) -> str:

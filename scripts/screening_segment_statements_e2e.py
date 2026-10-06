@@ -582,9 +582,9 @@ async def _run_simple_category_regressions(page, base_url: str) -> None:
 
     await _goto_screening(page, base_url)
     await _clear_all(page)
-    await click_by_text_or_role(page, "Geographic Locations")
+    await click_by_text_or_role(page, "Country of Incorporation")
     await page.wait_for_timeout(1000)
-    exp = page.locator('[data-testid="stExpander"]').filter(has_text="Geographic Locations").first
+    exp = page.locator('[data-testid="stExpander"]').filter(has_text="Country of Incorporation").first
     multi = exp.locator('[data-testid="stMultiSelect"]').first
     await multi.click(timeout=10_000)
     await page.locator('[role="option"]').first.click(timeout=10_000)
@@ -601,7 +601,7 @@ async def _run_simple_category_regressions(page, base_url: str) -> None:
     await page.locator('[role="option"]').first.click(timeout=10_000)
     await exp.locator('[data-testid="stForm"]').get_by_role("button", name="Add Criteria").click(timeout=20_000)
     await page.wait_for_selector("text=Active Criteria", timeout=60_000)
-    print("  Industry, Geographic Locations, Key Developments forms pass add-criteria smoke checks.")
+    print("  Industry, Country of Incorporation, Key Developments forms pass add-criteria smoke checks.")
 
 
 def _print_cache_status() -> None:

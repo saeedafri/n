@@ -605,13 +605,13 @@ def _gap_specs() -> list[ShotSpec]:
         ShotSpec(
             "screening", "/screening", "screening-geographic.png",
             ("Geographic", "Countries"), wait_ms=12000,
-            click="Geographic Locations",
+            click="Country of Incorporation",
             markers=_markers_for("screening-geographic.png"),
         ),
         ShotSpec(
             "screening", "/screening", "screening-geographic-countries.png",
             ("Geographic",), wait_ms=12000,
-            click="Geographic Locations",
+            click="Country of Incorporation",
             markers=_markers_for("screening-geographic-countries.png"),
         ),
         ShotSpec(

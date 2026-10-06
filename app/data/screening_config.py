@@ -776,7 +776,7 @@ PEOPLE_YEARS = list(range(_CURRENT_FY, 2012, -1))
 # result set are dropped at render time, so this is a maximum, not a minimum.
 PEOPLE_DISPLAY_COLUMNS = [
     "Company", "Ticker", "Executive Name", "Email", "Title", "Role", "Year",
-    "Industry", "Country", "Age",
+    "Industry", "Country of Incorporation", "Age",
     "Salary", "Bonus", "Stock Awards", "Option Awards", "Non-Equity Incentive",
     "All Other Compensation", "Total Compensation",
     "Total Pay", "Exercised Value", "Unexercised Value",

@@ -1,0 +1,14 @@
+{
+ "ticker": "VLGEA",
+ "fiscal_year": 2025,
+ "value": 37,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores | 37 | | | 37 | | | 38 | | | 38 | | | 37 | |",
+ "fye_date": "2025-07-26",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VLGEA/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

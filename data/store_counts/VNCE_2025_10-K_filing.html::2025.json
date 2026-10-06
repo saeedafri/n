@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2025,
+ "value": 57,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "Total Vince Stores (57)",
+ "fye_date": "2025-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VNCE/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

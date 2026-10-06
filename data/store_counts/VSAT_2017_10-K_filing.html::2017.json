@@ -1,0 +1,14 @@
+{
+ "ticker": "VSAT",
+ "fiscal_year": 2017,
+ "value": 23,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "uthern Pines (North Carolina), Australia, China, India, Israel, Italy, Ireland, Switzerland and the United Kingdom, and operate 23 earth station locations to support our satellite broadband services business across",
+ "fye_date": "2017-03-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VSAT/2017/10-K/filing.html::2017",
+ "extractor_version": 5
+}

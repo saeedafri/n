@@ -1,0 +1,14 @@
+{
+ "ticker": "VITL",
+ "fiscal_year": 2021,
+ "value": 32,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "y or limited indoor dining capacities. COVID-19 and the government measures taken to control it have caused a significant disruption to our business operation. As of fiscal year-end August 31, 2021, we had all of our 32 restaurants operating at 100% indoor dining capacit",
+ "fye_date": "2021-08-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VITL/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}
