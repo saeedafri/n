@@ -23,6 +23,8 @@ Assumptions / Schema Notes:
 - DB stores raw dollar values; UI shows / user enters in $mm (divide/multiply by 1,000,000)
 """
 
+import functools
+import hashlib
 import json
 import os
 import re
@@ -1958,6 +1960,47 @@ def _segment_cache_universe() -> List[str]:
     raise RuntimeError(SEGMENT_CACHE_UNAVAILABLE_MESSAGE)
 
 
+def _segment_cache_entries(ticker: str, biz: Dict, geo: Dict) -> List[tuple]:
+    """One company's classified segments as cache rows:
+    (ticker, segment_type, metric_key, member, year, value_mm).
+
+    A reportable segment named after a place is indexed under geography as well
+    as business. It is the only geography some filers publish — McDonald's
+    reports "United States" as a segment and files no geographic revenue at all,
+    so screening on a geography used to miss it entirely. The Segments tab is
+    unaffected: it still shows the member where the filer put it.
+
+    The company's own geographic disclosure always wins, whole. Amazon reports a
+    "North America" segment AND a United States / Germany / UK / Japan geographic
+    breakdown — different cuts of the same revenue, so mixing them would list
+    426bn of "North America" beside 490bn of "United States". The segment copy is
+    written only for a metric and year where the geographic disclosure says
+    nothing at all, which is why matching member by member is not enough.
+    """
+    from data.geo_hierarchy import names_a_place
+
+    filed_as_geo = {
+        (metric_key, int(year))
+        for metric_key, members in geo.items()
+        for by_year in members.values()
+        for year, value in by_year.items() if value is not None
+    }
+    entries: List[tuple] = []
+    for segment_type, data in (("business", biz), ("geographical", geo)):
+        for metric_key, members in data.items():
+            for member, by_year in members.items():
+                also_geography = segment_type == "business" and names_a_place(member)
+                for year, value in by_year.items():
+                    if value is None:
+                        continue
+                    year = int(year)
+                    entries.append((ticker, segment_type, metric_key, member, year, float(value)))
+                    if also_geography and (metric_key, year) not in filed_as_geo:
+                        entries.append((ticker, "geographical", metric_key, member,
+                                        year, float(value)))
+    return entries
+
+
 def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=None,
                                  raise_on_timeout: bool = True):
     """Scan v5 and replay the Segments-tab classifier for `tickers`.
@@ -2064,13 +2107,7 @@ def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=No
             if not years:
                 continue
             biz, geo, _ = SegmentDataRepository._classify_segment_rows(trows, years)
-            for seg_type, data in (("business", biz), ("geographical", geo)):
-                for metric_key, members in data.items():
-                    for member, yv in members.items():
-                        for yr, val in yv.items():
-                            if val is None:
-                                continue
-                            entries.append((tk, seg_type, metric_key, member, int(yr), float(val)))
+            entries.extend(_segment_cache_entries(tk, biz, geo))
         processed += len(chunk)
         if progress_cb:
             try:
@@ -2414,9 +2451,46 @@ def _ensure_segment_refresh_state_table() -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """
     )
+    # Added 2026-10-06 with the classifier gate below; the table predates it.
+    # MySQL 8 has no ADD COLUMN IF NOT EXISTS, and a duplicate-column error here
+    # is the normal case on every call after the first.
+    try:
+        db_manager.execute_insert(
+            f"ALTER TABLE {SEGMENT_REFRESH_STATE_TABLE} "
+            f"ADD COLUMN classifier_version VARCHAR(16) NOT NULL DEFAULT ''"
+        )
+    except Exception:
+        pass
     db_manager.execute_insert(
         f"INSERT IGNORE INTO {SEGMENT_REFRESH_STATE_TABLE} (id, last_built_max_id) VALUES (1, 0)"
     )
+
+
+@functools.lru_cache(maxsize=1)
+def _segment_classifier_version() -> str:
+    """Hash of the code that decides what a segment is and where it belongs.
+
+    The refresh gate below watches coreiq_filing_metrics_v5 growing, so a deploy
+    that changes classification alone never rebuilt anything: segment data comes
+    from 10-Ks, which land in a burst each spring, and until the next one the
+    screener kept serving members the previous rules produced. The fix that put
+    McDonald's "United States" into the geographic index would have sat dormant
+    for months. Hashing the five functions means a change to them is itself a
+    reason to rebuild, once.
+    """
+    import inspect
+
+    sources = []
+    for fn in (SegmentDataRepository._classify_segment_rows,
+               SegmentDataRepository._classify_member,
+               SegmentDataRepository._segment_axes,
+               SegmentDataRepository._member_display_map,
+               _segment_cache_entries):
+        try:
+            sources.append(inspect.getsource(fn))
+        except Exception:
+            sources.append(getattr(fn, "__qualname__", "?"))
+    return hashlib.sha1("".join(sources).encode("utf-8", "replace")).hexdigest()[:12]
 
 
 def _v5_max_id() -> int:
@@ -2443,11 +2517,14 @@ def refresh_segment_cache_if_stale(force: bool = False) -> dict:
         _ensure_segment_refresh_state_table()
         cur_max = _v5_max_id()
         st_rows = db_manager.execute_query_readonly(
-            f"SELECT last_built_max_id FROM {SEGMENT_REFRESH_STATE_TABLE} WHERE id = 1", {}
+            f"SELECT last_built_max_id, classifier_version "
+            f"FROM {SEGMENT_REFRESH_STATE_TABLE} WHERE id = 1", {}
         ) or []
         last_max = int(st_rows[0]["last_built_max_id"] or 0) if st_rows else 0
+        built_with = (st_rows[0].get("classifier_version") or "") if st_rows else ""
+        classifier = _segment_classifier_version()
 
-        if not force and cur_max <= last_max:
+        if not force and cur_max <= last_max and built_with == classifier:
             out.update(action="fresh", max_id=cur_max, last_built_max_id=last_max)
             return out
 
@@ -2484,6 +2561,7 @@ def refresh_segment_cache_if_stale(force: bool = False) -> dict:
             full_rebuild = (
                 force
                 or last_max <= 0
+                or built_with != classifier   # new rules reach every ticker
                 or not changed
                 or len(changed) > _SEGMENT_INCREMENTAL_MAX_TICKERS
                 or len(changed) > universe_size * _SEGMENT_INCREMENTAL_MAX_SHARE
@@ -2518,10 +2596,12 @@ def refresh_segment_cache_if_stale(force: bool = False) -> dict:
                 UPDATE {SEGMENT_REFRESH_STATE_TABLE}
                    SET building = 0,
                        last_built_max_id = :mx,
+                       classifier_version = :cv,
                        last_built_at = UTC_TIMESTAMP()
                  WHERE id = 1
                 """,
-                {"mx": last_max if retry_pending else cur_max},
+                {"mx": last_max if retry_pending else cur_max,
+                 "cv": "" if retry_pending else classifier},
             )
             log_timing(
                 "SEGMENT_CACHE_REFRESH", elapsed * 1000,
@@ -3564,6 +3644,9 @@ def apply_segment_statement_criterion(
 
     stmt = criterion.get("statement", "")
     segment_type = _segment_statement_type(criterion)
+    # A range is one ordinary fetch per year, so the two modes cannot disagree.
+    if criterion.get("year_range"):
+        return _apply_segment_year_range_criterion(criterion, working_df)
     metric_info = criterion.get("metric_info") or {}
     metric_key = metric_info.get("metric_key") or criterion.get("metric_label", "Revenues")
     metric_label = metric_info.get("label", metric_key)
@@ -3780,6 +3863,65 @@ def apply_segment_statement_criterion(
         ),
         "cache_rows":        len(rows) if data_source == "values_cache" else 0,
         "cache_scope_rows":  cache_scope.get("rows", 0),
+    }
+
+
+def _apply_segment_year_range_criterion(
+    criterion: Dict, working_df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, Dict]:
+    """One segment column per fiscal year, side by side.
+
+    Display-only, like the financial year range it mirrors: nobody is dropped for
+    missing a year, they just read N/A there. Each year is the ordinary
+    single-year path, so a range can never disagree with what the same criterion
+    shows on its own.
+    """
+    t_total = time.perf_counter()
+    years = sorted({int(y) for y in (criterion.get("year_range") or [])})
+    base_col = criterion.get("display_col") or criterion.get("metric_label", "Segments")
+    out = working_df.copy()
+    year_cols: List[str] = []
+    with_data = 0
+
+    for year in years:
+        col = f"{base_col} [FY {year}]"
+        one = {k: v for k, v in criterion.items() if k != "year_range"}
+        one.update(year=year, display_col=col, filter_enabled=False,
+                   operator="Greater Than", value1=0.0, value2=0.0)
+        try:
+            frame, _stats = apply_segment_statement_criterion(one, working_df)
+        except Exception as exc:
+            log_error(f"[SCREENING] segment year-range FY {year} failed: {exc}")
+            continue
+        year_cols.append(col)
+        # Shared-ticker siblings (TSCO = Tractor Supply + Tesco) repeat a ticker;
+        # Series.map needs a unique index, and segment values are per ticker anyway.
+        by_ticker = frame.drop_duplicates(subset=["ticker"]).set_index("ticker")
+        if col in frame.columns:
+            out[col] = out["ticker"].map(by_ticker[col])
+            with_data = max(with_data, int(out[col].notna().sum()))
+        raw = f"{col}__raw"
+        if raw in frame.columns:
+            out[raw] = out["ticker"].map(by_ticker[raw])
+
+    criterion["year_cols"] = year_cols
+    ms_total = (time.perf_counter() - t_total) * 1000
+    log_timing(
+        "SCREENING_SEGMENT_YEAR_RANGE_TOTAL", ms_total,
+        f"type={_segment_statement_type(criterion)} years={years} "
+        f"cols={len(year_cols)} tickers={len(out)} with_data={with_data}",
+    )
+    return out, {
+        "type":         "financial",
+        "statement":    criterion.get("statement", ""),
+        "segment_type": _segment_statement_type(criterion),
+        "metric":       criterion.get("metric_label", base_col),
+        "year_range":   years,
+        "year_cols":    year_cols,
+        "rows_in":      len(working_df),
+        "rows_out":     len(out),
+        "with_data":    with_data,
+        "elapsed_ms":   ms_total,
     }
 
 
@@ -5920,6 +6062,13 @@ def recompute_working_set(
             return apply_geo_segments_criterion(crit, src_df)
         if ctype_ == "additional":
             return apply_additional_criterion(crit, src_df)
+        if ctype_ == "people":
+            # People Attributes filters PEOPLE rows, not companies. The company
+            # pipeline must leave the universe untouched — the People results
+            # renderer applies it to the people frame in pandas. Declared
+            # explicitly (rather than relying on the fallthrough) so the debug
+            # trace reports a deliberate no-op instead of an unknown type.
+            return src_df, {"type": "people", "non_company_filter": True}
         return src_df, {}
 
     for i, criterion in enumerate(active_criteria):
@@ -5956,11 +6105,6 @@ def recompute_working_set(
                 result_df, cached_dbg = criterion_cache[cache_key]
                 dbg = dict(cached_dbg)
                 dbg["cache_hit"] = True
-                # Re-stamp derived columns the UI needs (skipped from fingerprint).
-                if dbg.get("quarter_cols"):
-                    criterion["quarter_cols"] = dbg["quarter_cols"]
-                if dbg.get("year_cols"):
-                    criterion["year_cols"] = dbg["year_cols"]
 
         # Annotate-only for financial / key-dev / segment criteria; industry and
         # geography additionally narrow the universe (see FILTERING_CRITERION_TYPES).
@@ -5983,6 +6127,14 @@ def recompute_working_set(
                 # don't cache transient errors — only cache real results
                 if not dbg.get("degraded"):
                     criterion_cache[cache_key] = (result_df.copy(), dict(dbg))
+
+        # Stamp derived columns the UI needs from the stats, on cache hits AND
+        # fresh runs: the segment wrappers hand the service a copy of the
+        # criterion, so a stamp made there never reaches this dict.
+        if dbg.get("quarter_cols"):
+            criterion["quarter_cols"] = dbg["quarter_cols"]
+        if dbg.get("year_cols"):
+            criterion["year_cols"] = dbg["year_cols"]
 
         # Merge NEW value columns onto the full universe; missing → NaN (N/A)
         with_data = 0

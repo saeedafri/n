@@ -681,3 +681,107 @@ KEYDEV_TIMEFRAMES = {
     "Last 365 Days": 365,
     "All History":   None,
 }
+
+# ---------------------------------------------------------------------------
+# People Screening — executive roles, compensation metrics, sources
+#
+# Backed by coreiq_executives_compensation (SEC proxy extraction) and the
+# companyOfficers array inside coreiq_yf_company_overview.payload_json.
+# See docs/superpowers/specs/2026-10-06-screening-people-criteria-design.md.
+# ---------------------------------------------------------------------------
+
+# Role buckets, applied FIRST MATCH WINS against the raw title text.
+#
+# The raw `position` column holds 2,048 distinct free-text values, so it can
+# never be a dropdown — this collapses it to something selectable while the
+# original text stays searchable through the `title_contains` filter.
+#
+# ORDER IS SIGNIFICANT. "President and Chief Executive Officer" has to land in
+# CEO, not President, so every C-level test runs before the President test.
+# Validated against all 14,523 real title strings in STG: 98.3% of non-blank
+# SEC positions and 99.0% of YF titles land in a named bucket.
+PEOPLE_ROLE_PATTERNS = [
+    ("CEO",                   r"chief\s+exec|\bceo\b"),
+    ("CFO",                   r"chief\s+financ|\bcfo\b"),
+    ("COO",                   r"chief\s+operat|\bcoo\b"),
+    ("CIO/CTO",               r"chief\s+(info|tech|digital|data)|\bcio\b|\bcto\b"),
+    ("General Counsel",       r"general\s+counsel|chief\s+legal|legal\s+affairs|\bcounsel\b"),
+    ("Chair",                 r"\bchair"),
+    # The lookbehind is load-bearing: "Executive Vice President, M&A and
+    # Corporate Affairs" contains "President" as a whole word, so a plain
+    # \bpresident\b swallowed every EVP/SVP into the President bucket.
+    ("President",             r"(?<!vice[\s-])\bpresident\b"),
+    ("Other C-Suite",         r"\bchief\b"),
+    ("Investor Relations",    r"investor\s+relations"),
+    ("Company Secretary",     r"\bsecretary\b"),
+    ("Board / Exec Director", r"executive\s+director|executive\s+board|corporate\s+director"
+                              r"|representative\s+director"),
+    ("General Manager",       r"general\s+manager|\bgm\b|managing\s+director|\bmd\b"),
+    ("Executive Officer",     r"executive\s+officer"),
+    ("EVP/SVP/VP",            r"\b(e|s)?vp\b|vice\s+president"),
+    ("Head of Function",      r"\bhead\s+of\b|\bdirector\b|\bmanager\b|\bcontroller\b|\bofficer\b"),
+]
+
+# Title text with no bucket match, and title text that is blank.
+PEOPLE_ROLE_OTHER   = "Other"
+PEOPLE_ROLE_UNKNOWN = "Unknown"
+
+# Selector order for the Role multiselect.
+PEOPLE_ROLES = [name for name, _ in PEOPLE_ROLE_PATTERNS] + [
+    PEOPLE_ROLE_OTHER, PEOPLE_ROLE_UNKNOWN,
+]
+
+# Filterable compensation metrics: UI label → frame column.
+# All hold RAW DOLLARS in the DB; the UI takes $mm and scales by DB_SCALE, the
+# same contract every financial criterion uses.
+PEOPLE_MONEY_METRICS = {
+    "Salary":                 "salary",
+    "Bonus":                  "bonus",
+    "Stock Awards":           "stock_awards",
+    "Option Awards":          "option_awards",
+    "Non-Equity Incentive":   "non_equity_incentive",
+    "All Other Compensation": "all_other_compensation",
+    "Total Compensation":     "total_compensation",
+    "Total Pay":              "total_pay",
+    "Exercised Value":        "exercised_value",
+    "Unexercised Value":      "unexercised_value",
+}
+
+# Which source each money metric comes from — shown as a hint in the form so
+# nobody filters SEC-only companies on a YF-only metric and sees zero rows.
+PEOPLE_MONEY_SOURCE_HINT = {
+    "Salary":                 "SEC",
+    "Bonus":                  "SEC",
+    "Stock Awards":           "SEC",
+    "Option Awards":          "SEC",
+    "Non-Equity Incentive":   "SEC",
+    "All Other Compensation": "SEC",
+    "Total Compensation":     "SEC",
+    "Total Pay":              "YFinance",
+    "Exercised Value":        "YFinance",
+    "Unexercised Value":      "YFinance",
+}
+
+PEOPLE_SOURCES = ["SEC", "YFinance"]
+
+# `form` values present in coreiq_executives_compensation (verified: only these two).
+PEOPLE_FILING_FORMS = ["DEF 14A", "PRE 14A"]
+
+# Compensation years present in the SEC table span 2013-2026; the YF officers
+# carry fiscalYear. Built from the same current-year anchor as SCREENING_YEARS
+# so the list does not need editing every January.
+PEOPLE_YEARS = list(range(_CURRENT_FY, 2012, -1))
+
+# Grid column order for People results. Columns with no data for the current
+# result set are dropped at render time, so this is a maximum, not a minimum.
+PEOPLE_DISPLAY_COLUMNS = [
+    "Company", "Ticker", "Executive Name", "Email", "Title", "Role", "Year",
+    "Industry", "Country", "Age",
+    "Salary", "Bonus", "Stock Awards", "Option Awards", "Non-Equity Incentive",
+    "All Other Compensation", "Total Compensation",
+    "Total Pay", "Exercised Value", "Unexercised Value",
+    "Source", "Filing Form", "Filing Year", "Source Filing", "Confidence",
+]
+
+# Money columns, in display-label form — formatted as $ and dropped when empty.
+PEOPLE_MONEY_COLUMNS = list(PEOPLE_MONEY_METRICS.keys())

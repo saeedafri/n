@@ -1170,7 +1170,7 @@ def render_page():
     with tracker.step("PAGE_TITLE"):
         st.markdown("""
         <div style="margin: 24px 0; animation: nwsPageEntry .3s ease-out;">
-            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET DATA</div>
+            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET INTELLIGENCE PLATFORM</div>
             <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 28px; color: #323232;">News Results</div>
         </div>
         <style>@keyframes nwsPageEntry{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}</style>

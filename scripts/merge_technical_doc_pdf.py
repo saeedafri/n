@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[1]
 OUTPUT_PDF = DOC_DIR / "_pdf" / "Market-Data-Portal-Technical-Documentation-Complete.pdf"
 VALIDATION_DIR = DOC_DIR / "_validation-merged"
 
-MERGED_TITLE = "Market Data Portal (MDP) — Complete Technical Documentation"
+MERGED_TITLE = "Market Intelligence Platform (MIP) — Complete Technical Documentation"
 
 MERGE_SEQUENCE: list[dict[str, str]] = [
     {
@@ -284,7 +284,7 @@ def _build_master_cover(generated: str) -> str:
     <div class="cover-top">
       <img class="cover-logo" src="{_logo_data_uri()}" alt="Coresight Research">
       <h1 class="cover-title">{escape(MERGED_TITLE)}</h1>
-      <p class="cover-subtitle">Coresight Research Portal — Engineering Reference</p>
+      <p class="cover-subtitle">Coresight Market Intelligence Platform — Engineering Reference</p>
       <div class="cover-meta">
         <p><strong>Document version:</strong> 1.0</p>
         <p><strong>Generated:</strong> {escape(generated)}</p>
@@ -439,7 +439,7 @@ def _find_section_pages(doc: fitz.Document, total: int) -> dict[str, int]:
                 continue
             part = MERGE_SEQUENCE.index(spec) + 1
             if spec["file"] == "README.md":
-                if "how to read these docs" in text_lower and "market data portal (mdp)" in text_lower:
+                if "how to read these docs" in text_lower and "market intelligence platform (mip)" in text_lower:
                     slug_pages[slug] = page_idx
             elif f"part {part} of {total}" in text_lower and "continued from previous section" in text_lower:
                 slug_pages[slug] = page_idx

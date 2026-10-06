@@ -39,7 +39,7 @@ from utils.local_storage import (
 from utils.local_storage_manager import sync_market_data_state, save_market_data_state, get_persistent_state, set_persistent_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
 from utils.persist import persistent, bind_ram_clear
-from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
+from utils.media_url import lazy_download_button
 
 
 from utils.constants import (
@@ -49,65 +49,6 @@ from utils.constants import (
     format_currency_full as format_currency_display,
     QUARTERLY_FORECASTING_ENABLED,
 )
-
-
-def _trigger_excel_download(excel_bytes: bytes, filename: str) -> None:
-    """INVISIBLE client-side download trigger — renders NO button and no layout space.
-
-    Downloads `excel_bytes` via the Blob API, which bypasses Streamlit's /media/
-    endpoint (that path is not forwarded on the proxied deployment). The visible
-    control is the st.button in _lazy_excel_download; this component must never draw
-    one of its own — a second, differently-styled "Excel" button appearing under the
-    real one after a click was exactly the 17-Jul regression. height=0 + no body
-    content keeps it invisible, and nothing here touches the network (no font).
-    """
-    try:
-        import time as _t
-        from streamlit.components.v1 import html as _sthtml
-
-        # Served over HTTP via /media/ — see utils/media_url for why the bytes must
-        # not be base64-inlined into this iframe's HTML.
-        file_url = serve_bytes(
-            excel_bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename, page="market_data",
-        )
-        if not file_url:
-            report_oversized_embed(len(excel_bytes), f"Excel {filename}",
-                                   page="market_data")
-            st.error("Could not prepare this Excel file — please try again.")
-            return
-        file_url = absolute_app_url(file_url)
-        safe_name = filename.replace("'", "\\'").replace('"', '\\"')
-        # Unique nonce per invocation: openpyxl serialises timestamps at 1-second
-        # resolution, so two builds in the same second are byte-identical → identical
-        # iframe srcdoc → Streamlit keeps the existing DOM node and the download script
-        # never re-runs (a deliberate quick re-download would silently do nothing). The
-        # nonce forces a fresh srcdoc so every click remounts and re-fires.
-        _nonce = _t.time_ns()
-        html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;height:0;overflow:hidden;">
-<!-- dl-nonce {_nonce} -->
-<script>
-(function(){{
-  fetch("{file_url}").then(function(r){{
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    return r.blob();
-  }}).then(function(blob){{
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement("a");
-    a.href=url; a.download="{safe_name}";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    setTimeout(function(){{URL.revokeObjectURL(url);}},1000);
-  }}).catch(function(e){{console.error("Excel download failed:",e);}});
-}})();
-</script>
-</body></html>"""
-        _sthtml(html, height=0, width=0, scrolling=False)
-    except Exception as e:
-        log_structured_error(e, page="market_data", component="_trigger_excel_download", operation="trigger_excel_download")
 
 
 def _lazy_excel_download(widget_key: str, filename: str, build_fn, label: str = "Excel") -> None:
@@ -120,28 +61,22 @@ def _lazy_excel_download(widget_key: str, filename: str, build_fn, label: str = 
     app visibly froze (STG log 17-Jul: `MD_RUN_START tab=ratios gap=-1` twice
     back-to-back). @st.fragment scopes the click's rerun to THIS button alone — the
     page is untouched, nothing else re-renders, and only build_fn() runs. The file
-    then downloads through an invisible trigger, so the user sees one button and
-    gets one file. Bytes are built fresh per click (never memoised — the workbook
-    depends on period/currency/sort/units; a stale cache would serve the wrong file).
+    then downloads through an invisible Blob trigger, so the user sees one button
+    and gets one file. Bytes are built fresh per click (never memoised — the
+    workbook depends on period/currency/sort/units; a stale cache would serve the
+    wrong file). The widget key keeps its `_xlbtn_` prefix: the page stylesheet
+    targets `st-key-_xlbtn_*` to right-align and brand these buttons.
     """
-    @st.fragment
-    def _excel_button():
-        if st.button(label, key=f"_xlbtn_{widget_key}", help="Download this table as an Excel file"):
-            try:
-                xl = build_fn()
-            except Exception as e:
-                log_structured_error(e, page="market_data", component="_lazy_excel_download",
-                                     operation=f"build_excel:{widget_key}")
-                st.error("Could not build the Excel file. Please try again.")
-                return
-            if xl:
-                _trigger_excel_download(xl, filename)
-            else:
-                # build_fn returns None when the on-click re-fetch yields no rows.
-                # Never leave the click silent — that reads as a dead button.
-                st.toast("No data available to export for this view.", icon="⚠️")
-
-    _excel_button()
+    lazy_download_button(
+        label=label,
+        filename=filename,
+        build_fn=build_fn,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key=f"_xlbtn_{widget_key}",
+        page="market_data",
+        help="Download this table as an Excel file",
+        empty_message="No data available to export for this view.",
+    )
 
 
 def _income_excel_rows(data, historical_rate_map, conversion_rate, units_scale):

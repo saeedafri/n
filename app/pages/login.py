@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Login Page - Coresight Research Market Data Portal
+Login Page - Coresight Market Intelligence Platform (MIP)
 - Non-production (ENV / ENVIRONMENT / APP_ENV not ``production``) → OIDC
 - Production (any of those set to ``production``) → JWT email/password (market-prod parity)
 """
@@ -1455,7 +1455,7 @@ def main():
             "<h4 style='margin-top:0;margin-bottom:8px;font-size:24px;'>Welcome to the Coresight Research</h4>",
             unsafe_allow_html=True)
         st.markdown(
-            "<h1 style='font-size:40px;margin-top:0;'>Coresight Market Data Portal</h1>",
+            "<h1 style='font-size:40px;margin-top:0;'>Coresight Market Intelligence Platform</h1>",
             unsafe_allow_html=True)
 
         if IS_OIDC_ENV:
@@ -1508,12 +1508,12 @@ def main():
             st.markdown(
                 """
                 **Coresight Research Premium members** may use their existing login credentials
-                to access a complimentary trial of the **Coresight Market Data Portal**.
+                to access a complimentary trial of the **Coresight Market Intelligence Platform (MIP)**.
 
                 <a href="https://coresight.com/research/"
                    target="_blank"
                    style="text-decoration: none; color: #d6262f; font-weight: 600;">
-                   Learn more: Coresight Market Data Portal Overview >
+                   Learn more: Coresight Market Intelligence Platform Overview >
                 </a>
                 """,
                 unsafe_allow_html=True)

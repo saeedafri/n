@@ -1,6 +1,10 @@
-# CapIQReplacement — Coresight Research Portal
+# CapIQReplacement — Coresight Market Intelligence Platform (MIP)
 
-**App name:** Coresight Research Portal (internal repo name: CapIQReplacement)
+**App name:** Coresight Market Intelligence Platform, "MIP" (internal repo name: CapIQReplacement)
+Renamed from "Market Data Portal" on 2026-10-06. Env var names (`MDP_CACHE_DIR`,
+`MDP_CATEGORICAL`), the `market_data_user_sessions` table, the `/market_data` URL and the
+`marketdata-stg.coresight.com` host keep their old spelling on purpose — they are
+infrastructure contracts, not branding.
 **Stack:** Streamlit + Python 3, SQLAlchemy 2, MySQL (Azure Flexible Server), MCP servers
 
 ---

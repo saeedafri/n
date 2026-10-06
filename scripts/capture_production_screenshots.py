@@ -451,7 +451,7 @@ def _login_specs() -> list[ShotSpec]:
     return [
         ShotSpec(
             "login", "/", "login-01.png",
-            ("Sign in", "Coresight", "Market Data Portal"),
+            ("Sign in", "Coresight", "Market Intelligence Platform"),
             wait_ms=4000, min_body_len=100,
             markers=[
                 "80,200,1,749,200,Portal title",

@@ -154,7 +154,7 @@ def _write_technical_readme(dest_root: Path, copied: list[str], missing: list[st
     readme = dest_root / "README.txt"
     dest_root.mkdir(parents=True, exist_ok=True)
     lines = [
-        "Market Data Portal — Technical Documentation (PDFs for SharePoint)",
+        "Market Intelligence Platform (MIP) — Technical Documentation (PDFs for SharePoint)",
         "=" * 72,
         "",
         "This folder contains PDF copies only. Markdown sources stay in the parent",
@@ -196,7 +196,7 @@ def _write_business_readme(dest_root: Path, copied: list[str], missing: list[str
     readme = dest_root / "README.txt"
     dest_root.mkdir(parents=True, exist_ok=True)
     lines = [
-        "Market Data Portal — Business User Guide (PDFs for SharePoint)",
+        "Market Intelligence Platform (MIP) — Business User Guide (PDFs for SharePoint)",
         "=" * 72,
         "",
         "PDF copies for end-user documentation. Markdown sources remain in",

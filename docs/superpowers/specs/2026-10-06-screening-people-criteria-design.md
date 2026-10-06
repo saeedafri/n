@@ -520,3 +520,101 @@ Marked with `ponytail:` comments at the relevant line:
   app side is ready for it on day one.
 - **Non-SEC compensation coverage.** 103 of ~450 companies have proxy compensation and
   75 have YF officers. Widening that is an ingestion question, not an app one.
+
+---
+
+## 9. As shipped — corrections to this spec, found during implementation
+
+The design above was written from probes of the source tables. Building it turned
+up four things the probes had not shown. The sections above are left as written;
+this section is what is actually true in the code.
+
+### 9.1 The people frame is 6,727 rows, not 14,523
+
+`coreiq_executives_compensation` holds 14,007 rows covering only **6,418 distinct
+person-years**. A proxy's Summary Compensation Table restates the three prior fiscal
+years, and `PRE 14A` / `DEF 14A` are the preliminary and final versions of the same
+proxy, so one executive-year is stored up to **6 times** (CLX / Laura Stein / 2018,
+all six carrying the identical $2,106,867).
+
+**This was a live defect:** every one of those copies was rendered as its own grid
+row, so People Screening showed each executive **2.2x on average**.
+
+`_collapse_restatements()` keeps one row per (ticker, person, year, source). The
+copies agree on money — they differ in 386 of 6,418 groups, and then only by rounding
+($26,248,995 vs $26,248,997) — but disagree on `position` in 2,480 groups, because
+later proxies abbreviate the title and eventually prefix it with "Former". The
+contemporaneous filing therefore wins, which also keeps `is_former` true to the year
+being reported: Angela Ahrendts is flagged Former for FY2019, the year she left, and
+not for FY2014-2018.
+
+### 9.2 One person, several spellings
+
+Keying on the raw `executive_name` still left the same person as two rows:
+`Mark D. Papermaster` / `Mark Papermaster`, `Scott D. Lipesky` / `Scott Lipesky` —
+176 (ticker, year) groups, 363 rows, 5.7% of the SEC side.
+
+The extractor also glues junk onto names: footnote markers (`Richard A. Galanti 8`,
+`Fabrizio Freda ( 1 )`) and zero-width characters (`Jeffrey Davis ﻿`).
+
+So the frame carries `clean_person_name()` (strips that junk) and `person_key()`
+(first + last token, middle initials dropped) and dedups on the key.
+
+**The guard that matters:** Apple pays several SVPs *identically* — Bruce Sewell, Dan
+Riccio and Eddy Cue all show $22,807,544 for 2016. Equal pay is therefore NOT a
+duplicate signal, and only name identity is used. A test asserts those three survive.
+
+Where a name-variant pair disagrees on money it is always a truncated parse, never
+two people — ACI 2020 filed Robert Dimond at $7,146,900 and "Robert B. Dimond" at
+$6,900 — so the larger figure wins, on pay rounded to the nearest $1,000 so that
+restatement rounding still ties and the filing-year preference keeps picking the
+title.
+
+Final: **6,727 rows** (6,225 SEC person-years + 502 YF officers), 2.9 MB.
+
+### 9.3 YF officers dropped: 343, not 603
+
+§1.2 counted officers across unordered rows. Against the latest row per ticker the
+real figure is **516 officers, of which 173 have `totalPay`** — so the old
+`continue` dropped **343**, and all of them are now kept.
+
+### 9.4 `disabled=` cannot depend on another widget in the same `st.form`
+
+The compensation inputs were specified as disabled until a metric is chosen. Widgets
+inside an `st.form` do not rerun the script until submit, so that condition is
+evaluated against the **previous** render: the user picks a metric and the Value box
+stays greyed out, with no way to type a threshold. The E2E caught it. All four
+compensation inputs are now always enabled and `_validate_people_values()` does the
+job on submit.
+
+### 9.5 Two other defects fixed on the way
+
+- **`fillna("")` on a categorical column raises.** `role` / `source` / `filing_form`
+  are categorical (that is what holds the frame at 2.9 MB); filling them without an
+  `astype(object)` first threw `TypeError: Cannot setitem on a Categorical with a new
+  category ()` and killed the whole results render.
+- **A multi-line value inside the criterion-card template renders as a code block.**
+  The template is run through `textwrap.dedent`; an injected value with its own
+  newlines leaves mismatched indentation, dedent strips nothing, and Streamlit's
+  markdown renders the still-indented first line as code — a literal
+  `<details class='criterion-details'>` in a grey box. The People card builds its
+  HTML on one line.
+- The criterion card no longer prints a company match count for a People criterion.
+  The company pipeline legitimately reports `with_data=0` for one (it filters people,
+  not companies), and "0 of 558 companies have data" read as a failure.
+
+### 9.6 Measured result
+
+| | Before | After |
+|---|---|---|
+| People render, warm | ~5,900 ms, on every criteria edit | **15–38 ms** |
+| Materialized disk read | — | **0.02 s** |
+| Cold build (empty cache, once) | 5,900 ms | 5,545 ms, then warmed on boot |
+| Rows shown per executive-year | up to 6 | 1 |
+| Columns in the grid / export | 10 | **22** |
+
+Verified on `http://localhost:8501/screening` against the STG DB:
+CEO+CFO = 2,189 records / 156 companies; + Total Compensation > $10mm = **670 records
+/ 89 companies**, matching an independent pandas computation over the same frame.
+Companies and Key Devs modes were driven to results in the same session with no
+regression.

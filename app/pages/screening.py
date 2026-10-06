@@ -298,6 +298,7 @@ from core.auth_manager import require_auth
 # =============================================================================
 # SCREENING IMPORTS
 # =============================================================================
+from utils.media_url import lazy_download_button
 from data.screening_config import (
     OPERATORS,
     STATEMENT_CONFIG,
@@ -317,8 +318,21 @@ from data.screening_config import (
     KEYDEV_TIMEFRAMES,
     TABULAR_MARKET_DATA_STMTS,
     SEGMENT_STATEMENT_TYPES,
+    PEOPLE_DISPLAY_COLUMNS,
+    PEOPLE_FILING_FORMS,
+    PEOPLE_MONEY_COLUMNS,
+    PEOPLE_MONEY_METRICS,
+    PEOPLE_MONEY_SOURCE_HINT,
+    PEOPLE_ROLES,
+    PEOPLE_SOURCES,
+    PEOPLE_YEARS,
     get_metric_labels,
     get_metric_info,
+)
+from data.people_service import (
+    apply_people_criterion,
+    build_people_summary,
+    get_people_universe,
 )
 from data.screening_service import (
     get_all_industries,
@@ -597,7 +611,34 @@ _CRITERIA_OPTIONS = [
     ("Geographic Locations",           "geography",  True),
     ("Financial Information",          "financial",  True),
     ("Key Developments by Category",   "keydevs",    True),
+    ("People Attributes",              "people",     True),
 ]
+
+# Which criteria each "Screen For" mode may add. ONE definition, read by the
+# palette, by the detail-panel "Add New Criteria" dropdown and by the
+# saved-screening loader, so a mode cannot offer a criterion in one place and
+# refuse it in another.
+#
+# Key Developments is deliberately absent from Companies: it has its own
+# "Key Devs" mode, and a category filter does not belong in a company screen.
+# Credit Ratings / Store Counts are NOT lost by that removal — they are also
+# offered as checkboxes inside the Financial form.
+_MODE_CRITERIA = {
+    "Companies": ("industry", "geography", "financial"),
+    "Key Devs":  ("industry", "geography", "financial", "keydevs"),
+    "People":    ("industry", "geography", "financial", "people"),
+}
+
+# Criterion types that are children of another criterion (added by a parent
+# form, never by the palette) and so are always allowed to survive a mode
+# filter. Segment criteria are created from the Financial form; the additional
+# data types are created from both the Financial and Key Developments forms.
+_CHILD_CRITERIA_TYPES = ("additional", "biz_segments", "geo_segments")
+
+
+def _allowed_criteria_types(screen_for: str) -> tuple:
+    """Criterion types the given mode may hold, children included."""
+    return _MODE_CRITERIA.get(screen_for, _MODE_CRITERIA["Companies"]) + _CHILD_CRITERIA_TYPES
 
 # Friendly label for "Screen For" → page subtitle
 _SCREEN_TITLES = {
@@ -673,6 +714,65 @@ def _reset_criteria():
         st.session_state.scr_last_computed_fingerprint = None
     except Exception as e:
         log_structured_error(e, page="screening", component="_reset_criteria", operation="clear_criteria")
+
+
+def _filter_criteria_for_mode(criteria: List[dict], screen_for: str) -> tuple:
+    """Split a criteria list into (kept, dropped-labels) for the given mode.
+
+    Used when loading a saved screening: a set saved in one mode can hold
+    criterion types another mode does not offer. Keeping them would render a
+    column with no palette button behind it, so the user could neither edit nor
+    remove the filter driving it.
+
+    Child criteria (`additional`, segments) are kept — they are owned by a
+    parent criterion's form, not by the palette. A child whose parent was
+    dropped is removed too, so no orphan column survives.
+    """
+    try:
+        allowed = _allowed_criteria_types(screen_for)
+        labels = {
+            "industry": "Industry Classifications",
+            "geography": "Geographic Locations",
+            "financial": "Financial Information",
+            "keydevs": "Key Developments by Category",
+            "people": "People Attributes",
+        }
+
+        kept, dropped, dropped_idx = [], [], set()
+        for idx, criterion in enumerate(criteria):
+            if not isinstance(criterion, dict):
+                continue
+            ctype = criterion.get("type")
+            if ctype in allowed:
+                kept.append((idx, criterion))
+            else:
+                dropped_idx.add(idx)
+                label = labels.get(ctype, str(ctype))
+                if label not in dropped:
+                    dropped.append(label)
+
+        # A hidden child points at its parent by position in the ORIGINAL list.
+        # Drop orphans, then renumber parent_idx against the kept list.
+        final, old_to_new = [], {}
+        for old_idx, criterion in kept:
+            if criterion.get("parent_idx") in dropped_idx:
+                continue
+            old_to_new[old_idx] = len(final)
+            final.append(dict(criterion))
+        for criterion in final:
+            parent = criterion.get("parent_idx")
+            if parent is not None:
+                if parent in old_to_new:
+                    criterion["parent_idx"] = old_to_new[parent]
+                else:
+                    criterion.pop("parent_idx", None)
+                    criterion.pop("hidden", None)
+
+        return final, dropped
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_filter_criteria_for_mode",
+                             operation="filter_criteria_for_mode")
+        return list(criteria), []
 
 
 def _sync_criteria_fingerprint():
@@ -1183,11 +1283,27 @@ def _get_keydevs_cols(criteria: List[dict]) -> List[str]:
         return []
 
 
+def _segment_cols_for(criteria: List[dict], criterion_type: str) -> List[str]:
+    """Result columns for one segment criterion type.
+
+    A year range contributes one column per fiscal year (stamped on
+    ``year_cols`` by the service), a single year the one display column.
+    """
+    cols: List[str] = []
+    for c in criteria:
+        if c.get("type") != criterion_type:
+            continue
+        if c.get("year_cols"):
+            cols += [yc for yc in c["year_cols"] if yc not in cols]
+        elif c.get("display_col"):
+            cols.append(c["display_col"])
+    return cols
+
+
 def _get_biz_segments_cols(criteria: List[dict]) -> List[str]:
     """Return list of business segments result column names."""
     try:
-        return [c["display_col"] for c in criteria
-                if c.get("type") == "biz_segments" and c.get("display_col")]
+        return _segment_cols_for(criteria, "biz_segments")
     except Exception as e:
         log_structured_error(e, page="screening", component="_get_biz_segments_cols", operation="get_cols")
         return []
@@ -1196,8 +1312,7 @@ def _get_biz_segments_cols(criteria: List[dict]) -> List[str]:
 def _get_geo_segments_cols(criteria: List[dict]) -> List[str]:
     """Return list of geographic segments result column names."""
     try:
-        return [c["display_col"] for c in criteria
-                if c.get("type") == "geo_segments" and c.get("display_col")]
+        return _segment_cols_for(criteria, "geo_segments")
     except Exception as e:
         log_structured_error(e, page="screening", component="_get_geo_segments_cols", operation="get_cols")
         return []
@@ -1911,6 +2026,7 @@ def _render_criteria_detail_panel(cid: int, cr: dict, user_email: str,
                 "biz_segments": "Business Segments",
                 "geo_segments": "Geographic Segments",
                 "additional":   "Additional Data",
+                "people":       "People Attributes",
             }.get(ftype, ftype.upper())
 
             hdr_cols = st.columns([7, 1]) if editable else [st.container()]
@@ -1939,6 +2055,8 @@ def _render_criteria_detail_panel(cid: int, cr: dict, user_email: str,
                 _render_financial_detail(cid, fi, filt, editable)
             elif ftype == "keydevs":
                 _render_keydevs_detail(cid, fi, filt, working, editable, wk_key)
+            elif ftype == "people":
+                _render_people_detail(cid, fi, filt, working, editable, wk_key)
             else:
                 st.caption(filt.get("summary", "—"))
 
@@ -2273,6 +2391,31 @@ def _keydevs_summary_from_fields(
     )
 
 
+def _render_people_detail(cid, fi, filt, working, editable, wk_key):
+    """Show a People Attributes filter; owner can remove individual roles."""
+    roles = filt.get("roles", [])
+
+    st.markdown(
+        f'<div style="font-size:0.82rem;color:#495057;padding:2px 10px 6px 10px;">'
+        f'{filt.get("summary") or build_people_summary(filt)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    if roles and editable:
+        st.caption("Roles — click to remove")
+        cols = st.columns(min(len(roles), 5))
+        for ri, role in enumerate(list(roles)):
+            with cols[ri % len(cols)]:
+                if st.button(f"✕ {role}", key=f"_scr_pprm_{cid}_{fi}_{ri}",
+                             width="stretch"):
+                    filt["roles"] = [r for r in roles if r != role]
+                    filt["summary"] = build_people_summary(filt)
+                    st.session_state[wk_key] = working
+                    st.rerun()
+    elif roles:
+        st.caption("Roles: " + ", ".join(roles))
+
+
 def _render_keydevs_detail(cid, fi, filt, working, editable, wk_key):
     """Show key-dev categories; owner can remove individual categories / add new."""
     cat_labels = filt.get("category_labels", [])
@@ -2362,7 +2505,23 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
 
     st.markdown("---")
     st.markdown("**➕ Add New Criteria**")
-    type_options = ["Industry", "Geography", "Financial", "Key Developments"]
+    # Derived from _MODE_CRITERIA, not hardcoded. This dropdown is a SECOND way
+    # to add a criterion, so a hardcoded list here would let Companies mode
+    # re-add Key Developments from any criterion's detail panel even with the
+    # palette button gone.
+    _type_labels = {
+        "industry":  "Industry",
+        "geography": "Geography",
+        "financial": "Financial",
+        "keydevs":   "Key Developments",
+        "people":    "People Attributes",
+    }
+    _mode = st.session_state.get("scr_screen_for", "Companies")
+    type_options = [
+        _type_labels[t]
+        for t in _MODE_CRITERIA.get(_mode, _MODE_CRITERIA["Companies"])
+        if t in _type_labels
+    ]
     ac1, ac2 = st.columns([3, 1])
     with ac1:
         sel_type = st.selectbox(
@@ -2383,6 +2542,8 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
         _inline_add_financial(cid, working, wk_key, show_form_key)
     elif active_form == "Key Developments":
         _inline_add_keydevs(cid, working, wk_key, show_form_key)
+    elif active_form == "People Attributes":
+        _inline_add_people(cid, working, wk_key, show_form_key)
 
 
 def _inline_add_industry(cid, working, wk_key, show_form_key):
@@ -2664,8 +2825,21 @@ def _dialog_browse_saved_criteria():
             with btn_cols[0]:
                 if st.button("Load", key=f"scr_dlg_load_{cid}", type="primary",
                              width="stretch", help="Apply this criteria set to the screening"):
-                    # Apply: replace active criteria and recompute
-                    st.session_state.scr_active_criteria  = list(cr["criteria_list"])
+                    # Apply: replace active criteria and recompute.
+                    #
+                    # A saved set can carry criteria the CURRENT mode no longer
+                    # supports — a screening saved while in Key Devs mode holds
+                    # a keydevs criterion, and loading it into Companies mode
+                    # used to leave a Key Developments column that had no
+                    # palette button and so could neither be edited nor
+                    # removed. Drop those and say which.
+                    _loaded, _dropped = _filter_criteria_for_mode(
+                        list(cr["criteria_list"]),
+                        st.session_state.get("scr_screen_for", "Companies"),
+                    )
+                    if _dropped:
+                        st.session_state["scr_load_dropped_note"] = _dropped
+                    st.session_state.scr_active_criteria  = _loaded
                     st.session_state.scr_criterion_cache  = {}
                     st.session_state.scr_working_df       = None
                     st.session_state.scr_show_results     = False
@@ -3512,7 +3686,7 @@ def _render_page_header():
 
         st.markdown(f"""
         <div style="margin: 24px 0 8px 0;">
-            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET DATA</div>
+            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET INTELLIGENCE PLATFORM</div>
             <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 28px; color: #323232;">{page_title}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -3572,8 +3746,14 @@ def _render_criteria_palette():
                 st.session_state["wl_dlg_open"] = False  # close other dialog
                 st.rerun()
 
-        cols = st.columns(len(_CRITERIA_OPTIONS))
-        for i, (label, ctype, available) in enumerate(_CRITERIA_OPTIONS):
+        # Only the criteria this mode supports. Companies no longer offers Key
+        # Developments; People gains People Attributes.
+        _mode = st.session_state.get("scr_screen_for", "Companies")
+        _allowed = _MODE_CRITERIA.get(_mode, _MODE_CRITERIA["Companies"])
+        _options = [opt for opt in _CRITERIA_OPTIONS if opt[1] in _allowed]
+
+        cols = st.columns(len(_options))
+        for i, (label, ctype, available) in enumerate(_options):
             with cols[i]:
                 if available:
                     active = st.session_state.scr_active_form == ctype
@@ -4214,11 +4394,13 @@ def _render_financial_form():
             num_quarters = None
             year_range = None
             quarter_range = None
-            # Year-range (display-only year columns) supported only for the core
-            # statements that route through apply_financial_criterion.
+            # Year-range (display-only year columns). The segment statements
+            # route through apply_segment_statement_criterion rather than
+            # apply_financial_criterion, and they now have their own range mode
+            # (_apply_segment_year_range_criterion), so they are offered it too.
             _allow_year_range = (
                 stmt in {"Income Statement", "Balance Sheet", "Cash Flow"}
-                and not is_segment_stmt
+                or is_segment_stmt
             )
             if is_trailing:
                 # Display-only: pick how many trailing quarters to show as columns.
@@ -4562,6 +4744,330 @@ def _render_keydevs_form():
         st.error("Something went wrong. Please try again.")
 
 
+def _people_criterion_from_widgets(values: dict) -> dict:
+    """Assemble a People Attributes criterion from collected widget values.
+
+    Shared by the palette form and the inline detail-panel form so the two can
+    never build a differently-shaped criterion.
+    """
+    criterion = {
+        "type":            "people",
+        "roles":           list(values.get("roles") or []),
+        "title_contains":  (values.get("title_contains") or "").strip(),
+        "name_contains":   (values.get("name_contains") or "").strip(),
+        "include_former":  bool(values.get("include_former")),
+        "years":           sorted(int(y) for y in (values.get("years") or [])),
+        "age_min":         values.get("age_min"),
+        "age_max":         values.get("age_max"),
+        "sources":         list(values.get("sources") or []),
+        "filing_forms":    list(values.get("filing_forms") or []),
+        "money_metric":    None,
+        "money_operator":  None,
+        "money_value1":    None,
+        "money_value2":    None,
+    }
+
+    metric = values.get("money_metric")
+    if metric and metric != "— none —":
+        criterion["money_metric"]   = metric
+        criterion["money_operator"] = values.get("money_operator") or "Greater Than"
+        criterion["money_value1"]   = values.get("money_value1")
+        criterion["money_value2"]   = values.get("money_value2")
+        criterion["display_col"]    = metric
+
+    criterion["summary"] = build_people_summary(criterion)
+    return criterion
+
+
+def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
+    """Render the People Attributes inputs and return their raw values.
+
+    Every option list comes from screening_config — no DB call builds this form.
+    """
+    pf = prefill or {}
+
+    roles = st.multiselect(
+        "Role / Title",
+        options=PEOPLE_ROLES,
+        default=[r for r in (pf.get("roles") or []) if r in PEOPLE_ROLES],
+        help="Grouped from the executive's title text. Leave empty for any role.",
+        key=f"{key_prefix}_roles",
+    )
+
+    tc1, tc2 = st.columns(2)
+    with tc1:
+        title_contains = st.text_input(
+            "Title contains",
+            value=pf.get("title_contains", ""),
+            placeholder="e.g. merchandising",
+            help="Searches the full job title as filed, not the grouped role.",
+            key=f"{key_prefix}_title_contains",
+        )
+    with tc2:
+        name_contains = st.text_input(
+            "Name contains",
+            value=pf.get("name_contains", ""),
+            placeholder="e.g. cook",
+            key=f"{key_prefix}_name_contains",
+        )
+
+    st.markdown("**Compensation**")
+    mc1, mc2, mc3, mc4 = st.columns([2.4, 2, 1.6, 1.6])
+    _metric_options = ["— none —"] + PEOPLE_MONEY_COLUMNS
+    _pf_metric = pf.get("money_metric")
+    with mc1:
+        money_metric = st.selectbox(
+            "Metric",
+            options=_metric_options,
+            index=(_metric_options.index(_pf_metric)
+                   if _pf_metric in _metric_options else 0),
+            key=f"{key_prefix}_money_metric",
+        )
+    with mc2:
+        money_operator = st.selectbox(
+            "Operator",
+            options=OPERATORS,
+            index=(OPERATORS.index(pf.get("money_operator"))
+                   if pf.get("money_operator") in OPERATORS else 0),
+            key=f"{key_prefix}_money_operator",
+        )
+    with mc3:
+        money_value1 = st.number_input(
+            "Value ($mm)",
+            value=float(pf.get("money_value1") or 0.0),
+            step=0.5, format="%.2f",
+            key=f"{key_prefix}_money_value1",
+        )
+    with mc4:
+        money_value2 = st.number_input(
+            "and ($mm)",
+            value=float(pf.get("money_value2") or 0.0),
+            step=0.5, format="%.2f",
+            key=f"{key_prefix}_money_value2",
+        )
+    # These four are NEVER disabled on each other's values. Widgets inside an
+    # st.form do not rerun the script until submit, so `disabled=(metric ==
+    # "— none —")` would be evaluated against the PREVIOUS render: pick a
+    # metric and the Value box stays greyed out, with no way to type a
+    # threshold. Validation on submit does this job instead.
+    _yf_only = ", ".join(
+        m for m in PEOPLE_MONEY_COLUMNS if PEOPLE_MONEY_SOURCE_HINT.get(m) == "YFinance")
+    st.caption(
+        f"Values are in $ millions. The second box applies to **Between** only. "
+        f"{_yf_only} are reported by YFinance companies only; the rest come from "
+        f"SEC proxy statements — a company on the other source has no value for "
+        f"that metric and will not match."
+    )
+
+    st.markdown("**Scope**")
+    sc1, sc2, sc3 = st.columns([3, 2, 2])
+    with sc1:
+        years = st.multiselect(
+            "Compensation year",
+            options=PEOPLE_YEARS,
+            default=[y for y in (pf.get("years") or []) if y in PEOPLE_YEARS],
+            help="Leave empty for every year on file.",
+            key=f"{key_prefix}_years",
+        )
+    with sc2:
+        sources = st.multiselect(
+            "Data source",
+            options=PEOPLE_SOURCES,
+            default=[s for s in (pf.get("sources") or []) if s in PEOPLE_SOURCES],
+            key=f"{key_prefix}_sources",
+        )
+    with sc3:
+        filing_forms = st.multiselect(
+            "Filing form",
+            options=PEOPLE_FILING_FORMS,
+            default=[f for f in (pf.get("filing_forms") or []) if f in PEOPLE_FILING_FORMS],
+            help="SEC proxy type the figures were extracted from.",
+            key=f"{key_prefix}_forms",
+        )
+
+    ac1, ac2, ac3 = st.columns([1.6, 1.6, 5])
+    with ac1:
+        age_min = st.number_input(
+            "Min age", min_value=0, max_value=120,
+            value=int(pf.get("age_min") or 0),
+            key=f"{key_prefix}_age_min",
+        )
+    with ac2:
+        age_max = st.number_input(
+            "Max age", min_value=0, max_value=120,
+            value=int(pf.get("age_max") or 0),
+            key=f"{key_prefix}_age_max",
+        )
+    with ac3:
+        include_former = st.checkbox(
+            "Include former executives",
+            value=bool(pf.get("include_former", False)),
+            help="Titles filed as 'Former ...'. Excluded by default.",
+            key=f"{key_prefix}_include_former",
+        )
+    st.caption("Age is only reported by YFinance companies — leave both at 0 to ignore it.")
+
+    return {
+        "roles": roles,
+        "title_contains": title_contains,
+        "name_contains": name_contains,
+        "include_former": include_former,
+        "years": years,
+        # 0 is the "unset" sentinel for both age bounds: a real executive age is
+        # never 0, and number_input has no empty state.
+        "age_min": int(age_min) if age_min else None,
+        "age_max": int(age_max) if age_max else None,
+        "sources": sources,
+        "filing_forms": filing_forms,
+        "money_metric": money_metric,
+        "money_operator": money_operator,
+        "money_value1": float(money_value1) if money_metric != "— none —" else None,
+        "money_value2": float(money_value2) if money_operator == "Between" else None,
+    }
+
+
+def _validate_people_values(values: dict) -> Optional[str]:
+    """Return an error message when the collected People values cannot screen."""
+    metric = values.get("money_metric")
+    if metric and metric != "— none —":
+        if values.get("money_operator") == "Between":
+            v1, v2 = values.get("money_value1"), values.get("money_value2")
+            if not v1 and not v2:
+                return "Enter both values for a Between comparison."
+            if v1 is not None and v2 is not None and float(v1) == float(v2):
+                return "Between needs two different values."
+
+    lo, hi = values.get("age_min"), values.get("age_max")
+    if lo is not None and hi is not None and lo > hi:
+        return "Min age cannot be greater than max age."
+
+    has_any = any([
+        values.get("roles"), values.get("title_contains"), values.get("name_contains"),
+        values.get("years"), values.get("sources"), values.get("filing_forms"),
+        lo is not None, hi is not None,
+        metric and metric != "— none —",
+    ])
+    if not has_any:
+        return "Select at least one people filter."
+    return None
+
+
+def _render_people_form():
+    """Render the People Attributes criterion form (People mode only)."""
+    try:
+        prefill = st.session_state.get("scr_prefill")
+        is_edit = bool(prefill and prefill.get("type") == "people")
+        prefill_for_form = prefill if is_edit else None
+
+        with st.expander("People Attributes", expanded=True):
+            with st.form("scr_people_form", clear_on_submit=False):
+                values = _render_people_widgets(prefill_for_form, "scr_pp")
+
+                col_add, col_cancel, _ = st.columns([1.5, 2, 6.5])
+                with col_add:
+                    submitted = st.form_submit_button(
+                        "Update Criteria" if is_edit else "Add Criteria",
+                        type="primary", width="stretch")
+                with col_cancel:
+                    cancelled = st.form_submit_button("Cancel", width="content")
+
+                if cancelled:
+                    st.session_state.scr_active_form = None
+                    st.session_state.scr_prefill = None
+                    st.session_state.scr_prefill_idx = None
+                    st.rerun()
+
+                if submitted:
+                    err = _validate_people_values(values)
+                    if err:
+                        st.error(err)
+                        return
+                    criterion = _people_criterion_from_widgets(values)
+                    idx = st.session_state.get("scr_prefill_idx")
+                    if is_edit and idx is not None and \
+                            0 <= idx < len(st.session_state.scr_active_criteria):
+                        st.session_state.scr_active_criteria[idx] = criterion
+                        st.session_state.scr_active_form = None
+                    else:
+                        _add_criterion(criterion)
+                    st.session_state.scr_prefill = None
+                    st.session_state.scr_prefill_idx = None
+                    st.rerun()
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_render_people_form",
+                             operation="render_people_form")
+        st.error("Something went wrong. Please try again.")
+
+
+def _inline_add_people(cid, working, wk_key, show_form_key):
+    """Inline form to add a People Attributes criterion from a detail panel."""
+    try:
+        st.markdown("**New People Filter**")
+        values = _render_people_widgets(None, f"_scr_np_{cid}")
+        c1, c2, _ = st.columns([1.5, 1.5, 6])
+        with c1:
+            if st.button("Add", key=f"_scr_npadd_{cid}", type="primary", width="stretch"):
+                err = _validate_people_values(values)
+                if err:
+                    st.error(err)
+                    return
+                working.append(_people_criterion_from_widgets(values))
+                st.session_state[wk_key] = working
+                st.session_state[show_form_key] = None
+                st.rerun()
+        with c2:
+            if st.button("Cancel", key=f"_scr_npcancel_{cid}", width="stretch"):
+                st.session_state[show_form_key] = None
+                st.rerun()
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_inline_add_people",
+                             operation="inline_add_people")
+
+
+def _segment_year_controls(pf: dict, key_prefix: str):
+    """Year / year range for a segment criterion — the same control the Income
+    Statement and Key Stats forms use, so one page reads one way.
+
+    Returns (year, year_range). A range is display-only: it renders one column
+    per fiscal year instead of one filtered column, exactly as the financial
+    year range does.
+    """
+    from data.screening_config import SCREENING_YEARS
+
+    year_options = ["Latest"] + list(SCREENING_YEARS)
+    saved_range = [int(y) for y in (pf.get("year_range") or [])]
+    mode = st.radio(
+        "Year selection", ["Single year", "Year range"], horizontal=True,
+        key=f"{key_prefix}_year_mode", index=(1 if saved_range else 0),
+        help="Year range shows the segment breakdown for each year side by side "
+             "(display-only — no value filter is applied).",
+    )
+    if mode == "Year range":
+        years = list(SCREENING_YEARS)
+        from_idx = (years.index(saved_range[0]) if saved_range and saved_range[0] in years
+                    else min(4, len(years) - 1))
+        to_idx = (years.index(saved_range[-1]) if saved_range and saved_range[-1] in years
+                  else 0)
+        col_from, col_to = st.columns(2)
+        with col_from:
+            y_from = st.selectbox("From year", options=years, index=from_idx,
+                                  key=f"{key_prefix}_year_from")
+        with col_to:
+            y_to = st.selectbox("To year", options=years, index=to_idx,
+                                key=f"{key_prefix}_year_to")
+        low, high = sorted([int(y_from), int(y_to)])
+        return "Latest", list(range(low, high + 1))
+
+    saved = pf.get("year", "Latest")
+    idx = year_options.index(saved) if saved in year_options else 0
+    year = st.selectbox(
+        "Year", options=year_options, index=idx, key=f"{key_prefix}_year",
+        help="Fiscal year of the segment figures. Latest uses each company's "
+             "most recent filed year.",
+    )
+    return year, None
+
+
 def _render_biz_segments_form():  # kept for edit-prefill dispatch via _render_criterion_form
     """Render the Business Segments criterion form."""
     try:
@@ -4584,6 +5090,8 @@ def _render_biz_segments_form():  # kept for edit-prefill dispatch via _render_c
                     key="scr_biz_seg_metric",
                     help="Select the financial metric to use for filtering and display.",
                 )
+
+                year, year_range = _segment_year_controls(pf, "scr_biz_seg")
 
                 filter_enabled = st.checkbox(
                     "Filter by value (optional)",
@@ -4639,12 +5147,16 @@ def _render_biz_segments_form():  # kept for edit-prefill dispatch via _render_c
                     criterion = {
                         "type":           "biz_segments",
                         "metric":         metric,
+                        "year":           year,
                         "filter_enabled": filter_enabled,
                         "operator":       op_final,
                         "value1":         value1,
                         "value2":         value2 if op_final == "Between" else 0.0,
                         "show_col":       show_col,
                     }
+                    if year_range:
+                        criterion["year_range"] = year_range
+                        criterion["filter_enabled"] = False
                     if display_col:
                         criterion["display_col"] = display_col
                     criterion["summary"] = build_biz_segments_summary(
@@ -4681,6 +5193,8 @@ def _render_geo_segments_form():
                     key="scr_geo_seg_metric",
                     help="Select the financial metric to use for filtering and display.",
                 )
+
+                year, year_range = _segment_year_controls(pf, "scr_geo_seg")
 
                 filter_enabled = st.checkbox(
                     "Filter by value (optional)",
@@ -4735,12 +5249,16 @@ def _render_geo_segments_form():
                     criterion = {
                         "type":           "geo_segments",
                         "metric":         metric,
+                        "year":           year,
                         "filter_enabled": filter_enabled,
                         "operator":       op_final,
                         "value1":         value1,
                         "value2":         value2 if op_final == "Between" else 0.0,
                         "show_col":       show_col,
                     }
+                    if year_range:
+                        criterion["year_range"] = year_range
+                        criterion["filter_enabled"] = False
                     if display_col:
                         criterion["display_col"] = display_col
                     criterion["summary"] = build_geo_segments_summary(
@@ -4830,6 +5348,8 @@ def _render_criterion_form():
             _render_geography_form()
         elif atype == "financial":
             _render_financial_form()
+        elif atype == "people":
+            _render_people_form()
         elif atype in ("keydevs", "biz_segments", "geo_segments", "additional"):
             # All segment / additional sub-types live inside the unified keydevs form
             _render_keydevs_form()
@@ -4951,6 +5471,60 @@ def _build_criterion_details_html(criterion: dict) -> str:
                 f"</details>"
             )
 
+    elif ctype == "people":
+        detail_items = []
+        if criterion.get("roles"):
+            detail_items.append(
+                f"<strong>Roles:</strong> {', '.join(criterion['roles'])}")
+        if criterion.get("title_contains"):
+            detail_items.append(
+                f"<strong>Title contains:</strong> {criterion['title_contains']}")
+        if criterion.get("name_contains"):
+            detail_items.append(
+                f"<strong>Name contains:</strong> {criterion['name_contains']}")
+        if criterion.get("money_metric") and criterion.get("money_value1") is not None:
+            _op = criterion.get("money_operator", "")
+            _v1 = criterion.get("money_value1")
+            _v2 = criterion.get("money_value2")
+            _cond = (f"{_op} ${_v1:,.2f}mm – ${_v2:,.2f}mm"
+                     if _op == "Between" and _v2 is not None
+                     else f"{_op} ${_v1:,.2f}mm")
+            detail_items.append(
+                f"<strong>{criterion['money_metric']}:</strong> {_cond}")
+        if criterion.get("years"):
+            _ys = criterion["years"]
+            detail_items.append(
+                f"<strong>Years:</strong> "
+                f"{_ys[0] if len(_ys) == 1 else f'{_ys[0]}–{_ys[-1]}'}")
+        if criterion.get("age_min") is not None or criterion.get("age_max") is not None:
+            detail_items.append(
+                f"<strong>Age:</strong> {criterion.get('age_min') or ''}"
+                f"–{criterion.get('age_max') or ''}")
+        if criterion.get("sources"):
+            detail_items.append(
+                f"<strong>Source:</strong> {', '.join(criterion['sources'])}")
+        if criterion.get("filing_forms"):
+            detail_items.append(
+                f"<strong>Filing form:</strong> {', '.join(criterion['filing_forms'])}")
+        if criterion.get("include_former"):
+            detail_items.append("<strong>Includes former executives</strong>")
+        if detail_items:
+            detail_html = "<br>".join(
+                f"<span class='criterion-detail-kv'>{d}</span>" for d in detail_items)
+            # ONE line, no embedded newlines. The card template is run through
+            # textwrap.dedent: a multi-line value injected at the template's
+            # indentation leaves lines with mismatched leading whitespace, dedent
+            # then finds no common prefix and strips nothing, and Streamlit's
+            # markdown renders the still-indented first line as a CODE BLOCK —
+            # the literal "<details class='criterion-details'>" in a grey box.
+            pills_html = (
+                f"<details class='criterion-details'>"
+                f"<summary>View filter details</summary>"
+                f"<div class='criterion-details-body' "
+                f"style='flex-direction:column;gap:2px;'>{detail_html}</div>"
+                f"</details>"
+            )
+
     elif ctype in ("biz_segments", "geo_segments"):
         metric   = criterion.get("metric", "Revenues")
         countries = criterion.get("countries", [])
@@ -5033,6 +5607,13 @@ def _render_active_criteria():
             # For those, report what the criterion actually found.
             with_data = dbg.get("with_data")
             if rows_out is None:
+                count_html = ""
+            elif ctype == "people":
+                # A People criterion filters PEOPLE, not companies, so the
+                # company pipeline legitimately reports with_data=0 for it.
+                # Printing "0 of 558 companies have data" reads as a failure
+                # when the filter is working perfectly; the real count is the
+                # record count above the results grid.
                 count_html = ""
             elif ctype in FILTERING_CRITERION_TYPES:
                 count_html = (f"<br><span class='criterion-card-count'>"
@@ -5633,44 +6214,55 @@ _EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 def _render_excel_js_download(excel_bytes, filename: str, label: str = "Excel") -> None:
     """Branded Excel download button served over HTTP, not the websocket.
 
-    The workbook is handed to Streamlit's media file manager (``st.download_button``),
-    so the ForwardMsg carries only a ``/media/...`` URL and the browser fetches the
-    bytes over plain HTTP.
+    The workbook is handed to Streamlit's media file manager, so the ForwardMsg
+    carries only a ``/media/...`` URL and the browser fetches the bytes over plain
+    HTTP. It used to base64-inline the whole workbook into a ``components.html``
+    iframe, which put the entire file inside ONE websocket message — ~7.9 MB at 19k
+    key-dev rows, ~66 MB for the full 156k-event universe. Anything that large is
+    truncated in transit by the marketdata-stg proxy and the browser's protobuf
+    decoder fails with `RangeError: index out of range: 99 + 7909686 > 348066`,
+    surfaced as the "Connection error" modal.
 
-    It used to base64-inline the whole workbook into a ``components.html`` iframe.
-    That put the entire file inside ONE websocket message, which scales with the
-    result set (~316 B/row xlsx → ~421 B/row after base64: ~7.9 MB at 19k key-dev
-    rows, ~66 MB for the full 156k-event universe). Anything that large is
-    truncated in transit by the marketdata-stg proxy, and the browser's protobuf
-    decoder then fails with `RangeError: index out of range: 99 + 7909686 > 348066`,
-    surfaced as the "Connection error" modal. A URL is a few dozen bytes at any
-    result size, so the message can no longer outgrow the transport.
+    The fetch is a Blob fetch, NOT ``st.download_button``: that widget renders an
+    anchor to the /media URL, which a desktop download manager refetches after the
+    save dialog — by then the orphan sweep has deleted the file and the manager
+    reports "No Internet Connection or DNS Failed". See utils.media_url.
+
+    `excel_bytes` may be ready-made bytes OR a zero-arg callable returning them.
+    A callable is deferred to click time — use it for workbooks expensive enough
+    that building them up-front would stall the page (see the key-devs export).
     """
     try:
-        # `excel_bytes` may be ready-made bytes OR a zero-arg callable returning them.
-        # A callable is handed straight to st.download_button, which defers it to click
-        # time and runs it off the event loop — use that for workbooks expensive enough
-        # that building them up-front would stall the page (see the key-devs export).
         if callable(excel_bytes):
             size_part = "deferred"
+            build_fn = excel_bytes
         else:
             if not excel_bytes:
                 return
             size_part = str(len(excel_bytes))
+            build_fn = lambda: excel_bytes
         # Stable per-call key so the CSS can target it and the widget survives reruns.
         btn_key = "xlbtn-" + hashlib.md5(
             f"{filename}|{label}|{size_part}".encode()).hexdigest()[:12]
-        with st.container(key=btn_key):
-            st.download_button(
-                label=label,
-                data=excel_bytes,
-                file_name=filename,
-                mime=_EXCEL_MIME,
-                key=f"dl_{btn_key}",
-                icon=":material/table:",
-                on_click="ignore",   # downloading must not trigger a rerun
-                width="content",
-            )
+        lazy_download_button(
+            label=label,
+            filename=filename,
+            build_fn=build_fn,
+            mimetype=_EXCEL_MIME,
+            key=f"dl_{btn_key}",
+            page="screening",
+            container_key=btn_key,
+            icon=":material/table:",
+            empty_message="No rows to export for this screen.",
+            # A deferred export fetches the COMPLETE result set (75k+ key-dev
+            # events on an all-history screen) and takes minutes. Say so, with a
+            # running clock — STG hides the top bar, so this is the only signal
+            # the user gets that the click landed.
+            # Short on purpose: the slot is ~210px wide. The live clock is what
+            # tells the user the click landed and the server is still working.
+            spinner_message=("Building full export…" if size_part == "deferred"
+                             else "Building your Excel…"),
+        )
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_excel_js_download", operation="render_excel_download_button")
 
@@ -5980,17 +6572,133 @@ def _build_screening_excel(
         return b""
 
 
-def _render_people_results():
-    """Render People Screening results — executive compensation data.
+def _people_company_meta(company_df: pd.DataFrame) -> pd.DataFrame:
+    """Ticker -> Company / Industry / Country, joined onto people rows.
 
-    Uses the existing company working set (filtered by any active Industry /
-    Geography / Financial criteria) to determine the ticker universe, then
-    fetches ALL years of compensation data from both SEC and YF sources.
+    Company metadata deliberately lives on the company working set, not in the
+    materialized people frame: reclassifying a company must not force a rebuild
+    of every executive row.
+    """
+    cols = {"ticker": "ticker"}
+    if "company_name" in company_df.columns:
+        cols["company_name"] = "Company"
+    if "sector" in company_df.columns:
+        cols["sector"] = "Industry"
+    if "country" in company_df.columns:
+        cols["country"] = "Country"
+    meta = company_df[list(cols.keys())].rename(columns=cols)
+    return meta.drop_duplicates(subset=["ticker"])
+
+
+def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename people columns to display labels, format money, drop empty ones."""
+    rename = {
+        "executive_name":         "Executive Name",
+        "email":                  "Email",
+        "title":                  "Title",
+        "role":                   "Role",
+        "year":                   "Year",
+        "age":                    "Age",
+        "ticker":                 "Ticker",
+        "source":                 "Source",
+        "filing_form":            "Filing Form",
+        "filing_year":            "Filing Year",
+        "filing_blob":            "Source Filing",
+        "confidence":             "Confidence",
+    }
+    rename.update({col: label for label, col in PEOPLE_MONEY_METRICS.items()})
+    out = df.rename(columns=rename)
+
+    # Keep only money columns that actually carry a value for THIS result set,
+    # so a SEC-only screen does not show five empty YFinance columns.
+    money_present = [c for c in PEOPLE_MONEY_COLUMNS
+                     if c in out.columns and out[c].notna().any()]
+    for col in PEOPLE_MONEY_COLUMNS:
+        if col in out.columns and col not in money_present:
+            out = out.drop(columns=[col])
+
+    for col in money_present:
+        out[col] = out[col].apply(
+            lambda v: f"${v:,.0f}" if pd.notna(v) else "")
+
+    # Age / Year / Filing Year / Confidence: integers, blank when missing.
+    for col in ("Age", "Year", "Filing Year", "Confidence"):
+        if col in out.columns:
+            out[col] = out[col].apply(
+                lambda v: "" if pd.isna(v) else str(int(v)))
+
+    for col in ("Executive Name", "Email", "Title", "Role", "Source",
+                "Filing Form", "Source Filing", "Company", "Industry", "Country"):
+        if col in out.columns:
+            # astype(object) FIRST. Role / Source / Filing Form are categorical
+            # in the materialized frame (they are low-cardinality and that is
+            # what keeps it at 2.9 MB), and fillna("") on a Categorical whose
+            # categories do not already contain "" raises TypeError rather than
+            # filling. That killed the whole results render.
+            out[col] = out[col].astype(object).where(out[col].notna(), "")
+            out[col] = out[col].astype(str).str.strip()
+
+    ordered = [c for c in PEOPLE_DISPLAY_COLUMNS if c in out.columns]
+    # Drop fully-empty optional columns so the grid never shows a column of
+    # blanks. Email is deliberately NOT in that list: it ships visible and
+    # empty until coreiq_people_contacts exists, so the gap is obvious rather
+    # than silent, and nothing has to change in the UI when the data lands.
+    keep = []
+    for col in ordered:
+        if col in ("Country", "Industry", "Source Filing") and \
+                not out[col].astype(str).str.strip().ne("").any():
+            continue
+        keep.append(col)
+    return out[keep]
+
+
+def _build_people_excel(display_df: pd.DataFrame) -> bytes:
+    """Styled workbook of the People grid, matching the other screening exports."""
+    try:
+        from io import BytesIO
+        import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "People"
+        red_fill = PatternFill("solid", fgColor="D62E2F")
+        bold_white = Font(bold=True, color="FFFFFF")
+        for ci, col_name in enumerate(display_df.columns, 1):
+            cell = ws.cell(row=1, column=ci, value=col_name)
+            cell.fill = red_fill
+            cell.font = bold_white
+            cell.alignment = Alignment(horizontal="center")
+        for ri, row_data in enumerate(display_df.itertuples(index=False), 2):
+            for ci, val in enumerate(row_data, 1):
+                ws.cell(row=ri, column=ci, value=val)
+        for col in ws.columns:
+            max_len = max((len(str(c.value or "")) for c in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+        buf = BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        log_structured_error(exc, page="screening", component="_build_people_excel",
+                             operation="build_people_excel")
+        return b""
+
+
+def _render_people_results():
+    """Render People Screening results — executive compensation and officers.
+
+    The company working set (narrowed by any Industry / Geography / Financial
+    criterion) sets the ticker scope; People Attributes criteria then filter the
+    PEOPLE rows. Both the universe read and every filter run in-process: the
+    people frame is materialized to disk, so a criteria edit costs no DB time.
     """
     try:
         st.markdown("---")
         criteria   = st.session_state.get("scr_active_criteria", [])
         wl_active  = bool(st.session_state.get("scr_active_watchlist_id"))
+        people_criteria = [c for c in criteria if c.get("type") == "people"]
+        # Company-level criteria are the ones that narrow the ticker scope.
+        company_criteria = [c for c in criteria if c.get("type") != "people"]
 
         col_btn, col_clear, col_space = st.columns([1, 0.8, 8.2])
         with col_btn:
@@ -6002,7 +6710,7 @@ def _render_people_results():
                 disabled=(len(criteria) == 0 and not wl_active),
             )
             if show_clicked:
-                if criteria:
+                if company_criteria:
                     # Same guard Companies mode uses. `is None` alone recomputed only
                     # on the very first run, so editing or removing a criterion left a
                     # stale working set and the results were built for the wrong
@@ -6016,6 +6724,9 @@ def _render_people_results():
                         st.session_state.scr_working_df = filter_universe_to_members(
                             get_base_company_universe(), wl_members
                         )
+                    else:
+                        # People-only screen: every company is in scope.
+                        st.session_state.scr_working_df = get_base_company_universe()
                 st.session_state.scr_show_results = True
 
         with col_clear:
@@ -6029,234 +6740,131 @@ def _render_people_results():
             return
 
         company_df: Optional[pd.DataFrame] = st.session_state.get("scr_working_df")
-
         if company_df is None or len(company_df) == 0:
             st.info("No companies match the current criteria. Try relaxing a filter.")
             return
 
-        tickers_in_scope = list(company_df["ticker"].unique())
+        t_people = time.perf_counter()
 
-        # Build a lookup: ticker → {company_name, sector, country}
-        company_meta = {
-            row["ticker"]: row
-            for _, row in company_df.iterrows()
-        }
-
-        # Detect which criteria types are active (for column visibility).
-        # Industry is no longer gated on its criterion — it is always shown.
-        has_geography = any(c.get("type") == "geography" for c in criteria)
-
-        # Fetch SEC and YF data in parallel
-        from data.repository import ExecutiveCompensationRepository as _ECR
-        from data.repository import CompanyRepository as _CR
-        from concurrent.futures import ThreadPoolExecutor
-
-        # Split tickers by source using cached companies map
-        _cmap = _CR.get_companies_map()
-        _sec_tickers = tuple(t for t in tickers_in_scope if _cmap.get(t, {}).get("source") == "SEC")
-        _yf_tickers  = tuple(t for t in tickers_in_scope if _cmap.get(t, {}).get("source") == "YFinance")
-
-        with ThreadPoolExecutor(max_workers=2) as _ppl:
-            _f_sec = _ppl.submit(_ECR.get_sec_all_compensation, _sec_tickers)
-            _f_yf  = _ppl.submit(_ECR.get_yf_all_compensation,  _yf_tickers)
-            _sec_rows = []
-            _yf_rows  = []
-            try:
-                _sec_rows = _f_sec.result()
-            except Exception as _e:
-                log_error(f"[PEOPLE] SEC compensation fetch failed: {_e}")
-            try:
-                _yf_rows = _f_yf.result()
-            except Exception as _e:
-                log_error(f"[PEOPLE] YF compensation fetch failed: {_e}")
-
-        # Build the unified people dataframe
-        import pandas as pd
-        records = []
-
-        # SEC rows — have salary / bonus / stock_awards / total_compensation
-        for r in _sec_rows:
-            tk = r.get("ticker", "")
-            meta = company_meta.get(tk, {})
-            co_name = meta.get("company_name", tk)
-            rec = {
-                "Company":           co_name,
-                "Ticker":            tk,
-                "Executive Name":    r.get("executive_name", ""),
-                "Position":          r.get("position", ""),
-                "Year":              r.get("compensation_year", ""),
-                "Salary":            r.get("salary"),
-                "Bonus":             r.get("bonus"),
-                "Stock Awards":      r.get("stock_awards"),
-                "Total Compensation": r.get("total_compensation"),
-                "Total Pay":         None,
-                "_source":           "SEC",
-            }
-            # Always populate — the Industry label is wanted on every People row,
-            # not only when an Industry criterion happens to be active.
-            rec["Industry"] = meta.get("sector", "")
-            if has_geography:
-                rec["Country"] = meta.get("country", "")
-            records.append(rec)
-
-        # YF rows — only have total_pay
-        for r in _yf_rows:
-            tk = r.get("ticker", "")
-            meta = company_meta.get(tk, {})
-            co_name = meta.get("company_name", tk)
-            rec = {
-                "Company":           co_name,
-                "Ticker":            tk,
-                "Executive Name":    r.get("executive_name", ""),
-                "Position":          r.get("position", ""),
-                "Year":              r.get("compensation_year", ""),
-                "Salary":            None,
-                "Bonus":             None,
-                "Stock Awards":      None,
-                "Total Compensation": None,
-                "Total Pay":         r.get("total_pay"),
-                "_source":           "YF",
-            }
-            # Always populate — the Industry label is wanted on every People row,
-            # not only when an Industry criterion happens to be active.
-            rec["Industry"] = meta.get("sector", "")
-            if has_geography:
-                rec["Country"] = meta.get("country", "")
-            records.append(rec)
-
-        if not records:
-            st.info("No executive compensation data found for the selected companies.")
+        # Disk read on every rerun after the first build — no SQL here.
+        people_df = get_people_universe()
+        if people_df is None or people_df.empty:
+            st.info("No executive compensation data is available.")
             return
 
-        people_df = pd.DataFrame(records)
+        tickers_in_scope = set(company_df["ticker"].unique())
+        scoped = people_df[people_df["ticker"].isin(tickers_in_scope)]
 
-        # Drop _source helper col
-        people_df.drop(columns=["_source"], inplace=True, errors="ignore")
-
-        # Decide which money columns have any real data and keep only those
-        _money_cols = ["Salary", "Bonus", "Stock Awards", "Total Compensation", "Total Pay"]
-        _visible_money = [c for c in _money_cols if people_df[c].notna().any()]
-
-        # Always-shown columns
-        _base_cols = ["Company", "Ticker", "Executive Name", "Position", "Year"]
-        # Optional criteria-driven columns
-        _criteria_cols = []
-        # Industry is ALWAYS shown (it used to be called "Sector" and appear only
-        # with an active Industry criterion). The value is the curated
-        # `primary_industry_coresight` carried on the working set — the same field
-        # the Key Devs and Companies grids show — so one name means one thing in
-        # every mode. Country stays criterion-driven: it has no equivalent backfill.
-        if "Industry" in people_df.columns:
-            _criteria_cols.append("Industry")
-        if has_geography and "Country" in people_df.columns:
-            _criteria_cols.append("Country")
-
-        all_display_cols = _base_cols + _criteria_cols + _visible_money
-        display_df = people_df[[c for c in all_display_cols if c in people_df.columns]].copy()
-
-        # Format money columns — only rows with actual values (repository guarantees
-        # that every row has at least one non-None money value in its source bucket).
-        for _mc in _visible_money:
-            if _mc in display_df.columns:
-                display_df[_mc] = display_df[_mc].apply(
-                    lambda v: f"${v:,.0f}" if (v is not None and not pd.isna(v)) else ""
-                )
-
-        # Fill None/NaN text cells with empty string (clean, no em-dash clutter)
-        for _tc in ["Executive Name", "Position", "Year"] + _criteria_cols:
-            if _tc in display_df.columns:
-                display_df[_tc] = display_df[_tc].fillna("").astype(str).str.strip()
-
-        # Sort: Company → Year desc (numeric sort on year string) → Total desc
-        display_df["_yr_sort"] = pd.to_numeric(display_df["Year"], errors="coerce").fillna(0)
-        _total_col = "Total Compensation" if "Total Compensation" in display_df.columns else (
-                     "Total Pay" if "Total Pay" in display_df.columns else None)
-        if _total_col:
-            display_df["_pay_sort"] = display_df[_total_col].apply(
-                lambda v: float(v.replace("$", "").replace(",", "")) if isinstance(v, str) and v else 0.0
+        if scoped.empty:
+            st.info(
+                "No executive data for the companies matching the current criteria. "
+                "Executive compensation is sourced from SEC proxy statements and "
+                "YFinance officer listings, which do not cover every company."
             )
-            display_df.sort_values(["Company", "_yr_sort", "_pay_sort"],
-                                   ascending=[True, False, False], inplace=True)
-            display_df.drop(columns=["_yr_sort", "_pay_sort"], inplace=True)
-        else:
-            display_df.sort_values(["Company", "_yr_sort"],
-                                   ascending=[True, False], inplace=True)
-            display_df.drop(columns=["_yr_sort"], inplace=True)
+            return
 
-        # Year filter — People tab only (standalone row above table)
-        _all_years = sorted(
-            [y for y in display_df["Year"].unique() if y and str(y).strip() not in ("", "nan")],
-            reverse=True,
-        )
-        _year_options = ["All Years"] + [str(y) for y in _all_years]
-        _yf_col, _ = st.columns([2, 8])
-        with _yf_col:
-            _selected_year = st.selectbox(
-                "Filter by Year",
-                options=_year_options,
-                key="scr_people_year_filter",
-            )
+        # People Attributes criteria stack as AND.
+        filtered = scoped
+        for criterion in people_criteria:
+            filtered = apply_people_criterion(filtered, criterion)
 
-        # Apply year filter before display
-        filtered_df = display_df.copy()
-        if _selected_year != "All Years":
-            filtered_df = filtered_df[filtered_df["Year"].astype(str) == _selected_year]
+        if filtered.empty:
+            st.info("No people match the current People Attributes filters. "
+                    "Try relaxing one.")
+            return
+
+        merged = filtered.merge(_people_company_meta(company_df), on="ticker", how="left")
+        if "Company" in merged.columns:
+            merged["Company"] = merged["Company"].fillna(merged["ticker"])
+
+        # Company -> Year desc -> pay desc, the order the grid opens on.
+        _pay = merged["total_compensation"].fillna(merged["total_pay"])
+        merged = merged.assign(_pay_sort=_pay.fillna(0)).sort_values(
+            ["Company", "year", "_pay_sort"],
+            ascending=[True, False, False], na_position="last",
+        ).drop(columns=["_pay_sort"])
+
+        display_df = _format_people_display(merged)
+
+        log_timing("PEOPLE_RESULTS_PIPELINE", (time.perf_counter() - t_people) * 1000,
+                   details=f"universe={len(people_df)} scoped={len(scoped)} "
+                           f"shown={len(display_df)} criteria={len(people_criteria)}")
 
         _hdr_col, _dl_col = st.columns([8, 2])
         with _hdr_col:
             st.markdown(
                 f"<p class='results-header'>"
-                f"<strong>{len(filtered_df)}</strong> executive records across "
-                f"<strong>{filtered_df['Ticker'].nunique() if 'Ticker' in filtered_df.columns else len(tickers_in_scope)}</strong> companies</p>",
+                f"<strong>{len(display_df)}</strong> executive records across "
+                f"<strong>{merged['ticker'].nunique()}</strong> companies</p>",
                 unsafe_allow_html=True,
             )
         with _dl_col:
-            try:
-                from io import BytesIO
-                import openpyxl
-                from openpyxl.styles import PatternFill, Font, Alignment
-                _wb = openpyxl.Workbook()
-                _ws = _wb.active
-                _ws.title = "People"
-                _red_fill  = PatternFill("solid", fgColor="D62E2F")
-                _bold_white = Font(bold=True, color="FFFFFF")
-                for ci, col_name in enumerate(filtered_df.columns, 1):
-                    cell = _ws.cell(row=1, column=ci, value=col_name)
-                    cell.fill = _red_fill
-                    cell.font = _bold_white
-                    cell.alignment = Alignment(horizontal="center")
-                for ri, row_data in enumerate(filtered_df.itertuples(index=False), 2):
-                    for ci, val in enumerate(row_data, 1):
-                        _ws.cell(row=ri, column=ci, value=val)
-                for col in _ws.columns:
-                    max_len = max((len(str(c.value or "")) for c in col), default=10)
-                    _ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
-                _buf = BytesIO()
-                _wb.save(_buf)
-                _xl_bytes = _buf.getvalue()
-                from datetime import datetime
-                _ts = datetime.now().strftime("%Y%m%d_%H%M")
-                _render_excel_js_download(
-                    _xl_bytes,
-                    f"People_Screening_{_ts}.xlsx",
-                    label="Excel",
+            from datetime import datetime as _dt_now
+            _ts = _dt_now.now().strftime("%Y%m%d_%H%M")
+            _render_excel_js_download(
+                _build_people_excel(display_df),
+                f"People_Screening_{_ts}.xlsx",
+                label="Excel",
+            )
+
+        # Publish the COMPLETE domain for every categorical column. The grid
+        # paginates, so without this its header filter offers only the values on
+        # the loaded page — and since the Excel export honours the filter model,
+        # a partial domain silently drops real rows from the download.
+        _domains = {}
+        for _col, _src in (("Role", "role"), ("Source", "source"),
+                           ("Filing Form", "filing_form")):
+            if _col in display_df.columns:
+                _domains[_col] = sorted(
+                    v for v in filtered[_src].astype(str).unique() if str(v).strip()
                 )
-            except Exception as _xl_exc:
-                log_structured_error(_xl_exc, page="screening",
-                                     component="_render_people_results",
-                                     operation="excel_export")
+        for _col in ("Year", "Filing Year"):
+            if _col in display_df.columns:
+                _domains[_col] = sorted(
+                    (v for v in display_df[_col].astype(str).unique() if v.strip()),
+                    reverse=True,
+                )
+        for _col, _src in (("Industry", "Industry"), ("Country", "Country"),
+                           ("Company", "Company")):
+            if _col in display_df.columns and _col in merged.columns:
+                _domains[_col] = sorted(
+                    v for v in merged[_src].astype(str).unique() if str(v).strip()
+                )
 
         _render_filterable_results_grid(
-            filtered_df,
+            display_df,
             key="people_results_grid",
             empty_message="No executive compensation records found.",
             pinned_column="Executive Name",
+            filter_domains=_domains or None,
         )
+
+        _render_people_coverage_note(people_df, tickers_in_scope)
 
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_results",
                              operation="render_people_results")
         st.error("Something went wrong. Please try again.")
+
+
+def _render_people_coverage_note(people_df: pd.DataFrame, tickers_in_scope: set) -> None:
+    """Say how many in-scope companies have no people data at all.
+
+    Executive compensation covers a minority of the universe (SEC proxies plus
+    YFinance officer listings). Without this, a short result looks like a bug
+    rather than a coverage gap.
+    """
+    try:
+        covered = set(people_df["ticker"].astype(str).unique())
+        missing = len(tickers_in_scope - covered)
+        if missing:
+            st.caption(
+                f"{missing} of {len(tickers_in_scope)} companies in scope have no "
+                f"executive data on file. Compensation comes from SEC proxy "
+                f"statements (DEF 14A / PRE 14A) and YFinance officer listings."
+            )
+    except Exception:
+        pass
 
 
 def _segment_prefix(seg_type: str) -> str:
@@ -7451,9 +8059,20 @@ def main():
             elif st.session_state.get("scr_saved_dlg_open"):
                 _dialog_browse_saved_criteria()
 
-            # Criteria palette (shared: Companies / Key Devs / People)
-            # People uses only Industry + Geography criteria (financial optional)
+            # Criteria palette — mode-aware (see _MODE_CRITERIA). Companies
+            # does not offer Key Developments; People offers People Attributes.
             _render_criteria_palette()
+
+            # A saved screening may have carried criteria this mode cannot hold.
+            _note = st.session_state.pop("scr_load_dropped_note", None)
+            if _note:
+                st.warning(
+                    f"This saved screening was created in a different mode. "
+                    f"{', '.join(_note)} "
+                    f"{'filters' if len(_note) > 1 else 'filter'} "
+                    f"cannot be used in {screen_for} screening and "
+                    f"{'were' if len(_note) > 1 else 'was'} not loaded."
+                )
 
             # Active criterion configuration form (if a palette button was clicked)
             if st.session_state.get("scr_active_form"):

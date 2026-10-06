@@ -31,6 +31,7 @@ from utils.server_logger import (
     SERVER_LOG_FILE,
     SERVER_LOGS_DIR,
 )
+from utils.media_url import lazy_download_button
 from core.auth_manager import require_auth, get_current_user
 from core.access_control import UserRolesManager
 
@@ -613,12 +614,18 @@ def main():
                         if st.button("🔄 Refresh", width='stretch', type="primary"):
                             st.rerun()
                     with _cols[1]:
-                        st.download_button(
-                            "⬇️ Download Logs",
-                            data=_log_download_bytes(),
-                            file_name=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
-                            mime="text/plain",
-                            width='stretch',
+                        # Blob download, not st.download_button — see utils.media_url.
+                        # Reading the log is deferred to the click too, so the viewer
+                        # no longer pulls every segment into RAM on each render.
+                        lazy_download_button(
+                            label="⬇️ Download Logs",
+                            filename=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+                            build_fn=_log_download_bytes,
+                            mimetype="text/plain",
+                            key="dl_server_logs",
+                            page="logs",
+                            width="stretch",
+                            empty_message="No log content to download.",
                         )
                     with _cols[2]:
                         if st.button("🗑️ Clear Logs", width='stretch', type="secondary"):
@@ -629,12 +636,15 @@ def main():
                                 st.error("❌ Failed to clear logs")
                     if _has_analytics:
                         with _cols[3]:
-                            st.download_button(
-                                "⬇️ Analytics",
-                                data=download_analytics_logs(),
-                                file_name=f"user-analytics-{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl",
-                                mime="application/json",
-                                width='stretch',
+                            lazy_download_button(
+                                label="⬇️ Analytics",
+                                filename=f"user-analytics-{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl",
+                                build_fn=download_analytics_logs,
+                                mimetype="application/json",
+                                key="dl_analytics_logs",
+                                page="logs",
+                                width="stretch",
+                                empty_message="No analytics log to download.",
                             )
                     _size = f"{stats['size']:,} B" if stats['exists'] else "0 B"
                     _mod = stats['modified'] if stats['exists'] else "Never"

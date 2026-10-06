@@ -8,7 +8,7 @@
 #   3. Redirect BROWSER to IdP /csr-idp/logout/ via <meta http-equiv="refresh">
 #      — Browsers process meta-refresh even when injected via React dangerouslySetInnerHTML.
 #      — stage3 clears its WordPress session cookie, then redirects to
-#        post_logout_redirect_uri (the Market Data Portal login page).
+#        post_logout_redirect_uri (the Market Intelligence Platform login page).
 #   4. If no id_token: local-only logout (IdP session NOT destroyed — user may be
 #      silently re-authed on next sign-in, but this is the safe fallback).
 #

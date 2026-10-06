@@ -48,7 +48,7 @@ from generate_technical_doc_pdf import (  # noqa: E402
 REPO = Path(__file__).resolve().parents[1]
 OUTPUT_PDF = DOC_DIR / "Market-Data-Portal-User-Guide-Complete.pdf"
 
-MERGED_TITLE = "Market Data Portal — Complete User Guide"
+MERGED_TITLE = "Market Intelligence Platform (MIP) — Complete User Guide"
 
 MERGE_SEQUENCE: list[dict[str, str]] = [
     {
@@ -303,7 +303,7 @@ def _build_master_cover(generated: str, section_count: int) -> str:
     <div class="cover-top">
       <img class="cover-logo" src="{_logo_data_uri()}" alt="Coresight Research">
       <h1 class="cover-title">{escape(MERGED_TITLE)}</h1>
-      <p class="cover-subtitle">Market Data Portal — User Guide</p>
+      <p class="cover-subtitle">Market Intelligence Platform (MIP) — User Guide</p>
       <div class="cover-meta">
         <p><strong>Document version:</strong> 1.0</p>
         <p><strong>Generated:</strong> {escape(generated)}</p>

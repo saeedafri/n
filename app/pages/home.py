@@ -148,7 +148,7 @@ def main():
     render_header(full_width=True, current_page="home")
 
     # Main title
-    st.markdown('<h1 class="main-title">CORESIGHT MARKET DATA</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">CORESIGHT MARKET INTELLIGENCE PLATFORM</h1>', unsafe_allow_html=True)
 
     # Two cards side by side
     col_spacer1, col1, col2, col_spacer2 = st.columns([1, 2, 2, 1])

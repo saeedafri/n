@@ -501,7 +501,7 @@ def test_download_buttons_fetch_a_blob_instead_of_linking_to_media(monkeypatch):
 
     markup = captured["markup"]
     assert ok is True
-    assert "createObjectURL" in markup and "fetch(f.url)" in markup
+    assert "createObjectURL" in markup and "saveBlob(FILES[i].url" in markup
     assert '<a href="/media' not in markup and "href=\"https://host/media" not in markup
     assert markup.count("onclick=\"dl(") == 2
     # The quoted filename survives as JSON, not as a broken JS string literal.

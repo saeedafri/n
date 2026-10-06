@@ -10286,11 +10286,16 @@ class SegmentDataRepository:
         return False
 
     @staticmethod
-    def _classify_member(row, geo_member_set: set) -> Optional[Tuple[str, str]]:
+    def _classify_member(row, geo_member_set: set,
+                         segment_axes: frozenset = frozenset()) -> Optional[Tuple[str, str]]:
         """(section, display label) for one dimensioned fact, or None when the fact
         names no real segment. Single source of truth for the annual builder, the
         quarterly builder and the screening cache, so member routing cannot drift
-        between the Segments tab and the screener."""
+        between the Segments tab and the screener.
+
+        ``segment_axes`` are the company's genuine business-segment axes, from
+        _segment_axes. Empty (the default) drops every place filed on a business
+        axis, which is what the pre-pass that computes the set needs."""
         from utils.constants import SEGMENT_SKIP_MEMBERS, SEGMENT_RECONCILIATION_MEMBERS
         from data.geo_hierarchy import names_a_place
         from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
@@ -10360,18 +10365,58 @@ class SegmentDataRepository:
             if is_geo_excluded_label(member):
                 return None
             member = canonicalize_geo_label(member)
+        elif (row.get('dimension') or '').strip() in segment_axes:
+            # A place on a real segment axis IS the filer's segment. McDonald's
+            # reports three segments and one of them is "U.S.", filed on
+            # us-gaap:StatementBusinessSegmentsAxis beside "International Operated
+            # Markets"; dropping every place there deleted the largest segment of
+            # the company from all five metrics while the Total still counted it.
+            # _segment_axes names the axes carrying a member nobody could mistake
+            # for geography, and on those a place stays.
+            #
+            # It is still a place, so it takes the canonical spelling the
+            # geographic table gives one: McDonald's renamed the same segment from
+            # "United States" to "U.S." in 2021, and without this the table lists
+            # both, each holding only the years the other is missing.
+            if names_a_place(member):
+                member = canonicalize_geo_label(member)
         elif names_a_place(member):
-            # A place tagged on a BUSINESS axis is geography filed in the wrong
-            # place — "United States", "EMEA", "Asia" are not lines of business.
-            # 86 companies do this. 79 of them already report the same places on
-            # the geographic axis, so the business copy is a duplicate; the other
-            # 7 are a coverage gap for the data team, not something to invent
-            # here by moving facts between axes. Either way it does not belong in
-            # the Business Segments list, so it goes.
+            # A place tagged on an axis with no business member is geography filed
+            # in the wrong place — "United States", "EMEA", "Asia" are not lines of
+            # business. 86 companies do this. 79 of them already report the same
+            # places on the geographic axis, so the business copy is a duplicate;
+            # the other 7 are a coverage gap for the data team, not something to
+            # invent here by moving facts between axes. Either way it does not
+            # belong in the Business Segments list, so it goes.
             return None
         return section, member
 
     @staticmethod
+    def _segment_axes(rows, geo_member_set: set) -> frozenset:
+        """Axes whose members are not all geography.
+
+        An axis that carries even one business member — something `names_a_place`
+        does not recognise as a place — is the filer's real segment breakdown, so
+        the places on it are segments too (McDonald's "U.S."). An axis carrying
+        nothing but places is geography filed on the wrong axis, and the rule in
+        _classify_member still drops all of it.
+
+        Reads the classifier's own verdict rather than repeating its rules: a
+        business member that survives _classify_member is by definition not a
+        place, because that is the only thing the rule drops.
+        """
+        axes = set()
+        for row in rows:
+            axis = (row.get('dimension') or '').strip()
+            if row.get('_is_ndim') or axis in axes:
+                continue       # one business member settles the axis
+            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            if classified and classified[0] == "business":
+                axes.add(axis)
+        return frozenset(axes)
+
+    @staticmethod
+    @functools.lru_cache(maxsize=8192)
     def _normalize_member_text(member: str) -> str:
         """Lower-cased name with dash variants unified, spacing around dashes removed
         and whitespace collapsed — enough to match rules without merging segments."""
@@ -10386,6 +10431,7 @@ class SegmentDataRepository:
         return re.sub(r'\s+', ' ', text).strip()
 
     @staticmethod
+    @functools.lru_cache(maxsize=8192)
     def _member_key(member: str) -> str:
         """Identity of a segment across filings, ignoring label drift. Ingredion files
         one segment as "Asia Pacific Segment", "Asia- Pacific" and "Asia-Pacific", and
@@ -10402,7 +10448,8 @@ class SegmentDataRepository:
         return re.sub(r'segments?$', '', key) or key
 
     @staticmethod
-    def _member_display_map(rows, geo_member_set: set) -> Dict[Tuple[str, str], str]:
+    def _member_display_map(rows, geo_member_set: set,
+                            segment_axes: frozenset = frozenset()) -> Dict[Tuple[str, str], str]:
         """(section, key) → the label to show for it.
 
         A trailing "Segment" or full stop is an artifact of how the element was
@@ -10423,7 +10470,7 @@ class SegmentDataRepository:
         for row in rows:
             if row.get('_is_ndim'):
                 continue
-            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            classified = SegmentDataRepository._classify_member(row, geo_member_set, segment_axes)
             if classified is None:
                 continue
             section, member = classified
@@ -10469,6 +10516,46 @@ class SegmentDataRepository:
             if text == before:
                 break
         return text or member.strip()
+
+    @staticmethod
+    def _align_members_with_total(biz_data, geo_data, total_concept_by_period,
+                                  member_by_concept, declared_values,
+                                  stored_context) -> None:
+        """Re-read each member with the element its Total turned out to use.
+
+        A member often carries the metric several ways. American Express tags its
+        USCS segment with four revenue elements at once — RevenueFromContract
+        WithCustomer ($15.6bn), NoninterestIncome ($22.3bn), RevenuesNetOf
+        InterestExpense ($34.8bn) and a filer-defined after-provisions line
+        ($31.8bn) — and nothing in the label tells them apart, so the first-wins
+        merge took whichever sorted first and listed $15.6bn of a segment under a
+        $72.2bn Total built from RevenuesNetOfInterestExpense.
+
+        The Total settles that: it is picked from the non-dimensioned facts by
+        _rank_total_candidate, and a member that filed the same element is the
+        part of exactly that whole. Nothing is invented — a metric whose Total
+        found no element, a member that does not carry it, and a member whose own
+        element the metric never declared are all left exactly as they were.
+        """
+        for (section, metric_name, period), concept in total_concept_by_period.items():
+            data = geo_data if section == "geo" else biz_data
+            for member, by_period in (data.get(metric_name) or {}).items():
+                slot = (section, metric_name, member, period)
+                # Only settles a tie between two elements the metric declares,
+                # which is the fault this is for. A member holding an element the
+                # metric never declared is a different measure — The Andersons'
+                # Rail segment, Arko's "Other Revenue" — and swapping it for a
+                # stray fact that happens to share the Total's element replaced
+                # real revenue with a rounding line.
+                if slot not in declared_values:
+                    continue
+                candidate = member_by_concept.get(slot + (concept,))
+                # Same axes, or it is a different disclosure wearing the right
+                # element: The Andersons' Rail revenue would become its Canadian
+                # slice (Segments: Rail, Geographical: Canada), and Chevron's
+                # Oil and Gas its Chevron Phillips joint venture.
+                if candidate and candidate[1] == stored_context.get(slot):
+                    by_period[period] = candidate[0]
 
     @staticmethod
     def _drop_offmeasure_members(biz_data, geo_data, member_concepts, total_concepts) -> None:
@@ -11059,7 +11146,17 @@ class SegmentDataRepository:
         largest_member: Dict[Tuple[str, str, int], float] = {}
         member_sum: Dict[Tuple[str, str, int], float] = {}
         member_concepts: Dict[Tuple[str, str, str], Set[str]] = {}
-        member_display = SegmentDataRepository._member_display_map(filtered, geo_member_set)
+        # Every candidate a member has, by the element it was tagged with, so a
+        # member can be re-read with the element its Total turned out to use.
+        member_by_concept: Dict[Tuple, Optional[Tuple[float, str]]] = {}
+        # The axes each stored value was filed under, so a re-read below can
+        # insist on the same context.
+        stored_context: Dict[Tuple, str] = {}
+        # Slots already filled from an element this metric declares (see below).
+        declared_values: Set[Tuple] = set()
+        segment_axes = SegmentDataRepository._segment_axes(filtered, geo_member_set)
+        member_display = SegmentDataRepository._member_display_map(
+            filtered, geo_member_set, segment_axes)
 
         for row in filtered:
             if row.get('_is_ndim'):
@@ -11074,7 +11171,7 @@ class SegmentDataRepository:
             scaled = raw_val / 1_000_000
 
             # Dimensioned rows → segment members
-            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            classified = SegmentDataRepository._classify_member(row, geo_member_set, segment_axes)
             if classified is None:
                 continue
             section, member = classified
@@ -11088,10 +11185,39 @@ class SegmentDataRepository:
                         target[metric_name] = {}
                     if member not in target[metric_name]:
                         target[metric_name][member] = {y: None for y in years}
-                    if target[metric_name][member][row_year] is None:
-                        target[metric_name][member][row_year] = scaled
                     concept = (row.get('concept') or '').strip()
+                    # An element the metric actually declares beats one that merely
+                    # shares a word with it. McDonald's files "Net restaurant
+                    # purchases (sales)" (us-gaap:GoodwillPeriodIncreaseDecrease)
+                    # on the same segment axis as "Total revenues"; both match the
+                    # Revenues keywords, and the label sort put $3m of goodwill
+                    # movement where $12,628m of segment revenue belongs. This is
+                    # the test the Total row already applies to itself
+                    # (_rank_total_candidate rule 1), now applied to members too.
+                    # A filer whose elements the metric never declares is
+                    # unaffected: nothing is declared, so first-wins still decides.
+                    declared = SegmentDataRepository._is_declared_concept(concept, metric_name)
+                    value_slot = (section, metric_name, member, row_year)
+                    if (target[metric_name][member][row_year] is None
+                            or (declared and value_slot not in declared_values)):
+                        target[metric_name][member][row_year] = scaled
+                        stored_context[value_slot] = (
+                            row.get('full_dimension_label') or '').strip()
+                    if declared:
+                        declared_values.add(value_slot)
                     if concept:
+                        # Candidate, with the context it was filed in. Ambiguous
+                        # → None: AbbVie files HUMIRA 2017 three times under one
+                        # element (US 12,361, international 6,066 and the 18,427
+                        # total, split on a further axis), so a bare (member,
+                        # year, element) key cannot say which is the whole.
+                        _fdl = (row.get('full_dimension_label') or '').strip()
+                        _cand = value_slot + (concept,)
+                        if _cand in member_by_concept:
+                            if member_by_concept[_cand] != (scaled, _fdl):
+                                member_by_concept[_cand] = None
+                        else:
+                            member_by_concept[_cand] = (scaled, _fdl)
                         section_concepts.setdefault((section, metric_name), set()).add(concept)
                         concept_counts.setdefault((section, metric_name), collections.Counter())[concept] += 1
                         member_concepts.setdefault(
@@ -11146,6 +11272,9 @@ class SegmentDataRepository:
             total_concepts.setdefault((section, metric_name), collections.Counter())[won_with] += 1
             total_concept_by_period[(section, metric_name, row_year)] = won_with
 
+        SegmentDataRepository._align_members_with_total(
+            biz_data, geo_data, total_concept_by_period, member_by_concept,
+            declared_values, stored_context)
         SegmentDataRepository._drop_offmeasure_members(
             biz_data, geo_data, member_concepts, total_concepts)
         SegmentDataRepository._suppress_impossible_totals(
@@ -11435,7 +11564,16 @@ class SegmentDataRepository:
         largest_member: Dict[Tuple[str, str, int], float] = {}
         member_sum: Dict[Tuple[str, str, int], float] = {}
         member_concepts: Dict[Tuple[str, str, str, int], Set[str]] = {}
-        member_display = SegmentDataRepository._member_display_map(all_rows, geo_member_set)
+        member_by_concept: Dict[Tuple, Optional[Tuple[float, str]]] = {}
+        # The axes each stored value was filed under, so a re-read below can
+        # insist on the same context.
+        stored_context: Dict[Tuple, str] = {}
+        # Slots already filled from an element this metric declares (annual builder
+        # carries the rationale).
+        declared_values: Set[Tuple] = set()
+        segment_axes = SegmentDataRepository._segment_axes(all_rows, geo_member_set)
+        member_display = SegmentDataRepository._member_display_map(
+            all_rows, geo_member_set, segment_axes)
 
         for row in all_rows:
             if row.get('_is_ndim'):
@@ -11457,7 +11595,7 @@ class SegmentDataRepository:
             scaled = raw_val / 1_000_000
 
             # Dimensioned rows → segment members
-            classified = SegmentDataRepository._classify_member(row, geo_member_set)
+            classified = SegmentDataRepository._classify_member(row, geo_member_set, segment_axes)
             if classified is None:
                 continue
             section, member = classified
@@ -11471,10 +11609,29 @@ class SegmentDataRepository:
                         target[metric_name] = {}
                     if member not in target[metric_name]:
                         target[metric_name][member] = {k: None for k in period_keys}
-                    if target[metric_name][member].get(pkey) is None:
-                        target[metric_name][member][pkey] = scaled
                     concept = (row.get('concept') or '').strip()
+                    declared = SegmentDataRepository._is_declared_concept(concept, metric_name)
+                    value_slot = (section, metric_name, member, pkey)
+                    if (target[metric_name][member].get(pkey) is None
+                            or (declared and value_slot not in declared_values)):
+                        target[metric_name][member][pkey] = scaled
+                        stored_context[value_slot] = (
+                            row.get('full_dimension_label') or '').strip()
+                    if declared:
+                        declared_values.add(value_slot)
                     if concept:
+                        # Candidate, with the context it was filed in. Ambiguous
+                        # → None: AbbVie files HUMIRA 2017 three times under one
+                        # element (US 12,361, international 6,066 and the 18,427
+                        # total, split on a further axis), so a bare (member,
+                        # year, element) key cannot say which is the whole.
+                        _fdl = (row.get('full_dimension_label') or '').strip()
+                        _cand = value_slot + (concept,)
+                        if _cand in member_by_concept:
+                            if member_by_concept[_cand] != (scaled, _fdl):
+                                member_by_concept[_cand] = None
+                        else:
+                            member_by_concept[_cand] = (scaled, _fdl)
                         section_concepts.setdefault((section, metric_name), set()).add(concept)
                         concept_counts.setdefault((section, metric_name), collections.Counter())[concept] += 1
                     member_periods.setdefault((section, metric_name, pkey), set()).add(
@@ -11527,6 +11684,9 @@ class SegmentDataRepository:
             total_concepts.setdefault((section, metric_name), collections.Counter())[won_with] += 1
             total_concept_by_period[(section, metric_name, pkey)] = won_with
 
+        SegmentDataRepository._align_members_with_total(
+            biz_data, geo_data, total_concept_by_period, member_by_concept,
+            declared_values, stored_context)
         SegmentDataRepository._drop_offmeasure_members(
             biz_data, geo_data, member_concepts, total_concepts)
         SegmentDataRepository._suppress_impossible_totals(
@@ -14449,135 +14609,12 @@ class ExecutiveCompensationRepository:
                 pass
             return []
 
-    # ── ALL-YEARS data for SEC tickers (People Screening tab) ────────────────
-
-    @staticmethod
-    @st.cache_data(ttl=21600, show_spinner=False)
-    def get_sec_all_compensation(tickers: Tuple[str, ...]) -> List[Dict[str, Any]]:
-        """Return ALL historical compensation rows for a set of SEC tickers.
-
-        Args:
-            tickers: Tuple of ticker strings (must be tuple for st.cache_data key).
-
-        Returns:
-            List of dicts with keys:
-                ticker, executive_name, position, compensation_year,
-                salary, bonus, stock_awards, total_compensation  (raw floats)
-        """
-        if not tickers:
-            return []
-        try:
-            placeholders = ", ".join([f":t{i}" for i in range(len(tickers))])
-            params = {f"t{i}": t for i, t in enumerate(tickers)}
-            query = f"""
-                SELECT ticker, executive_name, position, compensation_year,
-                       salary, bonus, stock_awards, total_compensation
-                FROM coreiq_executives_compensation
-                WHERE ticker IN ({placeholders})
-                ORDER BY ticker, compensation_year DESC,
-                         CAST(COALESCE(NULLIF(total_compensation,''),'0') AS UNSIGNED) DESC
-            """
-            rows = db_manager.execute_query_readonly(query, params)
-            result = []
-            _ff = ExecutiveCompensationRepository._to_float
-            for r in rows:
-                salary  = _ff(r.get("salary"))
-                bonus   = _ff(r.get("bonus"))
-                stock   = _ff(r.get("stock_awards"))
-                total   = _ff(r.get("total_compensation"))
-                # Skip rows with absolutely no money data
-                if salary is None and bonus is None and stock is None and total is None:
-                    continue
-                result.append({
-                    "ticker":             r.get("ticker"),
-                    "executive_name":     r.get("executive_name") or "",
-                    "position":           r.get("position") or "",
-                    "compensation_year":  r.get("compensation_year") or "",
-                    "salary":             salary,
-                    "bonus":              bonus,
-                    "stock_awards":       stock,
-                    "total_compensation": total,
-                })
-            return result
-        except Exception as e:
-            try:
-                from utils.server_logger import log_structured_error
-                log_structured_error(e, page="repository",
-                                     component="ExecutiveCompensationRepository",
-                                     operation="get_sec_all_compensation")
-            except Exception:
-                pass
-            return []
-
-    # ── YF compensation for bulk tickers (People Screening tab) ─────────────
-
-    @staticmethod
-    @st.cache_data(ttl=21600, show_spinner=False)
-    def get_yf_all_compensation(tickers: Tuple[str, ...]) -> List[Dict[str, Any]]:
-        """Return companyOfficers for all YF tickers in bulk.
-
-        Returns a list of dicts with keys:
-            ticker, executive_name, position, compensation_year, total_pay (float)
-        """
-        if not tickers:
-            return []
-        try:
-            import json as _json
-            placeholders = ", ".join([f":t{i}" for i in range(len(tickers))])
-            params = {f"t{i}": t for i, t in enumerate(tickers)}
-            # Use ROW_NUMBER to pick ONLY the latest ingested_at row per ticker.
-            # Without this, coreiq_yf_company_overview returns 57-86 rows per
-            # ticker (one per daily ETL run) → every officer appears ~80 times.
-            query = f"""
-                SELECT ticker, payload_json
-                FROM (
-                    SELECT ticker, payload_json,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY ticker
-                               ORDER BY ingested_at DESC
-                           ) AS _rn
-                    FROM coreiq_yf_company_overview
-                    WHERE ticker IN ({placeholders})
-                ) _ranked
-                WHERE _rn = 1
-            """
-            rows = db_manager.execute_query_readonly(query, params)
-            result = []
-            _ff = ExecutiveCompensationRepository._to_float
-            for r in rows:
-                tk = r.get("ticker", "")
-                payload = r.get("payload_json")
-                if not payload:
-                    continue
-                try:
-                    data = _json.loads(payload)
-                    officers = data.get("info", {}).get("companyOfficers", [])
-                    for o in officers:
-                        total_pay = _ff(o.get("totalPay"))
-                        # Skip officers with no pay data
-                        if total_pay is None:
-                            continue
-                        _fy = o.get("fiscalYear")
-                        _year = str(int(_fy)) if _fy is not None and str(_fy) not in ("", "0", "None") else ""
-                        result.append({
-                            "ticker":            tk,
-                            "executive_name":    o.get("name") or "",
-                            "position":          o.get("title") or "",
-                            "compensation_year": _year,
-                            "total_pay":         total_pay,
-                        })
-                except Exception:
-                    continue
-            return result
-        except Exception as e:
-            try:
-                from utils.server_logger import log_structured_error
-                log_structured_error(e, page="repository",
-                                     component="ExecutiveCompensationRepository",
-                                     operation="get_yf_all_compensation")
-            except Exception:
-                pass
-            return []
+    # The bulk ALL-YEARS fetches that used to live here (get_sec_all_compensation
+    # / get_yf_all_compensation) are gone. People Screening now reads one
+    # materialized frame from data/people_service.py instead: they were keyed on
+    # the ticker tuple, so every criteria edit re-paid ~6s of DB time, and the YF
+    # one dropped any officer with no totalPay (343 of 516). The two methods above
+    # stay — the Company Profile tab wants the latest year for ONE ticker.
 
 
 # =============================================================================

@@ -22,7 +22,9 @@ from data.watchlist_service import get_user_watchlists, get_watchlist_companies
 from core.database import init_database
 from utils.local_storage_manager import load_earnings_calls_state, save_earnings_calls_state
 from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
-from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
+from utils.media_url import (
+    serve_bytes, absolute_app_url, report_oversized_embed, lazy_download_button,
+)
 try:
     from utils.server_logger import log_error, log_info, log_warning, PageLoadTracker, log_db_timing, log_timing, new_rerun_id, set_page_context, log_structured_error, error_boundary, log_render_complete
 except ImportError:
@@ -2283,7 +2285,7 @@ def render_earnings_calls(active_ticker: str = None):
     # =======================================================================
     st.markdown("""
     <div style="margin: 24px 0 8px 0;">
-        <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET DATA</div>
+        <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET INTELLIGENCE PLATFORM</div>
         <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 28px; color: #323232;">Earnings Calls</div>
     </div>
     """, unsafe_allow_html=True)
@@ -2743,15 +2745,17 @@ def render_earnings_calls(active_ticker: str = None):
                         # st.rerun() here would cancel the toast before it shows.
                 elif _job.get("bytes"):
                     # Ready — served by Streamlit's media manager over plain HTTP
-                    # (no giant base64 iframe, no fonts.googleapis dependency).
-                    st.download_button(
-                        "⬇  Download CSV",
-                        data=_job["bytes"],
-                        file_name=_job.get("filename") or _xl_filename,
-                        mime="text/csv",
+                    # (no giant base64 iframe, no fonts.googleapis dependency) and
+                    # fetched into a Blob, never via an st.download_button anchor.
+                    lazy_download_button(
+                        label="⬇  Download CSV",
+                        filename=_job.get("filename") or _xl_filename,
+                        build_fn=(lambda b=_job["bytes"]: b),
+                        mimetype="text/csv",
                         key=f"ec_cross_csv_dl_{hash(_xl_sig_key)}",
+                        page="earnings_calls",
                         width="stretch",
-                        type="primary",
+                        button_type="primary",
                     )
                 elif _job.get("error"):
                     st.markdown(
@@ -2809,12 +2813,13 @@ def render_earnings_calls(active_ticker: str = None):
             if _xl_bytes:
                 _dl_l, _dl_r = st.columns([1, 1])
                 with _dl_r:
-                    st.download_button(
-                        "▦  CSV",
-                        data=_xl_bytes,
-                        file_name=f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.csv",
-                        mime="text/csv",
+                    lazy_download_button(
+                        label="▦  CSV",
+                        filename=f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.csv",
+                        build_fn=(lambda b=_xl_bytes: b),
+                        mimetype="text/csv",
                         key=f"ec_single_csv_dl_{hash(_xl_sig)}",
+                        page="earnings_calls",
                         width="stretch",
                     )
 

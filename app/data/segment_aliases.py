@@ -57,6 +57,7 @@ _PARENTHETICAL = re.compile(r"\(\s*[\"'“”]?([A-Za-z0-9&.']{1,10})[\"'“”]
 _ROLLUP_WORDS = re.compile(r"\b(?:total|subtotal)\b")
 
 
+@functools.lru_cache(maxsize=4096)
 def normalize_geo_key(label: str) -> str:
     """Lookup key that unifies formatting without changing the words."""
     if not label:
@@ -88,6 +89,7 @@ def _drop_acronym_parenthetical(text: str) -> str:
     return _PARENTHETICAL.sub(replace, text)
 
 
+@functools.lru_cache(maxsize=4096)
 def geo_match_key(label: str) -> str:
     """Looser key: conjunction, article and roll-up wording folded together."""
     text = normalize_geo_key(label)
@@ -140,6 +142,7 @@ def _removed_keys() -> FrozenSet[str]:
     return frozenset(_label_map().get("removed") or ())
 
 
+@functools.lru_cache(maxsize=4096)
 def canonicalize_geo_label(raw_label: str) -> str:
     """Business-approved display name for a raw geo member label.
 
@@ -281,6 +284,7 @@ def is_geo_known_biz_label(raw_label: str) -> bool:
     return normalize_geo_key(raw_label) in GEO_KNOWN_BIZ_LABELS
 
 
+@functools.lru_cache(maxsize=4096)
 def is_geo_excluded_label(raw_label: str) -> bool:
     """True when a label must not appear as a geographic segment at all."""
     return (

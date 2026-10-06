@@ -343,7 +343,7 @@ def _specs() -> list[ShotSpec]:
                           "1420,600,4,1114,600,Transcript stream"]),
         # LOGIN (no auth)
         ShotSpec("login", "/login", "login-01.png",
-                 ("Sign in", "Coresight", "Market Data Portal"),
+                 ("Sign in", "Coresight", "Market Intelligence Platform"),
                  error_extra=("Authentication failed",), wait_ms=4000,
                  markers=["80,200,1,749,200,Portal title",
                           "80,368,2,749,368,Sign in",

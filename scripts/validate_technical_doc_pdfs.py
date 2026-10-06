@@ -122,7 +122,7 @@ def detect_heading_only_pages(doc: fitz.Document, pdf_name: str) -> list[dict]:
         content_lines = [
             ln for ln in lines
             if not re.match(r"^(CONFIDENTIAL|Coresight|Page \d+ of \d+|Internal Use)", ln, re.I)
-            and not re.match(r"^Coresight Research Portal", ln, re.I)
+            and not re.match(r"^Coresight Market Intelligence Platform", ln, re.I)
         ]
         if len(content_lines) == 1:
             if len(content_lines[0]) < 80 and not _has_images(page):

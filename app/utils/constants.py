@@ -1186,6 +1186,14 @@ SEGMENT_METRIC_GROUPS = {
             "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
             "RevenueFromContractWithCustomerIncludingAssessedTax",
             "SalesRevenueNet", "SalesRevenueGoodsNet", "SalesRevenueServicesNet",
+            # A bank's or card issuer's top line. American Express files its
+            # segment revenue as us-gaap:RevenuesNetOfInterestExpense, so without
+            # this the table took RevenueFromContractWithCustomer instead and
+            # showed $37.2bn of FY2023 revenue against the $60.5bn it reported.
+            # Only the net-of-interest line qualifies: InterestAndDividendIncome
+            # Operating is interest income, which Cal-Maine and Celsius also file
+            # on their cash, and is nobody's revenue.
+            "RevenuesNetOfInterestExpense",
         ],
         "edgar_labels": ["revenue", "sales", "net sales"],
     },

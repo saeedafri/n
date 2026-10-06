@@ -372,6 +372,20 @@ def _warm_keydevs_screening() -> None:
     get_keydev_subtypes_by_category()
 
 
+def _warm_people_screening() -> None:
+    """Build the People Screening universe here, not on a user's first click.
+
+    Materialized, so this is a disk read (~0.3s) on every boot after the first.
+    The one time it is not — an empty cache directory, i.e. right after a deploy
+    — it is the whole executive-compensation table plus every YF officer
+    payload, ~5.5s of packet-bound DB time. Paying it on this thread means the
+    first visitor to People Screening never does.
+    """
+    from data.people_service import get_people_universe
+
+    get_people_universe()
+
+
 def _background_warmup_thread():
     """
     Background thread function for cache warming.
@@ -461,6 +475,7 @@ def _background_warmup_thread():
                 _warm_forecast_schema,
                 _warm_screening_segment_options,
                 _warm_keydevs_screening,
+                _warm_people_screening,
                 _warm_refresh_dialog,
             ):
                 try:

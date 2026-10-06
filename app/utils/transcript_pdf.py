@@ -198,7 +198,8 @@ def generate_transcript_pdf(
 
     Returns
     -------
-    bytes  — raw PDF bytes ready for st.download_button()
+    bytes  — raw PDF bytes, to be handed to utils.media_url (never to
+             st.download_button, whose /media anchor the browser can lose)
     """
     try:
         date_str = earnings_date or ""

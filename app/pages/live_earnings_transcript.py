@@ -32,6 +32,7 @@ from core.auth_manager import require_auth
 hide_sidebar()
 
 from components.navigation import render_coresight_footer, render_header
+from utils.media_url import lazy_download_button
 from data.live_earnings_transcript_store import (
     build_earnings_transcript_payload,
     export_period_key,
@@ -1022,31 +1023,27 @@ def render_page() -> None:
                 "after each new segment. Download mirrors **raw_json**."
             )
 
-            d1, d2, d3 = st.columns(3)
-            with d1:
-                st.download_button(
-                    "Download MD",
-                    data=transcript_md,
-                    file_name=f"{filename_base}.md",
-                    mime="text/markdown",
-                    use_container_width=True,
-                )
-            with d2:
-                st.download_button(
-                    "Download TXT",
-                    data=transcript_txt,
-                    file_name=f"{filename_base}.txt",
-                    mime="text/plain",
-                    use_container_width=True,
-                )
-            with d3:
-                st.download_button(
-                    "Download JSON",
-                    data=transcript_json,
-                    file_name=f"{filename_base}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                )
+            # Blob downloads, never st.download_button — its /media anchor is
+            # refetched by desktop download managers after the file is gone.
+            # See utils.media_url.lazy_download_button.
+            for _col, _label, _text, _ext, _mime in zip(
+                st.columns(3),
+                ("Download MD", "Download TXT", "Download JSON"),
+                (transcript_md, transcript_txt, transcript_json),
+                ("md", "txt", "json"),
+                ("text/markdown", "text/plain", "application/json"),
+            ):
+                with _col:
+                    lazy_download_button(
+                        label=_label,
+                        filename=f"{filename_base}.{_ext}",
+                        build_fn=(lambda t=_text: t.encode("utf-8")),
+                        mimetype=_mime,
+                        key=f"dl_live_{_ext}_{period_key}",
+                        page="live_earnings_transcript",
+                        width="stretch",
+                        empty_message="Nothing to download yet.",
+                    )
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
