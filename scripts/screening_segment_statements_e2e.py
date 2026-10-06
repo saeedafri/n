@@ -121,7 +121,7 @@ async def _wait_for_screening_ready(page, timeout: int = 120_000) -> None:
     try:
         await page.get_by_text("Company Screening", exact=False).wait_for(timeout=timeout)
         await page.get_by_text("Screen For", exact=False).wait_for(timeout=timeout)
-        await page.get_by_text("Financial Information", exact=False).wait_for(timeout=timeout)
+        await page.get_by_text("Company Information", exact=False).wait_for(timeout=timeout)
     except PWTimeout:
         await _save(page, "e2e-failure-current-page.png")
         raise
@@ -163,17 +163,17 @@ async def _goto_screening(page, base_url: str) -> None:
 
 
 def _fin_expander(page):
-    return page.locator('[data-testid="stExpander"]').filter(has_text="Financial Information").first
+    return page.locator('[data-testid="stExpander"]').filter(has_text="Company Information").first
 
 
 async def _open_financial_form(page) -> None:
-    exp = page.locator('[data-testid="stExpander"]').filter(has_text="Financial Information")
+    exp = page.locator('[data-testid="stExpander"]').filter(has_text="Company Information")
     if await exp.count() and await exp.first.locator('[data-testid="stSelectbox"]').count():
         return
-    await page.get_by_text("Financial Information", exact=False).wait_for(timeout=120_000)
-    await click_by_text_or_role(page, "Financial Information")
+    await page.get_by_text("Company Information", exact=False).wait_for(timeout=120_000)
+    await click_by_text_or_role(page, "Company Information")
     await page.wait_for_selector(
-        '[data-testid="stExpander"]:has-text("Financial Information") [data-testid="stSelectbox"]',
+        '[data-testid="stExpander"]:has-text("Company Information") [data-testid="stSelectbox"]',
         timeout=60_000,
     )
     await page.wait_for_timeout(700)

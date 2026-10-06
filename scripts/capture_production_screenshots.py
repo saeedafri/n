@@ -285,7 +285,7 @@ def _open_screening_watchlist_dropdown(page) -> bool:
 
 
 def _open_screening_financial(page) -> None:
-    page.locator("button:has-text('Financial Information')").first.click(timeout=30000)
+    page.locator("button:has-text('Company Information')").first.click(timeout=30000)
     page.wait_for_timeout(2000)
 
 
@@ -604,19 +604,19 @@ def _gap_specs() -> list[ShotSpec]:
         ),
         ShotSpec(
             "screening", "/screening", "screening-geographic.png",
-            ("Geographic", "Countries"), wait_ms=12000,
+            ("Country of Incorporation", "Countries"), wait_ms=12000,
             click="Country of Incorporation",
             markers=_markers_for("screening-geographic.png"),
         ),
         ShotSpec(
             "screening", "/screening", "screening-geographic-countries.png",
-            ("Geographic",), wait_ms=12000,
+            ("Country of Incorporation",), wait_ms=12000,
             click="Country of Incorporation",
             markers=_markers_for("screening-geographic-countries.png"),
         ),
         ShotSpec(
             "screening", "/screening", "screening-02-financial.png",
-            ("Statement Type", "Financial"), wait_ms=12000,
+            ("Statement Type", "Company Information"), wait_ms=12000,
             prepare="screening_financial_step0",
             markers=_markers_for("screening-02-financial.png"),
         ),

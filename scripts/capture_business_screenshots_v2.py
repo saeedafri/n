@@ -263,7 +263,7 @@ def _specs() -> list[ShotSpec]:
                           "400,280,2,500,320,Add criteria palette",
                           "700,350,3,800,390,Show Results"]),
         ShotSpec("screening", "/screening", "screening-financial-form.png",
-                 ("Step 1", "Statement Type"), click="Financial Information", wait_ms=12000,
+                 ("Step 1", "Statement Type"), click="Company Information", wait_ms=12000,
                  markers=["300,300,1,400,340,Financial criteria form",
                           "600,350,2,700,400,Statement type step"]),
         ShotSpec("screening", "/screening", "screening-key-devs-mode.png",

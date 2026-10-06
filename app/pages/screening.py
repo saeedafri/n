@@ -14,7 +14,7 @@ Architecture:
 This iteration implements: Companies flow only.
   • Industry Classifications
   • Country of Incorporation
-  • Financial Information (Income Statement, Balance Sheet, Cash Flow)
+  • Company Information (Income Statement, Balance Sheet, Cash Flow)
 """
 
 import json
@@ -609,7 +609,7 @@ _SCREEN_FOR_OPTIONS = [
 _CRITERIA_OPTIONS = [
     ("Industry Classifications",       "industry",   True),
     ("Country of Incorporation",       "geography",  True),
-    ("Financial Information",          "financial",  True),
+    ("Company Information",            "financial",  True),
     ("Key Developments by Category",   "keydevs",    True),
     ("People Attributes",              "people",     True),
 ]
@@ -733,7 +733,7 @@ def _filter_criteria_for_mode(criteria: List[dict], screen_for: str) -> tuple:
         labels = {
             "industry": "Industry Classifications",
             "geography": "Country of Incorporation",
-            "financial": "Financial Information",
+            "financial": "Company Information",
             "keydevs": "Key Developments by Category",
             "people": "People Attributes",
         }
@@ -2025,7 +2025,7 @@ def _render_criteria_detail_panel(cid: int, cr: dict, user_email: str,
             type_label = {
                 "industry":     "Industry Classifications",
                 "geography":    "Country of Incorporation",
-                "financial":    "Financial Information",
+                "financial":    "Company Information",
                 "keydevs":      "Key Developments",
                 "biz_segments": "Business Segments",
                 "geo_segments": "Geographic Segments",
@@ -2516,7 +2516,7 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
     _type_labels = {
         "industry":  "Industry",
         "geography": "Country of Incorporation",
-        "financial": "Financial",
+        "financial": "Company Information",
         "keydevs":   "Key Developments",
         "people":    "People Attributes",
     }
@@ -2542,7 +2542,7 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
         _inline_add_industry(cid, working, wk_key, show_form_key)
     elif active_form == "Country of Incorporation":
         _inline_add_geography(cid, working, wk_key, show_form_key)
-    elif active_form == "Financial":
+    elif active_form == "Company Information":
         _inline_add_financial(cid, working, wk_key, show_form_key)
     elif active_form == "Key Developments":
         _inline_add_keydevs(cid, working, wk_key, show_form_key)
@@ -2636,7 +2636,7 @@ def _inline_add_geography(cid, working, wk_key, show_form_key):
 def _inline_add_financial(cid, working, wk_key, show_form_key):
     """Inline form to add a new Financial criteria."""
     with st.container(border=True):
-        st.markdown("**New Financial Filter**")
+        st.markdown("**New Company Information Filter**")
 
         stmt_options = list(STATEMENT_CONFIG.keys())
         stmt = st.selectbox("Statement Type", options=stmt_options,
@@ -4261,7 +4261,7 @@ def _submit_financial_criterion(
 
 
 def _render_financial_form():
-    """Render the Financial Information criterion form.
+    """Render the Company Information criterion form.
 
     Normal / Key Stats / Ratios: Steps 1–4 (statement, metric, period, operator+value).
     Business / Geographical Segments: Steps 1–5 (+ segment members).
@@ -4271,7 +4271,7 @@ def _render_financial_form():
         prefill = st.session_state.get("scr_prefill")
         is_edit  = prefill and prefill.get("type") == "financial"
 
-        with st.expander("Financial Information", expanded=True):
+        with st.expander("Company Information", expanded=True):
             stmt_options = list(STATEMENT_CONFIG.keys())
 
             if is_edit:
@@ -5603,8 +5603,8 @@ def _render_active_criteria():
             dbg      = trace_by_idx.get(i, {})
             rows_out = dbg.get("rows_out")
             details_html = _build_criterion_details_html(criterion)
-            card_label = ("COUNTRY OF INCORPORATION" if ctype == "geography"
-                          else ctype.upper())
+            card_label = {"geography": "COUNTRY OF INCORPORATION",
+                          "financial": "COMPANY INFORMATION"}.get(ctype, ctype.upper())
             # Industry / Geography narrow the set, so rows_out IS the match count.
             # Financial / Key-Dev / segment criteria deliberately keep every company
             # (a non-reporting company must stay, showing N/A), so rows_out is always

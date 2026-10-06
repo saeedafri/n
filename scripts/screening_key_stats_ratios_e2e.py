@@ -80,7 +80,7 @@ def _goto_screening(page, base_url: str) -> None:
 
 def _fin_expander(page):
     page.wait_for_selector('[data-testid="stMain"]', state="attached", timeout=120_000)
-    return page.locator('[data-testid="stExpander"]').filter(has_text="Financial Information").first
+    return page.locator('[data-testid="stExpander"]').filter(has_text="Company Information").first
 
 
 def _select_in_expander(page, expander, box_index: int, option_text: str) -> None:
@@ -127,12 +127,12 @@ def _assert_no_inner_form_border(expander) -> None:
 
 
 def _open_financial_form(page) -> None:
-    exp = page.locator('[data-testid="stExpander"]').filter(has_text="Financial Information")
+    exp = page.locator('[data-testid="stExpander"]').filter(has_text="Company Information")
     if exp.count() and exp.first.locator('[data-testid="stSelectbox"]').count():
         return
-    page.get_by_role("button", name="Financial Information", exact=True).click(timeout=30_000)
+    page.get_by_role("button", name="Company Information", exact=True).click(timeout=30_000)
     page.wait_for_selector(
-        '[data-testid="stExpander"]:has-text("Financial Information") [data-testid="stSelectbox"]',
+        '[data-testid="stExpander"]:has-text("Company Information") [data-testid="stSelectbox"]',
         timeout=60_000,
     )
     page.wait_for_timeout(1000)
