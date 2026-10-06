@@ -206,9 +206,20 @@ would have opened. (The stray 2026 comes from 25 v5 rows with `fiscal_year = 202
 * `7e1282a` (07-18): Year became the parent filter (`all_years`), Document Type scoped to the
   bucket. Year "2025" now means bucket 2025 → no 10-K. This is the change users see.
 
-Both commits: author Mohd Saeed Afri (git is the only record; it cannot show whether the logic
-was designed by someone else and committed from this machine). No uncommitted change to
-`company_filings.py`; the October commits do not touch this logic.
+CapIQReplacement is a downstream copy. The team repo is
+`/Users/mohdsaeedafri/All-Code-Base/market-data-stg` (branch `stg-deploy`, Bitbucket
+`coresight_admin/marketdata`, HEAD `1c21ec5e` = origin). Its history, which is authoritative:
+
+| Change | Commit | Author | Date |
+|---|---|---|---|
+| Year key fiscal-first → **storage-first** (`bucket_year`), plus `_fiscal_label_for` labels | `1511451e` "changing the comany filings version from v4 to v5" | **Shashank Gupta** | 2026-06-21 |
+| Current query text (`company_filings.py:1989-2006`, adds `fiscal_quarter` / `COUNT`; keeps storage-first) | `f09565cc` "fixing a filing date bug" | **Shashank Gupta** | 2026-08-06 |
+| Year as parent filter, Document Type scoped to year (`:3360`, `:3368`) | `aa678199` "Debug Logs added in Filings page" | Mohd Saeed Afri | 2026-07-18 |
+| v4→v5 table rename only (does not touch `bucket_year`) | `e5f5a951` | Mohd Saeed Afri | 2026-06-23 |
+
+CapIQReplacement `39e578e` (06-23) and `7e1282a` (07-18) are those same changes copied in.
+`git blame HEAD` today: query lines → Shashank Gupta; Year-parent lines → Mohd Saeed Afri.
+No uncommitted change to `company_filings.py` in either repo.
 
 ### 8.4 Corrected fix
 
