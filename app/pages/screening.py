@@ -14,7 +14,7 @@ Architecture:
 This iteration implements: Companies flow only.
   • Industry Classifications
   • Country of Incorporation
-  • Company Information (Income Statement, Balance Sheet, Cash Flow)
+  • Financial Information (Income Statement, Balance Sheet, Cash Flow)
 """
 
 import json
@@ -609,10 +609,17 @@ _SCREEN_FOR_OPTIONS = [
 _CRITERIA_OPTIONS = [
     ("Industry Classifications",       "industry",   True),
     ("Country of Incorporation",       "geography",  True),
-    ("Company Information",            "financial",  True),
+    ("Financial Information",          "financial",  True),
     ("Key Developments by Category",   "keydevs",    True),
     ("People Attributes",              "people",     True),
 ]
+
+
+def _financial_label() -> str:
+    """The financial criterion is "Company Information" in Companies mode only."""
+    if st.session_state.get("scr_screen_for", "Companies") == "Companies":
+        return "Company Information"
+    return "Financial Information"
 
 # Which criteria each "Screen For" mode may add. ONE definition, read by the
 # palette, by the detail-panel "Add New Criteria" dropdown and by the
@@ -733,7 +740,7 @@ def _filter_criteria_for_mode(criteria: List[dict], screen_for: str) -> tuple:
         labels = {
             "industry": "Industry Classifications",
             "geography": "Country of Incorporation",
-            "financial": "Company Information",
+            "financial": _financial_label(),
             "keydevs": "Key Developments by Category",
             "people": "People Attributes",
         }
@@ -2025,7 +2032,7 @@ def _render_criteria_detail_panel(cid: int, cr: dict, user_email: str,
             type_label = {
                 "industry":     "Industry Classifications",
                 "geography":    "Country of Incorporation",
-                "financial":    "Company Information",
+                "financial":    _financial_label(),
                 "keydevs":      "Key Developments",
                 "biz_segments": "Business Segments",
                 "geo_segments": "Geographic Segments",
@@ -2516,7 +2523,8 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
     _type_labels = {
         "industry":  "Industry",
         "geography": "Country of Incorporation",
-        "financial": "Company Information",
+        "financial": ("Company Information"
+                      if _financial_label() == "Company Information" else "Financial"),
         "keydevs":   "Key Developments",
         "people":    "People Attributes",
     }
@@ -2542,7 +2550,7 @@ def _render_add_new_criteria_inline(cid, working, wk_key):
         _inline_add_industry(cid, working, wk_key, show_form_key)
     elif active_form == "Country of Incorporation":
         _inline_add_geography(cid, working, wk_key, show_form_key)
-    elif active_form == "Company Information":
+    elif active_form == _type_labels["financial"]:
         _inline_add_financial(cid, working, wk_key, show_form_key)
     elif active_form == "Key Developments":
         _inline_add_keydevs(cid, working, wk_key, show_form_key)
@@ -2636,7 +2644,9 @@ def _inline_add_geography(cid, working, wk_key, show_form_key):
 def _inline_add_financial(cid, working, wk_key, show_form_key):
     """Inline form to add a new Financial criteria."""
     with st.container(border=True):
-        st.markdown("**New Company Information Filter**")
+        st.markdown("**New Company Information Filter**"
+                    if _financial_label() == "Company Information"
+                    else "**New Financial Filter**")
 
         stmt_options = list(STATEMENT_CONFIG.keys())
         stmt = st.selectbox("Statement Type", options=stmt_options,
@@ -3758,6 +3768,8 @@ def _render_criteria_palette():
 
         cols = st.columns(len(_options))
         for i, (label, ctype, available) in enumerate(_options):
+            if ctype == "financial":
+                label = _financial_label()
             with cols[i]:
                 if available:
                     active = st.session_state.scr_active_form == ctype
@@ -4261,7 +4273,7 @@ def _submit_financial_criterion(
 
 
 def _render_financial_form():
-    """Render the Company Information criterion form.
+    """Render the Financial Information criterion form.
 
     Normal / Key Stats / Ratios: Steps 1–4 (statement, metric, period, operator+value).
     Business / Geographical Segments: Steps 1–5 (+ segment members).
@@ -4271,7 +4283,7 @@ def _render_financial_form():
         prefill = st.session_state.get("scr_prefill")
         is_edit  = prefill and prefill.get("type") == "financial"
 
-        with st.expander("Company Information", expanded=True):
+        with st.expander(_financial_label(), expanded=True):
             stmt_options = list(STATEMENT_CONFIG.keys())
 
             if is_edit:
@@ -5604,7 +5616,9 @@ def _render_active_criteria():
             rows_out = dbg.get("rows_out")
             details_html = _build_criterion_details_html(criterion)
             card_label = {"geography": "COUNTRY OF INCORPORATION",
-                          "financial": "COMPANY INFORMATION"}.get(ctype, ctype.upper())
+                          "financial": _financial_label().upper()}.get(ctype, ctype.upper())
+            if card_label == "FINANCIAL INFORMATION":
+                card_label = "FINANCIAL"
             # Industry / Geography narrow the set, so rows_out IS the match count.
             # Financial / Key-Dev / segment criteria deliberately keep every company
             # (a non-reporting company must stay, showing N/A), so rows_out is always
