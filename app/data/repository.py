@@ -10296,9 +10296,20 @@ class SegmentDataRepository:
         ``segment_axes`` are the company's genuine business-segment axes, from
         _segment_axes. Empty (the default) drops every place filed on a business
         axis, which is what the pre-pass that computes the set needs."""
-        from utils.constants import SEGMENT_SKIP_MEMBERS, SEGMENT_RECONCILIATION_MEMBERS
+        from utils.constants import (SEGMENT_SKIP_MEMBERS, SEGMENT_RECONCILIATION_MEMBERS,
+                                     EDGAR_BUSINESS_AXES, EDGAR_PRODUCT_AXES)
         from data.geo_hierarchy import names_a_place
         from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
+
+        # Revenue by product or sales channel is a second breakdown of the same
+        # revenue, not a segment. Wendy's files Sales, Franchise fees, … on
+        # srt:ProductOrServiceAxis beside its three operating segments, and listing
+        # both made Business Segments add up to twice the company. A filer with no
+        # operating-segment axis keeps its product lines: they are all it reports.
+        axis = (row.get('dimension') or '').strip()
+        if (any(p in axis for p in EDGAR_PRODUCT_AXES)
+                and any(b in a for a in segment_axes for b in EDGAR_BUSINESS_AXES)):
+            return None
 
         member_raw = row.get('dimension_member_label') or ''
         forced_section = None
@@ -10340,6 +10351,13 @@ class SegmentDataRepository:
         # Wholesale", "Total Segment") are not segments either. The prefix needs the
         # trailing space so a company whose name starts with "Total" survives.
         if "reconciling item" in low or low.startswith("total "):
+            return None
+        # Continuing vs discontinued operations splits the company by status, not
+        # by business. us-gaap:StatementOperatingActivitiesSegmentAxis carries it
+        # for 41 filers, and Campbell's listed "Continuing Operations" and
+        # "Discontinued Operations, Held-for-sale…" as Business Segments. The axis
+        # stays: Steve Madden and Jack in the Box file real segments on it.
+        if SegmentDataRepository._OPERATIONS_STATUS.search(low):
             return None
         member = SegmentDataRepository._title_case_member(member_raw)
         if not member:
@@ -10399,6 +10417,9 @@ class SegmentDataRepository:
             return None
         return section, member
 
+    _OPERATIONS_STATUS = re.compile(
+        r'(continuing|discontinued) operations|held[- ]for[- ]sale|^total operations$')
+
     @staticmethod
     def _segment_axes(rows, geo_member_set: set) -> frozenset:
         """Axes whose members are not all geography.
@@ -10422,6 +10443,59 @@ class SegmentDataRepository:
             if classified and classified[0] == "business":
                 axes.add(axis)
         return frozenset(axes)
+
+    @staticmethod
+    def _drop_wrapped_slices(rows) -> List[Dict[str, Any]]:
+        """Keep the least-sliced copy of each wrapped segment fact.
+
+        Chipotle files "U. S. Segment" revenue whole (11,679m) and again split by
+        Product and Service (11,620m food, 59m delivery). All three unwrap to the
+        same member, and first-wins showed the 59m delivery slice as the segment.
+        A slice only loses to a less-sliced fact for the same metric, period and
+        segment: Pulte's Florida and Nike's North America exist ONLY on a further
+        (Subsegments) axis, and those stay. Keyed on the metric, not the element:
+        CVS files Pharmacy Services whole as us-gaap:Revenues but slices it under
+        a second revenue element too, and that slice must lose as well.
+
+        Unwrapped facts slice the same way. A fact is credited to the member on
+        its first axis, so AbbVie's "Humira × United States" read as Humira and a
+        segment's U.S. revenue ("Geographical: U.S., Segments: X") read as the
+        whole U.S.; the one-axis copy of the same member now wins. Concentration-
+        risk axes annotate a fact without dividing it, so they are not counted.
+        """
+        from utils.constants import SEGMENT_METRIC_GROUPS
+        wrappers = SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS
+
+        def axis_count(r):
+            headings = re.findall(r", ([^,:]+): ", r.get('full_dimension_label') or '')
+            return sum(1 for h in headings if not h.startswith("Concentration Risk"))
+
+        def slice_key(r):
+            member = (r.get('dimension_member_label') or '').lower().strip()
+            if not member or r.get('_is_ndim'):
+                return None
+            whole = ((r.get('dimension_label') or '').strip().lower() if member in wrappers
+                     else ((r.get('dimension') or '').strip(), member))
+            label = r.get('original_label') or ''
+            metric = next((name for name, cfg in SEGMENT_METRIC_GROUPS.items()
+                           if SegmentDataRepository._matches_metric(label, cfg)), None)
+            if metric is None:
+                return None
+            # Declared and undeclared elements are ranked apart, as the member
+            # merge ranks them: GE files Power's Total assets (us-gaap:Assets)
+            # with four axes, and a 2-axis contract-asset fact must not beat it.
+            declared = SegmentDataRepository._is_declared_concept(
+                (r.get('concept') or '').strip(), metric)
+            return (metric, declared, r.get('period_start'), r.get('period_end'),
+                    r.get('period_instant'), whole)
+
+        fewest: Dict[Tuple, int] = {}
+        for r in rows:
+            key = slice_key(r)
+            if key is not None:
+                fewest[key] = min(fewest.get(key, axis_count(r)), axis_count(r))
+        return [r for r in rows
+                if (key := slice_key(r)) is None or axis_count(r) == fewest[key]]
 
     @staticmethod
     @functools.lru_cache(maxsize=8192)
@@ -10474,7 +10548,10 @@ class SegmentDataRepository:
         map shared across sections let the business spelling (more rows, later
         filing) win and undo the geographic canonicalisation.
         """
+        from utils.constants import SEGMENT_METRIC_GROUPS
         chosen: Dict[Tuple[str, str], Tuple[bool, str, int, str]] = {}
+        # What each spelling reported, per (metric, cell) — the cell it fills.
+        reported: Dict[Tuple[str, str], Dict[Tuple, Set[float]]] = {}
         for row in rows:
             if row.get('_is_ndim'):
                 continue
@@ -10483,6 +10560,16 @@ class SegmentDataRepository:
                 continue
             section, member = classified
             key = (section, SegmentDataRepository._member_key(member))
+            metric = next((name for name, cfg in SEGMENT_METRIC_GROUPS.items()
+                           if SegmentDataRepository._matches_metric(row.get('original_label') or '', cfg)),
+                          None)
+            if metric and row.get('numeric_value') is not None:
+                cell = SegmentDataRepository._get_row_year(row)
+                start, end = row.get('period_start'), row.get('period_end')
+                if start and end and (end - start).days < 300:
+                    cell = end      # a quarter's cell is its quarter end (10-Q rows carry no year)
+                reported.setdefault(key, {}).setdefault(
+                    (metric, cell), set()).add(round(float(row['numeric_value'])))
             filing_date = row.get('filing_date')
             filed = filing_date.isoformat()[:10] if hasattr(filing_date, 'isoformat') else ''
             trimmed = member.strip()
@@ -10495,8 +10582,31 @@ class SegmentDataRepository:
         # as "Europe Segment" or "Japan." kept the artifact, and it used to be
         # hidden by borrowing the other section's spelling — which is exactly the
         # cross-section leak this map now prevents.
-        return {key: SegmentDataRepository._strip_member_artifact(member)
-                for key, (_, _, _, member) in chosen.items()}
+        # A relabel: Chipotle's "Delivery Service" (FY2018-23) became "Delivery
+        # service revenue" (FY2024-25) — one product listed twice. A trailing
+        # revenue/sales word alone does not prove it: Tesla's "Automotive" segment
+        # and its "Automotive sales" line are different numbers. They are one
+        # member only if they share a year and agree on every one they share,
+        # so joining them can never drop a figure.
+        same_as: Dict[Tuple[str, str], Tuple[str, str]] = {}
+        by_stem: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+        for key in chosen:
+            stem = re.sub(r'(revenues?|sales)$', '', key[1]) or key[1]
+            by_stem.setdefault((key[0], stem), []).append(key)
+        for keys in by_stem.values():
+            for other in keys[1:]:
+                first = keys[0]
+                a, b = reported.get(first, {}), reported.get(other, {})
+                shared = a.keys() & b.keys()
+                if shared and all(a[p] == b[p] for p in shared):
+                    same_as[other] = same_as.get(first, first)
+        best: Dict[Tuple[str, str], Tuple[bool, str, int, str]] = {}
+        for key, rank in chosen.items():
+            group = same_as.get(key, key)
+            if group not in best or rank > best[group]:
+                best[group] = rank
+        return {key: SegmentDataRepository._strip_member_artifact(best[same_as.get(key, key)][3])
+                for key in chosen}
 
     # A trailing "Segment"/"Segments", ":" or a full stop after a whole word is an
     # artifact of the XBRL element name, not part of the segment's name. After a
@@ -10514,7 +10624,10 @@ class SegmentDataRepository:
 
     @staticmethod
     def _strip_member_artifact(member: str) -> str:
-        text = member.strip()
+        # "U. S. Segment" (Chipotle) reads "U.S.": spacing inside initials only.
+        # Not a geo canonicalisation — that workbook groups places into regions
+        # and would fold PriceSmart's four country segments into one.
+        text = re.sub(r'\b([A-Z])\. (?=[A-Z]\.)', r'\1.', member.strip())
         for _ in range(3):                # "Europe Segment:" needs two passes
             before = text
             for pattern in SegmentDataRepository._ARTIFACT_STRIPPERS:
@@ -10654,6 +10767,37 @@ class SegmentDataRepository:
                         by_period[period] = None
 
     @staticmethod
+    def _keep_newest_filing(biz_data, geo_data, stored_filing) -> None:
+        """Each column shows one filing's breakdown: the newest filing that reports
+        the period. CVS reorganised its segments in 2023 and restated 2021-22 under
+        the new names, so those columns listed the old segments (Pharmacy Services,
+        Retail/LTC, from the original 10-Ks) AND the new ones (Health Services,
+        Pharmacy & Consumer Wellness) — every number filed, the column matching no
+        filing and adding up to nearly twice the company. A member the newest
+        filing no longer reports for that period is dropped for that period only;
+        cells with no known filing are kept."""
+        def filed(slot):
+            day = stored_filing.get(slot)
+            return day.toordinal() if hasattr(day, 'toordinal') else None
+        for section, data in (("business", biz_data), ("geo", geo_data)):
+            for metric_name, members in list(data.items()):
+                newest: Dict[Any, int] = {}
+                for member, by_period in members.items():
+                    for period, value in by_period.items():
+                        day = filed((section, metric_name, member, period))
+                        if value is not None and day is not None:
+                            newest[period] = max(newest.get(period, day), day)
+                for member, by_period in list(members.items()):
+                    for period, value in by_period.items():
+                        day = filed((section, metric_name, member, period))
+                        if value is not None and day is not None and day < newest[period]:
+                            by_period[period] = None
+                    if not any(v is not None for v in by_period.values()):
+                        del members[member]
+                if not members:
+                    del data[metric_name]
+
+    @staticmethod
     def _period_key(row) -> Tuple:
         """The context a fact covers: an instant date, or a start→end span."""
         if (row.get('period_type') or '').lower() == 'instant':
@@ -10778,28 +10922,70 @@ class SegmentDataRepository:
         return SegmentDataRepository._normalize_heading(raw)
 
     @staticmethod
+    def _fiscal_year_of(day) -> int:
+        """Fiscal year a period ending on `day` belongs to. A 52/53-week year that
+        ends in the first week of January is the year before: Wendy's year ending
+        2023-01-01 is its fiscal 2022 (its own dei:DocumentFiscalYearFocus), and
+        calling it 2023 put it in the same column as the year ending 2023-12-31."""
+        return day.year - 1 if day.month == 1 and day.day <= 7 else day.year
+
+    @staticmethod
     def _get_row_year(row):
+        """Fiscal year of an annual fact, from the period it covers — never from
+        report_fiscal_year, which names the filing, not the period (HSY files its
+        fiscal 2017 under 2016), so trusting it put two years in one column.
+        None for anything that is not a full year: a quarter inside a 10-K would
+        otherwise fill an annual cell."""
         pt = (row.get('period_type') or '').lower()
-        if pt == 'duration' and row.get('period_end'):
-            pe = row['period_end']
-            ps = row.get('period_start')
-            rfy = row.get('report_fiscal_year')
-            if ps and hasattr(pe, 'year') and hasattr(ps, 'year'):
-                span = (pe - ps).days
-                if span >= 300:
-                    pe_year = pe.year if hasattr(pe, 'year') else int(str(pe)[:4])
-                    if rfy is not None and pe_year < rfy:
-                        return pe_year
-                elif span <= 7:
-                    # Zero/near-zero duration rows are XBRL noise (e.g. point-in-time
-                    # disclosure dates tagged as durations). They don't represent an
-                    # annual reporting period — return None to exclude them from the
-                    # segment year set rather than polluting it via the rfy fallback.
-                    return None
-        elif pt == 'instant' and row.get('period_instant'):
-            pi = row['period_instant']
-            return pi.year if hasattr(pi, 'year') else int(str(pi)[:4])
-        return row.get('report_fiscal_year')
+        if pt == 'duration':
+            pe, ps = row.get('period_end'), row.get('period_start')
+            if not (hasattr(pe, 'year') and hasattr(ps, 'year')):
+                return None
+            if (pe - ps).days < 300:
+                return None
+            return SegmentDataRepository._fiscal_year_of(pe)
+        if pt == 'instant' and hasattr(row.get('period_instant'), 'year'):
+            return SegmentDataRepository._fiscal_year_of(row['period_instant'])
+        return None
+
+    @staticmethod
+    def _newest_filing_first(rows) -> List[Dict[str, Any]]:
+        """Rows grouped by the period they cover, newest filing first inside each
+        group, so first-wins keeps a restated figure. Sorting by
+        report_fiscal_year — the filing's year, not the period's — put Campbell's
+        original FY2021 Snacks (3,944) ahead of the 3,855 its next 10-K restated
+        it to, and the stale number won."""
+        def key(r):
+            filed = r.get('filing_date')
+            return (r.get('period_end') or r.get('period_instant') or date.min,
+                    r.get('full_dimension_label') or '',
+                    r.get('original_label') or '',
+                    -filed.toordinal() if hasattr(filed, 'toordinal') else 0)
+        return sorted(rows, key=key)
+
+    @staticmethod
+    def _fiscal_year_ends(rows) -> Dict[int, Set[date]]:
+        """Fiscal year → the end dates of the full-year periods filed for it."""
+        ends: Dict[int, Set[date]] = {}
+        for row in rows:
+            if (row.get('period_type') or '').lower() != 'duration':
+                continue
+            year = SegmentDataRepository._get_row_year(row)
+            if year is not None:
+                ends.setdefault(year, set()).add(row['period_end'])
+        return ends
+
+    @staticmethod
+    def _at_year_end(row, year_ends: Dict[int, Set[date]]) -> bool:
+        """False for a balance dated anywhere but its fiscal year's end. 10-Ks
+        carry quarter-end and acquisition-date balances too, and first-wins let
+        a June balance fill the year's Assets cell. Durations, and a filer with
+        no full-year periods to compare against, always pass."""
+        if (row.get('period_type') or '').lower() != 'instant' or not year_ends:
+            return True
+        day = row.get('period_instant')
+        year = SegmentDataRepository._get_row_year(row)
+        return any(abs((day - end).days) <= 7 for end in year_ends.get(year, ()))
 
     # ── DB fetchers ────────────────────────────────────────────────────────
 
@@ -11139,10 +11325,9 @@ class SegmentDataRepository:
         SINGLE SOURCE OF TRUTH for segment-member classification, shared by the
         annual Segments tab (``_build_segment_tables_from_db``) AND the screening
         segment values cache (``screening_service.build_segment_values_cache``),
-        so the screener can never drift from what the Segments tab shows. The
-        caller MUST pass ``filtered`` already ordered by (report_fiscal_year,
-        full_dimension_label, original_label, filing_date DESC) so the first-wins
-        ("only set when None") merge keeps the most recent filing's value. Rows
+        so the screener can never drift from what the Segments tab shows. Rows
+        are put in _newest_filing_first order here, so the first-wins ("only set
+        when None") merge keeps the most recent filing's value. Rows
         whose derived year is not in ``years`` are skipped. Pass non-dimensioned
         rows (``_is_ndim=True``) to populate ``metric_totals``; omit them (the
         cache path does) to leave it empty.
@@ -11154,6 +11339,8 @@ class SegmentDataRepository:
         """
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
 
+        filtered = SegmentDataRepository._newest_filing_first(
+            SegmentDataRepository._drop_wrapped_slices(filtered))
         # Members this company reports on a genuine geographic axis (any metric, incl. non-monetary
         # warehouse/store counts). Used to confirm that a member recovered from a multi-dimensional
         # operating-segment fact is truly geographic before routing it to the Geographic table.
@@ -11189,16 +11376,21 @@ class SegmentDataRepository:
         # The axes each stored value was filed under, so a re-read below can
         # insist on the same context.
         stored_context: Dict[Tuple, str] = {}
+        # The filing each stored value came from (see _keep_newest_filing).
+        stored_filing: Dict[Tuple, Any] = {}
         # Slots already filled from an element this metric declares (see below).
         declared_values: Set[Tuple] = set()
         segment_axes = SegmentDataRepository._segment_axes(filtered, geo_member_set)
         member_display = SegmentDataRepository._member_display_map(
             filtered, geo_member_set, segment_axes)
+        year_ends = SegmentDataRepository._fiscal_year_ends(filtered)
 
         for row in filtered:
             if row.get('_is_ndim'):
                 continue  # second pass — needs the member concepts collected below
             if not SegmentDataRepository._is_monetary_row(row):
+                continue
+            if not SegmentDataRepository._at_year_end(row, year_ends):
                 continue
             orig_label = row.get('original_label') or ''
             row_year = SegmentDataRepository._get_row_year(row)
@@ -11240,6 +11432,7 @@ class SegmentDataRepository:
                         target[metric_name][member][row_year] = scaled
                         stored_context[value_slot] = (
                             row.get('full_dimension_label') or '').strip()
+                        stored_filing[value_slot] = row.get('filing_date')
                     if declared:
                         declared_values.add(value_slot)
                     if concept:
@@ -11281,6 +11474,8 @@ class SegmentDataRepository:
             concept = (row.get('concept') or '').strip()
             if not concept or not SegmentDataRepository._is_monetary_row(row):
                 continue
+            if not SegmentDataRepository._at_year_end(row, year_ends):
+                continue
             row_year = SegmentDataRepository._get_row_year(row)
             raw_val = row.get('numeric_value')
             if raw_val is None or row_year not in years:
@@ -11316,6 +11511,7 @@ class SegmentDataRepository:
             biz_data, geo_data, member_concepts, total_concepts)
         SegmentDataRepository._suppress_impossible_totals(
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
+        SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
 
         return biz_data, geo_data, metric_totals
 
@@ -11377,7 +11573,9 @@ class SegmentDataRepository:
         if not filtered:
             return None
 
-        years = sorted(set(_get_ey(r) for r in filtered if _get_ey(r) is not None))
+        # A column per fiscal year with a full-year period; a cover-page date in
+        # the next year (shares outstanding) is not a year of results.
+        years = sorted(SegmentDataRepository._fiscal_year_ends(filtered))
 
         # Build period_dates
         period_dates: Dict[int, date] = {}
@@ -11556,6 +11754,8 @@ class SegmentDataRepository:
         all_rows = SegmentDataRepository._fetch_all_db_rows_quarterly(ticker, start_date, end_date)
         if not all_rows:
             return None
+        all_rows = SegmentDataRepository._newest_filing_first(
+            SegmentDataRepository._drop_wrapped_slices(all_rows))
 
         # Collect distinct period_ends and build integer keys
         _pe_set = set()
@@ -11605,6 +11805,8 @@ class SegmentDataRepository:
         # The axes each stored value was filed under, so a re-read below can
         # insist on the same context.
         stored_context: Dict[Tuple, str] = {}
+        # The filing each stored value came from (see _keep_newest_filing).
+        stored_filing: Dict[Tuple, Any] = {}
         # Slots already filled from an element this metric declares (annual builder
         # carries the rationale).
         declared_values: Set[Tuple] = set()
@@ -11654,6 +11856,7 @@ class SegmentDataRepository:
                         target[metric_name][member][pkey] = scaled
                         stored_context[value_slot] = (
                             row.get('full_dimension_label') or '').strip()
+                        stored_filing[value_slot] = row.get('filing_date')
                     if declared:
                         declared_values.add(value_slot)
                     if concept:
@@ -11728,6 +11931,7 @@ class SegmentDataRepository:
             biz_data, geo_data, member_concepts, total_concepts)
         SegmentDataRepository._suppress_impossible_totals(
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
+        SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
 
         if not biz_data and not geo_data:
             return None
@@ -11860,15 +12064,18 @@ class SegmentDataRepository:
                     except Exception:
                         pass
 
-                # Product/service segment facts — classified as business
-                for axis in EDGAR_PRODUCT_AXES:
-                    try:
-                        facts = xbrl.query().by_dimension(axis).with_dimensions().execute()
-                        for f in facts:
-                            f['_section'] = 'business'
-                            local_biz.append(f)
-                    except Exception:
-                        pass
+                # Product/service facts stand in for segments only for a filer
+                # that has none (see _classify_member): a second breakdown of
+                # the same revenue is not a segment.
+                if not local_biz:
+                    for axis in EDGAR_PRODUCT_AXES:
+                        try:
+                            facts = xbrl.query().by_dimension(axis).with_dimensions().execute()
+                            for f in facts:
+                                f['_section'] = 'business'
+                                local_biz.append(f)
+                        except Exception:
+                            pass
 
                 # Geographic segment facts
                 for axis in EDGAR_GEO_AXES:
@@ -11911,7 +12118,13 @@ class SegmentDataRepository:
                     if is_geo_excluded_label(member):
                         continue
                     member = canonicalize_geo_label(member)
-                fy = fact.get('fiscal_year')
+                # edgartools' fiscal_year is the FILING's year, stamped on every
+                # comparative it carries; the period itself says which year it is.
+                dated = {k: (date.fromisoformat(v) if isinstance(v, str) else v)
+                         for k in ('period_start', 'period_end', 'period_instant')
+                         if (v := fact.get(k))}
+                fy = SegmentDataRepository._get_row_year(
+                    {'period_type': fact.get('period_type'), **dated})
                 if not fy:
                     continue
                 all_years.add(fy)
@@ -12029,7 +12242,7 @@ class SegmentDataRepository:
         rows = SegmentDataRepository._fetch_all_db_rows(ticker)
         if not rows:
             return None, None
-        years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
+        years = sorted(SegmentDataRepository._fiscal_year_ends(rows))
         if not years:
             return None, None
         _fye_m = SegmentDataRepository._fye_month(ticker)
@@ -12047,7 +12260,8 @@ class SegmentDataRepository:
                 for r in rows if r.get('period_end')
             ))
         rows = SegmentDataRepository._fetch_all_db_rows(ticker)
-        years = sorted(set(r['report_fiscal_year'] for r in rows if r.get('report_fiscal_year')))
+        # The table's own year keys, so the dropdown offers exactly its columns.
+        years = sorted(SegmentDataRepository._fiscal_year_ends(rows))
         _fye_m = SegmentDataRepository._fye_month(ticker)
         return [SegmentDataRepository._fye_display_date(y, _fye_m) for y in years]
 

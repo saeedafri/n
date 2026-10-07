@@ -781,3 +781,80 @@ def test_a_usable_mape_still_decides_the_best_model():
     }
     assert page._mape_is_usable(results)
     assert min(results, key=lambda m: page._ranking_metric(results[m])) == "Prophet"
+
+
+# ── a minority of unreadable labels must not discard the readable ones ──
+
+def test_a_few_unreadable_labels_do_not_void_the_whole_column():
+    """China NBS files label Jan+Feb as one row; 35 of 39 read fine.
+
+    The share threshold used to be a cliff at 0.9: at 0.897 the month-year
+    reader was skipped and the fallback turned every row into NaT, so the page
+    reported "no readable date column" about a column it could almost all read.
+    """
+    labels = []
+    for year in (23, 24, 25):
+        labels.append(f"Jan/Feb '{year}")              # unreadable, 1 in 11
+        for month in MONTHS_3[2:]:
+            labels.append(f"{month} '{year}")
+    got = engine.normalize_dates(pd.Series(labels))
+    assert got.notna().sum() == len(labels) - 3, "readable labels were discarded"
+    assert got.isna().sum() == 3
+
+
+def test_the_whole_column_is_still_refused_when_little_of_it_reads():
+    """Below the bar the reader must not claim a column it cannot read."""
+    labels = ["Jan '23", "Feb '23"] + ["not a date"] * 10
+    got = engine.normalize_dates(pd.Series(labels))
+    assert got.notna().sum() <= 2
+
+
+def test_a_mostly_iso_column_is_not_hijacked_by_the_month_year_reader():
+    """Whichever reader finds more dates wins; the majority is never sacrificed.
+
+    A file mixing two date styles is malformed — the format guide asks for one
+    style throughout — so the two stragglers are reported by name rather than
+    silently costing the ten good rows.
+    """
+    labels = [f"2024-{m:02d}-28" for m in range(1, 11)] + ["Jan '24", "Feb '24"]
+    got = engine.normalize_dates(pd.Series(labels))
+    assert got.notna().sum() == 10, "the ISO dates must survive"
+    assert [l for l, p in zip(labels, got) if pd.isna(p)] == ["Jan '24", "Feb '24"]
+
+
+def test_a_combined_two_month_label_is_explained_not_just_listed():
+    reasons = engine.explain_unreadable_dates(["Jan/Feb '23", "Jan/Feb '24"])
+    assert reasons, "no explanation produced"
+    joined = " ".join(reasons).lower()
+    assert "two months" in joined
+    assert "jan/feb '23" in joined
+    # it must say what to DO, not only what is wrong
+    assert "split" in joined
+
+
+def test_unreadable_reasons_are_grouped_by_kind():
+    reasons = engine.explain_unreadable_dates(["Jan-Feb 2023", "90000", "who knows"])
+    joined = " ".join(reasons).lower()
+    assert "two months" in joined and "plain numbers" in joined
+    assert "not a recognised date" in joined
+
+
+def test_china_retail_shaped_file_loads_end_to_end():
+    """The real failing file's shape: combined Januaries, apostrophe years."""
+    rows = []
+    for year in (23, 24, 25):
+        rows.append((f"Jan/Feb '{year}", 6800.0))
+        for index, month in enumerate(MONTHS_3[2:], start=3):
+            rows.append((f"{month} '{year}", 3400.0 + index * 20))
+    frame = pd.DataFrame(rows, columns=["Date", "Value (RMB bn)"])
+
+    date_col = engine.guess_date_column(frame)
+    value_col = engine.guess_value_column(frame, date_col)
+    assert date_col == "Date", "the date column must be found"
+    assert value_col == "Value (RMB bn)"
+
+    loaded = engine.load_series(frame, date_col, value_col, "Monthly")
+    series = loaded.frame[engine.TARGET_COL]
+    assert series.notna().sum() == 30, "the 30 readable months must survive"
+    assert loaded.dropped_rows == 3
+    assert all("Jan/Feb" in label for label in loaded.unreadable_dates)

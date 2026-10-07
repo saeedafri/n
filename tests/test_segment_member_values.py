@@ -186,7 +186,8 @@ def test_the_classifier_version_covers_every_rule_that_decides_a_segment():
     assert len(version) == 12
 
     source = inspect.getsource(svc._segment_classifier_version)
-    for name in ("_classify_segment_rows", "_classify_member", "_segment_axes",
+    for name in ("_classify_segment_rows", "_classify_member", "_drop_wrapped_slices",
+                 "_segment_axes",
                  "_member_display_map", "_segment_cache_entries"):
         assert name in source, f"{name} is not in the version hash"
 
@@ -404,3 +405,126 @@ def test_the_card_counts_a_geo_segment_year_range_through_the_pipeline():
                                       "Revenues ($mm) — FY 2022–2023 [FY 2023]"]
     assert trace[0]["with_data"] == 3        # MCD + both TSCO rows; KR is N/A
     assert len(out) == 4                     # nobody dropped
+
+
+# ── a slice of a segment is not the segment ──────────────────────────────────
+
+def cmg_row(value, slice_label=None, segment="U. S. Segment"):
+    """Chipotle FY2025: us-gaap:Revenues on the Operating Segments wrapper."""
+    row = amex_row(segment, "Revenue", "us-gaap:Revenues", value, 2025)
+    if slice_label:
+        row["full_dimension_label"] = (
+            f"Consolidation Items: Operating Segments, Product and Service: "
+            f"{slice_label}, Segments: {segment}")
+    return row
+
+
+def test_a_segment_filed_only_with_a_further_axis_keeps_its_figure():
+    """Abbott's Molecular (and Pulte's Florida, Nike's North America) exist only
+    as Subsegments of a wrapped segment. With no less-sliced copy to prefer, the
+    figure stays — only a slice of something filed whole is dropped."""
+    molecular = cmg_row(817_000_000, segment="Molecular")
+    molecular["full_dimension_label"] = (
+        "Consolidation Items: Operating Segments, Segments: Diagnostics, "
+        "Subsegments: Molecular")
+    rows = [molecular, ndim_row("Revenue", "us-gaap:Revenues", 43_000_000_000, 2025)]
+    assert business_revenues(rows, years=(2025,))["Molecular"][2025] == 817.0
+
+
+def test_the_segment_reads_its_own_figure_whatever_order_the_slices_arrive_in():
+    rows = [cmg_row(59_332_000, "Delivery service revenue", "Restaurants"),
+            cmg_row(11_620_085_000, "Food and beverage revenue", "Restaurants"),
+            cmg_row(11_679_417_000, segment="Restaurants"),
+            ndim_row("Revenue", "us-gaap:Revenues", 11_925_601_000, 2025)]
+    assert business_revenues(rows, years=(2025,))["Restaurants"][2025] == 11_679.417
+
+
+def test_a_lookalike_measure_with_fewer_axes_does_not_displace_the_segment():
+    """GE files Power's Total assets (us-gaap:Assets, 24,453m) with four axes and
+    a contract-asset fact (838m, filer element) with two. Both match "Assets";
+    only a less-sliced fact of the same declared-ness may win."""
+    total = cmg_row(24_453_000_000, segment="Power")
+    total.update(original_label="Total assets", concept="us-gaap:Assets",
+                 full_dimension_label=("Consolidation Items: Operating segments, Segments: "
+                                       "GE Industrial, Operating Activities: Continuing "
+                                       "Operations, Subsegments: Power"))
+    contract = cmg_row(838_000_000, segment="Power")
+    contract.update(original_label="Contract and other deferred assets",
+                    concept="ge:ContractAndOtherDeferredAssetsNoncurrent")
+    kept = Segments._drop_wrapped_slices([total, contract])
+    assert total in kept and contract in kept
+
+
+# ── one member, one row: relabels, liabilities, place names ──────────────────
+
+def product_row(label_on_axis, value, year, filed):
+    """Chipotle's product axis, as filed."""
+    row = segment_row(label_on_axis, "Total revenue", "us-gaap:Revenues", value, year, filed)
+    row.update(dimension="srt:ProductOrServiceAxis",
+               full_dimension_label=f"Product and Service: {label_on_axis}")
+    return row
+
+
+def test_a_relabelled_member_is_one_row():
+    """Chipotle filed its products as "Food and Beverage" / "Delivery Service"
+    through FY2023 and as "Food and beverage revenue" / "Delivery service
+    revenue" from FY2024: each product listed twice with half the years. The
+    FY2024 10-K repeats FY2023 under the new name with the same number — that
+    agreement is what makes it one member."""
+    rows = [
+        product_row("Food and Beverage", 9_804_124_000, 2023, "2024-02-06"),
+        product_row("Food and beverage revenue", 9_804_124_000, 2023, "2025-02-05"),
+        product_row("Food and beverage revenue", 11_866_051_000, 2025, "2026-02-04"),
+        product_row("Delivery Service", 67_525_000, 2023, "2024-02-06"),
+        product_row("Delivery service revenue", 67_525_000, 2023, "2025-02-05"),
+        product_row("Delivery service revenue", 59_550_000, 2025, "2026-02-04"),
+    ]
+    revenues = business_revenues(rows, years=(2023, 2025))
+    assert revenues == {
+        "Food and beverage revenue": {2023: 9_804.124, 2025: 11_866.051},
+        "Delivery service revenue": {2023: 67.525, 2025: 59.55},
+    }
+
+
+def test_a_sub_line_named_like_its_segment_stays_separate():
+    """Tesla's "Automotive" segment and its "Automotive sales" line differ only
+    by "sales" but report different numbers — merging them would lose one."""
+    rows = [product_row("Automotive", 20_821_000_000, 2019, "2020-02-13"),
+            product_row("Automotive sales", 19_358_000_000, 2019, "2020-02-13")]
+    assert business_revenues(rows, years=(2019,)) == {
+        "Automotive": {2019: 20_821.0}, "Automotive sales": {2019: 19_358.0}}
+
+
+def test_a_contract_liability_is_not_revenue():
+    """"Unearned revenue" and "Breakage revenue" are gift-card and rewards
+    liabilities; their labels say "revenue" and they were listed as segments."""
+    from utils.constants import SEGMENT_METRIC_GROUPS
+    revenues = SEGMENT_METRIC_GROUPS["Revenues"]
+    for label in ("Unearned revenue", "Liability in unearned revenue", "Breakage revenue"):
+        assert not Segments._matches_metric(label, revenues), label
+    assert Segments._matches_metric("Total revenue", revenues)
+
+
+def test_initials_lose_their_inner_spaces_and_nothing_else():
+    """Chipotle's one segment is "U. S. Segment". Only the spacing is fixed: the
+    geographic workbook groups places into regions, and running a business
+    segment through it folded PriceSmart's four country segments into one."""
+    assert Segments._strip_member_artifact("U. S. Segment") == "U.S."
+    assert Segments._strip_member_artifact("Caribbean Operations Segment") == "Caribbean Operations"
+    assert Segments._strip_member_artifact("Outside U.S.") == "Outside U.S."
+
+
+def test_a_relabel_is_one_row_in_the_quarterly_view_too():
+    """10-Q rows carry no report_fiscal_year, so a year-keyed agreement test saw
+    every quarter as one "None" year and never matched: the quarterly table kept
+    "Delivery Service" and "Delivery service revenue" apart."""
+    def quarter_row(label, value, end, filed):
+        row = product_row(label, value, end.year, filed)
+        row.update(period_start=date(end.year, end.month - 2, 1), period_end=end,
+                   report_fiscal_year=None)
+        return row
+    rows = [quarter_row("Delivery Service", 17_571_000, date(2023, 3, 31), "2023-04-26"),
+            quarter_row("Delivery service revenue", 17_571_000, date(2023, 3, 31), "2024-04-25"),
+            quarter_row("Delivery service revenue", 18_204_000, date(2024, 3, 31), "2024-04-25")]
+    names = Segments._member_display_map(rows, set())
+    assert set(names.values()) == {"Delivery service revenue"}

@@ -1181,6 +1181,9 @@ SEGMENT_METRIC_GROUPS = {
             "redemption", "loyalty", "recognized", "aftertax",
             "installment", "gain on", "gain (loss)", "gain related",
             "contract with customer, liability", "percentage",
+            # Gift-card and rewards liabilities: Chipotle labels them "Unearned
+            # revenue" / "Breakage revenue" and they were listed as segments.
+            "unearned", "breakage",
         ],
         "edgar_concepts": [
             "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",

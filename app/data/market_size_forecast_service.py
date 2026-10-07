@@ -218,6 +218,12 @@ def _parse_month_year(value) -> Optional[str]:
     return f"{year}-{month:02d}-01"
 
 
+# A date column only has to be 60% readable to be *chosen* (guess_date_column),
+# so the reader that finds those dates is held to the same bar rather than a
+# stricter one that silently discarded everything just below it.
+MONTH_YEAR_MIN_SHARE = 0.6
+
+
 def _short_year_is_plausible(populated: pd.Series) -> bool:
     """Guard the ambiguous `Mon NN` form, where NN is a day or a two-digit year.
 
@@ -246,6 +252,52 @@ def _short_year_is_plausible(populated: pd.Series) -> bool:
     return bool(steps.median() <= 6)
 
 
+DATE_SPELLINGS = ("`2020-12-31`, `2020-01`, `Jan 2020`, `Dec '22`, `Dec-22`, "
+                  "`2020M01`, `Q1 2020`, `2020Q1` and `2020`")
+
+
+def explain_unreadable_dates(labels) -> List[str]:
+    """Why these particular cells could not be read, in the user's own terms.
+
+    A list of accepted spellings is useless when the problem is not spelling.
+    China's NBS publishes `Jan/Feb '23` as one combined figure, and no list of
+    formats tells an analyst what to do about that -- so name the shape that was
+    actually found and say what to change.
+    """
+    texts = [str(v).strip() for v in labels if str(v).strip()]
+    if not texts:
+        return []
+
+    def month_names(text: str) -> int:
+        cleaned = re.sub(r"[^a-z]+", " ", text.lower())
+        return sum(1 for word in cleaned.split() if word[:3] in MONTH_ABBR)
+
+    combined = [t for t in texts if month_names(t) >= 2]
+    numeric = [t for t in texts if pd.notna(pd.to_numeric(t, errors='coerce'))]
+    reasons: List[str] = []
+
+    if combined:
+        sample = ", ".join(f"`{t}`" for t in combined[:3])
+        reasons.append(
+            f"{len(combined)} label(s) name **two months at once** ({sample}). A single "
+            "figure covering two months cannot sit in one month's slot without "
+            "distorting it, so those rows were left out and those periods are blank. "
+            "Split the figure across two rows, or relabel the row as the single "
+            "period it represents.")
+    if numeric:
+        sample = ", ".join(f"`{t}`" for t in numeric[:3])
+        reasons.append(
+            f"{len(numeric)} label(s) are plain numbers ({sample}) that are not years.")
+
+    accounted = set(combined) | set(numeric)
+    other = [t for t in texts if t not in accounted]
+    if other:
+        sample = ", ".join(f"`{t}`" for t in other[:3])
+        reasons.append(f"{len(other)} label(s) were not a recognised date ({sample}). "
+                       f"Readable spellings include {DATE_SPELLINGS}.")
+    return reasons
+
+
 def normalize_dates(series: pd.Series) -> pd.Series:
     """Turn messy period labels into real dates.
 
@@ -266,11 +318,24 @@ def normalize_dates(series: pd.Series) -> pd.Series:
             lambda v: _parse_quarter(v) is not None).mean() >= 0.9:
         return pd.to_datetime(values.apply(_parse_quarter), errors='coerce')
 
-    if (len(populated) > 0
-            and populated.astype(str).apply(
-                lambda v: _parse_month_year(v) is not None).mean() >= 0.9
-            and _short_year_is_plausible(populated)):
-        return pd.to_datetime(values.apply(_parse_month_year), errors='coerce')
+    if len(populated) > 0:
+        month_year_share = populated.astype(str).apply(
+            lambda v: _parse_month_year(v) is not None).mean()
+        # Was a flat >= 0.9, which behaved as a cliff rather than a threshold:
+        # a China NBS file whose Januaries read `Jan/Feb '23` had 35 of 39
+        # labels readable -- 0.897 -- so the month-year reader was skipped
+        # entirely and the fallback parser turned ALL 39 into NaT. The page
+        # then said "no readable date column" about a column it could read
+        # almost all of. Use this reader whenever it is the best one available;
+        # cells it cannot read stay NaT and get named in the ingestion notice.
+        if (month_year_share >= MONTH_YEAR_MIN_SHARE
+                and _short_year_is_plausible(populated)):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                fallback_share = float(
+                    pd.to_datetime(populated, errors='coerce').notna().mean())
+            if month_year_share >= fallback_share:
+                return pd.to_datetime(values.apply(_parse_month_year), errors='coerce')
 
     # A column of plain numbers that are not years is not a date column.
     # pandas would read 90000 as nanoseconds since the epoch and "parse"

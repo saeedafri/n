@@ -749,7 +749,14 @@ def _render_controls() -> Dict[str, Any]:
     """
     settings: Dict[str, Any] = {"ready": False}
 
-    st.markdown('<div class="msf-toolbar-label">Sales history</div>', unsafe_allow_html=True)
+    label_col, guide_col = st.columns([5, 1])
+    label_col.markdown('<div class="msf-toolbar-label">Sales history</div>',
+                       unsafe_allow_html=True)
+    if guide_col.button("File format", key=f"{KEY}show_format",
+                        use_container_width=True,
+                        help="What the spreadsheet needs to look like"):
+        _format_guide()
+
     upload = st.file_uploader(
         "Sales history (Excel or CSV)", type=["xlsx", "xls", "csv"],
         key=f"{KEY}upload", label_visibility="collapsed",
@@ -776,16 +783,24 @@ def _render_controls() -> Dict[str, Any]:
         # perfectly good dates and an all-text value column sent the analyst
         # hunting through the date column.
         found = ", ".join(f"`{c}`" for c in raw.columns)
-        if guessed_date is None and guessed_value is None:
-            st.error(f"No date column and no numeric value column found. "
-                     f"Columns in this file: {found}.\n\n"
-                     "Readable date spellings include `2020-01-31`, `2020-01`, "
-                     "`Jan 2020`, `Dec '22`, `Dec-22`, `2020M01`, `Q1 2020` and `2020`.")
-        elif guessed_date is None:
-            st.error(f"Found a value column (`{guessed_value}`) but no readable date "
-                     f"column. Columns in this file: {found}.\n\n"
-                     "Readable date spellings include `2020-01-31`, `2020-01`, "
-                     "`Jan 2020`, `Dec '22`, `Dec-22`, `2020M01`, `Q1 2020` and `2020`.")
+        if guessed_date is None:
+            # Name the cells that defeated it. "No readable date column" about a
+            # column plainly full of dates is the least actionable thing the page
+            # can say, so show which labels failed and why.
+            candidate = _likeliest_date_column(raw, guessed_value)
+            detail = ""
+            if candidate is not None:
+                unreadable = _unreadable_labels(raw[candidate])
+                reasons = engine.explain_unreadable_dates(unreadable)
+                if reasons:
+                    detail = (f"\n\nIn **{candidate}**:\n\n"
+                              + "\n\n".join(f"- {r}" for r in reasons))
+            if not detail:
+                detail = f"\n\nReadable date spellings include {engine.DATE_SPELLINGS}."
+            lead = ("No date column and no numeric value column found."
+                    if guessed_value is None else
+                    f"Found a value column (`{guessed_value}`) but no readable date column.")
+            st.error(f"{lead} Columns in this file: {found}.{detail}")
         else:
             st.error(f"Found a date column (`{guessed_date}`) but no column of numbers. "
                      f"Columns in this file: {found}.\n\n"
@@ -902,6 +917,101 @@ def _stage(loader, share: float, text: str) -> None:
     render_page_loader(f"{text} · {percent}%", placeholder=loader)
 
 
+def _in_script_run() -> bool:
+    """True when Streamlit is actually rendering, not merely importing us."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
+@st.dialog("What your Excel file should look like", width="large")
+def _format_guide() -> None:
+    """The file contract, shown on arrival and reopenable from the toolbar.
+
+    Static markdown only — it opens instantly because it computes nothing.
+    """
+    st.markdown("""
+**Two columns. One of dates, one of numbers.** Nothing else is required, and any
+extra columns are ignored.
+
+| Date | Sales |
+|---|---|
+| 2024-01-31 | 412,800 |
+| 2024-02-29 | 388,100 |
+| 2024-03-31 | 441,650 |
+
+**Column names** are detected automatically — `Date`, `Month`, `Period` and
+`Sales`, `Revenue`, `Value` all work, and you can override both after upload.
+
+**Dates may be spelled any of these ways**, as long as you keep one style
+throughout:
+
+| Style | Example |
+|---|---|
+| Full date | `2024-01-31` |
+| Month and year | `2024-01` · `Jan 2024` · `Jan-24` · `Dec '22` |
+| Statistical | `2024M01` |
+| Quarter | `Q1 2024` · `2024Q1` · `2024-Q1` |
+| Year only | `2024` |
+
+**Numbers may be formatted for reading** — `1,234`, `$1,234`, `12.5%`, `(87)`
+for negatives and spaces as separators are all read correctly.
+
+---
+
+#### What breaks a file
+
+- **One row covering two months**, such as `Jan/Feb '23`. A combined figure
+  cannot sit in a single month without distorting it — split it across two
+  rows, or label it as the one period it represents.
+- **Title or merged cells above the headers.** The first row must be the
+  column names.
+- **Totals or subtotal rows** mixed in with the periods — remove them.
+- **A gap in the middle.** Missing periods are allowed and reported, but a long
+  run of them weakens the forecast.
+- **Text in the value column**, such as `n/a` or `—`. Leave the cell empty.
+
+**Minimum history:** 4 periods to forecast at all, and 24 for SARIMAX to use the
+FRED macro indicators.
+""")
+    if st.button("Got it", type="primary", use_container_width=True,
+                 key=f"{KEY}format_guide_close"):
+        st.rerun()
+
+
+def _likeliest_date_column(raw: pd.DataFrame, value_col) -> Optional[str]:
+    """The column the analyst meant as dates, even though nothing parsed.
+
+    Detection returned nothing, so there is no score to rank on — fall back to
+    the column whose NAME says date, then to the first column that is not the
+    value column.
+    """
+    hints = ('date', 'month', 'period', 'time', 'day', 'week', 'quarter', 'year')
+    for col in raw.columns:
+        if col != value_col and any(h in str(col).strip().lower() for h in hints):
+            return col
+    for col in raw.columns:
+        if col != value_col:
+            return col
+    return None
+
+
+def _unreadable_labels(column: pd.Series, limit: int = 12) -> tuple:
+    """The distinct cells in this column that normalize_dates could not read."""
+    parsed = engine.normalize_dates(column)
+    failed = column[parsed.isna() & column.notna()]
+    seen, out = set(), []
+    for value in failed.astype(str):
+        if value not in seen:
+            seen.add(value)
+            out.append(value)
+        if len(out) >= limit:
+            break
+    return tuple(out)
+
+
 def _ingestion_diagnosis(loaded, settings: Dict[str, Any], usable: int) -> str:
     """Say which cells could not be read, rather than only how many survived.
 
@@ -910,13 +1020,9 @@ def _ingestion_diagnosis(loaded, settings: Dict[str, Any], usable: int) -> str:
     """
     lines = [f"Only {usable} usable row(s) after cleaning — too few to model."]
     if loaded.unreadable_dates:
-        shown = ", ".join(repr(v) for v in loaded.unreadable_dates[:6])
-        more = "" if len(loaded.unreadable_dates) <= 6 else f" and {len(loaded.unreadable_dates) - 6} more"
-        lines.append(
-            f"**{loaded.dropped_rows} date(s) could not be read**, starting with {shown}{more}.")
-        lines.append(
-            "Readable spellings include `2020-01-31`, `2020-01`, `Jan 2020`, `Dec '22`, "
-            "`Dec-22`, `2020M01`, `Q1 2020` and `2020`.")
+        lines.append(f"**{loaded.dropped_rows} date(s) could not be read.**")
+        lines.extend(f"- {reason}"
+                     for reason in engine.explain_unreadable_dates(loaded.unreadable_dates))
     elif loaded.dropped_rows:
         lines.append(f"**{loaded.dropped_rows} row(s)** had no date and were dropped.")
     else:
@@ -1198,11 +1304,10 @@ def _render_diagnostics_tab(outcome: Dict[str, Any]) -> None:
         st.info(f"{loaded.duplicates_merged} duplicate date(s) — rows sharing a period "
                 "were summed so the series has one value per period.")
     if loaded.dropped_rows:
-        detail = ""
-        if loaded.unreadable_dates:
-            shown = ", ".join(repr(v) for v in loaded.unreadable_dates[:5])
-            detail = f" The first were {shown}."
-        st.warning(f"{loaded.dropped_rows} row(s) had unreadable dates and were dropped.{detail}")
+        reasons = engine.explain_unreadable_dates(loaded.unreadable_dates)
+        st.warning(f"{loaded.dropped_rows} row(s) had dates this page could not read, so "
+                   "they were left out of the series.\n\n"
+                   + "\n\n".join(f"- {r}" for r in reasons))
     if loaded.snapped_to_period_end:
         st.info(f"{loaded.snapped_to_period_end} date(s) named a period rather than a day "
                 "(for example `Jan 2020`) and were placed at the end of that period.")
@@ -1730,6 +1835,14 @@ def main() -> None:
         'three ways — SARIMAX on FRED macro indicators, SARIMA on the series alone, and '
         'Prophet — each with walk-forward validation and a full residual diagnostic '
         'suite.</p>', unsafe_allow_html=True)
+
+    # Shown once per session on arrival. Analysts kept uploading files in
+    # shapes the page cannot read, so the contract is stated before the upload
+    # rather than as an error afterwards. A modal only means anything inside a
+    # real script run; the module also executes under import (tests, tooling).
+    if _in_script_run() and not st.session_state.get(f"{KEY}format_seen"):
+        st.session_state[f"{KEY}format_seen"] = True
+        _format_guide()
 
     tracker.step_start("CONTROLS")
     settings = _render_controls()

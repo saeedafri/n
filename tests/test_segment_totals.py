@@ -554,6 +554,7 @@ def test_the_segment_suffix_is_not_treated_as_part_of_the_name():
     newer["filing_date"] = date(2025, 3, 20)
     other = duration_member("Net revenue", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
                             "Americas", 2025, 8_000e6)
+    other["filing_date"] = newer["filing_date"]   # the same 10-K
     _, geo, _ = classify([older, newer, other])
     assert "China Mainland" in geo["Revenues"]
     assert "China Mainland Segment" not in geo["Revenues"]

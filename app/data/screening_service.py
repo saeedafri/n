@@ -2488,6 +2488,8 @@ def _segment_classifier_version() -> str:
     sources = []
     for fn in (SegmentDataRepository._classify_segment_rows,
                SegmentDataRepository._classify_member,
+               SegmentDataRepository._drop_wrapped_slices,
+               SegmentDataRepository._get_row_year,
                SegmentDataRepository._segment_axes,
                SegmentDataRepository._member_display_map,
                _segment_cache_entries):
