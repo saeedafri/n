@@ -1688,8 +1688,13 @@ def apply_tabular_market_data_criterion(
             f"slowest={slowest_str}",
         )
 
+    # annotate_only: year-range mode shows one column per year and applies NO
+    # threshold, exactly like trailing quarters. Without this the per-year calls
+    # would each filter to the companies passing a value test, and a company
+    # would silently vanish from the years it did not pass.
+    annotate_only = bool(criterion.get("annotate_only"))
     for ticker, fv in raw_values.items():
-        if _apply_operator(fv, operator, threshold1, threshold2):
+        if annotate_only or _apply_operator(fv, operator, threshold1, threshold2):
             disp = _format_tabular_display_value(fv, unit)
             if disp is not None:
                 passing[ticker] = disp
@@ -5885,6 +5890,94 @@ def apply_geo_segments_criterion(
     }
 
 
+@st.cache_data(ttl=21600, show_spinner=False)
+def _fetch_store_counts_by_category(ticker_tuple: tuple) -> Dict[str, Dict[str, float]]:
+    """{ticker: {category: count}} using each (ticker, category)'s latest year.
+
+    The store-count rows in coreiq_filing_metrics_v5 carry the category in
+    `dimension` — stores, locations, restaurants, dealerships, warehouses,
+    supermarkets, clubs, branches… 18 distinct values on STG. A company
+    normally reports one or two of them.
+    """
+    if not ticker_tuple:
+        return {}
+    ticker_sql = _build_ticker_in_list(list(ticker_tuple))
+    try:
+        rows = db_manager.execute_query_readonly(f"""
+            SELECT fmv.ticker, fmv.dimension, fmv.numeric_value
+            FROM coreiq_filing_metrics_v5 fmv
+            INNER JOIN (
+                SELECT ticker, dimension, MAX(report_fiscal_year) AS yr
+                FROM coreiq_filing_metrics_v5
+                WHERE ticker IN ({ticker_sql}) AND source = 'store_count'
+                GROUP BY ticker, dimension
+            ) ly
+              ON fmv.ticker = ly.ticker
+             AND fmv.dimension = ly.dimension
+             AND fmv.report_fiscal_year = ly.yr
+            WHERE fmv.source = 'store_count'
+              AND fmv.ticker IN ({ticker_sql})
+              AND fmv.numeric_value IS NOT NULL
+        """)
+    except Exception as exc:
+        log_error(f"[SCREENING] store-count-by-category fetch failed: {exc}")
+        return {}
+    out: Dict[str, Dict[str, float]] = {}
+    for r in rows or []:
+        dim = (r.get("dimension") or "").strip()
+        if not dim:
+            continue
+        try:
+            val = float(r["numeric_value"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        # Several filings in one year -> keep the largest (a partial extraction
+        # reads low; the consolidated figure is the one worth showing).
+        bucket = out.setdefault(r["ticker"], {})
+        bucket[dim] = max(val, bucket.get(dim, 0.0))
+    return out
+
+
+def _apply_store_counts_by_category(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    rows_in: int,
+    t_start: float,
+) -> Tuple[pd.DataFrame, Dict]:
+    """One display-only column per store category present in the result set."""
+    tickers = tuple(sorted(working_df["ticker"].values))
+    by_ticker = _fetch_store_counts_by_category(tickers)
+
+    # Order by how many in-scope companies report the category, not
+    # alphabetically: 'stores' (88 tickers) and 'locations' (44) belong at the
+    # left, 'venues' and 'homes' (1 each) at the far right. Alphabetical put
+    # Branches first and Stores fourteenth, so the grid opened on empty columns.
+    counts: Dict[str, int] = {}
+    for v in by_ticker.values():
+        for c in v:
+            counts[c] = counts.get(c, 0) + 1
+    categories = sorted(counts, key=lambda c: (-counts[c], c))
+    out = working_df.copy()
+    col_names: List[str] = []
+    for cat in categories:
+        col = f"Store Count — {cat.title()}"
+        out[col] = out["ticker"].map(
+            lambda t, _c=cat: by_ticker.get(t, {}).get(_c))
+        col_names.append(col)
+
+    criterion["category_cols"] = col_names
+    with_data = int(out[col_names].notna().any(axis=1).sum()) if col_names else 0
+    elapsed = (time.perf_counter() - t_start) * 1000
+    log_timing("SCREENING_STORE_COUNT_BY_CATEGORY", elapsed,
+               f"tickers={len(tickers)} categories={len(categories)} with_data={with_data}")
+    return out, {
+        "type": "additional", "data_type": "store_counts_by_category",
+        "category_cols": col_names, "categories": categories,
+        "rows_in": rows_in, "rows_out": len(out),
+        "with_data": with_data, "elapsed_ms": elapsed,
+    }
+
+
 def apply_additional_criterion(
     criterion: Dict,
     working_df: pd.DataFrame,
@@ -5895,6 +5988,12 @@ def apply_additional_criterion(
 
     data_type   = criterion.get("data_type", "credit_ratings")
     display_col = criterion.get("display_col")
+
+    if data_type == "store_counts_by_category":
+        if working_df.empty:
+            return working_df.copy(), {"type": "additional", "rows_in": 0,
+                                       "rows_out": 0, "elapsed_ms": 0}
+        return _apply_store_counts_by_category(criterion, working_df, rows_in, t_start)
 
     tickers = list(working_df["ticker"].values)
     if not tickers:
@@ -5962,6 +6061,71 @@ def build_additional_summary(data_type: str) -> str:
 # =============================================================================
 # PROGRESSIVE PIPELINE
 # =============================================================================
+
+def _apply_generic_year_range(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    single_year_fn,
+) -> Tuple[pd.DataFrame, Dict]:
+    """One column per fiscal year, by replaying a statement's own single-year applier.
+
+    Display-only, exactly like trailing quarters and the Income-Statement year
+    range: no operator/threshold is applied, and a company missing a year shows
+    N/A rather than dropping out.
+
+    Key Stats, Ratios and Forecasting each read a different table through their
+    own applier, so the Income-Statement year-range path
+    (``_apply_year_range_criterion``) cannot serve them — it is wired to
+    ``sec_col`` / ``yf_item``. Replaying the per-year applier keeps one source of
+    truth per statement and costs one query per year.
+
+    Estimates is deliberately NOT routed here: that source carries only the
+    current and next fiscal year (see apply_estimates_criterion), so a range
+    would render the same number under several year headings.
+    """
+    t_total = time.perf_counter()
+    rows_in = len(working_df)
+    years = sorted({int(y) for y in (criterion.get("year_range") or [])})
+    mi = criterion.get("metric_info") or {}
+    label = mi.get("label") or criterion.get("display_col") or "Value"
+    unit = mi.get("unit") or ""
+    stmt = criterion.get("statement")
+
+    out = working_df.copy()
+    col_names: List[str] = []
+    for y in years:
+        col = f"{label} ({unit}) [FY {y}]" if unit else f"{label} [FY {y}]"
+        per_year = {
+            **criterion,
+            "year": y,
+            "display_col": col,
+            # Display-only: never let a per-year call filter the universe.
+            "annotate_only": True,
+        }
+        per_year.pop("year_range", None)
+        try:
+            res, _dbg = single_year_fn(per_year, working_df)
+        except Exception as exc:
+            log_error(f"[SCREENING] {stmt} year-range FY{y} failed: {exc}")
+            continue
+        if col in res.columns:
+            mapped = dict(zip(res["ticker"], res[col]))
+            out[col] = out["ticker"].map(mapped)
+            col_names.append(col)
+
+    criterion["year_cols"] = col_names
+    with_data = int(out[col_names].notna().any(axis=1).sum()) if col_names else 0
+    ms_total = (time.perf_counter() - t_total) * 1000
+    log_timing("SCREENING_GENERIC_YEAR_RANGE_TOTAL", ms_total,
+               f"stmt={stmt} metric={label} years={years} cols={len(col_names)} "
+               f"with_data={with_data}")
+    return out, {
+        "type": "financial", "statement": stmt, "metric": label,
+        "period_type": "FY", "year_range": years, "year_cols": col_names,
+        "rows_in": rows_in, "rows_out": len(out),
+        "with_data": with_data, "elapsed_ms": ms_total,
+    }
+
 
 def recompute_working_set(
     active_criteria: List[Dict],
@@ -6040,6 +6204,11 @@ def recompute_working_set(
                     return apply_geographical_segments_statement_criterion(crit, src_df)
                 return apply_segment_statement_criterion(crit, src_df)
             if stmt_name in TABULAR_MARKET_DATA_STMTS:
+                if crit.get("year_range"):
+                    _fn = (apply_key_stats_criterion if stmt_name == "Key Stats"
+                           else apply_ratios_criterion if stmt_name == "Ratios"
+                           else apply_tabular_market_data_criterion)
+                    return _apply_generic_year_range(crit, src_df, _fn)
                 if stmt_name == "Key Stats":
                     return apply_key_stats_criterion(crit, src_df)
                 if stmt_name == "Ratios":
@@ -6048,6 +6217,9 @@ def recompute_working_set(
             if stmt_name == "Estimates":
                 return apply_estimates_criterion(crit, src_df)
             if stmt_name == "Forecasting":
+                if crit.get("year_range"):
+                    return _apply_generic_year_range(
+                        crit, src_df, apply_forecast_criterion)
                 return apply_forecast_criterion(crit, src_df)
             return apply_financial_criterion(crit, src_df)
         if ctype_ == "keydevs":

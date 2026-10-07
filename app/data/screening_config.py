@@ -402,6 +402,22 @@ STATEMENT_CONFIG = {
         ],
     },
 
+    # Additional Data — non-statement company facts pulled from
+    # coreiq_filing_metrics_v5 (source='store_count' / 'credit_rating').
+    # Store Count by Category fans out the `dimension` field (stores, locations,
+    # restaurants, dealerships, warehouses…) into one column per category.
+    "Additional Data": {
+        "additional_data": True,
+        "metrics": [
+            {"label": "Store Count",             "data_type": "store_counts",
+             "unit": "", "additional": True},
+            {"label": "Store Count by Category", "data_type": "store_counts_by_category",
+             "unit": "", "additional": True},
+            {"label": "Credit Rating",           "data_type": "credit_ratings",
+             "unit": "", "additional": True},
+        ],
+    },
+
     # Business Segments — Segment tab business/product members (coreiq_filing_metrics_v5).
     "Business Segments": {
         "segment_statement": True,
@@ -500,8 +516,34 @@ FORWARD_LOOKING_STMTS = {ESTIMATES_STMT, FORECAST_STMT}
 
 SEGMENT_STATEMENT_TYPES = {"Business Segments", "Geographical Segments"}
 
+# Additional Data is a statement type, not a financial metric: no period type, no
+# operator/threshold, no Additional-Data add-on of its own.
+ADDITIONAL_DATA_STMT = "Additional Data"
+
+# UI label -> value stored on the criterion.
+ADDITIONAL_DATA_TYPES = {
+    "Store Count":             "store_counts",
+    "Store Count by Category": "store_counts_by_category",
+    "Credit Rating":           "credit_ratings",
+}
+
+# Statement types whose Year selector offers a "Year range" mode (one display-only
+# column per fiscal year). Segment statements get it too, via is_segment_stmt.
+#
+# Estimates is deliberately ABSENT. That source carries only the current and next
+# fiscal year — verified on STG: Revenue Estimate (Avg) returns the identical
+# value for FY2026 and FY2027 and nothing at all for FY2029 — so a range would
+# print one number under several year headings. Key Stats, Ratios and Forecasting
+# all vary per year and are included.
+YEAR_RANGE_STMTS = {
+    "Income Statement", "Balance Sheet", "Cash Flow",
+    "Key Stats", "Ratios", "Forecasting",
+}
+
 # Financial form: hide Additional Data for tabular + segment statement types.
-FINANCIAL_NO_ADDITIONAL_DATA_STMTS = TABULAR_MARKET_DATA_STMTS | SEGMENT_STATEMENT_TYPES
+FINANCIAL_NO_ADDITIONAL_DATA_STMTS = (
+    TABULAR_MARKET_DATA_STMTS | SEGMENT_STATEMENT_TYPES | {ADDITIONAL_DATA_STMT}
+)
 
 # ---------------------------------------------------------------------------
 # Helper: get all metric labels for a statement type
@@ -775,11 +817,12 @@ PEOPLE_YEARS = list(range(_CURRENT_FY, 2012, -1))
 # Grid column order for People results. Columns with no data for the current
 # result set are dropped at render time, so this is a maximum, not a minimum.
 PEOPLE_DISPLAY_COLUMNS = [
-    "Company", "Ticker", "Executive Name", "Email", "Title", "Role", "Year",
+    "Company", "Ticker", "Executive Name", "Title", "Role", "Year",
     "Industry", "Country of Incorporation", "Age",
     "Salary", "Bonus", "Stock Awards", "Option Awards", "Non-Equity Incentive",
     "All Other Compensation", "Total Compensation",
-    "Total Pay", "Exercised Value", "Unexercised Value",
+    "Total Pay", "Total Pay (Local)", "Pay Currency",
+    "Exercised Value", "Unexercised Value",
     "Source", "Filing Form", "Filing Year", "Source Filing", "Confidence",
 ]
 

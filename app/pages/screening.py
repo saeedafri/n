@@ -318,6 +318,9 @@ from data.screening_config import (
     KEYDEV_TIMEFRAMES,
     TABULAR_MARKET_DATA_STMTS,
     SEGMENT_STATEMENT_TYPES,
+    YEAR_RANGE_STMTS,
+    ADDITIONAL_DATA_STMT,
+    ADDITIONAL_DATA_TYPES,
     PEOPLE_DISPLAY_COLUMNS,
     PEOPLE_FILING_FORMS,
     PEOPLE_MONEY_COLUMNS,
@@ -632,7 +635,11 @@ def _financial_label() -> str:
 # offered as checkboxes inside the Financial form.
 _MODE_CRITERIA = {
     "Companies": ("industry", "geography", "financial"),
-    "Key Devs":  ("industry", "geography", "financial", "keydevs"),
+    # No "financial" here: Company Information belongs to Companies mode, and a
+    # financial metric column repeated down an event grid is noise. Industry and
+    # Country of Incorporation stay so events can still be scoped to a sector or
+    # a geography.
+    "Key Devs":  ("industry", "geography", "keydevs"),
     "People":    ("industry", "geography", "financial", "people"),
 }
 
@@ -1332,8 +1339,18 @@ def _get_geo_segments_cols(criteria: List[dict]) -> List[str]:
 def _get_additional_cols(criteria: List[dict]) -> List[str]:
     """Return list of additional data result column names."""
     try:
-        return [c["display_col"] for c in criteria
-                if c.get("type") == "additional" and c.get("display_col")]
+        cols, seen = [], set()
+        for c in criteria:
+            if c.get("type") != "additional":
+                continue
+            # Store Count by Category contributes one column per category,
+            # the same way a year-range criterion contributes one per year.
+            for col in (c.get("category_cols") or
+                        ([c["display_col"]] if c.get("display_col") else [])):
+                if col not in seen:
+                    cols.append(col)
+                    seen.add(col)
+        return cols
     except Exception as e:
         log_structured_error(e, page="screening", component="_get_additional_cols", operation="get_cols")
         return []
@@ -2853,6 +2870,13 @@ def _dialog_browse_saved_criteria():
                     )
                     if _dropped:
                         st.session_state["scr_load_dropped_note"] = _dropped
+                    # Saved before the rename, the stored summary still says
+                    # "Geographic Locations: …" — restamp it so an old saved
+                    # screening does not show the retired label.
+                    for _c in _loaded:
+                        if _c.get("type") == "geography":
+                            _c["summary"] = build_geography_summary(
+                                _c.get("countries", []))
                     st.session_state.scr_active_criteria  = _loaded
                     st.session_state.scr_criterion_cache  = {}
                     st.session_state.scr_working_df       = None
@@ -4327,6 +4351,10 @@ def _render_financial_form():
 
             is_segment_stmt = stmt in SEGMENT_STATEMENT_TYPES
             is_tabular_stmt = stmt in TABULAR_MARKET_DATA_STMTS
+            # Additional Data is a company fact (latest store count / credit
+            # rating), not a financial line item: no period type, no year, no
+            # operator/threshold. It annotates the universe and nothing more.
+            is_additional_stmt = (stmt == ADDITIONAL_DATA_STMT)
             show_additional_data = stmt in {"Income Statement", "Balance Sheet", "Cash Flow"}
             stmt_cfg = STATEMENT_CONFIG.get(stmt, {})
             segment_type = stmt_cfg.get("segment_type")
@@ -4372,6 +4400,24 @@ def _render_financial_form():
                     is_edit,
                 )
 
+            if is_additional_stmt:
+                # Display-only: skip Period Type / Year / operator entirely.
+                period_type = "FY"
+                quarter = None
+                year_sel = "Latest"
+                num_quarters = None
+                year_range = None
+                quarter_range = None
+                operator = "Greater Than"
+                val1 = 0.0
+                val2 = 0.0
+                st.caption(
+                    f"{metric_label} is shown as a column for every company that "
+                    "reports it. Latest filed value; no value filter is applied."
+                )
+                _render_additional_stmt_submit(stmt, metric_label)
+                return
+
             if is_segment_stmt:
                 _period_step = "Step 4"
                 _op_step = "Step 5"
@@ -4414,10 +4460,7 @@ def _render_financial_form():
             # route through apply_segment_statement_criterion rather than
             # apply_financial_criterion, and they now have their own range mode
             # (_apply_segment_year_range_criterion), so they are offered it too.
-            _allow_year_range = (
-                stmt in {"Income Statement", "Balance Sheet", "Cash Flow"}
-                or is_segment_stmt
-            )
+            _allow_year_range = (stmt in YEAR_RANGE_STMTS) or is_segment_stmt
             if is_trailing:
                 # Display-only: pick how many trailing quarters to show as columns.
                 quarter = None
@@ -4653,6 +4696,44 @@ def _render_financial_form():
         st.error("Something went wrong. Please try again.")
 
 
+def _render_additional_stmt_submit(stmt: str, metric_label: str) -> None:
+    """Add / Cancel for the Additional Data statement type.
+
+    Produces a plain `additional` criterion — the same shape the existing
+    Additional Data checkboxes produce — so the whole downstream pipeline
+    (apply_additional_criterion, the criterion card, Excel) already handles it.
+    """
+    data_type = ADDITIONAL_DATA_TYPES.get(metric_label, "store_counts")
+    # Plain st.button, NOT st.form_submit_button: the Statement Type selectbox
+    # lives outside `with st.form(...)` (the form opens further down, after the
+    # period/operator steps this branch skips), so a form submit button here
+    # raises StreamlitAPIException and the whole form fails to render.
+    col_add, col_cancel, _sp = st.columns([1.5, 2, 6.5])
+    with col_add:
+        submitted = st.button("Add Criteria", type="primary", width="stretch",
+                              key="scr_fin_add_additional")
+    with col_cancel:
+        cancelled = st.button("Cancel", key="scr_fin_cancel_additional")
+
+    if cancelled:
+        st.session_state.scr_active_form = None
+        st.session_state.scr_prefill = None
+        st.session_state.scr_prefill_idx = None
+        st.rerun()
+
+    if submitted:
+        _add_criterion({
+            "type":        "additional",
+            "data_type":   data_type,
+            "show_col":    True,
+            "display_col": metric_label,
+            "summary":     f"{stmt}: {metric_label}",
+        })
+        st.session_state.scr_prefill = None
+        st.session_state.scr_prefill_idx = None
+        st.rerun()
+
+
 def _render_keydevs_form():
     """Render the Key Developments by Category criterion form.
 
@@ -4678,24 +4759,10 @@ def _render_keydevs_form():
                 )
                 date_fields = _collect_keydevs_date_fields(prefill_for_dates, "scr_kd")
 
-                # ── Additional Data add-on ───────────────────────────────────
-                st.markdown("---")
-                st.markdown("**Additional Data** *(optional — select alongside or instead of categories above)*")
-                col_cr, col_sc = st.columns(2)
-                with col_cr:
-                    add_credit_ratings = st.checkbox(
-                        "Credit Ratings",
-                        value=False,
-                        key="scr_kd_add_credit",
-                        help="Also add a Credit Ratings criterion showing the latest S&P rating per company.",
-                    )
-                with col_sc:
-                    add_store_counts = st.checkbox(
-                        "Store Counts",
-                        value=False,
-                        key="scr_kd_add_stores",
-                        help="Also add a Store Counts criterion showing the latest total store count per company.",
-                    )
+                # Credit Ratings / Store Counts used to be offered here as
+                # checkboxes. They now live where they belong — the Additional
+                # Data statement type under Company Information in Companies
+                # mode — so this form screens key developments and nothing else.
 
                 col_add, col_cancel, space = st.columns([1.5, 2, 6.5])
                 with col_add:
@@ -4710,8 +4777,8 @@ def _render_keydevs_form():
                     st.rerun()
 
                 if submitted:
-                    if not selected_labels and not add_credit_ratings and not add_store_counts:
-                        st.error("Please select at least one category or additional data option.")
+                    if not selected_labels:
+                        st.error("Please select at least one category.")
                         return
 
                     # Add key-dev criterion if categories were selected
@@ -4733,24 +4800,6 @@ def _render_keydevs_form():
                         # and apply_keydevs_criterion) so the grid is never blank.
                         criterion["display_col"] = _keydevs_display_col(date_fields)
                         _add_criterion(criterion)
-
-                    # Add additional data criteria if checked
-                    if add_credit_ratings:
-                        _add_criterion({
-                            "type":        "additional",
-                            "data_type":   "credit_ratings",
-                            "show_col":    True,
-                            "display_col": "S&P Rating",
-                            "summary":     build_additional_summary("credit_ratings"),
-                        })
-                    if add_store_counts:
-                        _add_criterion({
-                            "type":        "additional",
-                            "data_type":   "store_counts",
-                            "show_col":    True,
-                            "display_col": "Store Count",
-                            "summary":     build_additional_summary("store_counts"),
-                        })
 
                     st.session_state.scr_prefill = None
                     st.session_state.scr_prefill_idx = None
@@ -6614,7 +6663,6 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
     """Rename people columns to display labels, format money, drop empty ones."""
     rename = {
         "executive_name":         "Executive Name",
-        "email":                  "Email",
         "title":                  "Title",
         "role":                   "Role",
         "year":                   "Year",
@@ -6625,6 +6673,8 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
         "filing_year":            "Filing Year",
         "filing_blob":            "Source Filing",
         "confidence":             "Confidence",
+        "total_pay_local":        "Total Pay (Local)",
+        "pay_currency":           "Pay Currency",
     }
     rename.update({col: label for label, col in PEOPLE_MONEY_METRICS.items()})
     out = df.rename(columns=rename)
@@ -6640,6 +6690,10 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
     for col in money_present:
         out[col] = out[col].apply(
             lambda v: f"${v:,.0f}" if pd.notna(v) else "")
+    # Yahoo pay as filed, in its own currency — no $ sign; Total Pay is the USD figure.
+    if "Total Pay (Local)" in out.columns:
+        out["Total Pay (Local)"] = out["Total Pay (Local)"].apply(
+            lambda v: f"{v:,.0f}" if pd.notna(v) else "")
 
     # Age / Year / Filing Year / Confidence: integers, blank when missing.
     for col in ("Age", "Year", "Filing Year", "Confidence"):
@@ -6647,7 +6701,7 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = out[col].apply(
                 lambda v: "" if pd.isna(v) else str(int(v)))
 
-    for col in ("Executive Name","Email","Title", "Role", "Source",
+    for col in ("Executive Name", "Title", "Role", "Source", "Pay Currency",
                 "Filing Form", "Source Filing", "Company", "Industry", "Country of Incorporation"):
         if col in out.columns:
             # astype(object) FIRST. Role / Source / Filing Form are categorical
@@ -6660,12 +6714,11 @@ def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
 
     ordered = [c for c in PEOPLE_DISPLAY_COLUMNS if c in out.columns]
     # Drop fully-empty optional columns so the grid never shows a column of
-    # blanks. Email is deliberately NOT in that list: it ships visible and
-    # empty until coreiq_people_contacts exists, so the gap is obvious rather
-    # than silent, and nothing has to change in the UI when the data lands.
+    # blanks (a SEC-only screen has no local pay or currency).
     keep = []
     for col in ordered:
-        if col in ("Country of Incorporation", "Industry", "Source Filing") and \
+        if col in ("Country of Incorporation", "Industry", "Source Filing",
+                   "Total Pay (Local)", "Pay Currency") and \
                 not out[col].astype(str).str.strip().ne("").any():
             continue
         keep.append(col)

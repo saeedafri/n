@@ -65,6 +65,27 @@ _FORMER_REGEX = re.compile(r"\bformer\b", re.I)
 # Table ("Richard A. Galanti 8", "Fabrizio Freda ( 1 )", "Jeffrey Davis \ufeff").
 _NAME_ZERO_WIDTH = re.compile(r"[\u200b-\u200f\ufeff]")
 _NAME_FOOTNOTE = re.compile(r"\s*(\(\s*\d+\s*\)|\[\s*\d+\s*\]|\d{1,2})\s*$")
+_NAME_TRAILING_MARKS = re.compile(r"[\s*\u2013\u2014-]+$")
+
+# Title words the extractor glues AFTER a name: "Brian T. Olsavsky SVP and",
+# "Franck J. Moison Retired", "Martin P. Waters CEO/President". Each spelling
+# became its own grid row next to the clean one.
+_NAME_TITLE_WORDS = {
+    "svp", "sevp", "evp", "vp", "and", "&", "ceo", "cfo", "coo", "president",
+    "retired", "former", "division", "enterprise", "sector", "corporate",
+    "special", "strategic", "technical", "advisor", "founder", "chief",
+    "officer", "executive", "chairman",
+}
+# Never part of WHO someone is. Yahoo prefixes every officer with an honorific,
+# so first-token keys read "Mr." as the first name and merged Bernard Arnault
+# with his three sons ('mr|arnault').
+_NAME_HONORIFICS = {"mr", "mrs", "ms", "miss", "mx", "dr", "prof", "sir", "dame"}
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "phd", "ph", "md", "cpa", "mba", "esq"}
+
+
+def _is_title_token(token: str) -> bool:
+    word = token.lower().strip(".,*()\u2013\u2014-")
+    return not word or all(part in _NAME_TITLE_WORDS for part in word.split("/") if part)
 
 
 def clean_person_name(name):
@@ -81,22 +102,35 @@ def clean_person_name(name):
         if stripped == text or not stripped:
             break
         text = stripped
-    return re.sub(r"\s+", " ", text).strip(" ,;.")
+    text = re.sub(r"\s+", " ", text).strip(" ,;.")
+    tokens = text.split(" ")
+    # A "name" made only of title words ("Technical Advisor") is left alone —
+    # emptying it would merge unrelated rows.
+    if not all(_is_title_token(t) for t in tokens):
+        while len(tokens) > 1 and _is_title_token(tokens[-1]):
+            tokens.pop()
+    return _NAME_TRAILING_MARKS.sub("", " ".join(tokens)).strip(" ,;.")
 
 
 def person_key(name):
-    """First + last name token, for matching one person across spellings.
+    """Every full name word, for matching one person across spellings.
 
     "Mark D. Papermaster" and "Mark Papermaster" are one person filed two ways;
     single-letter tokens (middle initials) are dropped so both collapse to
-    ("mark", "papermaster"). Measured on STG: 176 (ticker, year) groups held one
+    "mark|papermaster". Measured on STG: 176 (ticker, year) groups held one
     person under more than one spelling, 363 rows, 5.7% of the SEC side.
+
+    Full middle names are KEPT: first + last alone merged "See Long Soon" with
+    "See Beng Soon" (two directors of one company). Spellings that differ by a
+    whole word are matched by `_merge_name_variants` on equal pay instead.
+
+    Honorifics and generational / degree suffixes are dropped too, so
+    "Mr. Tae-Moon Roh Ph.D." keys as tae-moon|roh, not mr|ph.
     """
-    tokens = [t for t in re.split(r"[\s.]+", clean_person_name(name).lower())
-              if len(t) > 1]
-    if not tokens:
-        return ""
-    return f"{tokens[0]}|{tokens[-1]}"
+    tokens = [t for t in (re.sub(r"[^\w'-]", "", t)
+                          for t in re.split(r"[\s.]+", clean_person_name(name).lower()))
+              if len(t) > 1 and t not in _NAME_HONORIFICS and t not in _NAME_SUFFIXES]
+    return "|".join(tokens)
 
 
 def classify_role(title: Optional[str]) -> str:
@@ -143,6 +177,27 @@ def _to_float(val: Any) -> Optional[float]:
             return None
 
 
+# A Summary Compensation Table amount as printed: thousands separators
+# (including the typographic apostrophe one proxy uses), optionally negative in
+# parentheses. Plain 4-digit numbers are years, and "(3)" is a footnote.
+_ROW_AMOUNT = re.compile(r"(\()?\s*\$?\s*(\d{1,3}(?:[,\u2019']\d{3})+)\s*(\))?")
+
+
+def last_row_amount(raw_row: Optional[str]) -> Optional[float]:
+    """The last amount in a filed table row — its Total column.
+
+    None when the row ends on a negative (that is a part, never the total) or
+    has no amount at all.
+    """
+    matches = list(_ROW_AMOUNT.finditer(raw_row or ""))
+    if not matches:
+        return None
+    last = matches[-1]
+    if last.group(1) and last.group(3):
+        return None
+    return float(re.sub(r"[,\u2019']", "", last.group(2)))
+
+
 def _to_int(val: Any) -> Optional[int]:
     """Cast a raw DB value to int, treating '' and junk as missing."""
     f = _to_float(val)
@@ -156,7 +211,8 @@ def _to_int(val: Any) -> Optional[int]:
 _SEC_QUERY = """
     SELECT ticker, executive_name, compensation_year, position, form, year,
            salary, bonus, stock_awards, option_awards, non_equity_incentive,
-           all_other_compensation, total_compensation, blob_name, confidence_score
+           all_other_compensation, total_compensation, blob_name, confidence_score,
+           raw_row
     FROM coreiq_executives_compensation
 """
 
@@ -174,59 +230,39 @@ _YF_QUERY = """
     WHERE _rn = 1
 """
 
-# The email source the data team owns. It does not exist yet, so the probe
-# below fails closed to an all-blank Email column rather than erroring.
-# ponytail: no contacts table yet, so Email ships empty. When
-# coreiq_people_contacts lands, this query starts returning rows and nothing
-# else has to change.
-_CONTACTS_QUERY = """
-    SELECT ticker, executive_name, email
-    FROM coreiq_people_contacts
+# Year-end USD rate per currency: ~20 years x 10 currencies = ~200 rows, so the
+# window runs server-side instead of shipping 30k daily rows (cost here is rows
+# fetched, not bytes). Units of to_currency per 1 USD.
+# ponytail: the current year's rate is taken when the frame is built and moves
+# only when the people tables change; fine for pay, which is annual.
+_FX_QUERY = """
+    SELECT to_currency, yr, close
+    FROM (
+        SELECT to_currency, YEAR(day_date) AS yr, close,
+               ROW_NUMBER() OVER (
+                   PARTITION BY to_currency, YEAR(day_date) ORDER BY day_date DESC
+               ) AS _rn
+        FROM coreiq_av_forex_daily
+        WHERE from_currency = 'USD' AND close > 0
+    ) _ranked
+    WHERE _rn = 1
 """
 
 _FRAME_COLUMNS = [
-    "ticker", "executive_name", "email", "title", "role", "is_former", "year",
+    "ticker", "executive_name", "title", "role", "is_former", "year",
     "salary", "bonus", "stock_awards", "option_awards", "non_equity_incentive",
     "all_other_compensation", "total_compensation",
-    "total_pay", "exercised_value", "unexercised_value",
+    "total_pay", "total_pay_local", "pay_currency",
+    "exercised_value", "unexercised_value",
     "age", "year_born",
     "source", "filing_form", "filing_year", "filing_blob", "confidence",
+    # Build-time only: the total as printed at the end of the filed row. Used by
+    # _repair_pay and dropped before the frame is stored.
+    "raw_total",
 ]
 
 
-def _fetch_contacts() -> Dict[tuple, str]:
-    """Return {(ticker, executive_name): email}, empty when no source exists.
-
-    Kept separate and defensive because coreiq_people_contacts is a planned
-    data-team deliverable: a missing table must leave the column blank, not
-    break People Screening.
-    """
-    # Ask information_schema FIRST. Running the SELECT and catching the failure
-    # works, but db_manager logs a STRUCTURED_ERROR before raising, so every
-    # cache build wrote an ERROR line for a table that is simply not built yet —
-    # noise that looks like a real fault to whoever reads the log.
-    try:
-        exists = db_manager.execute_query_readonly(
-            "SELECT 1 AS present FROM information_schema.tables "
-            "WHERE table_schema = DATABASE() AND table_name = 'coreiq_people_contacts' "
-            "LIMIT 1"
-        )
-        if not exists:
-            return {}
-        rows = db_manager.execute_query_readonly(_CONTACTS_QUERY)
-    except Exception:
-        return {}
-    out = {}
-    for r in rows or []:
-        tk = (r.get("ticker") or "").strip()
-        nm = (r.get("executive_name") or "").strip()
-        em = (r.get("email") or "").strip()
-        if tk and nm and em:
-            out[(tk, nm.casefold())] = em
-    return out
-
-
-def _sec_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List[dict]:
+def _sec_records(rows: List[Dict[str, Any]]) -> List[dict]:
     """Map SEC proxy rows onto the unified people schema."""
     out = []
     for r in rows:
@@ -236,7 +272,6 @@ def _sec_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List
         out.append({
             "ticker":                 ticker,
             "executive_name":         name,
-            "email":                  contacts.get((ticker, name.casefold()), ""),
             "title":                  title,
             "role":                   classify_role(title),
             "is_former":              is_former_title(title),
@@ -249,6 +284,8 @@ def _sec_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List
             "all_other_compensation": _to_float(r.get("all_other_compensation")),
             "total_compensation":     _to_float(r.get("total_compensation")),
             "total_pay":              None,
+            "total_pay_local":        None,
+            "pay_currency":           "",
             "exercised_value":        None,
             "unexercised_value":      None,
             "age":                    None,
@@ -258,12 +295,34 @@ def _sec_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List
             "filing_year":            _to_int(r.get("year")),
             "filing_blob":            (r.get("blob_name") or "").strip(),
             "confidence":             _to_int(r.get("confidence_score")),
+            "raw_total":              last_row_amount(r.get("raw_row")),
         })
     return out
 
 
-def _yf_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List[dict]:
+def _usd_rate(fx: Dict[str, Dict[int, float]], currency: str, year: Optional[int]) -> Optional[float]:
+    """Units of `currency` per 1 USD at the end of `year` (latest year on file
+    at or before it). None when the currency has no rate on file (MYR, SGD)."""
+    if currency == "USD":
+        return 1.0
+    by_year = fx.get(currency) or {}
+    usable = [y for y in by_year if year is None or y <= year]
+    return by_year[max(usable)] if usable else None
+
+
+def _yf_money(value: Any) -> Optional[float]:
+    """Yahoo sends 0 for a value it does not have, so 0 is treated as missing."""
+    f = _to_float(value)
+    return f if f else None
+
+
+def _yf_records(rows: List[Dict[str, Any]], fx: Dict[str, Dict[int, float]]) -> List[dict]:
     """Map YF companyOfficers onto the unified people schema.
+
+    Yahoo reports pay in the company's own currency (info.financialCurrency):
+    Samsung's 5,099,000,000 is won, not dollars. `total_pay` is converted to USD
+    so it sits beside SEC pay and filters in $mm; the original figure and its
+    currency are kept in `total_pay_local` / `pay_currency`.
 
     Officers with no totalPay are KEPT. The previous implementation skipped
     them, which dropped 603 of 916 officers (66%) even though they carry a
@@ -277,9 +336,11 @@ def _yf_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List[
         if not payload:
             continue
         try:
-            officers = (json.loads(payload).get("info") or {}).get("companyOfficers") or []
+            info = json.loads(payload).get("info") or {}
+            officers = info.get("companyOfficers") or []
         except (ValueError, TypeError, AttributeError):
             continue
+        currency = (info.get("financialCurrency") or "").strip().upper()
         for o in officers:
             if not isinstance(o, dict):
                 continue
@@ -287,14 +348,20 @@ def _yf_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List[
             title = (o.get("title") or "").strip()
             if not name and not title:
                 continue
+            year = _to_int(o.get("fiscalYear"))
+            rate = _usd_rate(fx, currency, year) if currency else None
+
+            def usd(value):
+                return value / rate if value is not None and rate else None
+
+            pay_local = _yf_money(o.get("totalPay"))
             out.append({
                 "ticker":                 ticker,
                 "executive_name":         name,
-                "email":                  contacts.get((ticker, name.casefold()), ""),
                 "title":                  title,
                 "role":                   classify_role(title),
                 "is_former":              is_former_title(title),
-                "year":                   _to_int(o.get("fiscalYear")),
+                "year":                   year,
                 "salary":                 None,
                 "bonus":                  None,
                 "stock_awards":           None,
@@ -302,9 +369,11 @@ def _yf_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List[
                 "non_equity_incentive":   None,
                 "all_other_compensation": None,
                 "total_compensation":     None,
-                "total_pay":              _to_float(o.get("totalPay")),
-                "exercised_value":        _to_float(o.get("exercisedValue")),
-                "unexercised_value":      _to_float(o.get("unexercisedValue")),
+                "total_pay":              usd(pay_local),
+                "total_pay_local":        pay_local,
+                "pay_currency":           currency,
+                "exercised_value":        usd(_yf_money(o.get("exercisedValue"))),
+                "unexercised_value":      usd(_yf_money(o.get("unexercisedValue"))),
                 "age":                    _to_int(o.get("age")),
                 "year_born":              _to_int(o.get("yearBorn")),
                 "source":                 "YFinance",
@@ -312,8 +381,99 @@ def _yf_records(rows: List[Dict[str, Any]], contacts: Dict[tuple, str]) -> List[
                 "filing_year":            None,
                 "filing_blob":            "",
                 "confidence":             None,
+                "raw_total":              None,
             })
     return out
+
+
+# Summary Compensation Table columns, left to right as the proxy prints them.
+_PAY_PARTS = ["salary", "bonus", "stock_awards", "option_awards",
+              "non_equity_incentive", "all_other_compensation"]
+
+
+def _repair_pay(df: pd.DataFrame) -> pd.DataFrame:
+    """Undo the two proxy-extractor faults that are provable from the row itself.
+
+    1. Footnote text read as a pay row: the same number in the total AND two or
+       more pay columns (Zebra "Cristen Kogl" $11,100,484 everywhere). Not a
+       person-year at all, so the row is dropped.
+    2. A smeared value: when a proxy leaves a cell blank without a dash, the
+       extractor slides the next value left into it, so one figure sits in two
+       adjacent columns and the parts overshoot the total (Apple 2023: the
+       $46,970,283 stock award is also stored as Bonus). The rightmost copy is
+       the real column; the others are cleared — only when that makes the row
+       add up.
+    3. A subtotal read as the total: PepsiCo prints non-equity pay as two
+       sub-columns plus their sum, and the extractor took that sum ($6,766,500
+       for Ramon Laguarta 2024) as the total. The total is the LAST figure of
+       the filed row ($28,814,759); it replaces the stored one only when it
+       makes the row add up and the stored one does not.
+
+    Adds `_sane`: the total is at least every single part and the parts do not
+    overshoot it by more than 5% (a NEGATIVE pension change, which the table has
+    no column for, legitimately does — Caleres 2022, -$51,306).
+    """
+    parts = df[_PAY_PARTS]
+    total = df["total_compensation"]
+    footnote = parts.eq(total, axis=0).sum(axis=1) >= 2
+    df = df[~footnote].copy()
+    total = df["total_compensation"]
+
+    over = df[_PAY_PARTS].sum(axis=1, min_count=1) > total + 1000
+    for idx in df.index[over]:
+        row = df.loc[idx, _PAY_PARTS]
+        repaired = row.copy()
+        for value, cols in row.dropna().groupby(row.dropna()).groups.items():
+            if value > 0 and len(cols) > 1:
+                repaired[list(cols)[:-1]] = None
+        if repaired.sum(min_count=1) <= df.at[idx, "total_compensation"] + 1000:
+            df.loc[idx, _PAY_PARTS] = repaired.astype(float)
+
+    def adds_up(total):
+        parts = df[_PAY_PARTS]
+        return (total >= parts.max(axis=1).fillna(0)) & (parts.sum(axis=1) <= total * 1.05 + 1000)
+
+    total = df["total_compensation"]
+    rescued = ~adds_up(total) & total.notna() & adds_up(df["raw_total"])
+    df.loc[rescued, "total_compensation"] = df.loc[rescued, "raw_total"]
+    df["_sane"] = (df["total_compensation"].isna() | adds_up(df["total_compensation"])).astype(int)
+    return df.drop(columns=["raw_total"])
+
+
+def _merge_name_variants(df: pd.DataFrame) -> pd.Series:
+    """Map every row to one person id per (ticker, source), across spellings.
+
+    Same key ("Mark D. Papermaster" / "Mark Papermaster") is one person. So is a
+    pair filed in the same year on the SAME pay that shares a first name or a
+    surname: nicknames (Mike / R. Michael Mohan, Bob / Robert W. Eddy), married
+    names (Karalyn Smith / Karalyn Yearout), split surnames (Benno Dor er).
+    Checked on all 45 such pairs in STG — every one is one person.
+
+    Equal pay ALONE is not enough: Apple pays Sewell, Riccio and Cue the same,
+    Amazon pays Olsavsky and Zapolsky the same. They share no name, so they stay
+    apart; Alex and Mike Dillard share a surname but not their pay.
+    """
+    keys = df["executive_name"].map(person_key)
+    parent = {}
+
+    def find(k):
+        while parent.get(k, k) != k:
+            k = parent[k]
+        return k
+
+    pay = df["total_compensation"].fillna(df["total_pay"]).round(-3)
+    scope = df["ticker"].astype(str) + "|" + df["source"].astype(str)
+    node = scope + "#" + keys
+    bucket = pd.DataFrame({"node": node, "key": keys, "scope": scope,
+                           "year": df["year"], "pay": pay})
+    bucket = bucket[bucket["pay"].gt(0) & keys.ne("")].drop_duplicates(["node", "year", "pay"])
+    for _, grp in bucket.groupby(["scope", "year", "pay"]):
+        pairs = list(zip(grp["node"], grp["key"].str.split("|")))
+        for i, (node_a, words_a) in enumerate(pairs):
+            for node_b, words_b in pairs[i + 1:]:
+                if words_a[0] == words_b[0] or words_a[-1] == words_b[-1]:
+                    parent[find(node_b)] = find(node_a)
+    return node.map(find)
 
 
 def _collapse_restatements(df: pd.DataFrame) -> pd.DataFrame:
@@ -325,33 +485,36 @@ def _collapse_restatements(df: pd.DataFrame) -> pd.DataFrame:
     6,418 real person-years: 2.2x on average, up to 6x for one executive-year.
     Every one of those copies was being rendered as its own grid row.
 
-    The copies agree on money (they disagree in 386 of 6,418 groups, and then
-    only by rounding — 26,248,995 vs 26,248,997), but disagree on `position` in
-    2,480 groups: later proxies abbreviate the title and eventually prefix it
-    with "Former". The contemporaneous filing is therefore the one to keep —
-    it carries the fullest title and describes the role as it was during the
-    year being reported, so `role` and `is_former` stay true to that year.
+    The copies disagree on `position` in 2,480 groups — later proxies abbreviate
+    the title and eventually prefix it with "Former" — and in 338 groups on the
+    total by more than $1,000, because one copy was mis-parsed. So:
 
     Preference order, best first:
-      1. a row that actually has a position (511 rows have none at all)
-      2. higher confidence_score (the extractor's own quality signal)
-      3. DEF 14A over PRE 14A — final over preliminary
-      4. earliest filing year — the original disclosure, not a later abbreviation
+      1. a copy whose pay adds up (`_repair_pay`) — 99 person-years had a broken
+         copy AND a clean one, and the broken one was winning
+      2. a row that actually has a position (511 rows have none at all)
+      3. higher confidence_score (the extractor's own quality signal)
+      4. the larger total, to $1,000 — every other disagreement is a truncation
+         (ACI 2020: Robert Dimond $7,146,900 vs "Robert B. Dimond" $6,900)
+      5. DEF 14A over PRE 14A — final over preliminary
+      6. earliest filing year — the original disclosure, not a later abbreviation
+
+    When no copy adds up, the total is withheld (blank) rather than shown: a
+    total below the salary is a mis-read, not a fact. The parts are kept.
     """
     if df.empty:
         return df
 
     before = len(df)
+    df = _repair_pay(df)
     _pay = df["total_compensation"].fillna(df["total_pay"])
     ranked = df.assign(
-        _person=df["executive_name"].map(person_key),
+        _person=_merge_name_variants(df),
         _has_title=df["title"].astype(str).str.strip().ne("").astype(int),
         _confidence=pd.to_numeric(df["confidence"], errors="coerce").fillna(-1),
         # Rounded to the nearest $1,000 so the ±$2 differences between
         # restatements TIE here and the filing-year preference below still
-        # picks the title. Only a materially different figure breaks the tie,
-        # which is what a truncated parse looks like: ACI 2020 filed Robert
-        # Dimond at $7,146,900 and "Robert B. Dimond" at $6,900.
+        # picks the title.
         # ponytail: largest-wins heuristic; every observed disagreement was a
         # truncation, never an inflation. Revisit if that stops holding.
         _pay_rank=pd.to_numeric(_pay, errors="coerce").fillna(-1).round(-3),
@@ -360,18 +523,36 @@ def _collapse_restatements(df: pd.DataFrame) -> pd.DataFrame:
         # Longer spelling = the one carrying the middle initial.
         _name_len=df["executive_name"].astype(str).str.len(),
     ).sort_values(
-        ["_has_title", "_confidence", "_pay_rank", "_is_def", "_filing_year", "_name_len"],
-        ascending=[False, False, False, False, True, False],
+        ["_sane", "_has_title", "_confidence", "_pay_rank", "_is_def", "_filing_year", "_name_len"],
+        ascending=[False, False, False, False, False, True, False],
         kind="mergesort",
     )
 
-    # Key on the NORMALIZED person, not the raw string: "Mark D. Papermaster"
-    # and "Mark Papermaster" are one person and were two adjacent grid rows
-    # carrying identical pay.
-    collapsed = ranked.drop_duplicates(
-        subset=["ticker", "_person", "year", "source"], keep="first"
-    ).drop(columns=["_person", "_has_title", "_confidence", "_pay_rank",
-                    "_is_def", "_filing_year", "_name_len"])
+    keys = ["ticker", "_person", "year", "source"]
+    collapsed = ranked.drop_duplicates(subset=keys, keep="first").copy()
+
+    # The copy that adds up can be the one filed without a title; borrow the
+    # title from the best titled copy of the same person-year.
+    titled = ranked[ranked["_has_title"].eq(1)].drop_duplicates(subset=keys)
+    best_title = collapsed[keys].merge(titled[keys + ["title"]], on=keys, how="left")["title"]
+    no_title = collapsed["title"].astype(str).str.strip().eq("").to_numpy() & best_title.notna().to_numpy()
+    if no_title.any():
+        collapsed.loc[no_title, "title"] = best_title[no_title].to_numpy()
+        collapsed.loc[no_title, "role"] = collapsed.loc[no_title, "title"].map(classify_role)
+        collapsed.loc[no_title, "is_former"] = collapsed.loc[no_title, "title"].map(is_former_title)
+
+    collapsed.loc[collapsed["_sane"].eq(0), "total_compensation"] = None
+
+    # One display name per person in every year: the fullest spelling filed.
+    longest = (ranked.assign(_len=ranked["executive_name"].str.len())
+               .sort_values("_len", ascending=False, kind="mergesort")
+               .drop_duplicates(subset=["ticker", "_person", "source"])
+               .set_index(["ticker", "_person", "source"])["executive_name"])
+    collapsed["executive_name"] = longest.reindex(
+        pd.MultiIndex.from_frame(collapsed[["ticker", "_person", "source"]])).to_numpy()
+
+    collapsed = collapsed.drop(columns=["_person", "_sane", "_has_title", "_confidence",
+                                        "_pay_rank", "_is_def", "_filing_year", "_name_len"])
 
     # Preserve the natural reading order rather than the ranking order.
     collapsed = collapsed.sort_values(
@@ -395,8 +576,6 @@ def _build_people_universe() -> pd.DataFrame:
     import time as _time
     t0 = _time.perf_counter()
 
-    contacts = _fetch_contacts()
-
     try:
         sec_rows = db_manager.execute_query_readonly(_SEC_QUERY) or []
     except Exception as exc:
@@ -413,7 +592,17 @@ def _build_people_universe() -> pd.DataFrame:
                              operation="fetch_yf_officers")
         yf_rows = []
 
-    records = _sec_records(sec_rows, contacts) + _yf_records(yf_rows, contacts)
+    fx: Dict[str, Dict[int, float]] = {}
+    try:
+        for r in db_manager.execute_query_readonly(_FX_QUERY) or []:
+            fx.setdefault(str(r["to_currency"]).upper(), {})[int(r["yr"])] = float(r["close"])
+    except Exception as exc:
+        # No rates -> non-USD Yahoo pay stays local-only; never a crash.
+        log_structured_error(exc, page="people_service",
+                             component="_build_people_universe",
+                             operation="fetch_fx_rates")
+
+    records = _sec_records(sec_rows) + _yf_records(yf_rows, fx)
 
     df = pd.DataFrame(records, columns=_FRAME_COLUMNS)
 
@@ -429,9 +618,10 @@ def _build_people_universe() -> pd.DataFrame:
     df["age"] = pd.to_numeric(df["age"], errors="coerce").astype("Int64")
     for col in PEOPLE_MONEY_METRICS.values():
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    for col in ("ticker", "role", "source", "filing_form"):
+    df["total_pay_local"] = pd.to_numeric(df["total_pay_local"], errors="coerce")
+    for col in ("ticker", "role", "source", "filing_form", "pay_currency"):
         df[col] = df[col].fillna("").astype("category")
-    for col in ("executive_name", "email", "title", "filing_blob"):
+    for col in ("executive_name", "title", "filing_blob"):
         df[col] = df[col].fillna("").astype(str)
 
     try:
@@ -474,7 +664,10 @@ def get_people_universe() -> pd.DataFrame:
         },
     ]
     return materialized_or_build(
-        "people_universe", _build_people_universe, sources,
+        # _v2: the frame's columns and dedupe changed (2026-10-07). The disk copy
+        # is keyed on the source tables only, so without a new name a deploy
+        # would keep serving the old snapshot.
+        "people_universe_v2", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
 
