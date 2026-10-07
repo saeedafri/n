@@ -6091,26 +6091,42 @@ def _apply_generic_year_range(
     unit = mi.get("unit") or ""
     stmt = criterion.get("statement")
 
-    out = working_df.copy()
-    col_names: List[str] = []
-    for y in years:
-        col = f"{label} ({unit}) [FY {y}]" if unit else f"{label} [FY {y}]"
+    def _col_for(y: int) -> str:
+        return f"{label} ({unit}) [FY {y}]" if unit else f"{label} [FY {y}]"
+
+    def _one_year(y: int):
         per_year = {
             **criterion,
             "year": y,
-            "display_col": col,
+            "display_col": _col_for(y),
             # Display-only: never let a per-year call filter the universe.
             "annotate_only": True,
         }
         per_year.pop("year_range", None)
-        try:
-            res, _dbg = single_year_fn(per_year, working_df)
-        except Exception as exc:
-            log_error(f"[SCREENING] {stmt} year-range FY{y} failed: {exc}")
-            continue
-        if col in res.columns:
-            mapped = dict(zip(res["ticker"], res[col]))
-            out[col] = out["ticker"].map(mapped)
+        return single_year_fn(per_year, working_df)
+
+    # The years are independent queries, so run them together. Serially, a
+    # 3-year Ratios range took 12.0s on STG — the tabular path spends ~3.2s per
+    # ticker-fetch pass and paid it once per year. One pass per year in parallel
+    # brings it back to roughly the cost of a single year.
+    out = working_df.copy()
+    col_names: List[str] = []
+    results: Dict[int, pd.DataFrame] = {}
+    if years:
+        with ThreadPoolExecutor(max_workers=min(len(years), 6)) as pool:
+            futures = {pool.submit(_one_year, y): y for y in years}
+            for fut in as_completed(futures):
+                y = futures[fut]
+                try:
+                    results[y] = fut.result()[0]
+                except Exception as exc:
+                    log_error(f"[SCREENING] {stmt} year-range FY{y} failed: {exc}")
+
+    for y in years:                      # keep chronological column order
+        col = _col_for(y)
+        res = results.get(y)
+        if res is not None and col in res.columns:
+            out[col] = out["ticker"].map(dict(zip(res["ticker"], res[col])))
             col_names.append(col)
 
     criterion["year_cols"] = col_names

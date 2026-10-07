@@ -640,7 +640,10 @@ _MODE_CRITERIA = {
     # Country of Incorporation stay so events can still be scoped to a sector or
     # a geography.
     "Key Devs":  ("industry", "geography", "keydevs"),
-    "People":    ("industry", "geography", "financial", "people"),
+    # People screens executives, not company financials — same reasoning as
+    # Key Devs. Industry and Country of Incorporation stay so a compensation
+    # screen can still be scoped to a sector or a geography.
+    "People":    ("industry", "geography", "people"),
 }
 
 # Criterion types that are children of another criterion (added by a parent

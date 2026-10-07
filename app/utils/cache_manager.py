@@ -372,6 +372,39 @@ def _warm_keydevs_screening() -> None:
     get_keydev_subtypes_by_category()
 
 
+def _warm_ratios_screening() -> None:
+    """Pre-fetch the per-ticker Ratios payload for the screening universe.
+
+    Ratios has no bulk SQL path — `_try_bulk_tabular_values` returns None for
+    anything that is not Key Stats — so a Ratios criterion falls back to one
+    query per ticker. Measured on STG: 10.4s cold for 558 companies, 89ms once
+    warm. `RatiosRepository.get_ratios_data` is cached per ticker and returns
+    the WHOLE ratio payload, so warming it once covers every ratio metric for
+    that period, not just the one the first user happens to pick.
+
+    Runs on the warmup thread, so the 10s is paid where nobody is waiting.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from data.repository import RatiosRepository
+    from data.screening_service import get_base_company_universe
+
+    try:
+        tickers = list(get_base_company_universe()["ticker"].values)
+    except Exception:
+        return
+    if not tickers:
+        return
+
+    def _one(tk):
+        try:
+            RatiosRepository.get_ratios_data(tk, None, None, "annual")
+        except Exception:
+            pass
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(_one, tickers))
+
+
 def _warm_people_screening() -> None:
     """Build the People Screening universe here, not on a user's first click.
 
@@ -476,6 +509,7 @@ def _background_warmup_thread():
                 _warm_screening_segment_options,
                 _warm_keydevs_screening,
                 _warm_people_screening,
+                _warm_ratios_screening,
                 _warm_refresh_dialog,
             ):
                 try:
