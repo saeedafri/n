@@ -113,6 +113,17 @@ def test_a_restated_figure_replaces_the_original():
     assert biz["Revenues"]["Snacks"][2021] == 3855.0
 
 
+def test_a_restatement_wins_even_when_its_label_is_worded_differently():
+    # AppLovin's FY2025 10-K restated 2024 to continuing operations and re-cased
+    # "Total Revenue" to "Total revenue".
+    original = {**fact("Advertising", 2_688_993_000, date(2024, 1, 1), date(2024, 12, 31)),
+                "original_label": "Total Revenue", "filing_date": date(2025, 2, 27)}
+    restated = {**fact("Advertising", 1_726_202_000, date(2024, 1, 1), date(2024, 12, 31)),
+                "original_label": "Total revenue", "filing_date": date(2026, 2, 19)}
+    biz, _geo, _tot = Segments._classify_segment_rows([original, restated], [2024])
+    assert biz["Revenues"]["Advertising"][2024] == 1726.202
+
+
 def test_a_reorganised_year_shows_only_the_newest_filings_segments():
     # CVS FY2022: the original 10-K split it into Pharmacy Services / Retail-LTC;
     # the FY2023 10-K restated it as Health Services / Pharmacy & Consumer Wellness.
@@ -160,3 +171,58 @@ def test_a_country_beside_its_region_is_withheld():
              "full_dimension_label": None}
     _biz, geo_data, _tot = Segments._classify_segment_rows(rows + [total], [2024])
     assert set(geo_data["Revenues"]) == {"Americas", "Europe", "Asia"}
+
+
+def test_a_rolled_up_region_beside_its_own_part_keeps_its_filed_name():
+    # Amphenol: the workbook maps "Other foreign locations" to Foreign, which
+    # beside China reads as if it included China.
+    geo = {"Revenues": {"United States": {2023: 4405.4}, "China": {2023: 2884.0},
+                        "Foreign": {2023: 5265.3}}}
+    Segments._name_overlaps_as_filed(geo, {"Foreign": {2023: "Other foreign locations"}})
+    assert list(geo["Revenues"]) == ["United States", "China", "Other foreign locations"]
+
+
+def test_only_the_years_filed_as_a_residual_are_renamed():
+    # Cadence: "Other Americas" beside the United States in 2014, the whole
+    # "Americas" in 2023.
+    geo = {"Revenues": {"United States": {2014: 696.6, 2023: None},
+                        "Americas": {2014: 23.4, 2023: 1759.8}}}
+    Segments._name_overlaps_as_filed(geo, {"Americas": {2014: "Other Americas", 2023: "Americas"}})
+    assert geo["Revenues"]["Americas"] == {2014: None, 2023: 1759.8}
+    assert geo["Revenues"]["Other Americas"] == {2014: 23.4, 2023: None}
+
+
+def test_a_rolled_up_region_with_nothing_inside_it_keeps_the_business_name():
+    geo = {"Revenues": {"United States": {2023: 10.0}, "Europe": {2023: 5.0}}}
+    Segments._name_overlaps_as_filed(geo, {"Europe": {2023: "Other Europe"}})
+    assert list(geo["Revenues"]) == ["United States", "Europe"]
+
+
+def test_two_places_one_filing_lists_apart_never_share_a_row():
+    # ADM files the Cayman Islands and the United Kingdom side by side; the
+    # business workbook maps both to "United Kingdom".
+    geo_axis = "srt:StatementGeographicalAxis"
+    rows = [fact(name, value, date(2023, 1, 1), date(2023, 12, 31), axis=geo_axis, heading="Geographical")
+            for name, value in (("United States", 38_783e6), ("Cayman Islands", 7_646e6),
+                                ("United Kingdom", 2_219e6))]
+    _biz, geo, _tot = Segments._classify_segment_rows(rows, [2023])
+    assert geo["Revenues"]["Cayman Islands"][2023] == 7646.0
+    assert geo["Revenues"]["United Kingdom"][2023] == 2219.0
+
+
+def test_a_revenue_member_carrying_its_cost_table_label_is_named_by_its_stream():
+    # C3.ai: subscription revenue arrives labelled "Cost of subscription".
+    rows = [fact("Cost of subscription", 227_090_000, date(2025, 5, 1), date(2026, 4, 30),
+                 axis=PRODUCTS, heading="Product and Service")]
+    biz, _geo, _tot = Segments._classify_segment_rows(rows, [2026])
+    assert list(biz["Revenues"]) == ["Subscription"]
+
+
+def test_the_xbrl_element_decides_the_metric_over_label_words():
+    # Campbell's capital expenditure is labelled "Purchases of plant assets".
+    capex = {**fact("Meals & Beverages", 156_000_000, date(2018, 7, 30), date(2019, 7, 28)),
+             "concept": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+             "original_label": "Purchases of plant assets"}
+    biz, _geo, _tot = Segments._classify_segment_rows([capex], [2019])
+    assert "Assets" not in biz
+    assert biz["Capital Expenditure"]["Meals & Beverages"][2019] == 156.0

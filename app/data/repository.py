@@ -10351,8 +10351,17 @@ class SegmentDataRepository:
         # Reconciling Item, Excluding Corporate Nonsegment") and roll-ups ("Total
         # Wholesale", "Total Segment") are not segments either. The prefix needs the
         # trailing space so a company whose name starts with "Total" survives.
-        if "reconciling item" in low or low.startswith("total "):
+        if "reconciling item" in low or low.startswith("total ") or SegmentDataRepository._RECONCILING_LINE.search(low):
             return None
+        # A member reused across tables can arrive with its cost-table label:
+        # C3.ai's subscription REVENUE (us-gaap:LicenseAndServiceMember) reads
+        # "Cost of subscription", Workday's "Costs of subscription services",
+        # Palo Alto's "Cost of product revenue". The value is the revenue; the
+        # name is what follows "cost of". A bare "Cost of sales" names no
+        # segment at all and is left as filed for the data team.
+        stripped = SegmentDataRepository._COST_LABEL.sub('', member_raw.strip())
+        if stripped != member_raw.strip() and not SegmentDataRepository._GENERIC_LINE.match(stripped):
+            member_raw = stripped
         # Continuing vs discontinued operations splits the company by status, not
         # by business. us-gaap:StatementOperatingActivitiesSegmentAxis carries it
         # for 41 filers, and Campbell's listed "Continuing Operations" and
@@ -10391,6 +10400,7 @@ class SegmentDataRepository:
         if section == "geo":
             if is_geo_excluded_label(member):
                 return None
+            row['_filed_member'] = member      # see _name_overlaps_as_filed
             member = canonicalize_geo_label(member)
         elif (row.get('dimension') or '').strip() in segment_axes:
             # A place on a real segment axis IS the filer's segment. McDonald's
@@ -10417,6 +10427,10 @@ class SegmentDataRepository:
             # belong in the Business Segments list, so it goes.
             return None
         return section, member
+
+    _RECONCILING_LINE = re.compile(r'included in segment|^restructuring and other|\ballocated to\b')
+    _COST_LABEL = re.compile(r'^costs? of\s+', re.IGNORECASE)
+    _GENERIC_LINE = re.compile(r'^(sales|revenues?|goods sold|products sold|net sales)$', re.IGNORECASE)
 
     _OPERATIONS_STATUS = re.compile(
         r'(continuing|discontinued) operations|held[- ]for[- ]sale|^total operations$')
@@ -10479,7 +10493,7 @@ class SegmentDataRepository:
                      else ((r.get('dimension') or '').strip(), member))
             label = r.get('original_label') or ''
             metric = next((name for name, cfg in SEGMENT_METRIC_GROUPS.items()
-                           if SegmentDataRepository._matches_metric(label, cfg)), None)
+                           if SegmentDataRepository._matches_metric(label, cfg, r.get('concept') or '')), None)
             if metric is None:
                 return None
             # Declared and undeclared elements are ranked apart, as the member
@@ -10562,7 +10576,7 @@ class SegmentDataRepository:
             section, member = classified
             key = (section, SegmentDataRepository._member_key(member))
             metric = next((name for name, cfg in SEGMENT_METRIC_GROUPS.items()
-                           if SegmentDataRepository._matches_metric(row.get('original_label') or '', cfg)),
+                           if SegmentDataRepository._matches_metric(row.get('original_label') or '', cfg, row.get('concept') or '')),
                           None)
             if metric and row.get('numeric_value') is not None:
                 cell = SegmentDataRepository._get_row_year(row)
@@ -10845,6 +10859,75 @@ class SegmentDataRepository:
                     del data[metric_name]
 
     @staticmethod
+    def _colliding_geo_names(rows, geo_member_set: set, segment_axes: frozenset) -> Set[str]:
+        """Filed geographic names that the business team's map would merge with
+        another place the SAME filing reports separately. ADM's 10-Ks list the
+        Cayman Islands and the United Kingdom side by side, the map names both
+        "United Kingdom", and first-wins kept one figure and dropped the other.
+        Two names are one place when they carry the same number; a different
+        number for the same period and element proves two places, and those
+        names are shown as filed."""
+        seen: Dict[Tuple, Dict[str, Tuple[str, float]]] = {}
+        for row in rows:
+            if row.get('_is_ndim') or row.get('numeric_value') is None:
+                continue
+            classified = SegmentDataRepository._classify_member(row, geo_member_set, segment_axes)
+            if not classified or classified[0] != "geo":
+                continue
+            filed = row.get('_filed_member') or classified[1]
+            slot = (row.get('filing_date'), SegmentDataRepository._period_key(row),
+                    row.get('concept'), classified[1])
+            seen.setdefault(slot, {})[SegmentDataRepository._member_key(filed)] = (
+                filed, round(float(row['numeric_value'])))
+        colliding: Set[str] = set()
+        for names in seen.values():
+            if len({value for _, value in names.values()}) > 1:
+                colliding.update(name for name, _ in names.values())
+        return colliding
+
+    @staticmethod
+    def _name_overlaps_as_filed(geo_data, filed_names: Dict[str, Dict[Any, str]]) -> None:
+        """A business-team name that contains another row of the same column goes
+        back to the name the company filed. The workbook rolls residuals up —
+        "Other foreign locations" → Foreign, "Other Europe" → Europe, "Central
+        America" → Latin America — which reads right on its own and wrong beside
+        a sibling: Amphenol's "Foreign" next to its China row, DXC's "Europe"
+        next to the United Kingdom, Fresh Del Monte's "Latin America" next to
+        South America.
+
+        Only the years filed under another name move. Cadence filed "Other
+        Americas" beside the United States in 2014 and the whole "Americas" in
+        2023; those are two rows, and the 2023 one keeps the canonical name.
+        The moved years take the latest filed spelling, so a filer that reworded
+        its residual still reads as one row."""
+        key = SegmentDataRepository._member_key
+        moves: Dict[str, Tuple[str, Set[Any]]] = {}
+        for members in geo_data.values():
+            for name, by_period in members.items():
+                node = SegmentDataRepository._geo_node(name)
+                filed = filed_names.get(name, {})
+                moved = {p for p, f in filed.items() if key(f) != key(name)}
+                if not node or not moved or name in moves:
+                    continue
+                periods = {p for p, v in by_period.items() if v is not None}
+                if any(node in SegmentDataRepository._geo_ancestors(other)
+                       for other, by in members.items()
+                       if other != name and any(by.get(p) is not None for p in periods)):
+                    moves[name] = (filed[max(moved)], moved)
+        for metric_name, members in geo_data.items():
+            rebuilt: Dict[str, Dict[Any, Optional[float]]] = {}
+            for name, by_period in members.items():
+                new_name, moved = moves.get(name, (None, set()))
+                if not new_name or new_name in members:
+                    rebuilt[name] = by_period    # the filed name is a row already
+                    continue
+                rest = {p: (None if p in moved else v) for p, v in by_period.items()}
+                if any(v is not None for v in rest.values()):
+                    rebuilt[name] = rest
+                rebuilt[new_name] = {p: (v if p in moved else None) for p, v in by_period.items()}
+            geo_data[metric_name] = rebuilt
+
+    @staticmethod
     def _aggregates_to_drop(section: str, values: Dict[str, float], over: float,
                             tol: float) -> Set[str]:
         total = sum(values.values()) - over
@@ -11034,14 +11117,24 @@ class SegmentDataRepository:
         return concept.rsplit(':', 1)[-1] in cfg["edgar_concepts"]
 
     @staticmethod
-    def _matches_metric(label: str, metric_cfg: dict) -> bool:
-        """Return True if label matches the include keywords but not exclude."""
+    def _matches_metric(label: str, metric_cfg: dict, concept: str = '') -> bool:
+        """True if the fact belongs to this metric. The XBRL element decides when
+        SEGMENT_METRIC_GROUPS declares it: Campbell's capital expenditure
+        (PaymentsToAcquirePropertyPlantAndEquipment) is labelled "Purchases of
+        plant assets", and the word "assets" filed it under Assets. An element
+        declared for another metric never matches; one declared for this metric
+        needs no keyword. The label's exclusions apply either way, and an
+        undeclared element is judged by its label alone."""
+        from utils.constants import SEGMENT_METRIC_GROUPS
         low = label.lower()
-        if not any(kw in low for kw in metric_cfg["db_include"]):
-            return False
         if any(kw in low for kw in metric_cfg["db_exclude"]):
             return False
-        return True
+        element = (concept or '').rsplit(':', 1)[-1]
+        if element in metric_cfg["edgar_concepts"]:
+            return True
+        if element and any(element in cfg["edgar_concepts"] for cfg in SEGMENT_METRIC_GROUPS.values()):
+            return False
+        return any(kw in low for kw in metric_cfg["db_include"])
 
     @staticmethod
     def _normalize_heading(raw_heading: str) -> str:
@@ -11236,7 +11329,7 @@ class SegmentDataRepository:
 
         def metric(r):
             return next((n for n, cfg in SEGMENT_METRIC_GROUPS.items()
-                         if SegmentDataRepository._matches_metric(r.get('original_label') or '', cfg)), None)
+                         if SegmentDataRepository._matches_metric(r.get('original_label') or '', cfg, r.get('concept') or '')), None)
 
         def parent_of(r):
             label = r.get('full_dimension_label') or ''
@@ -11294,13 +11387,16 @@ class SegmentDataRepository:
         group, so first-wins keeps a restated figure. Sorting by
         report_fiscal_year — the filing's year, not the period's — put Campbell's
         original FY2021 Snacks (3,944) ahead of the 3,855 its next 10-K restated
-        it to, and the stale number won."""
+        it to, and the stale number won. The filing date sorts ahead of the labels:
+        AppLovin's FY2025 10-K re-cased "Total Revenue" to "Total revenue", which
+        put its 2024 restatement (US 1,726) in a group of its own, behind the
+        original 2,689."""
         def key(r):
             filed = r.get('filing_date')
             return (r.get('period_end') or r.get('period_instant') or date.min,
+                    -filed.toordinal() if hasattr(filed, 'toordinal') else 0,
                     r.get('full_dimension_label') or '',
-                    r.get('original_label') or '',
-                    -filed.toordinal() if hasattr(filed, 'toordinal') else 0)
+                    r.get('original_label') or '')
         return sorted(rows, key=key)
 
     @staticmethod
@@ -11723,6 +11819,8 @@ class SegmentDataRepository:
         # Slots already filled from an element this metric declares (see below).
         declared_values: Set[Tuple] = set()
         segment_axes = SegmentDataRepository._segment_axes(filtered, geo_member_set)
+        colliding_geo = SegmentDataRepository._colliding_geo_names(filtered, geo_member_set, segment_axes)
+        filed_geo_names: Dict[str, Dict[Any, str]] = {}
         member_display = SegmentDataRepository._member_display_map(
             filtered, geo_member_set, segment_axes)
         year_ends = SegmentDataRepository._fiscal_year_ends(filtered)
@@ -11746,11 +11844,15 @@ class SegmentDataRepository:
             if classified is None:
                 continue
             section, member = classified
+            if section == "geo" and row.get('_filed_member') in colliding_geo:
+                member = row['_filed_member']
             member = member_display.get(
                 (section, SegmentDataRepository._member_key(member)), member)
+            if section == "geo":     # newest filing first, so the first name is the latest
+                filed_geo_names.setdefault(member, {}).setdefault(row_year, row.get('_filed_member') or member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                if SegmentDataRepository._matches_metric(orig_label, cfg):
+                if SegmentDataRepository._matches_metric(orig_label, cfg, row.get('concept') or ''):
                     target = geo_data if section == "geo" else biz_data
                     if metric_name not in target:
                         target[metric_name] = {}
@@ -11855,6 +11957,7 @@ class SegmentDataRepository:
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
         SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
         SegmentDataRepository._reconcile_with_totals(biz_data, geo_data, metric_totals)
+        SegmentDataRepository._name_overlaps_as_filed(geo_data, filed_geo_names)
 
         return biz_data, geo_data, metric_totals
 
@@ -12156,6 +12259,8 @@ class SegmentDataRepository:
         # carries the rationale).
         declared_values: Set[Tuple] = set()
         segment_axes = SegmentDataRepository._segment_axes(all_rows, geo_member_set)
+        colliding_geo = SegmentDataRepository._colliding_geo_names(all_rows, geo_member_set, segment_axes)
+        filed_geo_names: Dict[str, Dict[Any, str]] = {}
         member_display = SegmentDataRepository._member_display_map(
             all_rows, geo_member_set, segment_axes)
 
@@ -12183,11 +12288,15 @@ class SegmentDataRepository:
             if classified is None:
                 continue
             section, member = classified
+            if section == "geo" and row.get('_filed_member') in colliding_geo:
+                member = row['_filed_member']
             member = member_display.get(
                 (section, SegmentDataRepository._member_key(member)), member)
+            if section == "geo":     # newest filing first, so the first name is the latest
+                filed_geo_names.setdefault(member, {}).setdefault(pkey, row.get('_filed_member') or member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                if SegmentDataRepository._matches_metric(orig_label, cfg):
+                if SegmentDataRepository._matches_metric(orig_label, cfg, row.get('concept') or ''):
                     target = geo_data if section == "geo" else biz_data
                     if metric_name not in target:
                         target[metric_name] = {}
@@ -12278,6 +12387,7 @@ class SegmentDataRepository:
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
         SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
         SegmentDataRepository._reconcile_with_totals(biz_data, geo_data, metric_totals)
+        SegmentDataRepository._name_overlaps_as_filed(geo_data, filed_geo_names)
 
         if not biz_data and not geo_data:
             return None
