@@ -280,10 +280,9 @@ def explain_unreadable_dates(labels) -> List[str]:
         sample = ", ".join(f"`{t}`" for t in combined[:3])
         reasons.append(
             f"{len(combined)} label(s) name **two months at once** ({sample}). A single "
-            "figure covering two months cannot sit in one month's slot without "
-            "distorting it, so those rows were left out and those periods are blank. "
-            "Split the figure across two rows, or relabel the row as the single "
-            "period it represents.")
+            "figure covering two months cannot be placed in one month without "
+            "distorting it. Split the figure across two rows, or relabel the row as "
+            "the single period it represents.")
     if numeric:
         sample = ", ".join(f"`{t}`" for t in numeric[:3])
         reasons.append(
@@ -443,6 +442,80 @@ class LoadedSeries:
     dropped_rows: int = 0
     unreadable_dates: tuple = ()     # the actual cells that could not be read
     snapped_to_period_end: int = 0   # rows moved from period start to period end
+
+
+MIN_ROWS_TO_MODEL = 4
+
+
+def validate_upload(df: pd.DataFrame, date_col, value_col, freq_name: str) -> Dict[str, Any]:
+    """Check a file before anything is forecast from it.
+
+    A forecast built on a file the page only half understood is worse than no
+    forecast, because the number looks just as confident. So the problems are
+    found at upload and the run is held until they are fixed, rather than being
+    reported underneath a chart that has already been drawn.
+
+    Returns `blocking` (must be fixed) and `advisories` (worth knowing), each a
+    list of {title, detail}, plus the loaded series so the caller need not
+    read the file twice.
+    """
+    loaded = load_series(df, date_col, value_col, freq_name)
+    column = loaded.frame[TARGET_COL]
+    usable = int(column.notna().sum())
+
+    blocking: List[Dict[str, str]] = []
+    advisories: List[Dict[str, str]] = []
+
+    if loaded.dropped_rows:
+        for reason in explain_unreadable_dates(loaded.unreadable_dates):
+            blocking.append({
+                "title": f"{loaded.dropped_rows} row(s) have a date this page cannot read",
+                "detail": reason,
+            })
+    if usable == 0:
+        blocking.append({
+            "title": f"The {value_col} column holds no numbers",
+            "detail": "Every cell was blank or text. Values may carry thousands "
+                      "separators, currency symbols, percent signs or accounting "
+                      "brackets, but a column of words cannot be forecast.",
+        })
+    elif usable < MIN_ROWS_TO_MODEL:
+        blocking.append({
+            "title": f"Only {usable} usable period(s)",
+            "detail": f"At least {MIN_ROWS_TO_MODEL} are needed to fit anything at all. "
+                      "Check that the date and value columns above are the right ones.",
+        })
+
+    # Advisories: true of the data itself, not mistakes in the file.
+    if loaded.duplicates_merged:
+        advisories.append({
+            "title": f"{loaded.duplicates_merged} repeated period(s) were combined",
+            "detail": "Rows sharing a period were summed so the series has one value "
+                      "per period.",
+        })
+    blanks = column.isna()
+    if blanks.any() and not loaded.dropped_rows:
+        gaps = loaded.frame.index[blanks]
+        listed = ", ".join(d.strftime("%b %Y") for d in gaps[:6])
+        more = "" if len(gaps) <= 6 else f" and {len(gaps) - 6} more"
+        advisories.append({
+            "title": f"{int(blanks.sum())} period(s) have no value",
+            "detail": f"{listed}{more}. The models treat these as missing rather than "
+                      "zero, but a long run of them weakens the forecast.",
+        })
+    if 0 < usable < SARIMAX_MIN_OBS:
+        advisories.append({
+            "title": f"{usable} periods is below the {SARIMAX_MIN_OBS} SARIMAX needs",
+            "detail": "SARIMAX will be skipped; SARIMA and Prophet still run.",
+        })
+
+    return {
+        "loaded": loaded,
+        "usable_rows": usable,
+        "blocking": blocking,
+        "advisories": advisories,
+        "ok": not blocking,
+    }
 
 
 def read_workbook(source) -> pd.DataFrame:

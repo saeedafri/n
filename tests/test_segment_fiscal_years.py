@@ -135,3 +135,28 @@ def test_continuing_and_discontinued_operations_are_not_segments():
             fact("Wholesale Footwear", 1_000_000_000, date(2023, 1, 1), date(2023, 12, 31), axis=axis)]
     biz, _geo, _tot = Segments._classify_segment_rows(rows, [2023])
     assert set(biz["Revenues"]) == {"Wholesale Footwear"}
+
+
+def test_an_aggregate_listed_beside_its_parts_is_withheld():
+    # Apple lists "Products" beside iPhone, Mac, iPad and Wearables on one axis.
+    rows = [fact(m, v, date(2024, 9, 29), date(2025, 9, 27), axis=PRODUCTS, heading="Product and Service")
+            for m, v in (("Products", 307_003e6), ("iPhone", 209_586e6), ("Mac", 33_708e6),
+                         ("iPad", 28_023e6), ("Wearables", 35_686e6), ("Services", 109_158e6))]
+    total = {**fact("x", 416_161e6, date(2024, 9, 29), date(2025, 9, 27)),
+             "_is_ndim": True, "dimension": None, "dimension_member_label": None,
+             "full_dimension_label": None}
+    biz, _geo, _tot = Segments._classify_segment_rows(rows + [total], [2025])
+    assert "Products" not in biz["Revenues"]
+    assert sum(v[2025] for v in biz["Revenues"].values()) == 416_161.0
+
+
+def test_a_country_beside_its_region_is_withheld():
+    geo = "srt:StatementGeographicalAxis"
+    rows = [fact(m, v, date(2024, 1, 1), date(2024, 12, 31), axis=geo, heading="Geographical")
+            for m, v in (("Americas", 2_474e6), ("United States", 2_255e6),
+                         ("Europe", 1_057e6), ("Asia", 609e6))]
+    total = {**fact("x", 4_140e6, date(2024, 1, 1), date(2024, 12, 31)),
+             "_is_ndim": True, "dimension": None, "dimension_member_label": None,
+             "full_dimension_label": None}
+    _biz, geo_data, _tot = Segments._classify_segment_rows(rows + [total], [2024])
+    assert set(geo_data["Revenues"]) == {"Americas", "Europe", "Asia"}

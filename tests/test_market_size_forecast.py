@@ -858,3 +858,77 @@ def test_china_retail_shaped_file_loads_end_to_end():
     assert series.notna().sum() == 30, "the 30 readable months must survive"
     assert loaded.dropped_rows == 3
     assert all("Jan/Feb" in label for label in loaded.unreadable_dates)
+
+
+# ── a file is checked BEFORE anything is forecast from it ──────────
+
+def _china_shaped_frame():
+    """Combined Jan/Feb rows, as China's NBS publishes them."""
+    rows = []
+    for year in (23, 24, 25):
+        rows.append((f"Jan/Feb '{year}", 6800.0))
+        for index, month in enumerate(MONTHS_3[2:], start=3):
+            rows.append((f"{month} '{year}", 3400.0 + index * 20))
+    return pd.DataFrame(rows, columns=["Date", "Value (RMB bn)"])
+
+
+def test_a_file_with_unreadable_rows_is_blocked_not_forecast():
+    frame = _china_shaped_frame()
+    check = engine.validate_upload(frame, "Date", "Value (RMB bn)", "Monthly")
+    assert check["ok"] is False, "a file with unreadable dates must not be runnable"
+    assert check["blocking"], "the problem must be reported"
+    joined = " ".join(p["detail"] for p in check["blocking"]).lower()
+    assert "two months" in joined and "split" in joined
+
+
+def test_a_clean_file_passes_the_gate():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-31", periods=36, freq="ME"),
+        "Sales": np.linspace(100.0, 260.0, 36),
+    })
+    check = engine.validate_upload(frame, "Date", "Sales", "Monthly")
+    assert check["ok"] is True, check["blocking"]
+    assert check["usable_rows"] == 36
+
+
+def test_too_few_rows_is_blocking():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-31", periods=3, freq="ME"),
+        "Sales": [1.0, 2.0, 3.0],
+    })
+    check = engine.validate_upload(frame, "Date", "Sales", "Monthly")
+    assert check["ok"] is False
+    assert any("usable period" in p["title"] for p in check["blocking"])
+
+
+def test_a_text_only_value_column_is_blocking():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-31", periods=30, freq="ME"),
+        "Sales": ["n/a"] * 30,
+    })
+    check = engine.validate_upload(frame, "Date", "Sales", "Monthly")
+    assert check["ok"] is False
+    assert any("no numbers" in p["title"] for p in check["blocking"])
+
+
+def test_genuine_gaps_are_advisory_not_blocking():
+    """Missing periods are a property of the data, not a mistake in the file."""
+    dates = list(pd.date_range("2020-01-31", periods=36, freq="ME"))
+    values = list(np.linspace(100.0, 260.0, 36))
+    for drop in (20, 14, 8):
+        dates.pop(drop)
+        values.pop(drop)
+    check = engine.validate_upload(pd.DataFrame({"Date": dates, "Sales": values}),
+                                   "Date", "Sales", "Monthly")
+    assert check["ok"] is True, "a gap must not block the run"
+    assert any("no value" in a["title"] for a in check["advisories"])
+
+
+def test_a_short_series_warns_about_sarimax_without_blocking():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2023-01-31", periods=12, freq="ME"),
+        "Sales": np.linspace(50.0, 90.0, 12),
+    })
+    check = engine.validate_upload(frame, "Date", "Sales", "Monthly")
+    assert check["ok"] is True
+    assert any("SARIMAX" in a["title"] for a in check["advisories"])

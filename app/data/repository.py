@@ -11,6 +11,7 @@ import os
 import time
 import logging
 import functools
+import itertools
 import re
 import unicodedata
 
@@ -10766,6 +10767,165 @@ class SegmentDataRepository:
                     if total < max(peers):
                         by_period[period] = None
 
+    # The home market and the regions containing it — everything else a filer
+    # reports sits inside its "International" / "Non-US" / "Foreign" bucket.
+    _US_ANCESTRY = frozenset({"United States", "North America (NORAM)", "AMER (Americas)", "Global"})
+
+    @staticmethod
+    def _geo_ancestors(member: str) -> Set[str]:
+        """Hierarchy nodes containing this place ("United States" → North America,
+        Americas, Global). Anything outside the US and the regions containing it
+        is also inside the "International" bucket Foreign / Non-US resolve to."""
+        from data.geo_hierarchy import node_for_label, _hierarchy
+        node = node_for_label(member)
+        if not node or node.get("node") in ("Other", "International"):
+            return set()
+        nodes = _hierarchy()["nodes"]
+        found, parent = set(), node.get("parent")
+        while parent and parent not in found:
+            found.add(parent)
+            parent = (nodes.get(parent) or {}).get("parent")
+        if node.get("node") not in SegmentDataRepository._US_ANCESTRY:
+            found.add("International")
+        return found
+
+    @staticmethod
+    def _geo_node(member: str) -> Optional[str]:
+        from data.geo_hierarchy import node_for_label
+        node = node_for_label(member)
+        name = node.get("node") if node else None
+        return None if name in (None, "Other") else name
+
+    @staticmethod
+    def _reconcile_with_totals(biz_data, geo_data, metric_totals) -> None:
+        """A column must not count anything twice. Filers list an aggregate beside
+        its own parts — Apple's "Products" beside iPhone, Mac, iPad and Wearables;
+        Abbott's "International" beside its countries; Capri's "Americas" beside
+        "United States" — and the column then adds up to far more than the
+        company. Members are withheld from a column only with proof:
+
+        1. withholding them makes the column add up to its filed Total, and each
+           is an aggregate of members still listed; or, failing that,
+        2. (geography) each is a place listed beside one of its own ancestors,
+           and withholding it leaves the column no larger than the Total.
+
+        A column over its Total for any other reason — segment revenue that
+        includes intersegment sales, which the company eliminates on
+        consolidation — is left exactly as filed. Operating profit has no
+        additive Total, so it follows the Revenues decision for the column."""
+        for section, data in (("business", biz_data), ("geo", geo_data)):
+            totals = metric_totals.get(section) or {}
+            withheld: Dict[Any, Set[str]] = {}
+            for metric_name, members in data.items():
+                if metric_name == "Operating Profit Before Tax":
+                    continue
+                for period, total in (totals.get(metric_name) or {}).items():
+                    values = {m: by[period] for m, by in members.items()
+                              if by.get(period) is not None}
+                    if not total or total <= 0 or len(values) < 2:
+                        continue
+                    tol = max(abs(total) * 0.005, 0.5)
+                    over = sum(values.values()) - total
+                    if over <= max(abs(total) * 0.02, tol):
+                        continue
+                    drop = SegmentDataRepository._aggregates_to_drop(section, values, over, tol)
+                    if drop and metric_name == "Revenues":
+                        withheld.setdefault(period, set()).update(drop)
+                    for m in drop:
+                        members[m][period] = None
+            profit = data.get("Operating Profit Before Tax") or {}
+            for period, names in withheld.items():
+                for m in names:
+                    if m in profit and period in profit[m]:
+                        profit[m][period] = None
+            for metric_name, members in list(data.items()):
+                for m in [m for m, by in members.items() if all(v is None for v in by.values())]:
+                    del members[m]
+                if not members:
+                    del data[metric_name]
+
+    @staticmethod
+    def _aggregates_to_drop(section: str, values: Dict[str, float], over: float,
+                            tol: float) -> Set[str]:
+        total = sum(values.values()) - over
+        if section == "geo":
+            return SegmentDataRepository._geo_level_to_drop(values, total, tol)
+        # Business: an aggregate is a member equal to the sum of two or more other
+        # listed members (Apple's Products, AutoNation's "AN Reportable"). That
+        # equality is the proof; the detail stays and the aggregate goes.
+        names = sorted(values, key=lambda m: -values[m])
+
+        def is_sum_of_others(m, pool):
+            others = [o for o in pool if o != m]
+            return any(abs(sum(values[o] for o in combo) - values[m]) <= tol
+                       for size in range(2, min(6, len(others)) + 1)
+                       for combo in itertools.combinations(others, size))
+
+        # 1. A set worth exactly the overage, made of aggregates or of the parts
+        #    of one, makes the column add up to the Total.
+        for size in range(1, min(4, len(names) - 1) + 1):
+            for combo in itertools.combinations(names, size):
+                if abs(sum(values[m] for m in combo) - over) > tol:
+                    continue
+                rest = [m for m in names if m not in combo]
+                if all(is_sum_of_others(m, rest + [m]) for m in combo):
+                    return set(combo)
+        # 2. Otherwise drop proven aggregates when that ends the over-count; the
+        #    column may then fall short of the Total by revenue nobody listed.
+        aggregates = {m for m in names if is_sum_of_others(m, names)}
+        if aggregates and sum(values.values()) - sum(values[m] for m in aggregates) <= total + max(tol, abs(total) * 0.02):
+            return aggregates
+        return set()
+
+    @staticmethod
+    def _geo_level_to_drop(values: Dict[str, float], total: float, tol: float) -> Set[str]:
+        """Keep one complete geographic breakdown. Filers list two side by side:
+        Caterpillar has United States + Non-US AND North America, EAME, Asia
+        Pacific and Latin America; Avnet has Americas, EMEA, Asia AND their
+        countries. Every way to cut through the hierarchy is tried — each listed
+        region whole, as its listed sub-places, or not at all — with names the
+        hierarchy cannot place ("Other", "EAME", and the "International" bucket,
+        which a filer's "Other international" is also renamed to) free to join.
+        The cut that adds up to the Total, with the most detail, is kept. No cut
+        adds up → nothing is withheld, because nothing is proven."""
+        nodes = {m: SegmentDataRepository._geo_node(m) for m in values}
+        placed = [m for m, n in nodes.items() if n and n != "International"]
+        loose = [m for m in values if m not in placed]
+        if len(loose) > 6 or len(values) > 24:
+            return set()
+        ancestors = {m: SegmentDataRepository._geo_ancestors(m) for m in placed}
+
+        def parent(m):
+            # nearest listed ancestor: the one whose own ancestors include no other
+            listed = [o for o in placed if o != m and nodes[o] in ancestors[m]]
+            return min(listed, key=lambda o: len(ancestors[o] & {nodes[x] for x in listed}),
+                       default=None) if listed else None
+
+        children: Dict[Optional[str], List[str]] = {}
+        for m in placed:
+            children.setdefault(parent(m), []).append(m)
+
+        def cuts(m) -> List[Tuple[str, ...]]:
+            options = [(m,)]
+            kids = children.get(m, [])
+            if kids:
+                options += [sum(combo, ()) for combo in itertools.product(*(cuts(k) + [()] for k in kids))
+                            if any(combo)]
+            return options
+
+        roots = children.get(None, [])
+        best: Optional[Tuple[str, ...]] = None
+        limit = max(tol, abs(total) * 0.005)
+        for combo in itertools.product(*(cuts(r) + [()] for r in roots)):
+            chosen = sum(combo, ())
+            for size in range(len(loose) + 1):
+                for extra in itertools.combinations(loose, size):
+                    keep = chosen + extra
+                    if (len(keep) >= 2 and abs(sum(values[m] for m in keep) - total) <= limit
+                            and (best is None or len(keep) > len(best))):
+                        best = keep
+        return set(values) - set(best) if best else set()
+
     @staticmethod
     def _keep_newest_filing(biz_data, geo_data, stored_filing) -> None:
         """Each column shows one filing's breakdown: the newest filing that reports
@@ -10947,6 +11107,186 @@ class SegmentDataRepository:
         if pt == 'instant' and hasattr(row.get('period_instant'), 'year'):
             return SegmentDataRepository._fiscal_year_of(row['period_instant'])
         return None
+
+    # Axes a company may report its whole breakdown on when it files no segment or
+    # geographic axis at all. One of them is used, never several at once.
+    _BUSINESS_FALLBACK_AXES = (
+        "ProductOrServiceAxis", "ContractWithCustomerSalesChannelAxis",
+        "StatementOperatingActivitiesSegmentAxis", "SubsegmentsAxis", "BrandsAxis",
+        "RevenueChannelAxis", "ReportingbyChannelAxis", "SegmentInformationByServicesAxis",
+    )
+
+    @staticmethod
+    def _heading_kind(heading: str) -> str:
+        """'seg' / 'sub' / 'geo' / 'other' for one axis heading of full_dimension_label.
+        Filers word the segment axis many ways — Segments, Business Segments,
+        Operating Segments, "Segment Reporting Information, by Segment", Honeywell
+        Segments — and the geographic one as Geographical or Geographic Area."""
+        h = heading.strip().lower()
+        if h.startswith("concentration risk"):
+            return "ignore"          # annotates a fact, does not divide it
+        if h == "subsegments":
+            return "sub"
+        if "geograph" in h:
+            return "geo"
+        if (h.endswith(("segments", "segment")) and "subsegment" not in h
+                and "portfolio" not in h and "operating activities" not in h):
+            return "seg"
+        return "other"
+
+    @staticmethod
+    def _secondary_headings(row) -> List[str]:
+        """Headings of every axis after the first. The first heading can itself
+        hold a comma ("Statement, Business Segments: X", "Contract with Customer,
+        Sales Channel: Y"), so the search starts after the first member, which
+        `dimension_member_label` names exactly."""
+        label = row.get('full_dimension_label') or ''
+        member = row.get('dimension_member_label') or ''
+        at = label.find(f": {member}") if member else -1
+        rest = label[at + len(member) + 2:] if at != -1 else label
+        return re.findall(r", ([^,:]+): ", rest)
+
+    @staticmethod
+    def _row_breakdown(row) -> Optional[Tuple[str, str]]:
+        """(section, source) for a dimensioned fact, or None when it is not part of a
+        segment or geographic breakdown at all.
+
+        source "canon" is the filer's segment note: a fact on the segment axis
+        alone, or on the geographic axis alone — directly or inside the
+        "Operating Segments" wrapper (plus Subsegments under a segment). Any other
+        axis in the context makes the value a slice of the member it is credited
+        to: Abbott files "Operating Segments, Geographical: Non-US, Segments:
+        Established Pharmaceuticals, Subsegments: Key Emerging Markets", and the
+        non-US part read as the whole subsegment. A fact on one non-segment axis
+        alone reports that axis's own breakdown and is a fallback source.
+        """
+        dimension = (row.get('dimension') or '').split(':')[-1]
+        kinds = [k for k in map(SegmentDataRepository._heading_kind,
+                                SegmentDataRepository._secondary_headings(row)) if k != "ignore"]
+        member = (row.get('dimension_member_label') or '').lower().strip()
+        if member in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
+            if kinds in (["seg"], ["seg", "sub"]):
+                return ("business", "canon")
+            if kinds == ["geo"]:
+                return ("geo", "canon")
+            return None
+        if dimension == "StatementBusinessSegmentsAxis":
+            return ("business", "canon") if not kinds else None
+        if dimension == "SubsegmentsAxis" and kinds and all(k == "seg" for k in kinds):
+            return ("business", "canon")
+        if kinds:
+            return None
+        if SegmentDataRepository._is_geographic_axis(row):
+            return ("geo", "canon" if dimension == "StatementGeographicalAxis" else dimension)
+        if dimension in SegmentDataRepository._BUSINESS_FALLBACK_AXES:
+            return ("business", dimension)
+        return None
+
+    @staticmethod
+    def _one_breakdown(rows) -> List[Dict[str, Any]]:
+        """Keep, per section, the rows of ONE breakdown: the segment note when the
+        company files one, otherwise the single fallback axis it reports most on.
+        Wendy's listed its segments beside its revenue-by-source lines, CVS beside
+        a services axis, others beside legal entities and corporate items — each
+        list added up to more than the company. Consolidated rows always pass.
+
+        A segment axis carrying nothing but places (Apple, Costco: their segments
+        are regions) is no business breakdown under the business team's rule, so
+        such a company falls back like one without segments."""
+        from data.geo_hierarchy import names_a_place
+        sources: Dict[str, collections.Counter] = {"business": collections.Counter(),
+                                                    "geo": collections.Counter()}
+        tagged = []
+        for row in rows:
+            if row.get('_is_ndim'):
+                tagged.append((row, None))
+                continue
+            found = SegmentDataRepository._row_breakdown(row)
+            tagged.append((row, found))
+            if not found:
+                continue
+            section, source = found
+            if source == "canon" and section == "business":
+                wrapped = ((row.get('dimension_member_label') or '').lower().strip()
+                           in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS)
+                name = row.get('dimension_label') if wrapped else row.get('dimension_member_label')
+                if names_a_place(SegmentDataRepository._title_case_member(name or '')):
+                    source = "canon-place"
+                    tagged[-1] = (row, (section, source))
+            sources[section][source] += 1
+        chosen = {}
+        for section, counts in sources.items():
+            if counts.get("canon"):
+                chosen[section] = {"canon", "canon-place"}
+            elif counts:
+                fallback = [(n, s) for s, n in counts.items() if s != "canon-place"]
+                chosen[section] = {max(fallback)[1]} if fallback else {"canon-place"}
+        return [row for row, found in tagged
+                if found is None and row.get('_is_ndim')
+                or found is not None and found[1] in chosen.get(found[0], ())]
+
+    @staticmethod
+    def _resolve_subsegments(rows) -> List[Dict[str, Any]]:
+        """One level of the segment tree per period. Nike files NIKE Brand whole and
+        again as North America, EMEA, Greater China, APLA and Global Brand
+        Divisions; Abbott files Diagnostics whole and as Molecular, Point of Care…
+        Listing both counts the parent twice. The subsegments are shown when they
+        add up to the parent (more detail, same total); otherwise the parent is."""
+        from utils.constants import SEGMENT_METRIC_GROUPS
+
+        def metric(r):
+            return next((n for n, cfg in SEGMENT_METRIC_GROUPS.items()
+                         if SegmentDataRepository._matches_metric(r.get('original_label') or '', cfg)), None)
+
+        def parent_of(r):
+            label = r.get('full_dimension_label') or ''
+            cut = label.find(", Subsegments: ")
+            return label[:cut].rsplit(": ", 1)[-1].strip().lower() if cut != -1 else None
+
+        def period(r):
+            return (r.get('period_start'), r.get('period_end'), r.get('period_instant'))
+
+        children: Dict[Tuple, Dict[str, float]] = {}
+        parents: Dict[Tuple, float] = {}
+        for r in rows:
+            if r.get('_is_ndim') or r.get('numeric_value') is None:
+                continue
+            name = parent_of(r)
+            key_base = (metric(r), (r.get('concept') or '').strip(), period(r))
+            if name:
+                children.setdefault(key_base + (name,), {})[
+                    (r.get('dimension_label') or '').strip().lower()] = r['numeric_value']
+            elif SegmentDataRepository._row_breakdown(r) == ("business", "canon"):
+                wrapped = ((r.get('dimension_member_label') or '').lower().strip()
+                           in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS)
+                own = (r.get('dimension_label') if wrapped else r.get('dimension_member_label')) or ''
+                parents[key_base + (own.strip().lower(),)] = r['numeric_value']
+        drop_children, drop_parents = set(), set()
+        for key, kids in children.items():
+            whole = parents.get(key)
+            if whole is None:
+                continue
+            if abs(sum(kids.values()) - whole) <= max(abs(whole) * 0.01, 500_000):
+                drop_parents.add(key)
+            else:
+                drop_children.add(key)
+        if not drop_children and not drop_parents:
+            return rows
+        kept = []
+        for r in rows:
+            if not r.get('_is_ndim') and r.get('numeric_value') is not None:
+                key_base = (metric(r), (r.get('concept') or '').strip(), period(r))
+                name = parent_of(r)
+                if name and key_base + (name,) in drop_children:
+                    continue
+                if not name and SegmentDataRepository._row_breakdown(r) == ("business", "canon"):
+                    wrapped = ((r.get('dimension_member_label') or '').lower().strip()
+                               in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS)
+                    own = (r.get('dimension_label') if wrapped else r.get('dimension_member_label')) or ''
+                    if key_base + (own.strip().lower(),) in drop_parents:
+                        continue
+            kept.append(r)
+        return kept
 
     @staticmethod
     def _newest_filing_first(rows) -> List[Dict[str, Any]]:
@@ -11340,7 +11680,9 @@ class SegmentDataRepository:
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
 
         filtered = SegmentDataRepository._newest_filing_first(
-            SegmentDataRepository._drop_wrapped_slices(filtered))
+            SegmentDataRepository._drop_wrapped_slices(
+                SegmentDataRepository._resolve_subsegments(
+                    SegmentDataRepository._one_breakdown(filtered))))
         # Members this company reports on a genuine geographic axis (any metric, incl. non-monetary
         # warehouse/store counts). Used to confirm that a member recovered from a multi-dimensional
         # operating-segment fact is truly geographic before routing it to the Geographic table.
@@ -11512,6 +11854,7 @@ class SegmentDataRepository:
         SegmentDataRepository._suppress_impossible_totals(
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
         SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
+        SegmentDataRepository._reconcile_with_totals(biz_data, geo_data, metric_totals)
 
         return biz_data, geo_data, metric_totals
 
@@ -11755,7 +12098,9 @@ class SegmentDataRepository:
         if not all_rows:
             return None
         all_rows = SegmentDataRepository._newest_filing_first(
-            SegmentDataRepository._drop_wrapped_slices(all_rows))
+            SegmentDataRepository._drop_wrapped_slices(
+                SegmentDataRepository._resolve_subsegments(
+                    SegmentDataRepository._one_breakdown(all_rows))))
 
         # Collect distinct period_ends and build integer keys
         _pe_set = set()
@@ -11932,6 +12277,7 @@ class SegmentDataRepository:
         SegmentDataRepository._suppress_impossible_totals(
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
         SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
+        SegmentDataRepository._reconcile_with_totals(biz_data, geo_data, metric_totals)
 
         if not biz_data and not geo_data:
             return None

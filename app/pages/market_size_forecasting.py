@@ -17,6 +17,7 @@ leaves SARIMA and SARIMAX results in place.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -27,13 +28,14 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 from utils.server_logger import new_rerun_id
 new_rerun_id("market_size_forecasting")
 
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
-from components.loading import inject_red_spinner_css, render_page_loader
+from components.loading import inject_red_spinner_css
 from components.navigation import render_header, render_coresight_footer
 from components.styles import hide_sidebar, render_styles, set_page_layout
 from core.auth_manager import require_auth
@@ -887,8 +889,27 @@ def _render_controls() -> Dict[str, Any]:
                                        ["auto-detect", "additive", "multiplicative"],
                                        key=f"{KEY}season_mode")
 
+    # Check the file BEFORE offering to forecast it. A model fitted on a file
+    # the page only half read produces a number that looks exactly as confident
+    # as a good one, so the run is held until the file is right.
+    check = engine.validate_upload(raw, date_col, value_col, freq_name)
+    for note in check["advisories"]:
+        st.info(f"**{note['title']}** — {note['detail']}")
+    if check["blocking"]:
+        count = len(check["blocking"])
+        st.error(
+            f"**This file cannot be forecast yet — {count} problem"
+            f"{'' if count == 1 else 's'} to fix.**\n\n"
+            + "\n\n".join(f"**{p['title']}**\n\n{p['detail']}"
+                          for p in check["blocking"])
+            + "\n\nFix the spreadsheet and upload it again. **File format** at the "
+              "top of the page shows what the page expects.")
+        st.caption(f"Read as **{date_col}** (dates) and **{value_col}** (values) at "
+                   f"**{freq_name}** frequency — change either above if that is wrong.")
+        return settings
+
     settings.update({
-        "ready": True, "upload": upload, "raw": raw,
+        "ready": True, "upload": upload, "raw": raw, "validation": check,
         "date_col": date_col, "value_col": value_col, "freq_name": freq_name,
         "detected_freq": detected_freq, "guessed_date": guessed_date,
         "guessed_value": guessed_value,
@@ -904,17 +925,98 @@ def _render_controls() -> Dict[str, Any]:
 #  ANALYSIS
 # ═══════════════════════════════════════════════════════════════════
 
-def _stage(loader, share: float, text: str) -> None:
-    """Name the current stage inside the branded loader.
+_OVERLAY_JS = """
+<script>
+(function () {
+  var doc = window.parent.document;
+  var W   = window.parent;
+  var el  = doc.getElementById('msf-run-overlay');
+  if (!el) {
+    el = doc.createElement('div');
+    el.id = 'msf-run-overlay';
+    el.setAttribute('style', [
+      'position:fixed','inset:0','z-index:2147483000',
+      'background:rgba(255,255,255,0.88)','backdrop-filter:blur(2px)',
+      'display:flex','align-items:center','justify-content:center'].join(';'));
+    el.innerHTML =
+      '<div style="background:#fff;border:1px solid #E8EAED;border-radius:14px;' +
+      'box-shadow:0 10px 40px rgba(16,24,40,.12);padding:26px 34px;min-width:320px;' +
+      'text-align:center;font-family:Inter,system-ui,sans-serif">' +
+        '<div style="width:34px;height:34px;margin:0 auto 14px;border:3px solid #F0D5D5;' +
+        'border-top-color:#C8102E;border-radius:50%;animation:msfspin 0.9s linear infinite"></div>' +
+        '<div class="msf-ov-label" style="font-size:15px;font-weight:600;color:#0F172A"></div>' +
+        '<div style="margin-top:9px;height:4px;background:#F1F2F4;border-radius:3px;overflow:hidden">' +
+          '<div class="msf-ov-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#C8102E,#F0605F);' +
+          'transition:width .4s ease"></div></div>' +
+        '<div class="msf-ov-clock" style="margin-top:9px;font-size:12px;color:#6B7280">0s elapsed</div>' +
+        '<div style="margin-top:4px;font-size:11px;color:#9CA3AF">Keep this tab open</div>' +
+      '</div>';
+    doc.body.appendChild(el);
+    if (!doc.getElementById('msf-ov-style')) {
+      var s = doc.createElement('style');
+      s.id = 'msf-ov-style';
+      s.textContent = '@keyframes msfspin{to{transform:rotate(360deg)}}';
+      doc.head.appendChild(s);
+    }
+  }
+  var label = el.querySelector('.msf-ov-label');
+  if (label) label.textContent = __LABEL__;
+  var bar = el.querySelector('.msf-ov-bar');
+  if (bar) bar.style.width = __PCT__ + '%';
 
-    This used to drive an st.progress bar. That widget is painted from
-    Streamlit's theme primaryColor, which is blue, and no stylesheet of ours
-    reached inside it -- so a red-branded page ran a blue bar underneath a red
-    spinner. Re-rendering the loader card instead keeps one indicator, on
-    brand, and still names the stage and its share of the run.
+  // One poller for the whole run, owned by the PARENT window so it outlives
+  // this iframe. Streamlit may drop the iframe on any rerun; the overlay and
+  // its poller must not go with it.
+  if (W.__msfOverlayPoll) return;
+  var t0 = Date.now(), lastBusy = Date.now();
+  function cleanup() {
+    try { W.clearInterval(W.__msfOverlayPoll); } catch (e) {}
+    W.__msfOverlayPoll = null;
+    var node = doc.getElementById('msf-run-overlay');
+    if (node) { node.style.opacity = '0'; node.style.transition = 'opacity .25s';
+                W.setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, 260); }
+  }
+  W.__msfOverlayPoll = W.setInterval(function () {
+    var node = doc.getElementById('msf-run-overlay');
+    if (!node) { cleanup(); return; }
+    var clock = node.querySelector('.msf-ov-clock');
+    var secs = (Date.now() - t0) / 1000;
+    if (clock) clock.textContent = secs.toFixed(0) + 's elapsed';
+    // Streamlit shows its status widget for as long as the script is running.
+    // Gone, and still gone a moment later, means the server has finished and
+    // the results have been painted.
+    if (doc.querySelector('[data-testid="stStatusWidget"]')) lastBusy = Date.now();
+    else if (Date.now() - lastBusy > 900) cleanup();
+    if (secs > 1200) cleanup();           // never strand the page
+  }, 200);
+})();
+</script>
+"""
+
+
+def _run_overlay(text: str, share: float) -> None:
+    """Show (or update) the run overlay in the parent document.
+
+    Not an `st.empty()` placeholder: the models run in worker threads around
+    `st.cache_data`, and a placeholder written from the main thread was being
+    dropped the moment those threads started — the overlay vanished six seconds
+    into a forty-six second run and left the page blank. Living in the parent
+    document, outside Streamlit's element tree, it cannot be cleared by a rerun
+    or a cached call, and it removes itself when the script stops running.
     """
     percent = int(round(min(max(share, 0.0), 1.0) * 100))
-    render_page_loader(f"{text} · {percent}%", placeholder=loader)
+    components.html(
+        _OVERLAY_JS.replace("__LABEL__", json.dumps(text)).replace("__PCT__", str(percent)),
+        height=0)
+
+
+def _stage(loader, share: float, text: str) -> None:
+    """Name the current stage on the run overlay.
+
+    `loader` is kept in the signature so every call site reads the same; the
+    overlay is addressed by id in the parent document, not by placeholder.
+    """
+    _run_overlay(text, share)
 
 
 def _in_script_run() -> bool:
@@ -1869,11 +1971,11 @@ def main() -> None:
     if run_clicked:
         tracker.step_start("ANALYSIS")
         with status_area:
-            loader = render_page_loader("Running forecast models · 0%")
-            try:
-                st.session_state[f"{KEY}outcome"] = _run_analysis(settings, loader)
-            finally:
-                loader.empty()
+            # The overlay lives in the parent document and takes itself down once
+            # Streamlit stops running, so it stays up across the whole fit and
+            # disappears only when the results are actually on screen.
+            _run_overlay("Reading your file", 0.02)
+            st.session_state[f"{KEY}outcome"] = _run_analysis(settings, None)
         tracker.step_end("ANALYSIS")
 
     outcome = st.session_state.get(f"{KEY}outcome")
