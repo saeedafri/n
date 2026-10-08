@@ -123,6 +123,24 @@ restart (stored table read from disk) and on a revisit. Other Market Data tabs:
 1.3-5.5 s cold, 1.3-3.1 s after a restart. The screener's segment index rebuild
 reads every company's stored tables, so its first run on STG pre-builds them all.
 
+## 3b. No manual step after a data load (2026-10-08)
+
+The data team loads `coreiq_filing_metrics_v5`; nothing else is run.
+
+| # | Problem found | Fix |
+|---|---|---|
+| 26 | Stored Segments tables were tied only to the company-overview and income-statement tables, not to `coreiq_filing_metrics_v5`: the persist layer found dependencies only in a function's own source, and the tables reach their filing rows through a builder. A data load would not have refreshed them. | `persist._deps` follows calls through helper methods of the same class (all stored results benefit). |
+| 27 | A read after a load served the old stored copy and rebuilt behind it; the screener's index refresh could index that old copy, and the inner row store had the same behaviour. | `full_segment_tables` keys the stored tables AND the row fetches by the company's data version (`MAX(id)`, `COUNT(*)`, `MAX(data_insert_timestamp)`). A load is a new key: the next read builds from the new rows. The tab reads the version through a 2-minute cache; the screener's index refresh reads it live. |
+| 28 | The screener's index refresh polled every 6 h, so Screening could trail the tab for most of a day. | Poll every 15 min (`SEGMENT_CACHE_REFRESH_POLL_SEC`); the `MAX(id)` gate is one primary-key lookup, and only companies with new rows are re-indexed. |
+
+After a load: the Segments tab shows the new rows within 2 minutes of the next view;
+Screening within 15 minutes. A deploy that changes any rule re-indexes every company
+once, which also pre-builds every company's stored tables.
+
+8-K filings carry no segment data in XBRL: earnings 8-Ks (Walmart, Target, Costco,
+Amazon, Nike) hold only `dei` cover-page facts; the figures are in an untagged
+Exhibit 99.1. Segment values come from 10-K and 10-Q filings only.
+
 ## 4. Not fixable in the app (source data)
 
 - **Dollar Tree**: from FY2023 the DB labels the Dollar Tree segment

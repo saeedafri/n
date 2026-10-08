@@ -184,3 +184,44 @@ def test_composite_inherits_inner_tables_and_is_rebuilt_after_it(monkeypatch, tm
     assert ps._load("demo_outer", key)[1]["tables"] == ["coreiq_companies"]
     ps.on_tables_moved({"coreiq_companies"}, {"coreiq_companies": "T2"})
     assert ("demo_outer", ()) in q
+
+
+class _Rows:
+    """A stored result that reaches another one only through a helper — the shape of
+    SegmentDataRepository (stored tables -> builder -> stored filing rows)."""
+
+    @staticmethod
+    @ps.persistent("demo_rows")
+    def rows(t):
+        ps.record("SELECT * FROM coreiq_filing_metrics_v5")
+        return [t]
+
+    @staticmethod
+    def build(t):
+        return {"rows": _Rows.rows(t)}
+
+    @staticmethod
+    @ps.persistent("demo_tables")
+    def tables(t):
+        return _Rows.build(t)
+
+
+def test_dependencies_are_found_through_helper_methods(monkeypatch, tmp_path):
+    """Stored Segments tables read filing rows through a builder; without following
+    the helper, a data load never rebuilt them."""
+    setup(monkeypatch, tmp_path, {"coreiq_filing_metrics_v5": "T1"})
+    monkeypatch.setattr(ps, "_DEPS", {})
+    assert ps._deps("demo_tables") == {"demo_rows"}
+
+
+def test_segment_tables_are_keyed_by_the_companys_data_version(monkeypatch):
+    """A data load is a new data version, hence a new stored table: nothing to run."""
+    from data.repository import SegmentDataRepository as repo
+    seen = []
+    monkeypatch.setattr(repo, "_stored_segment_tables",
+                        staticmethod(lambda *a: seen.append(a[-1]) or {"years": []}))
+    monkeypatch.setattr(repo, "current_data_version", staticmethod(lambda t: "v1"))
+    repo.full_segment_tables("AAPL", fresh=True)
+    monkeypatch.setattr(repo, "current_data_version", staticmethod(lambda t: "v2"))
+    repo.full_segment_tables("AAPL", fresh=True)
+    assert seen == ["v1", "v2"]

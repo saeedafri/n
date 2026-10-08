@@ -189,21 +189,38 @@ def _scope(args, kwargs):
 
 
 def _deps(name):
-    """Persisted functions `name` calls, found in its source. An inner call answered
-    by its in-memory cache runs no SQL, so the outer build cannot see those tables —
-    it inherits them from here instead. (Same-named methods over-match: harmless,
-    only extra rebuilds.)"""
+    """Persisted functions `name` calls — directly or through helper methods of its
+    own class. An inner call answered by its cache runs no SQL, so the outer build
+    cannot see those tables; it inherits them from here instead. Reading only the
+    function's own source missed them behind a helper: the Segments tables reach
+    their filing rows through _build_segment_tables_from_db, so they were never
+    tied to coreiq_filing_metrics_v5 and a data load did not rebuild them.
+    (Same-named methods over-match: harmless, only extra rebuilds.)"""
     if name in _DEPS:
         return _DEPS[name]
     import inspect
+    import sys
     with _LOCK:
         funcs = dict(_FUNCS)
-    try:
-        src = inspect.getsource(funcs[name]["fn"])
-    except Exception:
-        src = ""
-    found = {n for n, f in funcs.items() if n != name
-             and re.search(r"\b" + re.escape(f["fn"].__name__) + r"\s*\(", src.split(":", 1)[-1])}
+    persisted = {f["fn"].__name__: n for n, f in funcs.items() if n != name}
+    start = funcs[name]["fn"]
+    owner = getattr(sys.modules.get(start.__module__), start.__qualname__.split(".")[0], None)
+    found, seen, todo = set(), set(), [start]
+    while todo:
+        fn = todo.pop()
+        try:
+            src = inspect.getsource(fn).split(":", 1)[-1]
+        except Exception:
+            continue
+        for called in set(re.findall(r"\b(\w+)\s*\(", src)):
+            if called in persisted:
+                found.add(persisted[called])
+            elif owner is not None and called not in seen and isinstance(owner, type):
+                helper = owner.__dict__.get(called)
+                helper = getattr(helper, "__func__", helper)
+                if callable(helper):
+                    seen.add(called)
+                    todo.append(inspect.unwrap(helper))
     _DEPS[name] = found
     return found
 

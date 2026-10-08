@@ -31,7 +31,9 @@ terse label.
 **Ask.**
 1. Store the member's **standard label** (`http://www.xbrl.org/2003/role/label`,
    without " [Member]"), never the terse or verbose one.
-2. Also store the member element name per axis, e.g. a column
+2. The `member` column already exists but holds only the FIRST axis's element —
+   for a wrapped segment row that is `us-gaap:OperatingSegmentsMember`, not the
+   segment. Store the member element name of EVERY axis, e.g. a column
    `dimension_members` = `{"srt:StatementGeographicalAxis": "country:US"}`. With
    it every member is identified exactly, whatever any label says.
 3. Write the axis heading in `full_dimension_label` from the axis, not a member:

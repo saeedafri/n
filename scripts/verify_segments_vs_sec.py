@@ -383,7 +383,9 @@ def check(ticker, tenk, tenq, extracts=None):
     from data.repository import SegmentDataRepository as repo
     rows = sec_facts(ticker, tenk, tenq, extracts)
     with contextlib.redirect_stdout(io.StringIO()):
-        annual = repo._build_segment_tables_from_db(ticker, date(2012, 1, 1), date(2026, 12, 31))
+        # what the tab shows: the database tables, or EDGAR's for a company not loaded yet
+        annual = (repo._build_segment_tables_from_db(ticker, date(2012, 1, 1), date(2026, 12, 31))
+                  or getattr(repo._fetch_from_edgartools, "__wrapped__", repo._fetch_from_edgartools)(ticker))
         quarterly = repo._build_segment_tables_quarterly(ticker, date(2018, 1, 1), date(2026, 12, 31))
     held = database_values(ticker)
     return {"ticker": ticker, "annual": compare(annual, rows, "annual", held),
@@ -391,10 +393,14 @@ def check(ticker, tenk, tenq, extracts=None):
 
 
 def all_tickers():
+    """Every company the app covers: those with filing rows and those in the
+    company master that the Segments tab serves straight from EDGAR."""
     from core.database import db_manager
     rows = db_manager.execute_query_readonly(
         "SELECT DISTINCT ticker FROM coreiq_filing_metrics_v5 WHERE is_dimensioned = 1 AND doc_type = '10-K'", {})
-    return sorted(r["ticker"] for r in rows)
+    master = db_manager.execute_query_readonly(
+        "SELECT ticker FROM coreiq_companies WHERE ticker IS NOT NULL AND TRIM(ticker) <> ''", {})
+    return sorted({r["ticker"] for r in rows} | {r["ticker"] for r in master})
 
 
 def main():
@@ -403,6 +409,19 @@ def main():
         return
     from dotenv import load_dotenv
     load_dotenv(REPO / ".env")
+    # The app's EDGAR fallback runs in this process too: keep it out of ~/.edgar.
+    own_folder = None
+    if not os.getenv("EDGAR_LOCAL_DATA_DIR"):
+        own_folder = tempfile.mkdtemp(prefix="sec_check_")
+        os.environ["EDGAR_LOCAL_DATA_DIR"] = own_folder
+    try:
+        run()
+    finally:
+        if own_folder:
+            shutil.rmtree(own_folder, ignore_errors=True)
+
+
+def run():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("tickers", nargs="*")
     parser.add_argument("--all", action="store_true")

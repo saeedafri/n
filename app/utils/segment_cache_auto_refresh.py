@@ -51,11 +51,14 @@ def _first_delay_s() -> int:
 
 def _poll_s() -> int:
     """Check cadence. The MAX(id) gate is O(1), so a frequent poll is cheap — a
-    real rebuild only fires when v5 grew. Default 6h; floored at 10 min."""
+    real rebuild only fires when v5 grew, and then only for the companies whose
+    rows changed. Default 15 min, so Screening follows a data load as closely as
+    the Segments tab does (6 h left Screening behind the tab for most of a day);
+    floored at 10 min."""
     try:
-        return max(600, int(os.getenv("SEGMENT_CACHE_REFRESH_POLL_SEC", str(6 * 3600))))
+        return max(600, int(os.getenv("SEGMENT_CACHE_REFRESH_POLL_SEC", "900")))
     except ValueError:
-        return 6 * 3600
+        return 900
 
 
 def run_segment_cache_refresh_tick(force: bool = False):

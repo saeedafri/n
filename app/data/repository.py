@@ -11560,7 +11560,7 @@ class SegmentDataRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @persistent("segment_rows")
-    def _fetch_all_db_rows(ticker: str) -> List[Dict[str, Any]]:
+    def _fetch_all_db_rows(ticker: str, data_version: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch ALL dimensioned + consolidated rows for a ticker.
 
         Persisted per ticker on disk (survives deploys): the two queries return
@@ -11708,7 +11708,8 @@ class SegmentDataRepository:
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
     @persistent("segment_rows_q")
-    def _fetch_all_db_rows_quarterly(ticker: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+    def _fetch_all_db_rows_quarterly(ticker: str, start_date: date, end_date: date,
+                                     data_version: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch all 3-month dimensioned rows from 10-Q filings for a date range."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         from utils.constants import SEGMENT_ALL_AXES
@@ -12135,10 +12136,11 @@ class SegmentDataRepository:
         """, {"ticker": ticker, "start_date": start_date, "end_date": end_date})
 
     @staticmethod
-    def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
+    def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date,
+                                      data_version: Optional[str] = None) -> Dict[str, Any]:
         """Process DB rows into CapIQ-style Business + Geographic tables."""
         return SegmentDataRepository._build_segment_tables_from_rows(
-            ticker, SegmentDataRepository._fetch_all_db_rows(ticker), start_date, end_date)
+            ticker, SegmentDataRepository._fetch_all_db_rows(ticker, data_version), start_date, end_date)
 
     @staticmethod
     def _build_segment_tables_from_rows(ticker: str, all_rows, start_date: date, end_date: date) -> Dict[str, Any]:
@@ -12327,7 +12329,8 @@ class SegmentDataRepository:
         }
 
     @staticmethod
-    def _build_segment_tables_quarterly(ticker: str, start_date: date, end_date: date) -> Optional[Dict[str, Any]]:
+    def _build_segment_tables_quarterly(ticker: str, start_date: date, end_date: date,
+                                        data_version: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Process 10-Q rows into CapIQ-style quarterly segment tables.
 
         Uses YYYYMMDD integer keys so the rendering layer works unchanged.
@@ -12335,7 +12338,7 @@ class SegmentDataRepository:
         """
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
 
-        all_rows = SegmentDataRepository._fetch_all_db_rows_quarterly(ticker, start_date, end_date)
+        all_rows = SegmentDataRepository._fetch_all_db_rows_quarterly(ticker, start_date, end_date, data_version)
         if not all_rows:
             return None
         all_rows = SegmentDataRepository._newest_filing_first(
@@ -12809,12 +12812,33 @@ class SegmentDataRepository:
     FULL_START, FULL_END = date(1990, 1, 1), date(2100, 12, 31)
 
     @staticmethod
-    def full_segment_tables(ticker: str, period_type: str = "annual") -> Dict[str, Any]:
+    def full_segment_tables(ticker: str, period_type: str = "annual", fresh: bool = False) -> Dict[str, Any]:
         """The Segments tab's tables over every year on file — the single source the
-        tab (filtered to the viewer's range) and the screener's segment index read."""
+        tab (filtered to the viewer's range) and the screener's segment index read.
+
+        Keyed by the company's data version, so a load by the data team is a new
+        key: the next read builds from the new rows, with nothing to run by hand
+        and no stale copy served. The tab reads the version through a two-minute
+        memory cache; `fresh=True` (the screener's index refresh) reads it live."""
+        version = (SegmentDataRepository.current_data_version(ticker) if fresh
+                   else SegmentDataRepository.data_version(ticker))
         return SegmentDataRepository._stored_segment_tables(
             ticker, SegmentDataRepository.FULL_START, SegmentDataRepository.FULL_END,
-            period_type.lower(), SegmentDataRepository.rules_version())
+            period_type.lower(), SegmentDataRepository.rules_version(), version)
+
+    @staticmethod
+    @st.cache_data(ttl=120, show_spinner=False)
+    def data_version(ticker: str) -> str:
+        return SegmentDataRepository.current_data_version(ticker)
+
+    @staticmethod
+    def current_data_version(ticker: str) -> str:
+        """Changes whenever the company's rows in coreiq_filing_metrics_v5 do: a row
+        added (newest id), removed (count) or re-inserted (insert time)."""
+        row = db_manager.fetch_one(
+            "SELECT MAX(id) AS newest, COUNT(*) AS n, MAX(data_insert_timestamp) AS loaded "
+            "FROM coreiq_filing_metrics_v5 WHERE ticker = :ticker", {"ticker": ticker}) or {}
+        return f"{row.get('newest')}:{row.get('n')}:{row.get('loaded')}"
 
     @staticmethod
     def _within_dates(tables: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
@@ -12854,7 +12878,8 @@ class SegmentDataRepository:
     @staticmethod
     @persistent("segment_tables")
     def _stored_segment_tables(ticker: str, start_date: date, end_date: date,
-                               period_type: str, rules_version: str) -> Dict[str, Any]:
+                               period_type: str, rules_version: str,
+                               data_version: Optional[str] = None) -> Dict[str, Any]:
         """Get segment data in CapIQ format — two tables: Business + Geographic.
 
         Cached (ttl=3600): the Segment tab render AND the lazy Excel builder both call
@@ -12881,7 +12906,7 @@ class SegmentDataRepository:
         """
         # Quarterly path — DB only, no edgartools fallback
         if period_type.lower() == "quarterly":
-            result = SegmentDataRepository._build_segment_tables_quarterly(ticker, start_date, end_date)
+            result = SegmentDataRepository._build_segment_tables_quarterly(ticker, start_date, end_date, data_version)
             if result is not None:
                 return result
             return {
@@ -12891,7 +12916,7 @@ class SegmentDataRepository:
             }
 
         # Annual: Tier 1 — DB
-        result = SegmentDataRepository._build_segment_tables_from_db(ticker, start_date, end_date)
+        result = SegmentDataRepository._build_segment_tables_from_db(ticker, start_date, end_date, data_version)
         if result is not None:
             return result
 

@@ -2002,7 +2002,7 @@ def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=No
     skipped: List[str] = []
     for done, tk in enumerate(tickers, 1):
         try:
-            tables = SegmentDataRepository.full_segment_tables(tk, "annual") or {}
+            tables = SegmentDataRepository.full_segment_tables(tk, "annual", fresh=True) or {}
         except Exception as exc:
             skipped.append(tk)
             log_error(f"[SCREENING] segment cache: {tk} failed — {str(exc)[:160]}")
