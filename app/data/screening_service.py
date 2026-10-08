@@ -2480,29 +2480,12 @@ def _segment_classifier_version() -> str:
     from 10-Ks, which land in a burst each spring, and until the next one the
     screener kept serving members the previous rules produced. The fix that put
     McDonald's "United States" into the geographic index would have sat dormant
-    for months. Hashing the functions below means a change to them is itself a
-    reason to rebuild, once.
+    for months. Hashing the segment rules (SegmentDataRepository.rules_version)
+    means a change to them is itself a reason to rebuild, once.
     """
     import inspect
 
-    sources = []
-    for fn in (SegmentDataRepository._classify_segment_rows,
-               SegmentDataRepository._classify_member,
-               SegmentDataRepository._drop_wrapped_slices,
-               SegmentDataRepository._get_row_year,
-               SegmentDataRepository._segment_axes,
-               SegmentDataRepository._member_display_map,
-               SegmentDataRepository._matches_metric,
-               SegmentDataRepository._newest_filing_first,
-               SegmentDataRepository._colliding_geo_names,
-               SegmentDataRepository._name_overlaps_as_filed,
-               SegmentDataRepository._keep_newest_filing,
-               SegmentDataRepository._reconcile_with_totals,
-               _segment_cache_entries):
-        try:
-            sources.append(inspect.getsource(fn))
-        except Exception:
-            sources.append(getattr(fn, "__qualname__", "?"))
+    sources = [SegmentDataRepository.rules_version(), inspect.getsource(_segment_cache_entries)]
     return hashlib.sha1("".join(sources).encode("utf-8", "replace")).hexdigest()[:12]
 
 

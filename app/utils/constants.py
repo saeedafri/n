@@ -1251,6 +1251,9 @@ SEGMENT_METRIC_GROUPS = {
         "edgar_concepts": [
             "PaymentsToAcquirePropertyPlantAndEquipment",
             "CapitalExpenditureDiscontinuedOperations",
+            # ASU 2023-07 segment disclosure, used from FY2024 10-Ks; without it an
+            # older 10-K's PaymentsToAcquire… outranked the newest filing (MDLZ).
+            "SegmentExpenditureAdditionToLongLivedAssets",
         ],
         "edgar_labels": ["capital expenditure", "property and equipment additions",
                          "purchases of property"],

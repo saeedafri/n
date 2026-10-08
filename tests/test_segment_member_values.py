@@ -186,10 +186,9 @@ def test_the_classifier_version_covers_every_rule_that_decides_a_segment():
     assert len(version) == 12
 
     source = inspect.getsource(svc._segment_classifier_version)
-    for name in ("_classify_segment_rows", "_classify_member", "_drop_wrapped_slices",
-                 "_segment_axes",
-                 "_member_display_map", "_segment_cache_entries"):
-        assert name in source, f"{name} is not in the version hash"
+    assert "rules_version()" in source and "_segment_cache_entries" in source
+    # rules_version hashes the whole repository class, so no helper can be missed
+    assert "inspect.getsource(SegmentDataRepository)" in inspect.getsource(Segments.rules_version)
 
 
 def test_the_version_changes_when_a_rule_changes():
@@ -245,8 +244,8 @@ def test_a_member_is_read_with_the_element_its_total_used():
     took the alphabetically-first one and listed $15.6bn of a segment under a
     $72.2bn Total."""
     revenues = business_revenues(AXP_2025, years=(2025,))
-    assert revenues["Uscs"][2025] == 34_814.0
-    assert revenues["Ics"][2025] == 13_000.0
+    assert revenues["USCS"][2025] == 34_814.0
+    assert revenues["ICS"][2025] == 13_000.0
 
 
 def test_realignment_will_not_reach_into_a_further_breakdown():

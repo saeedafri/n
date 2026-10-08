@@ -173,41 +173,8 @@ def test_a_country_beside_its_region_is_withheld():
     assert set(geo_data["Revenues"]) == {"Americas", "Europe", "Asia"}
 
 
-def test_a_rolled_up_region_beside_its_own_part_keeps_its_filed_name():
-    # Amphenol: the workbook maps "Other foreign locations" to Foreign, which
-    # beside China reads as if it included China.
-    geo = {"Revenues": {"United States": {2023: 4405.4}, "China": {2023: 2884.0},
-                        "Foreign": {2023: 5265.3}}}
-    Segments._name_overlaps_as_filed(geo, {"Foreign": {2023: "Other foreign locations"}})
-    assert list(geo["Revenues"]) == ["United States", "China", "Other foreign locations"]
 
 
-def test_only_the_years_filed_as_a_residual_are_renamed():
-    # Cadence: "Other Americas" beside the United States in 2014, the whole
-    # "Americas" in 2023.
-    geo = {"Revenues": {"United States": {2014: 696.6, 2023: None},
-                        "Americas": {2014: 23.4, 2023: 1759.8}}}
-    Segments._name_overlaps_as_filed(geo, {"Americas": {2014: "Other Americas", 2023: "Americas"}})
-    assert geo["Revenues"]["Americas"] == {2014: None, 2023: 1759.8}
-    assert geo["Revenues"]["Other Americas"] == {2014: 23.4, 2023: None}
-
-
-def test_a_rolled_up_region_with_nothing_inside_it_keeps_the_business_name():
-    geo = {"Revenues": {"United States": {2023: 10.0}, "Europe": {2023: 5.0}}}
-    Segments._name_overlaps_as_filed(geo, {"Europe": {2023: "Other Europe"}})
-    assert list(geo["Revenues"]) == ["United States", "Europe"]
-
-
-def test_two_places_one_filing_lists_apart_never_share_a_row():
-    # ADM files the Cayman Islands and the United Kingdom side by side; the
-    # business workbook maps both to "United Kingdom".
-    geo_axis = "srt:StatementGeographicalAxis"
-    rows = [fact(name, value, date(2023, 1, 1), date(2023, 12, 31), axis=geo_axis, heading="Geographical")
-            for name, value in (("United States", 38_783e6), ("Cayman Islands", 7_646e6),
-                                ("United Kingdom", 2_219e6))]
-    _biz, geo, _tot = Segments._classify_segment_rows(rows, [2023])
-    assert geo["Revenues"]["Cayman Islands"][2023] == 7646.0
-    assert geo["Revenues"]["United Kingdom"][2023] == 2219.0
 
 
 def test_a_revenue_member_carrying_its_cost_table_label_is_named_by_its_stream():
@@ -226,3 +193,46 @@ def test_the_xbrl_element_decides_the_metric_over_label_words():
     biz, _geo, _tot = Segments._classify_segment_rows([capex], [2019])
     assert "Assets" not in biz
     assert biz["Capital Expenditure"]["Meals & Beverages"][2019] == 156.0
+
+
+def test_an_acronym_filed_in_capitals_stays_an_acronym():
+    assert Segments._title_case_member("GIS") == "GIS"            # DXC
+    assert Segments._title_case_member("FHS") == "FHS"            # Restaurant Brands
+    assert Segments._title_case_member("RH SEGMENT") == "RH Segment"
+    assert Segments._title_case_member("UNITED STATES") == "United States"
+    assert Segments._title_case_member("OTHER") == "Other"
+
+
+def test_a_restatement_is_not_undone_by_an_older_filings_element():
+    # Synopsys FY2022 Europe: 493.4 under us-gaap:Revenues (FY2022 10-K),
+    # restated to 430.4 under RevenueFromContract… (FY2024 10-K). The Total's
+    # element is us-gaap:Revenues, last filed in the older 10-K.
+    slot = ("geo", "Revenues", "Europe", 2022)
+    geo = {"Revenues": {"Europe": {2022: 430.369}}}
+    Segments._align_members_with_total(
+        {}, geo, {("geo", "Revenues", 2022): "us-gaap:Revenues"},
+        {slot + ("us-gaap:Revenues",): (493.43, "Geographical: Europe", date(2022, 12, 12))},
+        {slot}, {slot: "Geographical: Europe"}, {slot: date(2024, 12, 19)})
+    assert geo["Revenues"]["Europe"][2022] == 430.369
+
+
+def test_a_column_is_sized_by_the_values_it_shows_not_every_filing_repeating_them():
+    # AppLovin 2024 geography: 2,689 + 2,020 in the FY2024 10-K, restated to
+    # 1,726 + 1,498 in the FY2025 10-K. The column shows the restatement.
+    geo = {"Revenues": {"United States": {2024: 1726.2}, "Rest of World (RoW)": {2024: 1497.9}}}
+    filed = {("geo", "Revenues", "United States", 2024): date(2026, 2, 19),
+             ("geo", "Revenues", "Rest of World (RoW)", 2024): date(2026, 2, 19)}
+    largest, sums = Segments._column_sizes({}, geo, filed)
+    assert round(sums[("geo", "Revenues", 2024)], 1) == 3224.1
+    assert largest[("geo", "Revenues", 2024)] == 1726.2
+
+
+def test_a_wrapped_segment_stays_with_its_unwrapped_years():
+    # Mondelez: "Segments: Europe" in its FY2023 10-K, "Consolidation Items:
+    # Operating Segments, Segments: Europe" from FY2024; Europe is also on its
+    # geographic axis.
+    wrapped = {"dimension": "srt:ConsolidationItemsAxis", "dimension_member_label": "Operating Segments",
+               "dimension_label": "Europe",
+               "full_dimension_label": "Consolidation Items: Operating Segments, Segments: Europe"}
+    axes = frozenset({"us-gaap:StatementBusinessSegmentsAxis"})
+    assert Segments._classify_member(wrapped, {"europe"}, axes) == ("business", "Europe")

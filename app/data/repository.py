@@ -10314,6 +10314,9 @@ class SegmentDataRepository:
 
         member_raw = row.get('dimension_member_label') or ''
         forced_section = None
+        # The axis the member itself sits on. A wrapper row's `dimension` names
+        # the wrapper's axis, so for one it is read off the inner heading below.
+        member_axis = axis
         # Multi-dimensional operating-segment facts: the primary member is a generic
         # wrapper ("Operating Segments") while the REAL segment sits on a second axis
         # in dimension_label — Costco geo revenue (ConsolidationItems=Operating
@@ -10327,6 +10330,12 @@ class SegmentDataRepository:
             if not inner or inner.lower() == member_raw.lower().strip():
                 return None
             member_raw = inner
+            # Judged as its unwrapped twin would be: Mondelez's FY2024 10-K files
+            # "Consolidation Items: Operating Segments, Segments: Europe" for the
+            # segment its earlier 10-Ks filed as "Segments: Europe", and reading
+            # the wrapper's axis dropped Europe as a place off any segment axis.
+            member_axis = SegmentDataRepository._INNER_SEGMENT_AXIS.get(
+                SegmentDataRepository._inner_heading(row, inner), axis)
             # geo_member_set only sees axes named in the `dimension` column, and on
             # a wrapper row that column names the WRAPPER's axis, never the inner
             # one. J&J's 10-K files "Consolidation Items: Operating Segments,
@@ -10334,9 +10343,13 @@ class SegmentDataRepository:
             # copy lives only in its 10-Qs, which the screening cache never reads —
             # so the set came up empty and three of its regions landed in Business.
             # full_dimension_label carries the inner axis's own heading, so read it.
+            # A member the filer heads "Segments" is its segment wherever else the
+            # name turns up: Mondelez's Europe sits on its geographic axis too,
+            # and routing the wrapped copy there split one segment across two
+            # tables by filing year (Business to FY2021, Geographic after).
             if SegmentDataRepository._looks_geographic(inner) and (
-                    inner.lower() in geo_member_set
-                    or SegmentDataRepository._inner_heading_is_geographic(row, inner)):
+                    SegmentDataRepository._inner_heading_is_geographic(row, inner)
+                    or (inner.lower() in geo_member_set and member_axis == axis)):
                 forced_section = "geo"
         # Compare on a dash/whitespace-normalised name so one spelling of each rule
         # covers a filer's variants ("Corporate, Non -Segment" vs "Corporate Non-Segment").
@@ -10359,9 +10372,11 @@ class SegmentDataRepository:
         # Palo Alto's "Cost of product revenue". The value is the revenue; the
         # name is what follows "cost of". A bare "Cost of sales" names no
         # segment at all and is left as filed for the data team.
-        stripped = SegmentDataRepository._COST_LABEL.sub('', member_raw.strip())
-        if stripped != member_raw.strip() and not SegmentDataRepository._GENERIC_LINE.match(stripped):
-            member_raw = stripped
+        if SegmentDataRepository._COST_LABEL.match(member_raw.strip()):
+            stripped = re.sub(r'\s+revenues?$', '', SegmentDataRepository._COST_LABEL.sub('', member_raw.strip()),
+                              flags=re.IGNORECASE)
+            if not SegmentDataRepository._GENERIC_LINE.match(stripped):
+                member_raw = stripped
         # Continuing vs discontinued operations splits the company by status, not
         # by business. us-gaap:StatementOperatingActivitiesSegmentAxis carries it
         # for 41 filers, and Campbell's listed "Continuing Operations" and
@@ -10400,9 +10415,8 @@ class SegmentDataRepository:
         if section == "geo":
             if is_geo_excluded_label(member):
                 return None
-            row['_filed_member'] = member      # see _name_overlaps_as_filed
             member = canonicalize_geo_label(member)
-        elif (row.get('dimension') or '').strip() in segment_axes:
+        elif axis in segment_axes or member_axis in segment_axes:
             # A place on a real segment axis IS the filer's segment. McDonald's
             # reports three segments and one of them is "U.S.", filed on
             # us-gaap:StatementBusinessSegmentsAxis beside "International Operated
@@ -10454,6 +10468,12 @@ class SegmentDataRepository:
             axis = (row.get('dimension') or '').strip()
             if row.get('_is_ndim') or axis in axes:
                 continue       # one business member settles the axis
+            # The operating-segment axis is segments by definition, regions or not
+            # (Mondelez, Apple, Costco, Cisco) — decided with the business team
+            # 2026-10-08 so every segment SEC files is shown.
+            if axis.endswith(':StatementBusinessSegmentsAxis'):
+                axes.add(axis)
+                continue
             classified = SegmentDataRepository._classify_member(row, geo_member_set)
             if classified and classified[0] == "business":
                 axes.add(axis)
@@ -10483,7 +10503,13 @@ class SegmentDataRepository:
 
         def axis_count(r):
             headings = re.findall(r", ([^,:]+): ", r.get('full_dimension_label') or '')
-            return sum(1 for h in headings if not h.startswith("Concentration Risk"))
+            count = sum(1 for h in headings if not h.startswith("Concentration Risk"))
+            # The wrapper ("Consolidation Items: Operating Segments") marks the
+            # segment's own figure; it divides nothing. Counting it let an older
+            # 10-K's plain "Segments: Europe" beat the restated wrapped copy in
+            # Mondelez's FY2024 10-K (capex 355 → 335).
+            member = (r.get('dimension_member_label') or '').lower().strip()
+            return count - 1 if member in wrappers and count else count
 
         def slice_key(r):
             member = (r.get('dimension_member_label') or '').lower().strip()
@@ -10656,7 +10682,7 @@ class SegmentDataRepository:
     @staticmethod
     def _align_members_with_total(biz_data, geo_data, total_concept_by_period,
                                   member_by_concept, declared_values,
-                                  stored_context) -> None:
+                                  stored_context, stored_filing=None) -> None:
         """Re-read each member with the element its Total turned out to use.
 
         A member often carries the metric several ways. American Express tags its
@@ -10690,8 +10716,46 @@ class SegmentDataRepository:
                 # element: The Andersons' Rail revenue would become its Canadian
                 # slice (Segments: Rail, Geographical: Canada), and Chevron's
                 # Oil and Gas its Chevron Phillips joint venture.
-                if candidate and candidate[1] == stored_context.get(slot):
+                # Never from an older filing than the value it replaces: Synopsys
+                # restated FY2022 Europe to 430.4 in its FY2024 10-K under
+                # RevenueFromContract…, and its Total's element (us-gaap:Revenues)
+                # last appeared in the FY2022 10-K, so the re-read brought back
+                # the original 493.4.
+                if candidate and candidate[1] == stored_context.get(slot) and not SegmentDataRepository._older_filing(
+                        candidate[2] if len(candidate) > 2 else None, (stored_filing or {}).get(slot)):
                     by_period[period] = candidate[0]
+
+    @staticmethod
+    def _column_sizes(biz_data, geo_data, stored_filing):
+        """(largest member, sum of members) per (section, metric, period), over the
+        values the column will show: one per member, from the newest filing in
+        the column. Summing every row that matched instead counted each figure
+        once per 10-K repeating it as a comparative — AppLovin's 2024 geography
+        summed to 7,933 (its 2025 AND 2026 10-Ks), so the Total nearest that
+        was the superseded 4,709, not the restated 3,224 its rows add up to."""
+        largest: Dict[Tuple, float] = {}
+        sums: Dict[Tuple, float] = {}
+        for section, data in (("business", biz_data), ("geo", geo_data)):
+            for metric_name, members in data.items():
+                newest: Dict[Any, Any] = {}
+                for member, by_period in members.items():
+                    for period, value in by_period.items():
+                        day = stored_filing.get((section, metric_name, member, period))
+                        if value is not None and day is not None:
+                            newest[period] = max(newest.get(period, day), day)
+                for member, by_period in members.items():
+                    for period, value in by_period.items():
+                        day = stored_filing.get((section, metric_name, member, period))
+                        if value is None or (day is not None and day < newest.get(period, day)):
+                            continue
+                        slot = (section, metric_name, period)
+                        largest[slot] = max(largest.get(slot, float('-inf')), value)
+                        sums[slot] = sums.get(slot, 0.0) + value
+        return largest, sums
+
+    @staticmethod
+    def _older_filing(day, than) -> bool:
+        return hasattr(day, 'toordinal') and hasattr(than, 'toordinal') and day < than
 
     @staticmethod
     def _drop_offmeasure_members(biz_data, geo_data, member_concepts, total_concepts) -> None:
@@ -10857,75 +10921,6 @@ class SegmentDataRepository:
                     del members[m]
                 if not members:
                     del data[metric_name]
-
-    @staticmethod
-    def _colliding_geo_names(rows, geo_member_set: set, segment_axes: frozenset) -> Set[str]:
-        """Filed geographic names that the business team's map would merge with
-        another place the SAME filing reports separately. ADM's 10-Ks list the
-        Cayman Islands and the United Kingdom side by side, the map names both
-        "United Kingdom", and first-wins kept one figure and dropped the other.
-        Two names are one place when they carry the same number; a different
-        number for the same period and element proves two places, and those
-        names are shown as filed."""
-        seen: Dict[Tuple, Dict[str, Tuple[str, float]]] = {}
-        for row in rows:
-            if row.get('_is_ndim') or row.get('numeric_value') is None:
-                continue
-            classified = SegmentDataRepository._classify_member(row, geo_member_set, segment_axes)
-            if not classified or classified[0] != "geo":
-                continue
-            filed = row.get('_filed_member') or classified[1]
-            slot = (row.get('filing_date'), SegmentDataRepository._period_key(row),
-                    row.get('concept'), classified[1])
-            seen.setdefault(slot, {})[SegmentDataRepository._member_key(filed)] = (
-                filed, round(float(row['numeric_value'])))
-        colliding: Set[str] = set()
-        for names in seen.values():
-            if len({value for _, value in names.values()}) > 1:
-                colliding.update(name for name, _ in names.values())
-        return colliding
-
-    @staticmethod
-    def _name_overlaps_as_filed(geo_data, filed_names: Dict[str, Dict[Any, str]]) -> None:
-        """A business-team name that contains another row of the same column goes
-        back to the name the company filed. The workbook rolls residuals up —
-        "Other foreign locations" → Foreign, "Other Europe" → Europe, "Central
-        America" → Latin America — which reads right on its own and wrong beside
-        a sibling: Amphenol's "Foreign" next to its China row, DXC's "Europe"
-        next to the United Kingdom, Fresh Del Monte's "Latin America" next to
-        South America.
-
-        Only the years filed under another name move. Cadence filed "Other
-        Americas" beside the United States in 2014 and the whole "Americas" in
-        2023; those are two rows, and the 2023 one keeps the canonical name.
-        The moved years take the latest filed spelling, so a filer that reworded
-        its residual still reads as one row."""
-        key = SegmentDataRepository._member_key
-        moves: Dict[str, Tuple[str, Set[Any]]] = {}
-        for members in geo_data.values():
-            for name, by_period in members.items():
-                node = SegmentDataRepository._geo_node(name)
-                filed = filed_names.get(name, {})
-                moved = {p for p, f in filed.items() if key(f) != key(name)}
-                if not node or not moved or name in moves:
-                    continue
-                periods = {p for p, v in by_period.items() if v is not None}
-                if any(node in SegmentDataRepository._geo_ancestors(other)
-                       for other, by in members.items()
-                       if other != name and any(by.get(p) is not None for p in periods)):
-                    moves[name] = (filed[max(moved)], moved)
-        for metric_name, members in geo_data.items():
-            rebuilt: Dict[str, Dict[Any, Optional[float]]] = {}
-            for name, by_period in members.items():
-                new_name, moved = moves.get(name, (None, set()))
-                if not new_name or new_name in members:
-                    rebuilt[name] = by_period    # the filed name is a row already
-                    continue
-                rest = {p: (None if p in moved else v) for p, v in by_period.items()}
-                if any(v is not None for v in rest.values()):
-                    rebuilt[name] = rest
-                rebuilt[new_name] = {p: (v if p in moved else None) for p, v in by_period.items()}
-            geo_data[metric_name] = rebuilt
 
     @staticmethod
     def _aggregates_to_drop(section: str, values: Dict[str, float], over: float,
@@ -11149,6 +11144,17 @@ class SegmentDataRepository:
         "UK", "USA", "US", "EU", "DACH", "CEE", "SEA", "ROW", "RoW",
     })
 
+    # Segment acronyms that contain a vowel, as filed in capitals. A vowel-free
+    # token is recognised without a list (see _title_case_member).
+    _SEGMENT_ACRONYMS = frozenset({
+        "AWS", "GIS", "CES", "GBS", "GTS", "ICS", "ICG", "IMS", "IPC", "EMS", "EVM",
+        "EBU", "MBU", "SBU", "AEBU", "CDBU", "CMBU", "CNBU", "MCBU", "DCAI", "EISG",
+        "ESSA", "AMESA", "AMENA", "FLNA", "QFNA", "PBNA", "NAB", "USCS", "USCC",
+        "USPB", "USPS", "CODM", "CIB", "GPU", "QSI", "TCA", "SAA", "AIT", "MCI",
+        "UGG", "AVA", "NEX", "IH", "EH", "IM", "IS", "NA", "USA", "LAAP", "APLA",
+        "EAME", "LACC", "ALMEA", "AMEA", "EMEA", "APAC", "LATAM", "MENA", "IDL",
+    })
+
     @staticmethod
     def _title_case_member(member: str) -> str:
         if not member:
@@ -11164,6 +11170,17 @@ class SegmentDataRepository:
         # and "JAPAN" read normally.
         if '&' in member or member.upper() in SegmentDataRepository._MEMBER_ACRONYMS:
             return member
+        # Word by word, an all-capitals acronym stays one: DXC's "GIS", American
+        # Express's "USCS", Restaurant Brands' "FHS" and "RH" read "Gis", "Uscs",
+        # "Fhs", "Rh" after title(). A token with no vowel is never an English
+        # word, so that test needs no list; acronyms that do carry a vowel are
+        # listed in _SEGMENT_ACRONYMS.
+        if member == member.upper():
+            return re.sub(r"[A-Za-z]+", lambda w: w.group() if (
+                w.group() in SegmentDataRepository._SEGMENT_ACRONYMS
+                or (len(w.group()) <= 5 and not re.search(r"[AEIOUY]", w.group())
+                    and not (len(w.group()) == 1 and w.group() in "AI"))
+            ) else w.group().capitalize(), member)
         return member.title()
 
     @staticmethod
@@ -11283,10 +11300,9 @@ class SegmentDataRepository:
         a services axis, others beside legal entities and corporate items — each
         list added up to more than the company. Consolidated rows always pass.
 
-        A segment axis carrying nothing but places (Apple, Costco: their segments
-        are regions) is no business breakdown under the business team's rule, so
-        such a company falls back like one without segments."""
-        from data.geo_hierarchy import names_a_place
+        A segment axis carrying nothing but places (Apple, Costco, Mondelez: their
+        segments are regions) is still the segment note: since 2026-10-08 those
+        regions are shown as the business segments SEC files them as."""
         sources: Dict[str, collections.Counter] = {"business": collections.Counter(),
                                                     "geo": collections.Counter()}
         tagged = []
@@ -11299,21 +11315,13 @@ class SegmentDataRepository:
             if not found:
                 continue
             section, source = found
-            if source == "canon" and section == "business":
-                wrapped = ((row.get('dimension_member_label') or '').lower().strip()
-                           in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS)
-                name = row.get('dimension_label') if wrapped else row.get('dimension_member_label')
-                if names_a_place(SegmentDataRepository._title_case_member(name or '')):
-                    source = "canon-place"
-                    tagged[-1] = (row, (section, source))
             sources[section][source] += 1
         chosen = {}
         for section, counts in sources.items():
             if counts.get("canon"):
-                chosen[section] = {"canon", "canon-place"}
+                chosen[section] = {"canon"}
             elif counts:
-                fallback = [(n, s) for s, n in counts.items() if s != "canon-place"]
-                chosen[section] = {max(fallback)[1]} if fallback else {"canon-place"}
+                chosen[section] = {max((n, s) for s, n in counts.items())[1]}
         return [row for row, found in tagged
                 if found is None and row.get('_is_ndim')
                 or found is not None and found[1] in chosen.get(found[0], ())]
@@ -11672,6 +11680,25 @@ class SegmentDataRepository:
             return False
         return any(axis.strip('%').lower() in dimension for axis in SEGMENT_GEO_AXES)
 
+    _INNER_SEGMENT_AXIS = {
+        "segments": "us-gaap:StatementBusinessSegmentsAxis",
+        "business segments": "us-gaap:StatementBusinessSegmentsAxis",
+        "statement business segments": "us-gaap:StatementBusinessSegmentsAxis",
+        "statement, business segments": "us-gaap:StatementBusinessSegmentsAxis",
+    }
+
+    @staticmethod
+    def _inner_heading(row, inner: str) -> str:
+        """Lower-cased heading in front of a wrapper fact's inner member:
+        "Consolidation Items: Operating Segments, Segments: Europe" → "segments"."""
+        label = row.get('full_dimension_label') or ''
+        at = label.lower().rfind(f": {inner.lower()}") if inner else -1
+        if at == -1:
+            return ''
+        head = label[:at]
+        cut = head.rfind(', ')
+        return (head[cut + 2:] if cut != -1 else head).strip().lower()
+
     @staticmethod
     def _inner_heading_is_geographic(row, inner: str) -> bool:
         """Is a wrapper fact's inner member filed under a Geographical heading?
@@ -11819,8 +11846,6 @@ class SegmentDataRepository:
         # Slots already filled from an element this metric declares (see below).
         declared_values: Set[Tuple] = set()
         segment_axes = SegmentDataRepository._segment_axes(filtered, geo_member_set)
-        colliding_geo = SegmentDataRepository._colliding_geo_names(filtered, geo_member_set, segment_axes)
-        filed_geo_names: Dict[str, Dict[Any, str]] = {}
         member_display = SegmentDataRepository._member_display_map(
             filtered, geo_member_set, segment_axes)
         year_ends = SegmentDataRepository._fiscal_year_ends(filtered)
@@ -11844,12 +11869,8 @@ class SegmentDataRepository:
             if classified is None:
                 continue
             section, member = classified
-            if section == "geo" and row.get('_filed_member') in colliding_geo:
-                member = row['_filed_member']
             member = member_display.get(
                 (section, SegmentDataRepository._member_key(member)), member)
-            if section == "geo":     # newest filing first, so the first name is the latest
-                filed_geo_names.setdefault(member, {}).setdefault(row_year, row.get('_filed_member') or member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg, row.get('concept') or ''):
@@ -11888,21 +11909,20 @@ class SegmentDataRepository:
                         _fdl = (row.get('full_dimension_label') or '').strip()
                         _cand = value_slot + (concept,)
                         if _cand in member_by_concept:
-                            if member_by_concept[_cand] != (scaled, _fdl):
+                            if (member_by_concept[_cand] or ())[:2] != (scaled, _fdl):
                                 member_by_concept[_cand] = None
                         else:
-                            member_by_concept[_cand] = (scaled, _fdl)
+                            member_by_concept[_cand] = (scaled, _fdl, row.get('filing_date'))
                         section_concepts.setdefault((section, metric_name), set()).add(concept)
                         concept_counts.setdefault((section, metric_name), collections.Counter())[concept] += 1
                         member_concepts.setdefault(
                             (section, metric_name, member, row_year), set()).add(concept)
                     member_periods.setdefault((section, metric_name, row_year), set()).add(
                         SegmentDataRepository._period_key(row))
-                    slot = (section, metric_name, row_year)
-                    if scaled > largest_member.get(slot, float('-inf')):
-                        largest_member[slot] = scaled
-                    member_sum[slot] = member_sum.get(slot, 0.0) + scaled
                     break
+
+        largest_member, member_sum = SegmentDataRepository._column_sizes(
+            biz_data, geo_data, stored_filing)
 
         # ── Second pass: non-dimensioned rows → per-section Total rows ────────
         # A Total is only a Total if it is the SAME XBRL concept the members are
@@ -11950,14 +11970,13 @@ class SegmentDataRepository:
 
         SegmentDataRepository._align_members_with_total(
             biz_data, geo_data, total_concept_by_period, member_by_concept,
-            declared_values, stored_context)
+            declared_values, stored_context, stored_filing)
         SegmentDataRepository._drop_offmeasure_members(
             biz_data, geo_data, member_concepts, total_concepts)
         SegmentDataRepository._suppress_impossible_totals(
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
         SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
         SegmentDataRepository._reconcile_with_totals(biz_data, geo_data, metric_totals)
-        SegmentDataRepository._name_overlaps_as_filed(geo_data, filed_geo_names)
 
         return biz_data, geo_data, metric_totals
 
@@ -12259,8 +12278,6 @@ class SegmentDataRepository:
         # carries the rationale).
         declared_values: Set[Tuple] = set()
         segment_axes = SegmentDataRepository._segment_axes(all_rows, geo_member_set)
-        colliding_geo = SegmentDataRepository._colliding_geo_names(all_rows, geo_member_set, segment_axes)
-        filed_geo_names: Dict[str, Dict[Any, str]] = {}
         member_display = SegmentDataRepository._member_display_map(
             all_rows, geo_member_set, segment_axes)
 
@@ -12288,12 +12305,8 @@ class SegmentDataRepository:
             if classified is None:
                 continue
             section, member = classified
-            if section == "geo" and row.get('_filed_member') in colliding_geo:
-                member = row['_filed_member']
             member = member_display.get(
                 (section, SegmentDataRepository._member_key(member)), member)
-            if section == "geo":     # newest filing first, so the first name is the latest
-                filed_geo_names.setdefault(member, {}).setdefault(pkey, row.get('_filed_member') or member)
 
             for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
                 if SegmentDataRepository._matches_metric(orig_label, cfg, row.get('concept') or ''):
@@ -12322,19 +12335,18 @@ class SegmentDataRepository:
                         _fdl = (row.get('full_dimension_label') or '').strip()
                         _cand = value_slot + (concept,)
                         if _cand in member_by_concept:
-                            if member_by_concept[_cand] != (scaled, _fdl):
+                            if (member_by_concept[_cand] or ())[:2] != (scaled, _fdl):
                                 member_by_concept[_cand] = None
                         else:
-                            member_by_concept[_cand] = (scaled, _fdl)
+                            member_by_concept[_cand] = (scaled, _fdl, row.get('filing_date'))
                         section_concepts.setdefault((section, metric_name), set()).add(concept)
                         concept_counts.setdefault((section, metric_name), collections.Counter())[concept] += 1
                     member_periods.setdefault((section, metric_name, pkey), set()).add(
                         SegmentDataRepository._period_key(row))
-                    slot = (section, metric_name, pkey)
-                    if scaled > largest_member.get(slot, float('-inf')):
-                        largest_member[slot] = scaled
-                    member_sum[slot] = member_sum.get(slot, 0.0) + scaled
                     break
+
+        largest_member, member_sum = SegmentDataRepository._column_sizes(
+            biz_data, geo_data, stored_filing)
 
         # Second pass: non-dimensioned rows → Total rows, ranked exactly as the
         # annual builder ranks them (see _rank_total_candidate) — the members' own
@@ -12380,14 +12392,13 @@ class SegmentDataRepository:
 
         SegmentDataRepository._align_members_with_total(
             biz_data, geo_data, total_concept_by_period, member_by_concept,
-            declared_values, stored_context)
+            declared_values, stored_context, stored_filing)
         SegmentDataRepository._drop_offmeasure_members(
             biz_data, geo_data, member_concepts, total_concepts)
         SegmentDataRepository._suppress_impossible_totals(
             biz_data, geo_data, metric_totals, member_concepts, total_concept_by_period)
         SegmentDataRepository._keep_newest_filing(biz_data, geo_data, stored_filing)
         SegmentDataRepository._reconcile_with_totals(biz_data, geo_data, metric_totals)
-        SegmentDataRepository._name_overlaps_as_filed(geo_data, filed_geo_names)
 
         if not biz_data and not geo_data:
             return None
@@ -12748,8 +12759,40 @@ class SegmentDataRepository:
         return bool(r)
 
     @staticmethod
-    @st.cache_data(ttl=3600, show_spinner=False)  # 1h — segment data is pre-ingested, not live
+    @functools.lru_cache(maxsize=1)
+    def rules_version() -> str:
+        """Hash of everything that decides what the Segments tab shows: this whole
+        class, the metric definitions and the business team's geography files.
+        Stored tables carry it, so a deploy that changes any rule — in any helper,
+        not only the function that is stored — is never served the old result."""
+        import inspect
+        import hashlib
+        from utils.constants import SEGMENT_METRIC_GROUPS
+        here = Path(__file__).resolve().parent
+        parts = [inspect.getsource(SegmentDataRepository), repr(SEGMENT_METRIC_GROUPS)]
+        for name in ("geo_label_map.json", "geo_hierarchy.json", "segment_aliases.py", "geo_hierarchy.py"):
+            try:
+                parts.append((here / name).read_text(encoding="utf-8"))
+            except OSError:
+                parts.append(name)
+        return hashlib.sha1("".join(parts).encode("utf-8", "replace")).hexdigest()[:12]
+
+    @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)  # memory fast path; the disk copy is below
     def get_segment_data(ticker: str, start_date: date, end_date: date, period_type: str = "annual") -> Dict[str, Any]:
+        """Segments tab tables, built once per company and stored on the persistent
+        cache dir (/home/mdp-cache on Azure — survives restarts and deploys).
+        Building costs 1-2.5 s of rules per company view; a stored copy is read in
+        milliseconds. A company is rebuilt only when it gets new filing rows (the
+        persist layer watches coreiq_filing_metrics_v5 ids per ticker), when a table
+        it reads is written, or when rules_version() changes."""
+        return SegmentDataRepository._stored_segment_tables(
+            ticker, start_date, end_date, period_type, SegmentDataRepository.rules_version())
+
+    @staticmethod
+    @persistent("segment_tables")
+    def _stored_segment_tables(ticker: str, start_date: date, end_date: date,
+                               period_type: str, rules_version: str) -> Dict[str, Any]:
         """Get segment data in CapIQ format — two tables: Business + Geographic.
 
         Cached (ttl=3600): the Segment tab render AND the lazy Excel builder both call
@@ -15361,6 +15404,7 @@ def warmup_ec_caches() -> None:
 
 # In-memory caches in front of the persisted per-company results (utils/persist.py).
 bind_ram_clear("key_stats", lambda: KeyStatsRepository.get_key_stats_data.clear())
+bind_ram_clear("segment_tables", lambda: SegmentDataRepository.get_segment_data.clear())
 bind_ram_clear("price_history", lambda: StockQuoteRepository.get_price_history.clear())
 bind_ram_clear("latest_quote", lambda: StockQuoteRepository.get_latest_quote.clear())
 bind_ram_clear("shares_with_price", lambda: StockQuoteRepository.get_shares_with_price.clear())
