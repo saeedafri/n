@@ -10314,6 +10314,7 @@ class SegmentDataRepository:
 
         member_raw = row.get('dimension_member_label') or ''
         forced_section = None
+        declared_segment = False     # wrapped as an operating segment by the filer
         # The axis the member itself sits on. A wrapper row's `dimension` names
         # the wrapper's axis, so for one it is read off the inner heading below.
         member_axis = axis
@@ -10325,7 +10326,7 @@ class SegmentDataRepository:
         # geographies dropped AMD's four segments and left the tab showing nothing but
         # its reconciliation line. A wrapper with no inner member is the roll-up
         # itself, redundant with the 1-D facts, so it goes.
-        if member_raw.lower().strip() in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
+        if SegmentDataRepository.is_wrapper_label(member_raw):
             inner = (row.get('dimension_label') or '').strip()
             if not inner or inner.lower() == member_raw.lower().strip():
                 return None
@@ -10336,6 +10337,7 @@ class SegmentDataRepository:
             # the wrapper's axis dropped Europe as a place off any segment axis.
             member_axis = SegmentDataRepository._INNER_SEGMENT_AXIS.get(
                 SegmentDataRepository._inner_heading(row, inner), axis)
+            declared_segment = member_axis != axis
             # geo_member_set only sees axes named in the `dimension` column, and on
             # a wrapper row that column names the WRAPPER's axis, never the inner
             # one. J&J's 10-K files "Consolidation Items: Operating Segments,
@@ -10347,14 +10349,25 @@ class SegmentDataRepository:
             # name turns up: Mondelez's Europe sits on its geographic axis too,
             # and routing the wrapped copy there split one segment across two
             # tables by filing year (Business to FY2021, Geographic after).
-            if SegmentDataRepository._looks_geographic(inner) and (
-                    SegmentDataRepository._inner_heading_is_geographic(row, inner)
-                    or (inner.lower() in geo_member_set and member_axis == axis)):
+            # The filer's own "Geographical:" heading is enough on its own: Merck's
+            # "Total segment profits, Geographical: Int’l" is not a name the place
+            # test knows, and it landed in Business beside the real segments.
+            if SegmentDataRepository._inner_heading_is_geographic(row, inner) or (
+                    SegmentDataRepository._looks_geographic(inner)
+                    and inner.lower() in geo_member_set and member_axis == axis):
                 forced_section = "geo"
+        filed_label = member_raw.strip()
+        # A "…Domain" element is the axis's own default — the whole company.
+        if re.search(r'domain\s*\]?$', filed_label, re.IGNORECASE):
+            return None
+        member_raw = SegmentDataRepository.readable_member(member_raw)
         # Compare on a dash/whitespace-normalised name so one spelling of each rule
         # covers a filer's variants ("Corporate, Non -Segment" vs "Corporate Non-Segment").
         low = SegmentDataRepository._normalize_member_text(member_raw)
-        if low in SEGMENT_SKIP_MEMBERS or low in SEGMENT_RECONCILIATION_MEMBERS:
+        # A name on the skip list is still a segment when the filer wraps it as an
+        # operating segment: CDW's "Corporate" segment (private-sector customers,
+        # $9.4bn) is not the unallocated corporate line the list is for.
+        if (low in SEGMENT_SKIP_MEMBERS or low in SEGMENT_RECONCILIATION_MEMBERS) and not declared_segment:
             return None
         # Aggregate XBRL "operating segment" roll-up members ("Operating segment",
         # "Total for operating segments", …) are totals, never a real segment.
@@ -10372,6 +10385,12 @@ class SegmentDataRepository:
         # Palo Alto's "Cost of product revenue". The value is the revenue; the
         # name is what follows "cost of". A bare "Cost of sales" names no
         # segment at all and is left as filed for the data team.
+        # "X Segment: description" names segment X: CDW files "Public Segment:
+        # Government Agencies, Education and Healthcare" in some years and
+        # "Public" in others, which listed one segment as two half-empty rows.
+        named = SegmentDataRepository._NAMED_SEGMENT.match(member_raw.strip())
+        if named:
+            member_raw = named.group(1)
         if SegmentDataRepository._COST_LABEL.match(member_raw.strip()):
             stripped = re.sub(r'\s+revenues?$', '', SegmentDataRepository._COST_LABEL.sub('', member_raw.strip()),
                               flags=re.IGNORECASE)
@@ -10413,7 +10432,7 @@ class SegmentDataRepository:
         # Segments tab and the screening cache are built from this one function,
         # so they cannot disagree about what counts as a geography.
         if section == "geo":
-            if is_geo_excluded_label(member):
+            if is_geo_excluded_label(member) or is_geo_excluded_label(filed_label):
                 return None
             member = canonicalize_geo_label(member)
         elif axis in segment_axes or member_axis in segment_axes:
@@ -10442,8 +10461,32 @@ class SegmentDataRepository:
             return None
         return section, member
 
-    _RECONCILING_LINE = re.compile(r'included in segment|^restructuring and other|\ballocated to\b')
+    # Lines that are not rows of any segment table: reconciling items, a bare
+    # "Total" or "Revenue" (Brunswick, Buckle). Eliminations, intersegment and
+    # unallocated rows stay: a filer lists them so the column adds up to its Total.
+    _RECONCILING_LINE = re.compile(
+        r'included in segment|^restructuring and other|\ballocated to\b|reconcil'
+        r'|^totals?$|^revenues?$')
+
+    @staticmethod
+    def readable_member(text: str) -> str:
+        """A member label as a person would write it. Labels sometimes carry the
+        element name itself — Home Depot "hd:InsidetheU.S.Member", D.R. Horton
+        "HomeBuildingMember", AutoZone "Auto Parts Stores [ Member]", Rocky Brands
+        "Retail (Member)" — or a footnote marker ("Direct to Consumer: (1)")."""
+        original = (text or '').strip()
+        t = re.sub(r'^[a-z][\w-]*:(?=\S)', '', original)                # hd:, us-gaap:, pf0:
+        t = re.sub(r'\s*[\[(]\s*(member|domain)\s*[\])]\s*$', '', t, flags=re.I)
+        t = re.sub(r'(?<=[a-z0-9.])Member$|\s+member$', '', t, flags=re.I)
+        t = re.sub(r'\s*:?\s*\(\d+\)$', '', t)                          # footnote "(1)"
+        # An element name is CamelCase; a brand is not split ("iPhone", "McDonald's"):
+        # only a label that was an element name, or has two inner capitals, is split.
+        element_name = t != original or len(re.findall(r'[a-z][A-Z]', t)) >= 2
+        if ' ' not in t and element_name:
+            t = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', t)
+        return t.strip() or original
     _COST_LABEL = re.compile(r'^costs? of\s+', re.IGNORECASE)
+    _NAMED_SEGMENT = re.compile(r'^(.+?)\s+segments?:\s+\S.*$', re.IGNORECASE)
     _GENERIC_LINE = re.compile(r'^(sales|revenues?|goods sold|products sold|net sales)$', re.IGNORECASE)
 
     _OPERATIONS_STATUS = re.compile(
@@ -10474,6 +10517,13 @@ class SegmentDataRepository:
             if axis.endswith(':StatementBusinessSegmentsAxis'):
                 axes.add(axis)
                 continue
+            # Costco files its segments only wrapped: "Consolidation Items:
+            # Operating Segments, Segments: United States".
+            if SegmentDataRepository.is_wrapper_label(row.get('dimension_member_label')):
+                inner_axis = SegmentDataRepository._INNER_SEGMENT_AXIS.get(
+                    SegmentDataRepository._inner_heading(row, (row.get('dimension_label') or '').strip()))
+                if inner_axis:
+                    axes.add(inner_axis)
             classified = SegmentDataRepository._classify_member(row, geo_member_set)
             if classified and classified[0] == "business":
                 axes.add(axis)
@@ -10499,23 +10549,27 @@ class SegmentDataRepository:
         risk axes annotate a fact without dividing it, so they are not counted.
         """
         from utils.constants import SEGMENT_METRIC_GROUPS
-        wrappers = SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS
+        is_wrapper = SegmentDataRepository.is_wrapper_label
 
         def axis_count(r):
-            headings = re.findall(r", ([^,:]+): ", r.get('full_dimension_label') or '')
-            count = sum(1 for h in headings if not h.startswith("Concentration Risk"))
+            # Concentration-risk axes and axes whose member is the segment wrapper
+            # divide nothing (Microsoft: "…, Segment Reporting Reconciling Item:
+            # Reportable Segments").
+            count = sum(1 for h, m in SegmentDataRepository._secondary_axes(r)
+                        if not h.startswith("Concentration Risk")
+                        and not SegmentDataRepository._WRAPPER_LABEL.fullmatch(m.lower().strip()))
             # The wrapper ("Consolidation Items: Operating Segments") marks the
             # segment's own figure; it divides nothing. Counting it let an older
             # 10-K's plain "Segments: Europe" beat the restated wrapped copy in
             # Mondelez's FY2024 10-K (capex 355 → 335).
             member = (r.get('dimension_member_label') or '').lower().strip()
-            return count - 1 if member in wrappers and count else count
+            return count - 1 if SegmentDataRepository._WRAPPER_LABEL.fullmatch(member) and count else count
 
         def slice_key(r):
             member = (r.get('dimension_member_label') or '').lower().strip()
             if not member or r.get('_is_ndim'):
                 return None
-            whole = ((r.get('dimension_label') or '').strip().lower() if member in wrappers
+            whole = ((r.get('dimension_label') or '').strip().lower() if is_wrapper(member)
                      else ((r.get('dimension') or '').strip(), member))
             label = r.get('original_label') or ''
             metric = next((name for name, cfg in SEGMENT_METRIC_GROUPS.items()
@@ -10785,9 +10839,15 @@ class SegmentDataRepository:
                            for (sec, met, _m, _p), concepts in member_concepts.items()
                            if sec == section and met == metric_name):
                     continue
+                # Per column: a filer-defined value goes only where another member of
+                # the same column carries the standard element. ADM switched segment
+                # profit to adm:OperatingProfitAdjusted (the ASU 2023-07 measure) in
+                # 2024; judging by the element most years used dropped every new year.
+                standard_in = {period for (sec, met, _m, period), concepts in member_concepts.items()
+                               if sec == section and met == metric_name and total_concept in concepts}
                 for member, by_period in list(members.items()):
                     for period in list(by_period):
-                        if by_period[period] is None:
+                        if by_period[period] is None or period not in standard_in:
                             continue
                         concepts = member_concepts.get((section, metric_name, member, period))
                         if concepts and not any(c.startswith(("us-gaap:", "srt:")) for c in concepts):
@@ -10933,9 +10993,13 @@ class SegmentDataRepository:
         # equality is the proof; the detail stays and the aggregate goes.
         names = sorted(values, key=lambda m: -values[m])
 
+        # An aggregate equals its parts to the rounding unit (Apple's Products is
+        # exactly iPhone + Mac + iPad + Wearables). Half a percent of the company
+        # is not proof: Coca-Cola's EMEA (3,028) came within 33 of Asia Pacific +
+        # Bottling (3,061) and was withheld as their sum.
         def is_sum_of_others(m, pool):
             others = [o for o in pool if o != m]
-            return any(abs(sum(values[o] for o in combo) - values[m]) <= tol
+            return any(abs(sum(values[o] for o in combo) - values[m]) <= max(0.5 * size, abs(values[m]) * 0.0005)
                        for size in range(2, min(6, len(others)) + 1)
                        for combo in itertools.combinations(others, size))
 
@@ -11122,9 +11186,12 @@ class SegmentDataRepository:
         undeclared element is judged by its label alone."""
         from utils.constants import SEGMENT_METRIC_GROUPS
         low = label.lower()
-        if any(kw in low for kw in metric_cfg["db_exclude"]):
-            return False
         element = (concept or '').rsplit(':', 1)[-1]
+        # Exclusions read the element's own name too: Caterpillar's
+        # us-gaap:DerivativeAssets is labelled "Net Amount of Assets".
+        element_words = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', element).lower()
+        if any(kw in low or kw in element_words for kw in metric_cfg["db_exclude"]):
+            return False
         if element in metric_cfg["edgar_concepts"]:
             return True
         if element and any(element in cfg["edgar_concepts"] for cfg in SEGMENT_METRIC_GROUPS.values()):
@@ -11237,12 +11304,24 @@ class SegmentDataRepository:
             return "ignore"          # annotates a fact, does not divide it
         if h == "subsegments":
             return "sub"
+        if h.endswith("[member]"):
+            return "seg"             # a member label written where the segment axis's heading belongs (MarineMax)
         if "geograph" in h:
             return "geo"
         if (h.endswith(("segments", "segment")) and "subsegment" not in h
                 and "portfolio" not in h and "operating activities" not in h):
             return "seg"
         return "other"
+
+    @staticmethod
+    def _secondary_axes(row) -> List[Tuple[str, str]]:
+        """(heading, member) of every axis after the first."""
+        label = row.get('full_dimension_label') or ''
+        member = row.get('dimension_member_label') or ''
+        at = label.find(f": {member}") if member else -1
+        rest = label[at + len(member) + 2:] if at != -1 else label
+        parts = re.split(r", (?=[^,:]+: )", rest)[1:]
+        return [tuple(p.split(": ", 1)) for p in parts if ": " in p]
 
     @staticmethod
     def _secondary_headings(row) -> List[str]:
@@ -11271,10 +11350,14 @@ class SegmentDataRepository:
         alone reports that axis's own breakdown and is a fallback source.
         """
         dimension = (row.get('dimension') or '').split(':')[-1]
-        kinds = [k for k in map(SegmentDataRepository._heading_kind,
-                                SegmentDataRepository._secondary_headings(row)) if k != "ignore"]
+        # A later axis whose member is the segment wrapper divides nothing:
+        # Microsoft's FY2018 10-K files "Segments: Intelligent Cloud, Segment
+        # Reporting Reconciling Item: Reportable Segments".
+        kinds = [k for heading, member in SegmentDataRepository._secondary_axes(row)
+                 if (k := SegmentDataRepository._heading_kind(heading)) != "ignore"
+                 and not (k == "other" and SegmentDataRepository.is_wrapper_label(member))]
         member = (row.get('dimension_member_label') or '').lower().strip()
-        if member in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS:
+        if SegmentDataRepository.is_wrapper_label(member):
             if kinds in (["seg"], ["seg", "sub"]):
                 return ("business", "canon")
             if kinds == ["geo"]:
@@ -11358,16 +11441,26 @@ class SegmentDataRepository:
                 children.setdefault(key_base + (name,), {})[
                     (r.get('dimension_label') or '').strip().lower()] = r['numeric_value']
             elif SegmentDataRepository._row_breakdown(r) == ("business", "canon"):
-                wrapped = ((r.get('dimension_member_label') or '').lower().strip()
-                           in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS)
+                wrapped = SegmentDataRepository.is_wrapper_label(r.get('dimension_member_label'))
                 own = (r.get('dimension_label') if wrapped else r.get('dimension_member_label')) or ''
                 parents[key_base + (own.strip().lower(),)] = r['numeric_value']
+        # A child name under two parents cannot stand for either: MercadoLibre splits
+        # Brazil, Mexico and Argentina each into "Commerce" and "Fintech", and
+        # showing the parts merged three countries into one Commerce row.
+        parents_of_child: Dict[Tuple, Set[str]] = {}
+        for key, kids in children.items():
+            for kid in kids:
+                parents_of_child.setdefault(key[:-1] + (kid,), set()).add(key[-1])
+        shared = {key for key, kids in children.items()
+                  if any(len(parents_of_child[key[:-1] + (kid,)]) > 1 for kid in kids)}
         drop_children, drop_parents = set(), set()
         for key, kids in children.items():
             whole = parents.get(key)
             if whole is None:
+                if key in shared:
+                    drop_children.add(key)
                 continue
-            if abs(sum(kids.values()) - whole) <= max(abs(whole) * 0.01, 500_000):
+            if key not in shared and abs(sum(kids.values()) - whole) <= max(abs(whole) * 0.01, 500_000):
                 drop_parents.add(key)
             else:
                 drop_children.add(key)
@@ -11381,8 +11474,7 @@ class SegmentDataRepository:
                 if name and key_base + (name,) in drop_children:
                     continue
                 if not name and SegmentDataRepository._row_breakdown(r) == ("business", "canon"):
-                    wrapped = ((r.get('dimension_member_label') or '').lower().strip()
-                               in SegmentDataRepository._SEGMENT_WRAPPER_MEMBERS)
+                    wrapped = SegmentDataRepository.is_wrapper_label(r.get('dimension_member_label'))
                     own = (r.get('dimension_label') if wrapped else r.get('dimension_member_label')) or ''
                     if key_base + (own.strip().lower(),) in drop_parents:
                         continue
@@ -11735,14 +11827,34 @@ class SegmentDataRepository:
             return "geo"
         return "business"  # Business, Product and Service, etc.
 
-    # Generic wrapper members that denote the operating-segment total, not a real segment.
-    # Multi-dimensional facts pair these with the actual segment on a SECOND axis, e.g. Costco
-    # geo revenue is tagged ConsolidationItems=Operating Segments + Segments=United States, with
-    # the real member ("United States") surfaced in the dimension_label column.
-    _SEGMENT_WRAPPER_MEMBERS = frozenset({
-        "operating segments", "reportable segments", "reportable segment",
-        "total reportable segments",
-    })
+    # The member meaning "the segment's own figure" (us-gaap:OperatingSegmentsMember
+    # on ConsolidationItemsAxis). Multi-dimensional facts pair it with the actual
+    # segment on a SECOND axis — Costco: ConsolidationItems=Operating Segments +
+    # Segments=United States, the real member in the dimension_label column.
+    # Filers label it at least 14 ways across our companies ("Operating segment",
+    # "Segment" — Avnet, "Reporting Segments" — Conagra, "Total segment profits" —
+    # Merck, "Operating" — Sysco …); a label missing from a fixed list dropped all
+    # of that company's wrapped segment figures. Eliminations, corporate and
+    # reconciling items never match.
+    _WRAPPER_LABEL = re.compile(
+        r"((company'?s )?(one|single|only) )?(total (for )?)?((operating|reportable|reporting|business|and) )*segments?"
+        r"( (totals?|profits?|net revenue))?"
+        r"(,? (including|inclusive of) intersegment (eliminations?|sales|revenues?))?|operating( groups?)?")
+
+    # Sales to outside customers by segment. Johnson Outdoors files segment revenue
+    # only this way ("Unaffiliated customers, Segments: Fishing"), so it stands in
+    # for the segment's figure — and loses to an "Operating Segments" figure for the
+    # same segment and period (see _drop_wrapped_slices).
+    _EXTERNAL_LABEL = re.compile(
+        r"(sales to )?(unaffiliated|external|third[- ]party|outside) customers?"
+        r"|external (operating )?(revenues?|sales)"
+        r"|((operating|reportable) )?segments,? excluding intersegment (eliminations?|elimination|sales)")
+
+    @staticmethod
+    def is_wrapper_label(label) -> bool:
+        text = (label or '').lower().strip()
+        return bool(SegmentDataRepository._WRAPPER_LABEL.fullmatch(text)
+                    or SegmentDataRepository._EXTERNAL_LABEL.fullmatch(text))
 
     _SEGMENT_GEO_AXIS_KEYS = (
         "StatementGeographicalAxis", "GeographicDistributionAxis",
@@ -12025,9 +12137,16 @@ class SegmentDataRepository:
     @staticmethod
     def _build_segment_tables_from_db(ticker: str, start_date: date, end_date: date) -> Dict[str, Any]:
         """Process DB rows into CapIQ-style Business + Geographic tables."""
+        return SegmentDataRepository._build_segment_tables_from_rows(
+            ticker, SegmentDataRepository._fetch_all_db_rows(ticker), start_date, end_date)
+
+    @staticmethod
+    def _build_segment_tables_from_rows(ticker: str, all_rows, start_date: date, end_date: date) -> Dict[str, Any]:
+        """Business + Geographic tables from rows shaped like coreiq_filing_metrics_v5,
+        whether they came from the database or straight from EDGAR, so a company
+        the data team has not loaded yet follows exactly the same rules."""
         from utils.constants import SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS
 
-        all_rows = SegmentDataRepository._fetch_all_db_rows(ticker)
         if not all_rows:
             return None  # Signal to fall back to edgartools
 
@@ -12469,204 +12588,100 @@ class SegmentDataRepository:
 
     @staticmethod
     @st.cache_data(ttl=21600, show_spinner=False)
-    def _fetch_from_edgartools(ticker: str) -> Dict[str, Any]:
-        """Fall back to edgartools when DB has no segment data.
+    def _fetch_from_edgartools(ticker: str) -> Optional[Dict[str, Any]]:
+        """Segment tables straight from EDGAR for a company with no rows in
+        coreiq_filing_metrics_v5. The facts are shaped like database rows and go
+        through _build_segment_tables_from_rows, so every rule — names, wrappers,
+        reconciling lines, newest filing, totals, the business team's map — is the
+        one the database path applies. A separate classifier here had drifted:
+        element names ("HomeBuildingMember"), the company total ("Operating
+        Segment") and eliminations reached the tab for 40-odd companies."""
+        rows = SegmentDataRepository._edgar_segment_rows(ticker)
+        if not rows:
+            return None
+        result = SegmentDataRepository._build_segment_tables_from_rows(
+            ticker, rows, SegmentDataRepository.FULL_START, SegmentDataRepository.FULL_END)
+        if result:
+            result["source"] = "edgartools"
+        return result
 
-        Fetches the latest 6 10-K filings and extracts segment data via XBRL.
-        Returns same structure as _build_segment_tables_from_db.
-        """
-        import sys
-        from pathlib import Path
-        _edgartools_path = str(Path(__file__).resolve().parent.parent.parent / "edgartools")
-        if _edgartools_path not in sys.path:
-            sys.path.insert(0, _edgartools_path)
+    # Headings the database writes in full_dimension_label, by axis.
+    _AXIS_HEADINGS = {
+        "StatementBusinessSegmentsAxis": "Segments", "ConsolidationItemsAxis": "Consolidation Items",
+        "StatementGeographicalAxis": "Geographical", "ProductOrServiceAxis": "Product and Service",
+        "SubsegmentsAxis": "Subsegments",
+    }
+
+    @staticmethod
+    def _edgar_segment_rows(ticker: str, filings: int = 10) -> List[Dict[str, Any]]:
+        """Currency facts from the latest 10-Ks as coreiq_filing_metrics_v5 rows:
+        dimensioned ones, and the consolidated ones the Total rows come from.
+        A member is named by its standard label without "[Member]": Dollar Tree's
+        own terse label for DollarTreeMember is "Cost of sales", the standard one
+        "Dollar Tree [Member]"."""
         from edgar import Company
-        from utils.constants import (
-            EDGAR_BUSINESS_AXES, EDGAR_GEO_AXES, EDGAR_PRODUCT_AXES,
-            SEGMENT_METRIC_GROUPS, SEGMENT_SKIP_MEMBERS,
-        )
-        from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
         try:
-            company = Company(ticker)
+            company_filings = list(Company(ticker).get_filings(form="10-K", amendments=False))[:filings]
         except Exception:
-            return None
+            return []
 
-        filings = company.get_filings(form='10-K')
-        if not filings:
-            return None
+        def words(name):
+            return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).strip()
 
-        # Take last 6 filings.
-        # NOTE: list(filings)[:6], not list(filings[:6]) — EntityFilings does not
-        # support slice indexing on edgartools >=5.x. A slice reaches
-        # get_filing_at(), where self.data['form'][slice] yields a pyarrow
-        # ChunkedArray instead of a Scalar and .as_py() raises AttributeError.
-        # That surfaced as "Something went wrong" on the market-data Segment tab.
-        filing_list = list(filings)[:6]
-        if not filing_list:
-            return None
+        def heading(axis_qname):
+            local = axis_qname.split(":")[-1]
+            return SegmentDataRepository._AXIS_HEADINGS.get(local, words(local.removesuffix("Axis")))
 
-        biz_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        geo_data: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
-        all_years = set()
-        period_dates: Dict[int, date] = {}
+        def member_label(catalog, qname):
+            entry = catalog.get(qname.replace(":", "_"))
+            labels = getattr(entry, "labels", None) or {}
+            text = re.sub(r"\s*\[(member|domain)\]\s*$", "",
+                          labels.get("http://www.xbrl.org/2003/role/label") or "", flags=re.I).strip()
+            return text or words(qname.split(":")[-1].removesuffix("Member"))
 
-        def _process_filing(filing_obj):
-            """Extract segment facts from a single filing."""
-            local_biz = []
-            local_geo = []
+        def day(value):
             try:
-                xbrl = filing_obj.xbrl()
-                if not xbrl:
-                    return local_biz, local_geo
+                return date.fromisoformat(str(value)[:10]) if value else None
+            except ValueError:
+                return None
 
-                # Business segment facts
-                for axis in EDGAR_BUSINESS_AXES:
-                    try:
-                        facts = xbrl.query().by_dimension(axis).with_dimensions().execute()
-                        for f in facts:
-                            f['_section'] = 'business'
-                            local_biz.append(f)
-                    except Exception:
-                        pass
-
-                # Product/service facts stand in for segments only for a filer
-                # that has none (see _classify_member): a second breakdown of
-                # the same revenue is not a segment.
-                if not local_biz:
-                    for axis in EDGAR_PRODUCT_AXES:
-                        try:
-                            facts = xbrl.query().by_dimension(axis).with_dimensions().execute()
-                            for f in facts:
-                                f['_section'] = 'business'
-                                local_biz.append(f)
-                        except Exception:
-                            pass
-
-                # Geographic segment facts
-                for axis in EDGAR_GEO_AXES:
-                    try:
-                        facts = xbrl.query().by_dimension(axis).with_dimensions().execute()
-                        for f in facts:
-                            f['_section'] = 'geo'
-                            local_geo.append(f)
-                    except Exception:
-                        pass
-
+        rows: List[Dict[str, Any]] = []
+        for filing in company_filings:
+            try:
+                xbrl = filing.xbrl()
             except Exception:
-                pass
-            return local_biz, local_geo
-
-        # Parallel filing processing
-        all_facts_biz = []
-        all_facts_geo = []
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            futs = {pool.submit(_process_filing, f): f for f in filing_list}
-            for fut in as_completed(futs):
-                biz_facts, geo_facts = fut.result()
-                all_facts_biz.extend(biz_facts)
-                all_facts_geo.extend(geo_facts)
-
-        def _process_facts(facts_list, target_dict, is_geo=False):
-            for fact in facts_list:
-                member_raw = fact.get('dimension_member_label') or ''
-                if member_raw.lower().strip() in SEGMENT_SKIP_MEMBERS:
+                continue
+            if not xbrl:
+                continue
+            units = getattr(xbrl, "units", {}) or {}
+            catalog = getattr(xbrl, "element_catalog", {}) or {}
+            for fact in xbrl.query().execute():
+                unit = units.get(fact.get("unit_ref")) or {}
+                if (fact.get("numeric_value") is None or unit.get("type") != "simple"
+                        or not str(unit.get("measure", "")).startswith("iso4217:")):
                     continue
-                member = SegmentDataRepository._title_case_member(member_raw)
-                if not member:
+                axes = [(k[4:].replace("_", ":", 1), v) for k, v in fact.items() if k.startswith("dim_")]
+                instant = day(fact.get("period_instant"))
+                row = {
+                    "concept": fact.get("concept"),
+                    "original_label": fact.get("label") or fact.get("original_label"),
+                    "numeric_value": fact["numeric_value"], "unit_ref": unit.get("measure"),
+                    "period_type": "instant" if instant else "duration",
+                    "period_start": day(fact.get("period_start")), "period_end": day(fact.get("period_end")),
+                    "period_instant": instant, "filing_date": filing.filing_date, "report_fiscal_year": None,
+                }
+                if not axes:
+                    rows.append({**row, "_is_ndim": True, "dimension": None, "dimension_label": None,
+                                 "dimension_member_label": None, "full_dimension_label": None})
                     continue
-                # Geographic members get the same treatment as the DB path in
-                # _classify_member: the business team's name, and nothing that
-                # is not a place. Without this a ticker whose DB rows are all
-                # non-places (SFIX: one facility sentence) falls back here and
-                # the raw label reappears on the Segments tab.
-                if is_geo:
-                    if is_geo_excluded_label(member):
-                        continue
-                    member = canonicalize_geo_label(member)
-                # edgartools' fiscal_year is the FILING's year, stamped on every
-                # comparative it carries; the period itself says which year it is.
-                dated = {k: (date.fromisoformat(v) if isinstance(v, str) else v)
-                         for k in ('period_start', 'period_end', 'period_instant')
-                         if (v := fact.get(k))}
-                fy = SegmentDataRepository._get_row_year(
-                    {'period_type': fact.get('period_type'), **dated})
-                if not fy:
-                    continue
-                all_years.add(fy)
-                val = fact.get('numeric_value')
-                if val is None:
-                    continue
+                labels = [member_label(catalog, member) for _, member in axes]
+                rows.append({**row, "_is_ndim": False, "dimension": axes[0][0],
+                             "dimension_member_label": labels[0],
+                             "dimension_label": labels[1] if len(labels) > 1 else labels[0],
+                             "full_dimension_label": ", ".join(
+                                 f"{heading(axis)}: {label}" for (axis, _), label in zip(axes, labels))})
+        return rows
 
-                # Build period_dates from period_end
-                pe = fact.get('period_end') or fact.get('period_instant')
-                if pe and fy:
-                    try:
-                        from datetime import date as dt_date
-                        if isinstance(pe, str):
-                            pe = dt_date.fromisoformat(pe)
-                        if fy not in period_dates or pe > period_dates[fy]:
-                            period_dates[fy] = pe
-                    except Exception:
-                        pass
-
-                scaled = val / 1_000_000
-                orig_label = fact.get('original_label') or ''
-
-                for metric_name, cfg in SEGMENT_METRIC_GROUPS.items():
-                    # Match by concept or label
-                    concept = fact.get('concept') or ''
-                    concept_short = concept.split(':')[-1] if ':' in concept else concept
-                    matched = False
-                    for ec in cfg["edgar_concepts"]:
-                        if ec.lower() == concept_short.lower():
-                            matched = True
-                            break
-                    if not matched:
-                        low_label = orig_label.lower()
-                        if any(kw in low_label for kw in cfg["edgar_labels"]):
-                            if not any(kw in low_label for kw in cfg.get("db_exclude", [])):
-                                matched = True
-                    if matched:
-                        if metric_name not in target_dict:
-                            target_dict[metric_name] = {}
-                        if member not in target_dict[metric_name]:
-                            target_dict[metric_name][member] = {}
-                        if fy not in target_dict[metric_name][member] or target_dict[metric_name][member][fy] is None:
-                            target_dict[metric_name][member][fy] = scaled
-                        break
-
-        _process_facts(all_facts_biz, biz_data)
-        _process_facts(all_facts_geo, geo_data, is_geo=True)
-
-        if not biz_data and not geo_data:
-            return None
-
-        years = sorted(all_years)
-        # Backfill year keys
-        for data_dict in (biz_data, geo_data):
-            for metric in data_dict.values():
-                for member_vals in metric.values():
-                    for y in years:
-                        if y not in member_vals:
-                            member_vals[y] = None
-
-        return {
-            "years": years,
-            "period_dates": period_dates,
-            "business_segments": biz_data,
-            "geo_segments": geo_data,
-            "source": "edgartools",
-        }
-
-    # ── Fiscal-year-end display helpers ─────────────────────────────────────
-    # Annual segment rows are keyed only by `report_fiscal_year` (an integer);
-    # the table has no clean fiscal-end date column (raw XBRL period_end is
-    # noisy). For the dropdown + column headers we synthesise a display date
-    # from the company's real fiscal-year-end month so it matches the Income
-    # Statement / Key Stats / Cash Flow tabs. These dates are DISPLAY ONLY —
-    # data selection filters by .year, so the underlying values are unchanged.
     @staticmethod
     def _fye_month(ticker: str) -> Optional[int]:
         """Company fiscal-year-end month (1-12) from cached overview; None if unknown."""
@@ -12786,8 +12801,55 @@ class SegmentDataRepository:
         milliseconds. A company is rebuilt only when it gets new filing rows (the
         persist layer watches coreiq_filing_metrics_v5 ids per ticker), when a table
         it reads is written, or when rules_version() changes."""
+        full = SegmentDataRepository.full_segment_tables(ticker, period_type)
+        return SegmentDataRepository._within_dates(full, start_date, end_date)
+
+    # One stored table per company and period type, whatever range a viewer picks:
+    # every range reads the same numbers, and the screener reads them too.
+    FULL_START, FULL_END = date(1990, 1, 1), date(2100, 12, 31)
+
+    @staticmethod
+    def full_segment_tables(ticker: str, period_type: str = "annual") -> Dict[str, Any]:
+        """The Segments tab's tables over every year on file — the single source the
+        tab (filtered to the viewer's range) and the screener's segment index read."""
         return SegmentDataRepository._stored_segment_tables(
-            ticker, start_date, end_date, period_type, SegmentDataRepository.rules_version())
+            ticker, SegmentDataRepository.FULL_START, SegmentDataRepository.FULL_END,
+            period_type.lower(), SegmentDataRepository.rules_version())
+
+    @staticmethod
+    def _within_dates(tables: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
+        """The same tables cut to the columns whose period falls in the range."""
+        if not tables:
+            return tables
+        dates = tables.get("period_dates") or {}
+
+        def inside(column):
+            when = dates.get(column)
+            if hasattr(when, "year"):
+                return start_date <= when <= end_date or (
+                    isinstance(column, int) and column < 10000 and start_date.year <= column <= end_date.year)
+            return isinstance(column, int) and column < 10000 and start_date.year <= column <= end_date.year
+
+        def cut(by_column):
+            return {c: v for c, v in by_column.items() if inside(c)}
+
+        out = dict(tables)
+        out["years"] = [c for c in tables.get("years") or [] if inside(c)]
+        for name in ("period_dates", "period_display_dates", "revenue_totals"):
+            if isinstance(tables.get(name), dict):
+                out[name] = cut(tables[name])
+        for part in ("business_segments", "geo_segments"):
+            kept = {}
+            for metric, members in (tables.get(part) or {}).items():
+                rows = {member: cut(by) for member, by in members.items()}
+                rows = {m: by for m, by in rows.items() if any(v is not None for v in by.values())}
+                if rows:
+                    kept[metric] = rows
+            out[part] = kept
+        if isinstance(tables.get("metric_totals"), dict):
+            out["metric_totals"] = {section: {metric: cut(by) for metric, by in metrics.items()}
+                                    for section, metrics in tables["metric_totals"].items()}
+        return out
 
     @staticmethod
     @persistent("segment_tables")
@@ -12833,58 +12895,10 @@ class SegmentDataRepository:
         if result is not None:
             return result
 
-        # Annual: Tier 2 — Fall back to edgartools
+        # Annual: Tier 2 — straight from EDGAR, through the same builder
         edgar_result = SegmentDataRepository._fetch_from_edgartools(ticker)
-        if edgar_result is not None:
-            # Filter years to date range
-            start_yr, end_yr = start_date.year, end_date.year
-            years = [y for y in edgar_result["years"] if start_yr <= y <= end_yr]
-            if years:
-                edgar_result["years"] = years
-                # Fetch authoritative revenue totals from income statement for edgartools path
-                period_dates = edgar_result.get("period_dates", {})
-                revenue_totals: Dict[int, Optional[float]] = {y: None for y in years}
-                try:
-                    _e_wide_start = start_date.replace(year=max(start_date.year - 1, 1900))
-                    try:
-                        _e_wide_end = end_date.replace(year=end_date.year + 1)
-                    except ValueError:
-                        _e_wide_end = end_date
-                    _e_tot_rows = db_manager.execute_query_readonly(
-                        """SELECT fiscal_date_ending, total_revenue
-                           FROM coreiq_av_financials_income_statement
-                           WHERE ticker = :ticker AND report_type = 'annual'
-                             AND fiscal_date_ending BETWEEN :start_date AND :end_date
-                           ORDER BY fiscal_date_ending ASC""",
-                        {"ticker": ticker, "start_date": _e_wide_start, "end_date": _e_wide_end},
-                    )
-                    for _etr in (_e_tot_rows or []):
-                        _efe = _etr.get('fiscal_date_ending')
-                        _erv = _etr.get('total_revenue')
-                        if _efe is None or _erv is None:
-                            continue
-                        _efe_yr = _efe.year if hasattr(_efe, 'year') else int(str(_efe)[:4])
-                        if _efe_yr in revenue_totals and revenue_totals[_efe_yr] is None:
-                            revenue_totals[_efe_yr] = float(_erv) / 1_000_000
-                            continue
-                        _e_best_yr = None
-                        _e_min = 60
-                        for _eyr, _epd in period_dates.items():
-                            if _eyr not in revenue_totals or revenue_totals[_eyr] is not None:
-                                continue
-                            try:
-                                _ed = abs((_efe - _epd).days) if (hasattr(_efe, 'year') and hasattr(_epd, 'year')) else 9999
-                                if _ed < _e_min:
-                                    _e_min = _ed
-                                    _e_best_yr = _eyr
-                            except Exception:
-                                pass
-                        if _e_best_yr is not None:
-                            revenue_totals[_e_best_yr] = float(_erv) / 1_000_000
-                except Exception:
-                    pass
-                edgar_result["revenue_totals"] = revenue_totals
-                return edgar_result
+        if edgar_result:
+            return SegmentDataRepository._within_dates(edgar_result, start_date, end_date)
 
         # Nothing found
         return {

@@ -236,3 +236,82 @@ def test_a_wrapped_segment_stays_with_its_unwrapped_years():
                "full_dimension_label": "Consolidation Items: Operating Segments, Segments: Europe"}
     axes = frozenset({"us-gaap:StatementBusinessSegmentsAxis"})
     assert Segments._classify_member(wrapped, {"europe"}, axes) == ("business", "Europe")
+
+
+def test_every_spelling_of_the_segment_wrapper_is_recognised():
+    # Labels found across our companies for us-gaap:OperatingSegmentsMember.
+    for label in ("Operating Segments", "Operating segment", "Segment", "Segments",
+                  "Reporting Segments", "Business Segments", "Reportable Operating Segments",
+                  "Total for operating segments", "Total segment profits", "Segment totals",
+                  "Total segment net revenue", "Operating groups", "Operating"):
+        assert Segments.is_wrapper_label(label), label
+    for label in ("Intersegment eliminations", "Segment reconciling items", "Corporate, non-segment",
+                  "All other segments", "Europe"):
+        assert not Segments.is_wrapper_label(label), label
+
+
+def test_a_new_segment_profit_element_is_kept_in_the_years_it_alone_is_filed():
+    # ADM: us-gaap:OperatingIncomeLoss through 2023, adm:OperatingProfitAdjusted from 2024.
+    biz = {"Operating Profit Before Tax": {"Nutrition": {2023: 427.0, 2025: 417.0}}}
+    concepts = {("business", "Operating Profit Before Tax", "Nutrition", 2023): {"us-gaap:OperatingIncomeLoss"},
+                ("business", "Operating Profit Before Tax", "Nutrition", 2025): {"adm:OperatingProfitAdjusted"}}
+    import collections
+    totals = {("business", "Operating Profit Before Tax"): collections.Counter({"us-gaap:OperatingIncomeLoss": 3})}
+    Segments._drop_offmeasure_members(biz, {}, concepts, totals)
+    assert biz["Operating Profit Before Tax"]["Nutrition"] == {2023: 427.0, 2025: 417.0}
+
+
+def test_a_label_that_describes_its_segment_is_named_by_the_segment():
+    # CDW: "Public Segment: Government Agencies, Education and Healthcare" in some
+    # years, "Public" in others.
+    rows = [fact("Public Segment: Government Agencies, Education and Healthcare", 9e9, date(2024, 1, 1), date(2024, 12, 31)),
+            fact("Public", 8e9, date(2023, 1, 1), date(2023, 12, 31))]
+    biz, _geo, _tot = Segments._classify_segment_rows(rows, [2023, 2024])
+    assert list(biz["Revenues"]) == ["Public"]
+
+
+def test_an_element_name_used_as_a_label_reads_as_words():
+    assert Segments.readable_member("HomeBuildingMember") == "Home Building"          # D.R. Horton
+    assert Segments.readable_member("Auto Parts Stores [ Member]") == "Auto Parts Stores"
+    assert Segments.readable_member("Retail (Member)") == "Retail"
+    assert Segments.readable_member("pf0:AsiaMember") == "Asia"
+    assert Segments.readable_member("Direct to Consumer: (1)") == "Direct to Consumer"
+    assert Segments.readable_member("iPhone") == "iPhone"                             # brands untouched
+    assert Segments.readable_member("McDonald's") == "McDonald's"
+
+
+def test_a_single_segment_companys_total_is_not_a_segment():
+    for label in ("Company's One Reportable Operating Segment", "Operating and Reportable Segments"):
+        assert Segments.is_wrapper_label(label), label
+
+
+def test_subsegments_that_repeat_under_every_parent_do_not_replace_them():
+    # MercadoLibre: each country segment split into Commerce and Fintech.
+    def row(parent, child, value):
+        label = f"Segments: {parent}" + (f", Subsegments: {child}" if child else "")
+        return {**fact(parent, value, date(2025, 1, 1), date(2025, 12, 31)),
+                "dimension_label": child or parent, "full_dimension_label": label}
+    rows = [row("Brazil", None, 100e6), row("Brazil", "Commerce", 60e6), row("Brazil", "Fintech", 40e6),
+            row("Mexico", None, 50e6), row("Mexico", "Commerce", 30e6), row("Mexico", "Fintech", 20e6)]
+    kept = Segments._resolve_subsegments(rows)
+    assert {r["full_dimension_label"] for r in kept} == {"Segments: Brazil", "Segments: Mexico"}
+
+
+def test_an_exclusion_reads_the_element_name_as_well_as_the_label():
+    # Caterpillar: us-gaap:DerivativeAssets labelled "Net Amount of Assets".
+    from utils.constants import SEGMENT_METRIC_GROUPS
+    assert not Segments._matches_metric("Net Amount of Assets", SEGMENT_METRIC_GROUPS["Assets"],
+                                        "us-gaap:DerivativeAssets")
+
+
+def test_a_wrapper_member_on_a_later_axis_does_not_slice_the_fact():
+    # Microsoft FY2018 10-K: the segment first, the reconciling-item wrapper second.
+    row = {"dimension": "us-gaap:StatementBusinessSegmentsAxis", "dimension_member_label": "Intelligent Cloud",
+           "full_dimension_label": "Statement, Business Segments: Intelligent Cloud, "
+                                   "Segment Reporting Reconciling Item: Reportable Segments"}
+    assert Segments._row_breakdown(row) == ("business", "canon")
+
+
+def test_intersegment_qualified_segment_totals_are_wrappers():
+    assert Segments.is_wrapper_label("Reportable Segments Including Intersegment Eliminations")   # Caterpillar
+    assert Segments.is_wrapper_label("Operating segments, inclusive of intersegment sales")        # GE Vernova

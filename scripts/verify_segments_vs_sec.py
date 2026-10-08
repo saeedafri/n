@@ -2,7 +2,7 @@
 
     .venv/bin/python scripts/verify_segments_vs_sec.py WMT MDLZ ...     # some companies
     .venv/bin/python scripts/verify_segments_vs_sec.py --all             # every company with segment rows
-    options: --out results.jsonl  --jobs 6  --tenk 14  --tenq 32
+    options: --out results.jsonl  --jobs 6  --tenk 16  --tenq 40  --extracts DIR
 
 For each company, one at a time: its 10-Ks and 10-Qs are downloaded into a private
 temporary folder (EDGAR_LOCAL_DATA_DIR), every segment fact is extracted, the folder
@@ -36,6 +36,8 @@ sys.path.insert(0, str(REPO / "app"))
 
 SEGMENT_AXIS = "StatementBusinessSegmentsAxis"
 GEO_AXES = ("StatementGeographicalAxis",)
+OTHER_BUSINESS_AXES = ("ProductOrServiceAxis", "ContractWithCustomerSalesChannelAxis",
+                       "StatementOperatingActivitiesSegmentAxis")
 WRAPPERS = {"OperatingSegmentsMember", "SegmentReportingSegmentMember", "ReportableSegmentsMember"}
 # A single-segment company's one member is the company itself: its Total row.
 WHOLE_COMPANY = {"ReportableSegmentMember", "ReportableSegmentsMember", "OperatingSegmentsMember"}
@@ -76,8 +78,23 @@ def extract(ticker, tenk, tenq):
     return rows
 
 
-def sec_facts(ticker, tenk, tenq):
-    """Download, extract and delete in a child process; the parent never touches EDGAR."""
+def sec_facts(ticker, tenk, tenq, extracts=None):
+    """Download, extract and delete in a child process; the parent never touches EDGAR.
+    With `extracts`, the small extract (never the filings) is kept there and reused,
+    so a re-check after a code change needs no download."""
+    import gzip
+    saved = Path(extracts) / f"{ticker}.json.gz" if extracts else None
+    if saved and saved.exists():
+        return json.loads(gzip.open(saved, "rt").read())
+    rows = download_and_extract(ticker, tenk, tenq)
+    if saved:
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(saved, "wt") as handle:
+            json.dump(rows, handle, default=str)
+    return rows
+
+
+def download_and_extract(ticker, tenk, tenq):
     folder = tempfile.mkdtemp(prefix=f"sec_{ticker}_")
     try:
         env = dict(os.environ, EDGAR_LOCAL_DATA_DIR=folder)
@@ -127,6 +144,10 @@ def placement(dims):
         if core[SEGMENT_AXIS].split(":")[-1] in WHOLE_COMPANY:
             return None
         return "business", core[SEGMENT_AXIS]
+    if set(core) in ({SEGMENT_AXIS, "SubsegmentsAxis"}, {"SubsegmentsAxis"}):
+        return "business-sub", core["SubsegmentsAxis"]      # a sub-segment the tab can list
+    if len(core) == 1 and next(iter(core)) in OTHER_BUSINESS_AXES:
+        return "business-other", next(iter(core.values()))  # product lines, channels: listed when a company has no segments
     if len(core) == 1 and next(iter(core)) in GEO_AXES:
         return "geo", next(iter(core.values()))
     return None
@@ -140,11 +161,19 @@ def names_for(row, qname):
     raw = [row["member"] or "", words(qname)]
     out = set()
     for text in raw:
-        if not text or text.lower().strip() in repo._SEGMENT_WRAPPER_MEMBERS:
+        if not text or repo.is_wrapper_label(text):
             continue
         shown = repo._strip_member_artifact(repo._title_case_member(text))
         out.update({shown, canonicalize_geo_label(shown)})
     return {key(n) for n in out if n}
+
+
+def display_name(row, qname):
+    """The filed label ("CHINA" for country:CN), or the element's words when the
+    label is only the wrapper's ("Operating Segments")."""
+    from data.repository import SegmentDataRepository as repo
+    label = row["member"] or ""
+    return words(qname) if not label or repo.is_wrapper_label(label) else label
 
 
 def key(name):
@@ -181,7 +210,7 @@ def newest_facts(rows, view):
     for slot, members in found.items():
         # one filing per column, as the tab shows it: the newest that reports it
         latest = max(f[0] for facts in members.values() for f in facts)
-        newest[slot] = {qname: [(v, names_for(r, q)) for filed, v, r, q in facts if filed == latest]
+        newest[slot] = {qname: [(v, names_for(r, q), display_name(r, q)) for filed, v, r, q in facts if filed == latest]
                         for qname, facts in members.items() if any(f[0] == latest for f in facts)}
     return newest
 
@@ -204,7 +233,63 @@ def near(a, b):
     return abs(a - b) <= max(TOLERANCE, abs(b) * 2e-6)
 
 
-def compare(table, rows, view):
+def why_not_shown(section, name, values, app):
+    """Why a filed segment fact has no cell, by the tab's own documented rules:
+    sec_shown_as_parts    the tab lists its parts, and they add up to it
+    sec_withheld_overlap  a place containing, or inside, a place the column shows
+                          (one geographic breakdown per column, never both)
+    sec_withheld_aggregate the sum of other shown members (Abbott's "Non-US")
+    sec_excluded_by_rule  not a segment: corporate, reconciling, eliminations
+    sec_merged_by_name_map the business team's map gives it the name of a row the
+                          column already shows ("Other Americas" -> Americas)
+    sec_missing           none of these; split by the caller into
+                          missing_not_in_db (the database lacks the value: data team)
+                          missing_app_gap   (the database has it, the tab does not)"""
+    from itertools import combinations
+    from data.repository import SegmentDataRepository as repo
+    from data.segment_aliases import canonicalize_geo_label
+    shown = list(app.values())
+    sums = lambda size: (sum(c) for c in combinations(shown[:20], size))
+    if any(near(total, v) or abs(total - v) <= 0.6 for v in values
+           for size in range(2, min(6, len(shown)) + 1) for total in sums(size)):
+        return "sec_shown_as_parts"
+    everything = sum(shown)
+    if len(shown) >= 3 and any(abs(everything - total - v) <= max(0.6, abs(v) * 0.001) for v in values
+                               for size in range(0, 4) for total in ([0] if size == 0 else sums(size))):
+        return "sec_withheld_aggregate"
+    row = {"dimension": "us-gaap:StatementBusinessSegmentsAxis" if section == "business"
+           else "srt:StatementGeographicalAxis", "dimension_member_label": name, "dimension_label": name,
+           "full_dimension_label": ("Segments: " if section == "business" else "Geographical: ") + name}
+    if repo._classify_member(row, set(), frozenset({"us-gaap:StatementBusinessSegmentsAxis"})) is None:
+        return "sec_excluded_by_rule"
+    mapped = canonicalize_geo_label(repo._title_case_member(name))
+    if section == "geo" and mapped != repo._title_case_member(name) and mapped in app:
+        return "sec_merged_by_name_map"      # the business map names it like a row already shown
+    if section == "geo":
+        place = repo._geo_node(canonicalize_geo_label(repo._title_case_member(name)))
+        if place and any(place in repo._geo_ancestors(m) or repo._geo_node(m) in repo._geo_ancestors(
+                canonicalize_geo_label(repo._title_case_member(name))) for m in app):
+            return "sec_withheld_overlap"
+    return "sec_missing"
+
+
+def database_values(ticker):
+    """(fiscal year | quarter end) -> segment values coreiq_filing_metrics_v5 holds,
+    to tell a fact the database lacks from one the tab leaves out."""
+    from data.repository import SegmentDataRepository as repo
+    annual, quarterly = defaultdict(set), defaultdict(set)
+    for row in repo._fetch_all_db_rows(ticker):
+        when = row.get("period_end") or row.get("period_instant")
+        if when and row.get("numeric_value") is not None and not row.get("_is_ndim"):
+            annual[fiscal_year(when)].add(round(row["numeric_value"] / 1e6, 1))
+    for row in repo._fetch_all_db_rows_quarterly(ticker, date(2018, 1, 1), date(2026, 12, 31)):
+        when = row.get("period_end")
+        if when and row.get("numeric_value") is not None and not row.get("_is_ndim"):
+            quarterly[when].add(round(row["numeric_value"] / 1e6, 1))
+    return {"annual": annual, "quarterly": quarterly}
+
+
+def compare(table, rows, view, held=None):
     sec = newest_facts(rows, view)
     shown = app_columns(table, view) if table else {}
     counts, issues = Counter(), []
@@ -218,21 +303,43 @@ def compare(table, rows, view):
                 return hit
         return None
 
+    us_only = {column for (section, metric, column), members in shown.items()
+               if section == "geo" and metric == "Revenues" and list(members) == ["United States"]
+               and table and near(members["United States"], (table.get("revenue_totals") or {}).get(
+                   column if view == "annual" else None) or -1)}
     for (section, metric, column), members in shown.items():
+        if section == "geo" and metric == "Revenues" and column in us_only:
+            counts["shown_us_only_inferred"] += 1   # no geographic note: all revenue shown as US
+            continue
         facts = sec_slot(section, metric, column)
+        if section == "business":                        # the tab may list sub-segments or product lines
+            facts = {**(sec_slot("business-other", metric, column) or {}),
+                     **(sec_slot("business-sub", metric, column) or {}), **(facts or {})} or None
         if facts is None and section == "geo":           # places filed as segments
             facts = sec_slot("business", metric, column)
         for member, value in members.items():
             if not facts:
                 counts["shown_no_sec_column"] += 1
+                issues.append(["shown_no_sec_column", section, metric, str(column), member, value, None])
                 continue
-            mine = [v for options in facts.values() for v, names in options if key(member) in names]
+            # names pooled per member element: Ingredion's wrapped fact carries only the
+            # element's words, its plain twin the filed label "F&II - LATAM"
+            mine = [v for options in facts.values()
+                    if key(member) in set().union(*(n for _, n, _ in options)) for v, _, _ in options]
             if any(near(value, v) for v in mine):
                 counts["shown_ok"] += 1
             elif mine:
-                counts["shown_wrong_value"] += 1
-                issues.append(["shown_wrong_value", section, metric, str(column), member, value, mine[0]])
-            elif any(near(value, v) for options in facts.values() for v, _ in options):
+                # The newest filing restated it. If the database has that figure the
+                # tab should show it; if not, the database lacks the newer filing.
+                newer_held = held is not None and any(
+                    round(m, 1) in (held["annual"].get(column, set()) if view == "annual" else
+                                    set().union(*(v for d, v in held["quarterly"].items()
+                                                  if abs((d - column).days) <= 3)) or set())
+                    for m in mine)
+                kind = "shown_superseded_app" if newer_held else "shown_superseded_not_in_db"
+                counts[kind] += 1
+                issues.append([kind, section, metric, str(column), member, value, mine[0]])
+            elif any(near(value, v) for options in facts.values() for v, _, _ in options):
                 counts["shown_other_name"] += 1
                 issues.append(["shown_other_name", section, metric, str(column), member, value, None])
             else:
@@ -242,30 +349,45 @@ def compare(table, rows, view):
     for (section, metric, column), members in sec.items():
         if view == "annual" and table and column not in (table.get("years") or []):
             continue
-        app = shown.get((section, metric, column), {}) or {}
-        if section == "business":                         # a place filed as a segment may be shown as geography
+        if view == "quarterly" and column < date(2018, 1, 1):      # the tab's quarterly window
+            continue
+        app = shown.get(("business" if section.startswith("business") else section, metric, column), {}) or {}
+        if section.startswith("business"):                # a place filed as a segment may be shown as geography
             app = {**shown.get(("geo", metric, column), {}), **app}
         for qname, options in members.items():
-            names = set().union(*(n for _, n in options))
-            values = [v for v, _ in options]
+            names = set().union(*(n for _, n, _ in options))
+            values = [v for v, _, _ in options]
+            shown_as = options[0][2]
             if any(key(m) in names and any(near(v, x) for x in values) for m, v in app.items()):
                 counts["sec_shown"] += 1
             elif any(any(near(v, x) for x in values) for v in app.values()):
                 counts["sec_shown_other_name"] += 1
             else:
-                counts["sec_missing"] += 1
-                issues.append(["sec_missing", section, metric, str(column), words(qname), None, values[0]])
+                reason = ("sec_subsegment_parent_shown" if section == "business-sub"
+                          else "sec_other_breakdown" if section == "business-other"   # the segment note is shown instead
+                          else why_not_shown(section, shown_as, values, app))
+                if reason == "sec_missing" and held is not None:
+                    value = round(values[0], 1)
+                    if view == "annual":
+                        inside = value in held["annual"].get(column, set())
+                    else:
+                        inside = any(value in vals for when, vals in held["quarterly"].items()
+                                     if abs((when - column).days) <= 3)
+                    reason = "missing_app_gap" if inside else "missing_not_in_db"
+                counts[reason] += 1
+                issues.append([reason, section, metric, str(column), shown_as, None, values[0]])
     return {"counts": dict(counts), "issues": issues}
 
 
-def check(ticker, tenk, tenq):
+def check(ticker, tenk, tenq, extracts=None):
     from data.repository import SegmentDataRepository as repo
-    rows = sec_facts(ticker, tenk, tenq)
+    rows = sec_facts(ticker, tenk, tenq, extracts)
     with contextlib.redirect_stdout(io.StringIO()):
         annual = repo._build_segment_tables_from_db(ticker, date(2012, 1, 1), date(2026, 12, 31))
         quarterly = repo._build_segment_tables_quarterly(ticker, date(2018, 1, 1), date(2026, 12, 31))
-    return {"ticker": ticker, "annual": compare(annual, rows, "annual"),
-            "quarterly": compare(quarterly, rows, "quarterly")}
+    held = database_values(ticker)
+    return {"ticker": ticker, "annual": compare(annual, rows, "annual", held),
+            "quarterly": compare(quarterly, rows, "quarterly", held)}
 
 
 def all_tickers():
@@ -286,8 +408,9 @@ def main():
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--out", default="-")
     parser.add_argument("--jobs", type=int, default=6)
-    parser.add_argument("--tenk", type=int, default=14)
-    parser.add_argument("--tenq", type=int, default=32)
+    parser.add_argument("--tenk", type=int, default=16)      # FY2012 onwards, the tab's annual window
+    parser.add_argument("--tenq", type=int, default=40)      # 2018 onwards, the tab's quarterly window
+    parser.add_argument("--extracts", help="keep the small per-company extracts here for re-checks")
     args = parser.parse_args()
     tickers = all_tickers() if args.all else [t.upper() for t in args.tickers]
     done = set()
@@ -298,7 +421,7 @@ def main():
 
     def one(ticker):
         try:
-            return check(ticker, args.tenk, args.tenq)
+            return check(ticker, args.tenk, args.tenq, args.extracts)
         except Exception as error:
             return {"ticker": ticker, "error": repr(error)[:300]}
 

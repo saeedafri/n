@@ -165,7 +165,8 @@ def get_all_geo_segment_names(ticker_tuple: tuple = ()) -> List[str]:
     etc.) for revenue metrics — the same values shown in the market data Segments tab.
     No DB call at render time; loads instantly.
     """
-    return _GEO_SEGMENT_PRESETS
+    cached = [label for label, _ in read_segment_member_options_cache("geographical")]
+    return sorted(cached) if cached else _GEO_SEGMENT_PRESETS
 
 
 _BIZ_SEGMENT_PRESETS: List[str] = sorted([
@@ -211,7 +212,8 @@ def get_all_biz_segment_names(ticker_tuple: tuple = ()) -> List[str]:
     These are the same segment names that appear in the market data Segments tab.
     No DB call at render time — instant, never blocks the form.
     """
-    return _BIZ_SEGMENT_PRESETS
+    cached = [label for label, _ in read_segment_member_options_cache("business")]
+    return sorted(cached) if cached else _BIZ_SEGMENT_PRESETS
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1914,36 +1916,6 @@ def get_segment_cache_build_state() -> dict:
         return dict(_segment_cache_build_state)
 
 
-# Columns the shared classifier (SegmentDataRepository._classify_segment_rows) reads.
-_SEGMENT_CACHE_FETCH_COLS = (
-    "original_label, numeric_value, unit_ref, report_fiscal_year, "
-    "dimension_label, dimension_member_label, concept, period_type, "
-    "period_start, period_end, period_instant, dimension, "
-    "full_dimension_label, filing_date"
-)
-
-
-def _segment_cache_recency_key(row: Dict) -> tuple:
-    """Sort key matching SegmentDataRepository._fetch_all_db_rows: ascending
-    (year, full_dimension_label, original_label) then filing_date DESC, so the
-    shared classifier's first-wins merge keeps the most recent filing's value."""
-    fd = row.get("filing_date")
-    if fd is None:
-        fd_neg = 0
-    else:
-        s = fd.isoformat() if hasattr(fd, "isoformat") else str(fd)[:10]
-        try:
-            fd_neg = -int(s.replace("-", "")[:8])
-        except (ValueError, TypeError):
-            fd_neg = 0
-    return (
-        row.get("report_fiscal_year") or 0,
-        row.get("full_dimension_label") or "",
-        row.get("original_label") or "",
-        fd_neg,
-    )
-
-
 def _segment_cache_universe() -> List[str]:
     """Tickers to (re)build the segment cache for.
 
@@ -2008,120 +1980,41 @@ def _segment_cache_entries(ticker: str, biz: Dict, geo: Dict) -> List[tuple]:
 
 def _segment_entries_for_tickers(tickers, ticker_chunk: int = 12, progress_cb=None,
                                  raise_on_timeout: bool = True):
-    """Scan v5 and replay the Segments-tab classifier for `tickers`.
+    """The Segments tab's own tables for `tickers`, as screener cache rows.
 
-    The scan+classify pass shared by the full rebuild and the incremental
-    refresh, so the two can never drift apart in how a segment is classified.
+    Read from SegmentDataRepository.full_segment_tables — the stored tables the tab
+    itself shows — so every number on the Segments tab is the number the screener
+    filters on, for every company, including rows only the tab's builder adds
+    (US-only companies' "United States = total revenue"). Deriving them a second
+    way here had drifted: Kroger, Macy's and CVS were missing 13-14 cells each.
+
     Returns (entries, skipped_tickers). Each entry is
     (ticker, segment_type, metric_key, member, year, value_mm).
-
-    With `raise_on_timeout` (the full rebuild) any timed-out chunk aborts the run,
+    With `raise_on_timeout` (the full rebuild) any failed company aborts the run,
     because that build republishes the whole table and a partial result would drop
     good data. The incremental path clears the flag instead: it writes per ticker,
-    so the tickers that succeeded are safe to publish and the ones that timed out
-    are reported back so the caller can retry them rather than lose them.
+    so the tickers that succeeded are safe to publish and the failed ones are
+    reported back so the caller can retry them rather than lose them.
+    ``ticker_chunk`` is kept for callers; companies are read one at a time.
     """
-    from utils.constants import SEGMENT_ALL_AXES
-
-    total_t = len(tickers)
-    clause, base_params = SegmentDataRepository._build_dim_clause(SEGMENT_ALL_AXES)
-
-    entries: List[tuple] = []  # (ticker, segment_type, metric_key, member, year, value_mm)
-    processed = 0
-    skipped: List[str] = []
-    _consecutive_failures = 0
     import time as _seg_time
-    from sqlalchemy import text as _sql_text
-    for start in range(0, total_t, ticker_chunk):
-        chunk = tickers[start:start + ticker_chunk]
-        params = dict(base_params)
-        qmarks = []
-        for i, t in enumerate(chunk):
-            params[f"ct{i}"] = t
-            qmarks.append(f":ct{i}")
-        # GUARDRAIL (19-Jul-2026 crash-loop fix). Without a
-        # (ticker, is_dimensioned, doc_type) index this chunk scan of the 14.4M-row
-        # v5 table ran 60-121s each and, run ~9x back-to-back, starved the web
-        # process until Azure restarted the container (503 crash loop). Defenses:
-        #   • MAX_EXECUTION_TIME(20000) — hard 20s server-side ceiling per chunk.
-        #   • small ticker_chunk (12) — small result sets → short GIL-held deserialize.
-        #   • sleep(0.4) between chunks — yields CPU/GIL so interactive requests and
-        #     the heartbeat thread are never starved by a long back-to-back run.
-        #   • retry-then-abort — see the fetch below.
-        # Add the index (see spec) to make every chunk sub-second; then nothing skips.
-        sql = f"""
-            SELECT /*+ MAX_EXECUTION_TIME(20000) */ ticker, {_SEGMENT_CACHE_FETCH_COLS}
-            FROM coreiq_filing_metrics_v5
-            WHERE is_dimensioned = 1 AND doc_type = '10-K'
-              AND numeric_value IS NOT NULL
-              AND ticker IN ({", ".join(qmarks)}) AND ({clause})
-        """
-        # Fetch on a RAISING connection with retry. execute_query_readonly() swallows
-        # errors and returns [] — over a flaky link a failed chunk would then look like
-        # "no data" and silently drop those tickers from this whole-table rebuild
-        # (that corrupted the cache once, 19-Jul). The raw read engine raises, so a
-        # transient failure is retried and a persistent one is recorded → aborts the
-        # publish below (the live cache is kept), never silently shipped partial.
-        # Circuit breaker. Every chunk costs 3 x 20s before it gives up, so a run
-        # where the DB is simply too loaded to answer keeps 3 of the 5 read-pool
-        # connections busy for ~60s per chunk and does that once per chunk, forever.
-        # Observed on STG 18-Sep: chunks 21 through 41 all failed back to back,
-        # 12:50 to 13:09 — twenty solid minutes of timing-out scans over the 14.4M
-        # row v5 table, ending right before the user's session and leaving the DB
-        # cold enough that their first Key Devs query took 34s. `raise_on_timeout`
-        # would have aborted the publish anyway; the only thing those 20 chunks
-        # bought was load. Stop after 3 consecutive failures and say so once.
-        if _consecutive_failures >= 3:
-            log_error(
-                f"[SCREENING] segment cache: giving up after {_consecutive_failures} "
-                f"consecutive chunk failures at chunk {start // ticker_chunk} of "
-                f"{(total_t + ticker_chunk - 1) // ticker_chunk} — the DB is not "
-                f"answering this scan. {len(skipped)} tickers skipped; the live cache "
-                f"is untouched and this retries on the next poll."
-            )
-            skipped.extend(tickers[start:])
-            break
-        rows = None
-        for _attempt in range(3):
-            try:
-                with db_manager._read_engine.connect() as _c:
-                    rows = [dict(m) for m in _c.execute(_sql_text(sql), params).mappings()]
-                break
-            except Exception as _qe:
-                if _attempt < 2:
-                    _seg_time.sleep(1.0)
-                    continue
-                skipped.extend(chunk)
-                log_error(
-                    f"[SCREENING] segment cache: chunk {start // ticker_chunk} "
-                    f"({len(chunk)} tickers) failed after 3 tries — {str(_qe)[:160]}"
-                )
-        if rows is None:
-            _consecutive_failures += 1
-            _seg_time.sleep(0.4)
+    entries: List[tuple] = []
+    skipped: List[str] = []
+    for done, tk in enumerate(tickers, 1):
+        try:
+            tables = SegmentDataRepository.full_segment_tables(tk, "annual") or {}
+        except Exception as exc:
+            skipped.append(tk)
+            log_error(f"[SCREENING] segment cache: {tk} failed — {str(exc)[:160]}")
             continue
-        _consecutive_failures = 0
-        by_ticker: Dict[str, List[dict]] = {}
-        for r in rows:
-            by_ticker.setdefault(r["ticker"], []).append(r)
-        for tk, trows in by_ticker.items():
-            trows.sort(key=_segment_cache_recency_key)
-            years = sorted(
-                {y for y in (SegmentDataRepository._get_row_year(r) for r in trows) if y is not None}
-            )
-            if not years:
-                continue
-            biz, geo, _ = SegmentDataRepository._classify_segment_rows(trows, years)
-            entries.extend(_segment_cache_entries(tk, biz, geo))
-        processed += len(chunk)
+        entries.extend(_segment_cache_entries(
+            tk, tables.get("business_segments") or {}, tables.get("geo_segments") or {}))
         if progress_cb:
             try:
-                progress_cb(processed, total_t)
+                progress_cb(done, len(tickers))
             except Exception:
                 pass
-        # Yield between chunks — the whole point of the crash fix.
-        _seg_time.sleep(0.4)
-
+        _seg_time.sleep(0.02)      # yield the GIL to interactive requests between companies
     if skipped and raise_on_timeout:
         # ABORT before the whole-table swap. The zero-downtime publish REPLACES the
         # live cache, so publishing a build that skipped chunks would drop those
@@ -2818,25 +2711,7 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
     out = read_segment_member_labels_raw(segment_type)
     if segment_type == "geographical":
         out = _collapse_geo_canonical_options(out)
-    else:
-        out = _drop_places_from_business_options(out)
     return out
-
-
-def _drop_places_from_business_options(
-    raw_opts: List[Tuple[str, int]],
-) -> List[Tuple[str, int]]:
-    """Keep geography out of the Business Segments dropdown.
-
-    ``_classify_member`` already stops these at the root, but the screening
-    cache is a table that rebuilds on its own schedule, so rows written before
-    that rule existed are still in it. Filtering on the way out means the list
-    is right now rather than after the next rebuild. Pure dict work over a few
-    thousand cached labels — microseconds, no query.
-    """
-    from data.geo_hierarchy import names_a_place
-
-    return [(label, count) for label, count in raw_opts if not names_a_place(label)]
 
 
 def _collapse_geo_canonical_options(
@@ -5422,85 +5297,31 @@ def _fetch_segment_revenue_v4(
     year: Optional[int],
     use_geo_axes: bool = False,
 ) -> Dict[str, float]:
-    """Query coreiq_filing_metrics_v5 for segment revenue by selected dimension_member_labels.
-
-    Fast approach: no subquery JOIN.
-    - Specific year: single WHERE filter.
-    - Latest: query last 3 years, pick latest year per ticker in Python.
-    Returns {ticker: revenue_mm}.
-    """
-    from utils.constants import SEGMENT_GEO_AXES, SEGMENT_BUSINESS_AXES, SEGMENT_PRODUCT_AXES
-    from datetime import date as _date
-
-    tickers = list(ticker_tuple)
-    labels = [l for l in segment_labels_tuple if l]
-    if not tickers or not labels:
+    """Revenue of the selected segments per company, read from the Segments tab's
+    own tables (SegmentDataRepository.full_segment_tables), so the screener shows
+    exactly the tab's numbers. The sum of the selected members that company has,
+    for `year` or, when None, the latest year any of them is filed.
+    Returns {ticker: revenue_mm}."""
+    labels = {SegmentDataRepository._member_key(l) for l in segment_labels_tuple if l}
+    if not ticker_tuple or not labels:
         return {}
+    part = "geo_segments" if use_geo_axes else "business_segments"
+    out: Dict[str, float] = {}
+    for tk in ticker_tuple:
+        try:
+            tables = SegmentDataRepository.full_segment_tables(tk, "annual") or {}
+        except Exception as exc:
+            log_error(f"[SCREENING] segment revenue: {tk} failed — {str(exc)[:160]}")
+            continue
+        chosen = {m: by for m, by in ((tables.get(part) or {}).get("Revenues") or {}).items()
+                  if SegmentDataRepository._member_key(m) in labels}
+        years = sorted({y for by in chosen.values() for y, v in by.items() if v is not None})
+        pick = year if year is not None else (years[-1] if years else None)
+        values = [by.get(pick) for by in chosen.values() if by.get(pick) is not None]
+        if values:
+            out[tk] = float(sum(values))
+    return out
 
-    ticker_sql   = _build_ticker_in_list(tickers)
-    safe_labels  = [lbl.replace("'", "''") for lbl in labels]
-    label_in_sql = ", ".join(f"'{l}'" for l in safe_labels)
-
-    axes = SEGMENT_GEO_AXES if use_geo_axes else (SEGMENT_BUSINESS_AXES + SEGMENT_PRODUCT_AXES)
-    axis_or = " OR ".join(f"dimension LIKE '{ax}'" for ax in axes)
-
-    # MAX_EXECUTION_TIME hint: 30s ceiling. Large working sets can exceed this on v4
-    # (no index on dimension_member_label). If it times out we return {} and the
-    # caller falls back to the IS-table total-revenue path.
-    try:
-        if year:
-            query = f"""
-                SELECT /*+ MAX_EXECUTION_TIME(30000) */
-                    ticker, SUM(numeric_value) / {DB_SCALE} AS revenue_mm
-                FROM coreiq_filing_metrics_v5
-                WHERE ticker IN ({ticker_sql})
-                  AND is_dimensioned = 1
-                  AND doc_type = '10-K'
-                  AND numeric_value > 0
-                  AND dimension_member_label IN ({label_in_sql})
-                  AND ({axis_or})
-                  AND report_fiscal_year = {year}
-                GROUP BY ticker
-            """
-            rows = db_manager.execute_query_readonly(query)
-            return {r["ticker"]: float(r["revenue_mm"])
-                    for r in (rows or []) if r.get("revenue_mm") is not None}
-        else:
-            min_year = _date.today().year - 3
-            query = f"""
-                SELECT /*+ MAX_EXECUTION_TIME(30000) */
-                    ticker, report_fiscal_year,
-                    SUM(numeric_value) / {DB_SCALE} AS revenue_mm
-                FROM coreiq_filing_metrics_v5
-                WHERE ticker IN ({ticker_sql})
-                  AND is_dimensioned = 1
-                  AND doc_type = '10-K'
-                  AND numeric_value > 0
-                  AND dimension_member_label IN ({label_in_sql})
-                  AND ({axis_or})
-                  AND report_fiscal_year >= {min_year}
-                GROUP BY ticker, report_fiscal_year
-                ORDER BY ticker, report_fiscal_year DESC
-            """
-            rows = db_manager.execute_query_readonly(query)
-            latest: Dict[str, float] = {}
-            for r in (rows or []):
-                t = r["ticker"]
-                if t not in latest and r.get("revenue_mm") is not None:
-                    latest[t] = float(r["revenue_mm"])
-            return latest
-
-    except Exception as exc:
-        log_error(f"[SCREENING] _fetch_segment_revenue_v4 failed (may be timeout for large set): {exc}")
-        return {}
-
-
-# ── Fast IS-table revenue path ────────────────────────────────────────────────
-# instead of coreiq_filing_metrics_v5 (7.75M rows, no suitable composite index
-# for ticker+is_dimensioned+doc_type — full scans take 90-430 seconds on Azure).
-# Revenue from IS tables == sum of all segments, which is what the column shows.
-
-@st.cache_data(ttl=1800, show_spinner=False)
 def _fetch_revenue_from_is(ticker_tuple: tuple) -> Dict[str, float]:
     """Return {ticker: latest_annual_total_revenue_mm} from income-statement tables.
 

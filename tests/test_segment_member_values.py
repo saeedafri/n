@@ -83,13 +83,21 @@ def test_the_members_add_up_to_what_McDonalds_filed():
     assert round(sum(v[2024] for v in revenues.values()), 1) == 25_920.0
 
 
-def test_geography_filed_on_a_business_axis_is_still_dropped():
-    """The 86 companies that tag nothing but places on a business axis are
-    unaffected: with no business member to vouch for it, the axis is geography."""
+def test_regions_on_the_operating_segment_axis_are_the_segments():
+    """Decided 2026-10-08: StatementBusinessSegmentsAxis is the operating-segment
+    axis, so Mondelez's and Apple's regional segments are business segments."""
     rows = [
         segment_row("United States", "Total revenues", "us-gaap:Revenues", 900_000_000, 2024),
         segment_row("EMEA", "Total revenues", "us-gaap:Revenues", 100_000_000, 2024),
     ]
+    assert set(business_revenues(rows)) == {"United States", "Europe, Middle East and Africa (EMEA)"}
+
+
+def test_geography_on_an_axis_that_is_not_for_segments_is_still_dropped():
+    rows = [{**segment_row(name, "Total revenues", "us-gaap:Revenues", value, 2024),
+             "dimension": "us-gaap:StatementOperatingActivitiesSegmentAxis",
+             "full_dimension_label": f"Operating Activities Segment: {name}"}
+            for name, value in (("United States", 900_000_000), ("EMEA", 100_000_000))]
     assert business_revenues(rows) == {}
 
 

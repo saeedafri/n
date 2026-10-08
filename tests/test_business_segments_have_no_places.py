@@ -59,20 +59,8 @@ def test_blank_and_junk_are_not_places():
         assert names_a_place(label) is False
 
 
-def test_the_screening_dropdown_filter_drops_only_places():
-    from data.screening_service import _drop_places_from_business_options
-
-    options = [(label, 10) for label in
-               PLACES_FOUND_ON_A_BUSINESS_AXIS + REAL_BUSINESS_SEGMENTS + CATCH_ALLS]
-    kept = {label for label, _ in _drop_places_from_business_options(options)}
-    assert kept == set(REAL_BUSINESS_SEGMENTS) | set(CATCH_ALLS)
-    assert not (kept & set(PLACES_FOUND_ON_A_BUSINESS_AXIS))
 
 
-def test_counts_are_carried_through_untouched():
-    from data.screening_service import _drop_places_from_business_options
-
-    assert _drop_places_from_business_options([("Retail", 38), ("EMEA", 14)]) == [("Retail", 38)]
 
 
 def test_classify_member_sends_a_place_on_a_business_axis_nowhere():
