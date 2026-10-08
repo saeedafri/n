@@ -3308,9 +3308,10 @@ def main():
 
 
     with header_col2:
-        # Always use 4 columns for consistent layout
-        # Column 1: Company, Column 2: Document Type, Column 3: Filing Unit (8-K/6-K only), Column 4: Year
-        f1, f2, f3, f4 = st.columns([2.0, 1.4, 1.0, 0.8])
+        # Displayed in selection order: Company → Year → Document Type → Filing Unit
+        # (8-K/6-K only). Widgets still render Doc Type before Year (the Year label
+        # needs doc_type); only their columns follow the selection order.
+        f1, f2, f3, f4 = st.columns([2.0, 0.8, 1.4, 1.0])
 
         # ═══════════════════════════════════════════════════════════════════
         # DROPDOWN #1: Company Selection
@@ -3381,7 +3382,7 @@ def main():
             )
 
         _dropdown_render_start = _perf_time.time()
-        with f2:
+        with f3:
             doc_type = st.selectbox(
                 "Document Type",
                 options=available_doc_types,
@@ -3420,7 +3421,7 @@ def main():
                 _default_display = _max_display if _max_display > 0 else 1
                 st.session_state["cf_filing_unit_select"] = _default_display
 
-            with f3:
+            with f4:
                 _selected_display_num = st.selectbox(
                     "Filing Unit",
                     options=_filing_unit_display_options,
@@ -3437,11 +3438,6 @@ def main():
             _dd_filing_unit_render_elapsed = _perf_time.time() - _dropdown_render_start
             _dd_filing_unit_total_elapsed = _perf_time.time() - _dd_filing_unit_start
 
-            # Use f4 for Year when Filing Unit is shown
-            _year_col = f4
-        else:
-            # No filing unit - use f3 for Year
-            _year_col = f3
 
         # ═══════════════════════════════════════════════════════════════════
         # DROPDOWN #4 (or #3): Year Selection (depends on Company + DocType)
@@ -3460,7 +3456,7 @@ def main():
             st.session_state["cf_year_select"] = available_years[0]
 
         _dropdown_render_start = _perf_time.time()
-        with _year_col:
+        with f2:
             year = st.selectbox(
                 "Year",
                 options=available_years,
