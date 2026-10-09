@@ -136,13 +136,13 @@ def person_key(name):
 def classify_role(title: Optional[str]) -> str:
     """Collapse a free-text executive title into one selectable role bucket.
 
-    Blank / missing title -> PEOPLE_ROLE_UNKNOWN (511 SEC rows have no position
-    at all; the extractor records 'missing_position' for them).
-    No pattern matched -> PEOPLE_ROLE_OTHER.
+    Blank title and no pattern matched both -> PEOPLE_ROLE_OTHER: the two meant
+    the same thing to a user ("not one of the named roles"), so they are one
+    bucket (manager, 2026-10-09). 511 SEC rows have no position at all.
     """
     text = (title or "").strip()
     if not text:
-        return PEOPLE_ROLE_UNKNOWN
+        return PEOPLE_ROLE_OTHER
     for name, rx in _ROLE_REGEX:
         if rx.search(text):
             return name
@@ -565,6 +565,93 @@ def _collapse_restatements(df: pd.DataFrame) -> pd.DataFrame:
     return collapsed
 
 
+def _names_match(a: List[str], b: List[str]) -> bool:
+    """One person filed two ways: same surname, and first names equal or one a
+    short form of the other (Doug / Douglas). Yahoo often leads with an initial
+    ("C. Douglas McMillon"), which person_key already drops."""
+    if not a or not b or a[-1] != b[-1]:
+        return False
+    if len(a) == 1 or len(b) == 1:
+        return False
+    first_a, first_b = a[0], b[0]
+    return (first_a == first_b
+            or (min(len(first_a), len(first_b)) >= 3
+                and (first_a.startswith(first_b) or first_b.startswith(first_a))))
+
+
+def _merge_sources(df: pd.DataFrame) -> pd.DataFrame:
+    """Combine a US company's SEC proxy rows with its Yahoo officer rows.
+
+    Same company, same person (`_names_match`), and the match must be unique in
+    both directions — an ambiguous pair is left as two people rather than risk
+    giving one executive another's pay. Precedence:
+      * SEC wins every field it has (pay parts, total, title);
+      * Yahoo fills what SEC never discloses — year born, total pay, exercised /
+        unexercised value — onto the SEC row of the SAME year;
+      * age is derived per year from year born, so a 2019 row does not show the
+        executive's age today.
+    A Yahoo year with no SEC row stays, renamed to the SEC spelling so the
+    person is one row in the grid. Merged rows read source "SEC+YFinance".
+    """
+    both = set(df.loc[df["source"] == "SEC", "ticker"]) & set(df.loc[df["source"] == "YFinance", "ticker"])
+    if not both:
+        return df
+    df = df.copy()
+    keys = df["executive_name"].map(person_key).str.split("|")
+    drop = []
+    matched_people = 0
+    for ticker in both:
+        sec_idx = df.index[(df["ticker"] == ticker) & (df["source"] == "SEC")]
+        yf_idx = df.index[(df["ticker"] == ticker) & (df["source"] == "YFinance")]
+        sec_people = {}
+        for i in sec_idx:
+            sec_people.setdefault("|".join(keys[i]), []).append(i)
+        yf_people = {}
+        for i in yf_idx:
+            yf_people.setdefault("|".join(keys[i]), []).append(i)
+        pairs = {}
+        for yk in yf_people:
+            hits = [sk for sk in sec_people if _names_match(sk.split("|"), yk.split("|"))]
+            if len(hits) == 1:
+                pairs.setdefault(hits[0], []).append(yk)
+        for sk, yks in pairs.items():
+            if len(yks) != 1:
+                continue
+            matched_people += 1
+            yk = yks[0]
+            sec_rows = sec_people[sk]
+            name = df.at[sec_rows[0], "executive_name"]
+            born = next((df.at[i, "year_born"] for i in yf_people[yk]
+                         if pd.notna(df.at[i, "year_born"])), None)
+            if born is None:
+                yi = yf_people[yk][0]
+                if pd.notna(df.at[yi, "age"]) and pd.notna(df.at[yi, "year"]):
+                    born = int(df.at[yi, "year"]) - int(df.at[yi, "age"])
+            for i in sec_rows:
+                df.at[i, "source"] = "SEC+YFinance"
+                if born is not None:
+                    df.at[i, "year_born"] = born
+                    if pd.notna(df.at[i, "year"]):
+                        df.at[i, "age"] = int(df.at[i, "year"]) - int(born)
+            by_year = {df.at[i, "year"]: i for i in sec_rows}
+            for yi in yf_people[yk]:
+                target = by_year.get(df.at[yi, "year"])
+                if target is not None:
+                    for col in ("total_pay", "total_pay_local", "pay_currency",
+                                "exercised_value", "unexercised_value"):
+                        if pd.isna(df.at[target, col]) or df.at[target, col] in ("", None):
+                            df.at[target, col] = df.at[yi, col]
+                    drop.append(yi)
+                else:
+                    df.at[yi, "executive_name"] = name
+                    df.at[yi, "source"] = "SEC+YFinance"
+                    if born is not None:
+                        df.at[yi, "year_born"] = born
+    log_timing("PEOPLE_SOURCE_MERGE", 0,
+               details=f"tickers={len(both)} people={matched_people} yf_rows_folded={len(drop)}")
+    return df.drop(index=drop).reset_index(drop=True)
+
+
 def _build_people_universe() -> pd.DataFrame:
     """Fetch BOTH people sources whole and return the unified frame.
 
@@ -611,6 +698,7 @@ def _build_people_universe() -> pd.DataFrame:
         return df
 
     df = _collapse_restatements(df)
+    df = _merge_sources(df)
 
     df["is_former"] = df["is_former"].fillna(False).astype(bool)
     for col in ("year", "filing_year", "year_born", "confidence"):
@@ -667,7 +755,8 @@ def get_people_universe() -> pd.DataFrame:
         # _v2: the frame's columns and dedupe changed (2026-10-07). The disk copy
         # is keyed on the source tables only, so without a new name a deploy
         # would keep serving the old snapshot.
-        "people_universe_v2", _build_people_universe, sources,
+        # _v3: Unknown folded into Other + SEC/Yahoo merge (2026-10-09).
+        "people_universe_v3", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
 
@@ -742,7 +831,9 @@ def apply_people_criterion(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
 
     roles = criterion.get("roles") or []
     if roles:
-        out = out[out["role"].astype(str).isin([str(r) for r in roles])]
+        # Saved criteria may still name the retired "Unknown" bucket.
+        wanted = {PEOPLE_ROLE_OTHER if str(r) == PEOPLE_ROLE_UNKNOWN else str(r) for r in roles}
+        out = out[out["role"].astype(str).isin(wanted)]
 
     title_contains = (criterion.get("title_contains") or "").strip()
     if title_contains:
@@ -770,7 +861,11 @@ def apply_people_criterion(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
 
     sources = criterion.get("sources") or []
     if sources:
-        out = out[out["source"].astype(str).isin([str(s) for s in sources])]
+        # A merged row is "SEC+YFinance" and belongs to both.
+        wanted = {str(s) for s in sources}
+        # astype(bool): on an empty frame .map() yields float64, and df[float
+        # Series] is a COLUMN selection that silently drops every column.
+        out = out[out["source"].astype(str).map(lambda v: bool(wanted & set(v.split("+")))).astype(bool)]
 
     forms = criterion.get("filing_forms") or []
     if forms:
@@ -805,10 +900,14 @@ def build_people_summary(criterion: dict) -> str:
             symbol = OPERATOR_SQL.get(operator, operator)
             parts.append(f"{metric} {symbol} ${v1:,.1f}mm")
 
+    shown = criterion.get("show_metrics") or []
+    if shown:
+        parts.append("Show: " + ", ".join(str(m) for m in shown))
+
     years = criterion.get("years") or []
     if years:
         ys = sorted(int(y) for y in years)
-        parts.append(f"FY {ys[0]}" if len(ys) == 1 else f"FY {ys[0]}–{ys[-1]}")
+        parts.append(f"FY {ys[0]}" if len(ys) == 1 else "FY " + ", ".join(str(y) for y in ys))
 
     if criterion.get("age_min") is not None or criterion.get("age_max") is not None:
         lo = criterion.get("age_min")
@@ -827,3 +926,61 @@ def build_people_summary(criterion: dict) -> str:
         parts.append("incl. former")
 
     return " · ".join(parts) if parts else "All people"
+
+
+# =============================================================================
+# YEAR-COLUMN GRID — pure pandas, no DB, no st.*
+# =============================================================================
+
+def pivot_people_years(df: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
+    """One row per executive x metric, one column per year.
+
+        Executive  Title  Metric  2024  2025  2026
+        A          CEO    Salary  ...   ...   ...
+
+    `metrics` are display labels (PEOPLE_MONEY_METRICS keys); only those are
+    shown. Identity columns come from the executive's LATEST year on file, so a
+    title change shows the current title once instead of splitting the row.
+    An executive with no value for any chosen metric keeps one row with blank
+    years — the person is in scope, the pay simply was not disclosed.
+    `df` may carry Company / Industry / Country of Incorporation already joined.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+    cols = [(label, PEOPLE_MONEY_METRICS[label]) for label in metrics
+            if label in PEOPLE_MONEY_METRICS and PEOPLE_MONEY_METRICS[label] in df.columns]
+    rows = df.assign(year=pd.to_numeric(df["year"], errors="coerce"))
+    who = ["ticker", "executive_name"]
+    latest = (rows.sort_values("year", ascending=False, na_position="last", kind="mergesort")
+                  .drop_duplicates(who))
+    attrs = [c for c in ("Company", "Industry", "Country of Incorporation", "title", "role",
+                         "age", "year_born") if c in latest.columns]
+    identity = latest[who + attrs]
+
+    long = []
+    for order, (label, col) in enumerate(cols):
+        part = rows.loc[rows[col].notna() & rows["year"].notna(), who + ["year", col]]
+        long.append(part.rename(columns={col: "value"}).assign(Metric=label, _order=order))
+    long = pd.concat(long, ignore_index=True) if long else pd.DataFrame(
+        columns=who + ["year", "value", "Metric", "_order"])
+
+    if long.empty:
+        grid = identity.assign(Metric="", _order=0)
+        year_cols = []
+    else:
+        long["year"] = long["year"].astype(int).astype(str)
+        grid = (long.pivot_table(index=who + ["Metric", "_order"], columns="year",
+                                 values="value", aggfunc="first")
+                    .reset_index())
+        grid.columns.name = None
+        year_cols = sorted(c for c in grid.columns if str(c).isdigit())
+        missing = identity[~identity.set_index(who).index.isin(grid.set_index(who).index)]
+        grid = grid.merge(identity, on=who, how="left")
+        if not missing.empty:
+            grid = pd.concat([grid, missing.assign(Metric="", _order=0)], ignore_index=True)
+
+    sort_by = (["Company"] if "Company" in grid.columns else []) + ["executive_name", "_order"]
+    grid = grid.sort_values(sort_by, kind="mergesort").drop(columns="_order")
+    lead = [c for c in ("Company", "ticker", "executive_name", "title", "role", "Industry",
+                        "Country of Incorporation", "age", "year_born") if c in grid.columns]
+    return grid[lead + ["Metric"] + year_cols].reset_index(drop=True)

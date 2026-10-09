@@ -764,14 +764,15 @@ PEOPLE_ROLE_PATTERNS = [
     ("Head of Function",      r"\bhead\s+of\b|\bdirector\b|\bmanager\b|\bcontroller\b|\bofficer\b"),
 ]
 
-# Title text with no bucket match, and title text that is blank.
+# Title text with no bucket match OR no title at all — one bucket (2026-10-09:
+# "Unknown" was folded into "Other"; both meant "not a predefined role").
+# PEOPLE_ROLE_UNKNOWN survives only so saved criteria that still name it map
+# onto Other.
 PEOPLE_ROLE_OTHER   = "Other"
 PEOPLE_ROLE_UNKNOWN = "Unknown"
 
 # Selector order for the Role multiselect.
-PEOPLE_ROLES = [name for name, _ in PEOPLE_ROLE_PATTERNS] + [
-    PEOPLE_ROLE_OTHER, PEOPLE_ROLE_UNKNOWN,
-]
+PEOPLE_ROLES = [name for name, _ in PEOPLE_ROLE_PATTERNS] + [PEOPLE_ROLE_OTHER]
 
 # Filterable compensation metrics: UI label → frame column.
 # All hold RAW DOLLARS in the DB; the UI takes $mm and scales by DB_SCALE, the
@@ -814,17 +815,17 @@ PEOPLE_FILING_FORMS = ["DEF 14A", "PRE 14A"]
 # so the list does not need editing every January.
 PEOPLE_YEARS = list(range(_CURRENT_FY, 2012, -1))
 
-# Grid column order for People results. Columns with no data for the current
-# result set are dropped at render time, so this is a maximum, not a minimum.
+# Identity columns of the People grid, left of the Metric column and the
+# per-year value columns. Source / filing columns are deliberately absent: the
+# published view does not say where a figure came from (manager, 2026-10-09).
 PEOPLE_DISPLAY_COLUMNS = [
-    "Company", "Ticker", "Executive Name", "Title", "Role", "Year",
-    "Industry", "Country of Incorporation", "Age",
-    "Salary", "Bonus", "Stock Awards", "Option Awards", "Non-Equity Incentive",
-    "All Other Compensation", "Total Compensation",
-    "Total Pay", "Total Pay (Local)", "Pay Currency",
-    "Exercised Value", "Unexercised Value",
-    "Source", "Filing Form", "Filing Year", "Source Filing", "Confidence",
+    "Company", "Ticker", "Executive Name", "Title", "Role",
+    "Industry", "Country of Incorporation", "Age", "Year Born",
 ]
+
+# Metrics shown when a People criterion names none — the headline pay figure
+# from each disclosure type, so a screen is never shown with no pay at all.
+PEOPLE_DEFAULT_SHOW_METRICS = ["Total Compensation", "Total Pay"]
 
 # Money columns, in display-label form — formatted as $ and dropped when empty.
 PEOPLE_MONEY_COLUMNS = list(PEOPLE_MONEY_METRICS.keys())

@@ -56,9 +56,10 @@ def test_role_classification():
         ("Deputy GM & Finance Director",                               "General Manager"),
         # Junk / missing.
         ("Executive",                                                  "Other"),
-        ("",                                                           "Unknown"),
-        (None,                                                         "Unknown"),
-        ("   ",                                                        "Unknown"),
+        # Blank titles share the Other bucket (Unknown was folded in, 2026-10-09).
+        ("",                                                           "Other"),
+        (None,                                                         "Other"),
+        ("   ",                                                        "Other"),
     ]
     for title, expected in cases:
         got = classify_role(title)
@@ -513,15 +514,85 @@ def test_summary():
         "money_operator": "Greater Than", "money_value1": 5.0,
         "years": [2024, 2025, 2026],
     })
-    assert "CEO, CFO" in s and "Total Compensation > $5.0mm" in s and "FY 2024–2026" in s, s
+    assert "CEO, CFO" in s and "Total Compensation > $5.0mm" in s and "FY 2024, 2025, 2026" in s, s
     assert build_people_summary({}) == "All people"
     one_year = build_people_summary({"years": [2025]})
     assert "FY 2025" in one_year and "–" not in one_year, one_year
     print("  summary: OK")
 
 
+def test_unknown_role_maps_to_other():
+    """A saved criterion that still names "Unknown" selects the merged Other bucket."""
+    df = pd.DataFrame({"ticker": ["A", "A"], "executive_name": ["X Y", "Z W"],
+                       "role": ["Other", "CEO"], "is_former": [False, False],
+                       "year": [2025, 2025], "title": ["", "CEO"]})
+    got = apply_people_criterion(df, {"roles": ["Unknown"]})
+    assert list(got["executive_name"]) == ["X Y"], got
+    assert "Unknown" not in PEOPLE_ROLES
+    print("  Unknown -> Other: OK")
+
+
+def _merge_frame():
+    rows = [
+        # Walmart-shaped: SEC pay by year, Yahoo officer with age/born/option values.
+        dict(ticker="WMT", executive_name="Doug McMillon", title="President and CEO", year=2024,
+             total_compensation=27_000_000, source="SEC"),
+        dict(ticker="WMT", executive_name="Doug McMillon", title="President and CEO", year=2025,
+             total_compensation=26_000_000, source="SEC"),
+        dict(ticker="WMT", executive_name="Mr. C. Douglas McMillon", title="CEO", year=2025,
+             total_pay=26_500_000, exercised_value=1_000_000, age=59, year_born=1966,
+             source="YFinance"),
+        # Same surname, different first name -> must stay two people.
+        dict(ticker="WMT", executive_name="John Furner", title="CEO Walmart US", year=2025,
+             total_compensation=12_000_000, source="SEC"),
+        dict(ticker="WMT", executive_name="Ms. Kathryn McLay", title="CEO International",
+             year=2025, total_pay=9_000_000, source="YFinance"),
+    ]
+    df = pd.DataFrame(rows, columns=_FRAME_COLUMNS)
+    return df
+
+
+def test_sec_yahoo_merge():
+    """SEC wins on pay; Yahoo fills born/age/option values on the same year only."""
+    from data.people_service import _merge_sources
+    out = _merge_sources(_merge_frame())
+    doug = out[out["executive_name"] == "Doug McMillon"].set_index("year")
+    assert len(doug) == 2, out                                 # Yahoo row folded into 2025
+    assert doug.loc[2025, "total_compensation"] == 26_000_000   # SEC pay kept
+    assert doug.loc[2025, "total_pay"] == 26_500_000            # Yahoo fills what SEC lacks
+    assert doug.loc[2025, "exercised_value"] == 1_000_000
+    assert doug.loc[2024, "exercised_value"] is None or pd.isna(doug.loc[2024, "exercised_value"])
+    assert doug.loc[2024, "age"] == 2024 - 1966 and doug.loc[2025, "age"] == 2025 - 1966
+    assert set(doug["source"]) == {"SEC+YFinance"}
+    assert "Ms. Kathryn McLay" in set(out["executive_name"])    # unmatched Yahoo kept
+    assert (out["executive_name"] == "John Furner").sum() == 1
+    print("  SEC + Yahoo merge: OK")
+
+
+def test_year_pivot():
+    """Selected metrics only; years become columns; latest title wins."""
+    from data.people_service import pivot_people_years
+    df = pd.DataFrame([
+        dict(ticker="A", executive_name="P Q", title="CFO", role="CFO", year=2024, salary=1.0, bonus=5.0),
+        dict(ticker="A", executive_name="P Q", title="CEO", role="CEO", year=2025, salary=2.0, bonus=6.0),
+        dict(ticker="A", executive_name="No Pay", title="COO", role="COO", year=2025),
+    ], columns=_FRAME_COLUMNS)
+    grid = pivot_people_years(df, ["Salary"])
+    assert list(grid.columns[-2:]) == ["2024", "2025"], grid.columns
+    assert "Bonus" not in set(grid["Metric"]) and "bonus" not in grid.columns
+    pq = grid[grid["executive_name"] == "P Q"].iloc[0]
+    assert pq["Metric"] == "Salary" and pq["2024"] == 1.0 and pq["2025"] == 2.0 and pq["title"] == "CEO"
+    assert (grid["executive_name"] == "No Pay").sum() == 1      # in scope, pay undisclosed
+    two = pivot_people_years(df, ["Salary", "Bonus"])
+    assert list(two[two["executive_name"] == "P Q"]["Metric"]) == ["Salary", "Bonus"]
+    print("  year pivot: OK")
+
+
 if __name__ == "__main__":
     print("people_service self-check")
+    test_unknown_role_maps_to_other()
+    test_sec_yahoo_merge()
+    test_year_pivot()
     test_role_classification()
     test_former_detection()
     test_name_cleaning()

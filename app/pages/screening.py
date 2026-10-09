@@ -321,21 +321,25 @@ from data.screening_config import (
     YEAR_RANGE_STMTS,
     ADDITIONAL_DATA_STMT,
     ADDITIONAL_DATA_TYPES,
+    PEOPLE_DEFAULT_SHOW_METRICS,
     PEOPLE_DISPLAY_COLUMNS,
-    PEOPLE_FILING_FORMS,
     PEOPLE_MONEY_COLUMNS,
     PEOPLE_MONEY_METRICS,
     PEOPLE_MONEY_SOURCE_HINT,
+    PEOPLE_ROLE_OTHER,
+    PEOPLE_ROLE_UNKNOWN,
     PEOPLE_ROLES,
-    PEOPLE_SOURCES,
     PEOPLE_YEARS,
     get_metric_labels,
     get_metric_info,
 )
+from data.management_changes import compare_move_pay, get_management_changes
 from data.people_service import (
     apply_people_criterion,
     build_people_summary,
     get_people_universe,
+    person_key,
+    pivot_people_years,
 )
 from data.screening_service import (
     get_all_industries,
@@ -4827,8 +4831,7 @@ def _people_criterion_from_widgets(values: dict) -> dict:
         "years":           sorted(int(y) for y in (values.get("years") or [])),
         "age_min":         values.get("age_min"),
         "age_max":         values.get("age_max"),
-        "sources":         list(values.get("sources") or []),
-        "filing_forms":    list(values.get("filing_forms") or []),
+        "show_metrics":    list(values.get("show_metrics") or []),
         "money_metric":    None,
         "money_operator":  None,
         "money_value1":    None,
@@ -4880,6 +4883,15 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
         )
 
     st.markdown("**Compensation**")
+    show_metrics = st.multiselect(
+        "Compensation metrics to show",
+        options=PEOPLE_MONEY_COLUMNS,
+        default=[m for m in (pf.get("show_metrics") or PEOPLE_DEFAULT_SHOW_METRICS)
+                 if m in PEOPLE_MONEY_COLUMNS],
+        help="Only these metrics appear in the results. Pick several to compare them.",
+        key=f"{key_prefix}_show_metrics",
+    )
+    st.caption("Optional threshold — filter executives on one metric:")
     mc1, mc2, mc3, mc4 = st.columns([2.4, 2, 1.6, 1.6])
     _metric_options = ["— none —"] + PEOPLE_MONEY_COLUMNS
     _pf_metric = pf.get("money_metric")
@@ -4918,40 +4930,27 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
     # "— none —")` would be evaluated against the PREVIOUS render: pick a
     # metric and the Value box stays greyed out, with no way to type a
     # threshold. Validation on submit does this job instead.
-    _yf_only = ", ".join(
+    _partial = ", ".join(
         m for m in PEOPLE_MONEY_COLUMNS if PEOPLE_MONEY_SOURCE_HINT.get(m) == "YFinance")
     st.caption(
         f"Values are in $ millions. The second box applies to **Between** only. "
-        f"{_yf_only} are reported by YFinance companies only; the rest come from "
-        f"SEC proxy statements — a company on the other source has no value for "
-        f"that metric and will not match."
+        f"{_partial} are reported for some companies only; an executive with no "
+        f"value for the chosen metric does not match."
     )
 
-    st.markdown("**Scope**")
-    sc1, sc2, sc3 = st.columns([3, 2, 2])
-    with sc1:
-        years = st.multiselect(
-            "Compensation year",
-            options=PEOPLE_YEARS,
-            default=[y for y in (pf.get("years") or []) if y in PEOPLE_YEARS],
-            help="Leave empty for every year on file.",
-            key=f"{key_prefix}_years",
-        )
-    with sc2:
-        sources = st.multiselect(
-            "Data source",
-            options=PEOPLE_SOURCES,
-            default=[s for s in (pf.get("sources") or []) if s in PEOPLE_SOURCES],
-            key=f"{key_prefix}_sources",
-        )
-    with sc3:
-        filing_forms = st.multiselect(
-            "Filing form",
-            options=PEOPLE_FILING_FORMS,
-            default=[f for f in (pf.get("filing_forms") or []) if f in PEOPLE_FILING_FORMS],
-            help="SEC proxy type the figures were extracted from.",
-            key=f"{key_prefix}_forms",
-        )
+    st.markdown("**Compensation years**")
+    years = st.multiselect(
+        "Compensation years (select one or more)",
+        options=PEOPLE_YEARS,
+        default=[y for y in (pf.get("years") or []) if y in PEOPLE_YEARS],
+        placeholder="Select one or more years — each becomes a column",
+        help="Pick several years (e.g. 2024, 2025, 2026) to compare them side by side. "
+             "Leave empty for every year on file.",
+        key=f"{key_prefix}_years",
+    )
+    # Source / filing-form filters are no longer offered (the published view does
+    # not expose provenance); re-saving a criterion drops any old hidden ones.
+    sources, filing_forms = [], []
 
     ac1, ac2, ac3 = st.columns([1.6, 1.6, 5])
     with ac1:
@@ -4973,7 +4972,7 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
             help="Titles filed as 'Former ...'. Excluded by default.",
             key=f"{key_prefix}_include_former",
         )
-    st.caption("Age is only reported by YFinance companies — leave both at 0 to ignore it.")
+    st.caption("Age is not disclosed for every executive — leave both at 0 to ignore it.")
 
     return {
         "roles": roles,
@@ -4987,6 +4986,7 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
         "age_max": int(age_max) if age_max else None,
         "sources": sources,
         "filing_forms": filing_forms,
+        "show_metrics": show_metrics,
         "money_metric": money_metric,
         "money_operator": money_operator,
         "money_value1": float(money_value1) if money_metric != "— none —" else None,
@@ -5012,6 +5012,7 @@ def _validate_people_values(values: dict) -> Optional[str]:
     has_any = any([
         values.get("roles"), values.get("title_contains"), values.get("name_contains"),
         values.get("years"), values.get("sources"), values.get("filing_forms"),
+        values.get("show_metrics"),
         lo is not None, hi is not None,
         metric and metric != "— none —",
     ])
@@ -6662,70 +6663,27 @@ def _people_company_meta(company_df: pd.DataFrame) -> pd.DataFrame:
     return meta.drop_duplicates(subset=["ticker"])
 
 
-def _format_people_display(df: pd.DataFrame) -> pd.DataFrame:
-    """Rename people columns to display labels, format money, drop empty ones."""
-    rename = {
-        "executive_name":         "Executive Name",
-        "title":                  "Title",
-        "role":                   "Role",
-        "year":                   "Year",
-        "age":                    "Age",
-        "ticker":                 "Ticker",
-        "source":                 "Source",
-        "filing_form":            "Filing Form",
-        "filing_year":            "Filing Year",
-        "filing_blob":            "Source Filing",
-        "confidence":             "Confidence",
-        "total_pay_local":        "Total Pay (Local)",
-        "pay_currency":           "Pay Currency",
-    }
-    rename.update({col: label for label, col in PEOPLE_MONEY_METRICS.items()})
-    out = df.rename(columns=rename)
-
-    # Keep only money columns that actually carry a value for THIS result set,
-    # so a SEC-only screen does not show five empty YFinance columns.
-    money_present = [c for c in PEOPLE_MONEY_COLUMNS
-                     if c in out.columns and out[c].notna().any()]
-    for col in PEOPLE_MONEY_COLUMNS:
-        if col in out.columns and col not in money_present:
-            out = out.drop(columns=[col])
-
-    for col in money_present:
-        out[col] = out[col].apply(
-            lambda v: f"${v:,.0f}" if pd.notna(v) else "")
-    # Yahoo pay as filed, in its own currency — no $ sign; Total Pay is the USD figure.
-    if "Total Pay (Local)" in out.columns:
-        out["Total Pay (Local)"] = out["Total Pay (Local)"].apply(
-            lambda v: f"{v:,.0f}" if pd.notna(v) else "")
-
-    # Age / Year / Filing Year / Confidence: integers, blank when missing.
-    for col in ("Age", "Year", "Filing Year", "Confidence"):
+def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
+    """Label and format the year-column People grid (people_service.pivot_people_years)."""
+    out = grid.rename(columns={
+        "ticker": "Ticker", "executive_name": "Executive Name", "title": "Title",
+        "role": "Role", "age": "Age", "year_born": "Year Born",
+    })
+    year_cols = [c for c in out.columns if str(c).isdigit()]
+    for col in year_cols:
+        out[col] = out[col].apply(lambda v: f"${v:,.0f}" if pd.notna(v) else "")
+    for col in ("Age", "Year Born"):
         if col in out.columns:
-            out[col] = out[col].apply(
-                lambda v: "" if pd.isna(v) else str(int(v)))
-
-    for col in ("Executive Name", "Title", "Role", "Source", "Pay Currency",
-                "Filing Form", "Source Filing", "Company", "Industry", "Country of Incorporation"):
+            out[col] = out[col].apply(lambda v: "" if pd.isna(v) else str(int(v)))
+    for col in ("Company", "Ticker", "Executive Name", "Title", "Role", "Industry",
+                "Country of Incorporation", "Metric"):
         if col in out.columns:
-            # astype(object) FIRST. Role / Source / Filing Form are categorical
-            # in the materialized frame (they are low-cardinality and that is
-            # what keeps it at 2.9 MB), and fillna("") on a Categorical whose
-            # categories do not already contain "" raises TypeError rather than
-            # filling. That killed the whole results render.
-            out[col] = out[col].astype(object).where(out[col].notna(), "")
-            out[col] = out[col].astype(str).str.strip()
-
-    ordered = [c for c in PEOPLE_DISPLAY_COLUMNS if c in out.columns]
-    # Drop fully-empty optional columns so the grid never shows a column of
-    # blanks (a SEC-only screen has no local pay or currency).
-    keep = []
-    for col in ordered:
-        if col in ("Country of Incorporation", "Industry", "Source Filing",
-                   "Total Pay (Local)", "Pay Currency") and \
-                not out[col].astype(str).str.strip().ne("").any():
-            continue
-        keep.append(col)
-    return out[keep]
+            # astype(object) first: Role / Ticker are categorical in the frame and
+            # fillna("") on a Categorical without "" raises.
+            out[col] = out[col].astype(object).where(out[col].notna(), "").astype(str).str.strip()
+    lead = [c for c in PEOPLE_DISPLAY_COLUMNS if c in out.columns
+            and (c in ("Company", "Executive Name") or out[c].ne("").any())]
+    return out[lead + ["Metric"] + year_cols]
 
 
 def _build_people_excel(display_df: pd.DataFrame) -> bytes:
@@ -6834,12 +6792,13 @@ def _render_people_results():
         if scoped.empty:
             st.info(
                 "No executive data for the companies matching the current criteria. "
-                "Executive compensation is sourced from SEC proxy statements and "
-                "YFinance officer listings, which do not cover every company."
+                "Executive data does not cover every company."
             )
             return
 
-        # People Attributes criteria stack as AND.
+        # People Attributes criteria stack as AND. They decide WHO is shown; the
+        # grid then shows those people's selected metrics for the selected years,
+        # so a threshold met in 2025 still shows 2024 and 2026 beside it.
         filtered = scoped
         for criterion in people_criteria:
             filtered = apply_people_criterion(filtered, criterion)
@@ -6849,29 +6808,40 @@ def _render_people_results():
                     "Try relaxing one.")
             return
 
-        merged = filtered.merge(_people_company_meta(company_df), on="ticker", how="left")
+        no_threshold = [dict(c, money_metric=None) for c in people_criteria]
+        shown_rows = scoped
+        for criterion in no_threshold:
+            shown_rows = apply_people_criterion(shown_rows, criterion)
+        who = filtered[["ticker", "executive_name"]].drop_duplicates()
+        shown_rows = shown_rows.merge(who, on=["ticker", "executive_name"], how="inner")
+
+        metrics: List[str] = []
+        for criterion in people_criteria:
+            for m in (criterion.get("show_metrics") or []) + [criterion.get("money_metric")]:
+                if m and m not in metrics:
+                    metrics.append(m)
+        metrics = metrics or list(PEOPLE_DEFAULT_SHOW_METRICS)
+
+        merged = shown_rows.merge(_people_company_meta(company_df), on="ticker", how="left")
         if "Company" in merged.columns:
-            merged["Company"] = merged["Company"].fillna(merged["ticker"])
+            merged["Company"] = merged["Company"].fillna(merged["ticker"].astype(str))
+        merged = _fill_age_from_filings(merged)
 
-        # Company -> Year desc -> pay desc, the order the grid opens on.
-        _pay = merged["total_compensation"].fillna(merged["total_pay"])
-        merged = merged.assign(_pay_sort=_pay.fillna(0)).sort_values(
-            ["Company", "year", "_pay_sort"],
-            ascending=[True, False, False], na_position="last",
-        ).drop(columns=["_pay_sort"])
-
-        display_df = _format_people_display(merged)
+        grid = pivot_people_years(merged, metrics)
+        display_df = _format_people_display(grid)
 
         log_timing("PEOPLE_RESULTS_PIPELINE", (time.perf_counter() - t_people) * 1000,
                    details=f"universe={len(people_df)} scoped={len(scoped)} "
-                           f"shown={len(display_df)} criteria={len(people_criteria)}")
+                           f"people={len(who)} shown={len(display_df)} "
+                           f"metrics={len(metrics)} criteria={len(people_criteria)}")
 
         _hdr_col, _dl_col = st.columns([8, 2])
         with _hdr_col:
             st.markdown(
                 f"<p class='results-header'>"
-                f"<strong>{len(display_df)}</strong> executive records across "
-                f"<strong>{merged['ticker'].nunique()}</strong> companies</p>",
+                f"<strong>{len(who)}</strong> executives across "
+                f"<strong>{who['ticker'].nunique()}</strong> companies · "
+                f"{', '.join(metrics)}</p>",
                 unsafe_allow_html=True,
             )
         with _dl_col:
@@ -6888,24 +6858,10 @@ def _render_people_results():
         # the loaded page — and since the Excel export honours the filter model,
         # a partial domain silently drops real rows from the download.
         _domains = {}
-        for _col, _src in (("Role", "role"), ("Source", "source"),
-                           ("Filing Form", "filing_form")):
+        for _col in ("Role", "Metric", "Industry", "Country of Incorporation", "Company"):
             if _col in display_df.columns:
                 _domains[_col] = sorted(
-                    v for v in filtered[_src].astype(str).unique() if str(v).strip()
-                )
-        for _col in ("Year", "Filing Year"):
-            if _col in display_df.columns:
-                _domains[_col] = sorted(
-                    (v for v in display_df[_col].astype(str).unique() if v.strip()),
-                    reverse=True,
-                )
-        for _col, _src in (("Industry", "Industry"), ("Country of Incorporation", "Country of Incorporation"),
-                           ("Company", "Company")):
-            if _col in display_df.columns and _col in merged.columns:
-                _domains[_col] = sorted(
-                    v for v in merged[_src].astype(str).unique() if str(v).strip()
-                )
+                    v for v in display_df[_col].astype(str).unique() if str(v).strip())
 
         _render_filterable_results_grid(
             display_df,
@@ -6917,10 +6873,231 @@ def _render_people_results():
 
         _render_people_coverage_note(people_df, tickers_in_scope)
 
+        _render_management_changes(tickers_in_scope, people_criteria,
+                                   _people_company_meta(company_df))
+
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_results",
                              operation="render_people_results")
         st.error("Something went wrong. Please try again.")
+
+
+def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict],
+                               company_meta: pd.DataFrame) -> None:
+    """Appointments and departures read from 8-K Item 5.02, for the same companies
+    and the same name / title / role filters as the People grid above.
+
+    The frame is materialized (data/management_changes.py), so this is pandas only.
+    Lower-confidence rows (no title or no timing found in the text) and the source
+    sentence are opt-in: the default view is the hand-validated High tier.
+    """
+    try:
+        t0 = time.perf_counter()
+        changes = get_management_changes()
+        if changes is None or changes.empty:
+            return
+        st.markdown("#### Management Changes")
+        c1, c2, c3, c4 = st.columns([2.2, 1.6, 1.8, 1.6])
+        with c1:
+            kinds = st.multiselect("Change", ["Appointment", "Departure"],
+                                   default=["Appointment", "Departure"], key="scr_mc_kinds")
+        with c2:
+            include_board = st.checkbox("Include board seats", value=True, key="scr_mc_board")
+        with c3:
+            include_low = st.checkbox("Include lower-confidence", value=False, key="scr_mc_low",
+                                      help="Rows where the filing text gave no title or no "
+                                           "effective timing. Review against the source.")
+        with c4:
+            show_source = st.checkbox("Show source text", value=False, key="scr_mc_source")
+
+        df = changes[changes["ticker"].isin(tickers_in_scope)
+                     & changes["change"].isin(kinds or ["Appointment", "Departure"])]
+        if not include_board:
+            df = df[df["role"].astype(str) != "Board"]
+        if not include_low:
+            df = df[df["confidence"].astype(str) == "High"]
+        # The People Attributes filters mean the same thing here.
+        for criterion in people_criteria:
+            if criterion.get("name_contains"):
+                df = df[df["person"].str.contains(criterion["name_contains"], case=False,
+                                                  regex=False, na=False)]
+            if criterion.get("title_contains"):
+                wanted = criterion["title_contains"]
+                df = df[df["title"].str.contains(wanted, case=False, regex=False, na=False)
+                        | df["previous_title"].str.contains(wanted, case=False, regex=False, na=False)]
+            if criterion.get("roles"):
+                roles = {PEOPLE_ROLE_OTHER if r == PEOPLE_ROLE_UNKNOWN else r
+                         for r in criterion["roles"]}
+                df = df[df["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER)
+                        .isin(roles)]
+
+        if df.empty:
+            st.info("No management changes on file for these companies and filters.")
+            return
+
+        out = df.merge(company_meta, on="ticker", how="left")
+        out["Company"] = out.get("Company", out["ticker"]).fillna(out["ticker"])
+
+        def day(col):
+            return out[col].dt.strftime("%Y-%m-%d").fillna("")
+
+        display = pd.DataFrame({
+            "Company":          out["Company"].astype(str),
+            "Ticker":           out["ticker"].astype(str),
+            "Announced":        day("notice_date"),
+            "Effective":        day("effective_date").where(day("effective_date") != "",
+                                                            out["effective_note"].fillna("")),
+            "Executive Name":   out["person"],
+            "Change":           out["change"].astype(str),
+            "Event":            out["event_type"].astype(str),
+            "Title(s)":         out["titles"].fillna(""),
+            "Previous Title":   out["previous_title"].fillna(""),
+            "Role":             out["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER),
+            "Succeeds":         out["replaces"].fillna(""),
+            "Succeeded By":     out["replaced_by"].fillna(""),
+            "Reason":           out["reason"].fillna(""),
+            "Role Start":       out["role_start"].dt.strftime("%Y-%m-%d").fillna(""),
+            "Role End":         out["role_end"].dt.strftime("%Y-%m-%d").where(
+                out["role_end"].notna(),
+                out["role_start"].notna().map({True: "present", False: ""})),
+            "Years in Role":    out["years_in_role"].map(lambda v: "" if pd.isna(v) else f"{v:.1f}"),
+        })
+        if include_low:
+            display["Confidence"] = out["confidence"].astype(str)
+        if show_source:
+            display["Source Text"] = out["evidence"]
+            display["Filing"] = out["source_ref"]
+        # Columns that are blank for every row of this result say nothing.
+        display = display[[c for c in display.columns
+                           if c in ("Company", "Executive Name", "Change")
+                           or display[c].astype(str).str.strip().ne("").any()]]
+
+        log_timing("MGMT_CHANGES_RENDER", (time.perf_counter() - t0) * 1000,
+                   details=f"universe={len(changes)} shown={len(display)}")
+
+        _hdr, _dl = st.columns([8, 2])
+        with _hdr:
+            st.markdown(
+                f"<p class='results-header'><strong>{len(display)}</strong> management changes "
+                f"across <strong>{display['Ticker'].nunique() if 'Ticker' in display else 0}"
+                f"</strong> companies</p>", unsafe_allow_html=True)
+        with _dl:
+            from datetime import datetime as _dt_now
+            _render_excel_js_download(
+                _build_people_excel(display),
+                f"Management_Changes_{_dt_now.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                label="Excel",
+            )
+        _domains = {col: sorted(v for v in display[col].astype(str).unique() if v.strip())
+                    for col in ("Change", "Event", "Role", "Company") if col in display}
+        _render_filterable_results_grid(
+            display,
+            key="people_mgmt_changes_grid",
+            empty_message="No management changes found.",
+            pinned_column="Executive Name",
+            link_columns=["Filing"] if show_source else None,
+            filter_domains=_domains,
+        )
+        st.caption("Read from current-report disclosures of officer and director changes. "
+                   "Announced = date the change was disclosed; Effective = date it takes effect, "
+                   "as stated in the filing. Years in Role is measured from the stated "
+                   "appointment date to the stated departure date (or today); roles that began "
+                   "before 2016 have no start date on file and are left blank.")
+        _render_executive_moves(changes, tickers_in_scope, company_meta)
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_render_management_changes",
+                             operation="render_management_changes")
+        st.error("Management changes could not be loaded.")
+
+
+def _render_executive_moves(changes: pd.DataFrame, tickers_in_scope: set,
+                            company_meta: pd.DataFrame) -> None:
+    """Executives who left one company and were appointed at another, with their
+    pay before and after where both proxies are on file.
+
+    A move is only listed when the new company's own filing names the old one
+    (data/management_changes.mark_moves) — a shared name alone is not a move.
+    """
+    try:
+        moves = changes[(changes["moved_from"].astype(str) != "")
+                        & (changes["ticker"].isin(tickers_in_scope)
+                           | changes["moved_from"].isin(tickers_in_scope))]
+        if moves.empty:
+            return
+        st.markdown("#### Executive Moves")
+        include_board = st.checkbox("Include moves into board seats", value=False,
+                                    key="scr_moves_board")
+        if not include_board:
+            moves = moves[moves["role"].astype(str) != "Board"]
+        if moves.empty:
+            st.info("No officer moves between companies in scope.")
+            return
+        moves = moves.assign(_key=moves["person"].map(person_key)).sort_values("notice_date") \
+                     .drop_duplicates(["_key", "moved_from", "ticker"]).drop(columns="_key")
+        moves = compare_move_pay(moves, get_people_universe())
+        names = dict(zip(company_meta["ticker"].astype(str),
+                         company_meta.get("Company", company_meta["ticker"]).astype(str)))
+
+        def money(v):
+            return "" if pd.isna(v) else f"${v:,.0f}"
+
+        def year(v):
+            return "" if pd.isna(v) else str(int(v))
+
+        display = pd.DataFrame({
+            "Executive Name":   moves["person"],
+            "From Company":     moves["moved_from"].map(lambda t: names.get(str(t), str(t))),
+            "Previous Title":   moves["moved_from_title"].fillna(""),
+            "Left":             moves["moved_from_date"].dt.strftime("%Y-%m-%d").fillna(""),
+            "To Company":       moves["ticker"].astype(str).map(lambda t: names.get(t, t)),
+            "New Title":        moves["titles"].fillna(""),
+            "Joined":           moves["effective_date"].fillna(moves["notice_date"]).dt.strftime("%Y-%m-%d"),
+            "Prior Total Pay":  moves["prior_pay"].map(money),
+            "Prior Pay Year":   moves["prior_pay_year"].map(year),
+            "New Total Pay":    moves["new_pay"].map(money),
+            "New Pay Year":     moves["new_pay_year"].map(year),
+            "Pay Change %":     moves["pay_change_pct"].map(lambda v: "" if pd.isna(v) else f"{v:+.1f}%"),
+        }).sort_values("Joined", ascending=False)
+        st.markdown(f"<p class='results-header'><strong>{len(display)}</strong> moves</p>",
+                    unsafe_allow_html=True)
+        _render_filterable_results_grid(display, key="people_moves_grid",
+                                        empty_message="No executive moves found.",
+                                        pinned_column="Executive Name", height=360)
+        st.caption("Pay is total compensation for the latest year disclosed at the old "
+                   "company and the first year disclosed at the new one; blank where "
+                   "that company's pay is not on file.")
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_render_executive_moves",
+                             operation="render_executive_moves")
+        st.error("Executive moves could not be loaded.")
+
+
+def _fill_age_from_filings(df: pd.DataFrame) -> pd.DataFrame:
+    """Year born / age from the age an appointment filing states ("age 49"),
+    for executives whose compensation disclosure carries none.
+
+    Matched on (ticker, person_key) — same company, same person. Age is then
+    per row (year - year born), never one age pasted across every year.
+    """
+    try:
+        changes = get_management_changes()
+        stated = changes[changes["age"].notna()]
+        if stated.empty or df.empty:
+            return df
+        born = (stated.assign(_key=stated["person"].map(person_key),
+                              _born=stated["filing_date"].dt.year - stated["age"])
+                      .groupby([stated["ticker"].astype(str), "_key"])["_born"].median().round())
+        keys = list(zip(df["ticker"].astype(str), df["executive_name"].map(person_key)))
+        from_filings = pd.Series([born.get(k) for k in keys], index=df.index, dtype="float")
+        df = df.copy()
+        df["year_born"] = pd.to_numeric(df["year_born"], errors="coerce").fillna(from_filings)
+        derived = pd.to_numeric(df["year"], errors="coerce") - df["year_born"]
+        df["age"] = pd.to_numeric(df["age"], errors="coerce").fillna(derived)
+        return df
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_fill_age_from_filings",
+                             operation="fill_age")
+        return df
 
 
 def _render_people_coverage_note(people_df: pd.DataFrame, tickers_in_scope: set) -> None:
@@ -6936,8 +7113,7 @@ def _render_people_coverage_note(people_df: pd.DataFrame, tickers_in_scope: set)
         if missing:
             st.caption(
                 f"{missing} of {len(tickers_in_scope)} companies in scope have no "
-                f"executive data on file. Compensation comes from SEC proxy "
-                f"statements (DEF 14A / PRE 14A) and YFinance officer listings."
+                f"executive data on file."
             )
     except Exception:
         pass

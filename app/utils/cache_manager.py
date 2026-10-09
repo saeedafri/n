@@ -414,9 +414,12 @@ def _warm_people_screening() -> None:
     payload, ~5.5s of packet-bound DB time. Paying it on this thread means the
     first visitor to People Screening never does.
     """
+    from data.management_changes import get_management_changes
     from data.people_service import get_people_universe
 
     get_people_universe()
+    # 8-K Item 5.02 events: ~27s fetch + ~12s regex when the disk copy is gone.
+    get_management_changes()
 
 
 def _background_warmup_thread():
@@ -434,6 +437,12 @@ def _background_warmup_thread():
     """
     try:
         time.sleep(0.5)  # Minimal delay to let pg.run() start (engines are initialized)
+
+        # People Screening on its own thread. Queued behind the calendar and
+        # Key Devs warms (minutes on a cold pool) it reached People ~3 min after
+        # boot, so a first People visitor paid both cold builds (24s + 46s).
+        threading.Thread(target=_warm_people_screening, daemon=True,
+                         name="warm-people").start()
         from datetime import date, timedelta
 
         # ── Track 0: Calendar warmup (RUNS FIRST — it's the slowest page and the
@@ -508,7 +517,6 @@ def _background_warmup_thread():
                 _warm_forecast_schema,
                 _warm_screening_segment_options,
                 _warm_keydevs_screening,
-                _warm_people_screening,
                 _warm_ratios_screening,
                 _warm_refresh_dialog,
             ):

@@ -19,6 +19,7 @@ import logging
 import re
 import threading
 import time
+from datetime import date
 import streamlit as st
 from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass
@@ -1807,6 +1808,20 @@ class FilingDocument:
 # ── DB-based company/year/doctype lists (replaces folder scan) ────────────────
 from data.repository import FilingMetricRepository
 
+def _tickers_with_filings() -> Optional[set]:
+    """Tickers that have any coreiq_filing_metrics_v5 row; None when unknown."""
+    try:
+        from core.database import db_manager
+        rows = db_manager.execute_query_readonly(
+            "SELECT c.ticker FROM coreiq_companies c WHERE EXISTS "
+            "(SELECT 1 FROM coreiq_filing_metrics_v5 v WHERE v.ticker = c.ticker)")
+        return {str(r["ticker"]) for r in rows if r.get("ticker")} or None
+    except Exception as exc:
+        log_structured_error(exc, page="company_filings", component="_tickers_with_filings",
+                             operation="fetch_tickers_with_filings")
+        return None
+
+
 @st.cache_data(ttl=21600, show_spinner=False)
 def _load_companies_from_db():
     """Get (ticker, display_label) for the company dropdown.
@@ -1818,6 +1833,14 @@ def _load_companies_from_db():
     """
     _func_start = _perf_time.time()
 
+    # Companies with at least one filing row. A company listed without any (BOO:
+    # registered in coreiq_companies, never ingested — 76 such tickers on STG)
+    # opened an empty page. Index semi-join, ~0.3s warm / 6s cold, so it runs
+    # beside the company query and fails OPEN: no answer -> list everyone.
+    from concurrent.futures import ThreadPoolExecutor
+    _with_filings_pool = ThreadPoolExecutor(max_workers=1)
+    _with_filings = _with_filings_pool.submit(_tickers_with_filings)
+    _with_filings_pool.shutdown(wait=False)
 
     try:
         from data.repository import CompanyRepository
@@ -1886,8 +1909,14 @@ def _load_companies_from_db():
         if _COMPANY_NAMES_CACHE is None:
             _COMPANY_NAMES_CACHE = _built_names
 
+        try:
+            has_filings = _with_filings.result(timeout=10)
+        except Exception:
+            has_filings = None
         results = []
         for ticker in seen_tickers:
+            if has_filings and ticker not in has_filings:
+                continue
             name = _built_names.get(ticker, ticker)
             display = f"{name} ({ticker})"
             results.append((ticker, display))
@@ -2039,6 +2068,14 @@ def _prefetch_ticker_filter_data(ticker: str):
             expected_quarter = _quarter_label_from_doc_type(dt)
             db_quarter = _quarter_label_from_value(row.get("fiscal_quarter"))
             if expected_quarter and db_quarter and db_quarter != expected_quarter:
+                continue
+
+            # A bucket year past next year is a mis-parsed file name, not a filing:
+            # the non-SEC ingester read the "%20" of "June%2030" as "20", so ASICS
+            # (7936) Q2 decks landed in 2030 and FY2013 reports in 2033-2035 (also
+            # OR, 1913, ZAL, ATD). The blob paths are wrong at the source; until the
+            # data team re-files them, they are not offered as years.
+            if str(by).isdigit() and int(by) > date.today().year + 1:
                 continue
 
             seen_doc_buckets.add(pair_key)
