@@ -186,7 +186,11 @@ def load_config() -> AppConfig:
         except Exception:
             env = Environment.LOCAL
 
-        pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
+        # 10 kept per engine (was 5): with 5, connections beyond it were opened for a
+        # burst and closed on return, so each burst re-did the TLS handshake (2.5 s
+        # checkout waits seen on page requests while background jobs held the pool).
+        # STG MySQL: max_connections 341, peak use 186.
+        pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
         max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
 
         # SSL is only considered in staging/production in this template

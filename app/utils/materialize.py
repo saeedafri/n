@@ -16,6 +16,8 @@ def _materialize_on():
     return os.getenv("PAGE_MATERIALIZE", "1").strip().lower() in ("1", "true", "yes", "on")
 
 
+_BUILD_LOCKS = {}  # name -> lock held while its first copy is built
+_BUILD_LOCKS_GUARD = threading.Lock()
 _CACHE_DIR = None  # memoized once resolved — the writable dir never changes per process
 
 
@@ -420,7 +422,15 @@ def materialized_or_build(name, build_fn, sources, clear=None, inputs=None):
         return _obj.obj
     if _obj is not None:
         return _obj
-    slog_warning(f"[MAT][{name}] MISS → live build (no previous generation)")
-    _obj = build_fn()
-    write_materialized(name, _obj, sources)
-    return _obj
+    # One build per name: on a fresh cache dir the boot warm-up and the first visitors
+    # all missed at once and each ran the full build (People universe: 3 x 23-29 s).
+    with _BUILD_LOCKS_GUARD:
+        lock = _BUILD_LOCKS.setdefault(name, threading.Lock())
+    with lock:
+        _obj = _disk_copy(name)
+        if _obj is not None:
+            return _obj
+        slog_warning(f"[MAT][{name}] MISS → live build (no previous generation)")
+        _obj = build_fn()
+        write_materialized(name, _obj, sources)
+        return _obj

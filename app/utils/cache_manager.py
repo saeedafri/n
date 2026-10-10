@@ -404,7 +404,10 @@ def _warm_ratios_screening() -> None:
         except Exception:
             pass
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    # 2 workers: 8 held more connections than the read pool has (5) for ~4 min on a
+    # fresh cache dir (1,264 s of 3-6 s queries), so user requests queued behind it.
+    # Later boots read the persisted results (~5 s total), so only the first is slower.
+    with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(_one, tickers))
 
 

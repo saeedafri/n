@@ -719,11 +719,29 @@ def _sync_pass(changed_tables, reconcile):
             if reconcile or time.time() - last >= RECONCILE_EVERY_S:
                 _start_sweep(key)
         _maybe_snapshot(c)
+        _warm_title_indexes(c)
     except Exception as exc:
         slog_warning(f"[NEWS_MIRROR] sync failed: {type(exc).__name__}: {str(exc)[:160]}")
     finally:
         if changed:
             _changed(changed)
+
+
+_TITLES_WARM = set()
+
+
+def _warm_title_indexes(c):
+    """Read each complete table's (time, norm_title) index once per process. After a
+    restore or restart those pages are not in the OS cache, and the first keyword
+    search over a year read them from disk: 3.95 s for 1.4M AV titles vs 0.19 s warm."""
+    for key, t in TABLES.items():
+        if key in _TITLES_WARM or _get_state(c, f"{key}:complete") != "1":
+            continue
+        for i, ix in enumerate(t.get("indexes", [])):
+            if "norm_title" in ix:
+                c.execute(f"SELECT COUNT(*) FROM {t['source']} INDEXED BY ix_{key}_{i} "
+                          f"WHERE {t['ts']} > '' AND instr(norm_title, char(1)) > 0").fetchone()
+        _TITLES_WARM.add(key)
 
 
 def _maybe_snapshot(c):

@@ -1752,18 +1752,18 @@ class NewsRepository:
         def _build_topic_keys() -> List[str]:
             from utils.server_logger import log_db_timing as _ldt
             _t0 = _t.perf_counter()
-            # USE INDEX forces a covering index scan instead of a full table scan.
-            # idx_yf_pub_topic_v1 (published_at, primary_topic_v1) covers v1 reads,
-            # idx_yf_pub_topic_v2 (published_at, primary_topic_v2) covers v2 reads.
+            # No index hint: with idx_yf_topic_v1 / idx_yf_topic_v2 (added on STG
+            # 2026-10-10) MySQL skip-scans 16 distinct values (0.3 ms) instead of all
+            # 575k entries of idx_yf_pub_topic_v* (0.36 s warm, 3-6 s cold). Unhinted
+            # it still picks idx_yf_pub_topic_v* where the new ones do not exist, and a
+            # hint naming a missing index is an error (the ETL recreates this table).
             sql = """
                 SELECT DISTINCT primary_topic_v1 AS topic
                 FROM coreiq_yf_market_news_sentiment
-                     USE INDEX (idx_yf_pub_topic_v1)
                 WHERE primary_topic_v1 IS NOT NULL AND primary_topic_v1 != ''
                 UNION
                 SELECT DISTINCT primary_topic_v2
                 FROM coreiq_yf_market_news_sentiment
-                     USE INDEX (idx_yf_pub_topic_v2)
                 WHERE primary_topic_v2 IS NOT NULL AND primary_topic_v2 != ''
             """
             rows = db_manager.execute_query_readonly_raising(sql, {})
@@ -7342,7 +7342,7 @@ class FilingMetricRepository:
                 storage_year
             FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
-              AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
+              AND (storage_year = :year OR (storage_year IS NULL AND (report_fiscal_year = :year OR (report_fiscal_year IS NULL AND fiscal_year = :year))))
               AND doc_type = :doc_type
               {filing_unit_clause}
             ORDER BY
@@ -7578,11 +7578,15 @@ class FilingMetricRepository:
         Returns raw dicts so they are cache-serialisable (no dataclass instances).
         """
         t0 = time.perf_counter()
+        # The year test is COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
+        # spelled as index ranges (same rows, verified): the COALESCE form matched no
+        # index, so MySQL read every year's rows of the company's doc type (~12k) to
+        # keep ~1k — 2-4 s cold. Used by all four filing-year queries in this class.
         sql = f"""
             SELECT {FilingMetricRepository._SELECT_COLS_RAW}
             FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
-              AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
+              AND (storage_year = :year OR (storage_year IS NULL AND (report_fiscal_year = :year OR (report_fiscal_year IS NULL AND fiscal_year = :year))))
               AND doc_type = :doc_type
               AND numeric_value IS NOT NULL
               AND (standard_concept IS NULL OR standard_concept NOT LIKE '%Text Block')
@@ -7794,7 +7798,7 @@ class FilingMetricRepository:
                            ) AS rn
                     FROM coreiq_filing_metrics_v5
                     WHERE ticker = :ticker
-                      AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
+                      AND (storage_year = :year OR (storage_year IS NULL AND (report_fiscal_year = :year OR (report_fiscal_year IS NULL AND fiscal_year = :year))))
                       AND doc_type = :doc_type
                       AND MATCH(original_label, standard_concept, dimension_label)
                           AGAINST (:ft_query IN BOOLEAN MODE)
@@ -7830,7 +7834,7 @@ class FilingMetricRepository:
                        ) AS rn
                 FROM coreiq_filing_metrics_v5
                 WHERE ticker = :ticker
-                  AND COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year
+                  AND (storage_year = :year OR (storage_year IS NULL AND (report_fiscal_year = :year OR (report_fiscal_year IS NULL AND fiscal_year = :year))))
                   AND doc_type = :doc_type
                   AND ({where_synonyms})
                   AND (standard_concept IS NULL OR standard_concept NOT LIKE '%Text Block')
@@ -9026,17 +9030,23 @@ class EarningsCalendarRepository:
                         _cmap = CompanyRepository.get_companies_map()
                         _in = ", ".join(f"'{t}'" for t in _foreign)
                         _yf_q = f"""
-                            SELECT ticker, yf_symbol,
-                                JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.info.firstTradeDateMilliseconds')) AS ftd_ms,
-                                JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.info.firstTradeDateEpochUtc'))      AS ftd_sec,
-                                JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.info.shortName'))                   AS yf_name
-                            FROM (
-                                SELECT ticker, yf_symbol, payload_json,
+                            SELECT o.ticker, o.yf_symbol,
+                                JSON_UNQUOTE(JSON_EXTRACT(o.payload_json,'$.info.firstTradeDateMilliseconds')) AS ftd_ms,
+                                JSON_UNQUOTE(JSON_EXTRACT(o.payload_json,'$.info.firstTradeDateEpochUtc'))      AS ftd_sec,
+                                JSON_UNQUOTE(JSON_EXTRACT(o.payload_json,'$.info.shortName'))                   AS yf_name
+                            FROM coreiq_yf_company_overview o
+                            JOIN (
+                                SELECT id,
                                        ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY ingested_at DESC) AS rn
                                 FROM coreiq_yf_company_overview
-                                WHERE ticker IN ({_in}) AND payload_json IS NOT NULL AND payload_json <> ''
-                            ) x WHERE rn = 1
+                                WHERE ticker IN ({_in})
+                            ) x ON x.id = o.id AND x.rn = 1
+                            WHERE o.payload_json IS NOT NULL AND o.payload_json <> ''
                         """
+                        # Ranks from idx_ticker_ingested and reads JSON for the winners
+                        # only; ranking with payload_json read ~6k snapshots (47 MB) for
+                        # ~35 tickers: 15 s cold. ponytail: a ticker whose NEWEST payload
+                        # is empty is skipped instead of using an older one (0 such rows).
                         for r in db_manager.execute_query_readonly(_yf_q):
                             _ms = r.get("ftd_ms")
                             if not _ms and r.get("ftd_sec"):

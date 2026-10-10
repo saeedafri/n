@@ -204,3 +204,96 @@ Streamlit on this machine; it was rerun in full (`full_qa3killed_nomat` kept, no
 No App Settings, schema or data changes. Deploy as normal. The first Segments view per
 company rebuilds its stored tables once (new version format), in the background where the
 boot warm-up reaches it first.
+
+## Round 2 — full re-review, indexes on STG (2026-10-10 evening)
+
+Every action still over 1 s in the round-1 after-run was traced to a query or a step, then
+measured on STG with `EXPLAIN ANALYZE` (read-only). "Cold" = first read after the data left
+MySQL's buffer pool; "warm" = repeat. Laptop round trip to STG = ~0.27 s; a new TLS
+connection = ~1.9 s; the first query of a process = ~5.9 s (engine + connection). STG's app
+server is in the DB's region, so round-trip and transfer costs are far smaller there.
+
+### Indexes added on STG (index-only DDL, `ALGORITHM=INPLACE, LOCK=NONE`; no data changed)
+
+| Table | Index | Build | Query | Before | After |
+|---|---|---|---|---|---|
+| `coreiq_filing_metrics_v5` (14.6M rows, 16.6 GB) | `idx_v5_filing_periods (ticker, doc_type, storage_year, report_fiscal_year, fiscal_year, fiscal_quarter)` | 1,992 s | Company Filings prefetch (doc type / year / quarter list) | 14.5 s cold (48k full-row reads; old index lacked `fiscal_quarter`) | 0.9 s cold, covering index only |
+| `coreiq_yf_market_news_sentiment` (373k rows) | `idx_yf_topic_v1 (primary_topic_v1)`, `idx_yf_topic_v2 (primary_topic_v2)` | 119 s | Newsroom topic list | 0.36 s warm / 3-6 s cold (575k index entries for 16 values) | 0.3 ms (skip scan) |
+| `coreiq_nasdaq_earnings_calendar` (18k rows) | `idx_nec_ticker_fqe (ticker, fiscal_quarter_ending)` | 0.7 s | Calendar ticker universe (IPO feed, company lists) | 57 ms + 21,676 row lookups (6.2 s cold for the IPO join) | 9.7 ms, covering |
+
+Notes: `coreiq_yf_market_news_sentiment` was recreated by the ETL on 2026-10-09; its new
+indexes are lost if the ETL recreates it again, so the code no longer names any index on it
+(the old `USE INDEX` hints were removed — unhinted, MySQL picks the new index when present and
+the old covering index otherwise; a hint naming a missing index would be an error). PROD needs
+the same three statements if these are wanted there.
+
+### Query rewrites (same rows, verified by comparing full result sets)
+
+- Filing-year filter `COALESCE(storage_year, report_fiscal_year, fiscal_year) = :year`
+  matched no index (the existing expression index is on the old
+  `COALESCE(report_fiscal_year, storage_year)`), so MySQL read every year of the company's doc
+  type (~12k rows) to keep ~1k. Rewritten as index ranges in the 4 queries of
+  `FilingMetricRepository` (header, search preload, both DB fallbacks). Cold 2.0-3.8 s →
+  1.9-2.4 s; the rest is transferring ~1k wide rows to the laptop.
+- Newest Yahoo overview per ticker (Calendar IPO fallback, People screen): the window function
+  carried `payload_json`, reading every daily snapshot (6,039 rows, 47 MB for 35 tickers;
+  ~9.5k rows for all). Now ranks `(ticker, ingested_at, id)` from `idx_ticker_ingested` and
+  fetches the winners' JSON only. Cold 7.3 s → 1.7 s (People); IPO fallback was 15.1 s cold.
+- Key Devs all-companies universe: joined ~157k events to three company tables before
+  `DISTINCT`. Tickers are de-duplicated first. 4.7 s → 1.9 s warm, 4,698 identical rows.
+
+### Fresh-deploy contention (first deploy on an empty cache dir)
+
+- Ratios warm-up: 8 workers held more connections than the read pool has (5) for ~4 min
+  (1,264 s of 3-6 s queries). Now 2 workers. Redeploys read persisted results (~5 s total).
+- Cold builds of disk-materialized results had no single-flight: the boot warm-up and the
+  first visitors each ran the full build (People universe 3 × 23-29 s). `materialized_or_build`
+  now holds a per-name lock and re-reads the disk copy after waiting. Check: scratchpad
+  `t_single.py` (4 concurrent callers → 1 build).
+- The freshness watcher queued a rebuild for caches registered but not yet on disk (no
+  meta → every table "moved"), repeating a first build already in progress (People universe
+  13.1 s + 6.2 s). `_check` now skips names with no disk copy; the first caller writes it.
+
+### Newsroom 1-year keyword search
+
+Profiled on a full local copy (2.1M AV articles, 1.4M in the last year): the AV title scan is
+3.95 s on first read and 0.19 s warm (the time goes to reading the SQLite index pages from
+disk after a restore/restart; `instr` vs `LIKE` makes no difference warm). The copy now reads
+each table's `(time, norm_title)` index once per process right after a sync pass sees it
+complete (`_warm_title_indexes`, ~4-7 s in the background), so the first visitor's search is
+warm.
+
+### Explained, not changed
+
+- Retailer Adding first load (6.5 s locally): its own connection pool (new TLS connection,
+  1.9 s from the laptop) + ~10 round trips (DDL check, schema, rows, ACL) + a 500-row editor.
+  The three column checks are now one query. In-region on STG the round trips are milliseconds.
+- Market Data price history: already a covering index (0.8 ms in MySQL); 4.3 s seen on a fresh
+  deploy was pool contention from the boot warm-up.
+- Forecasting companies list (1.3 s, first use per process): both parts use covering indexes
+  (20 ms / 43 ms); the rest is round trips and rows to the laptop.
+- Segment row queries: cold-cache bound (7.9 s cold vs 48 ms warm) with `dimension LIKE '%…%'`
+  over wide rows — no reasonable index; users no longer wait on them (the throttled boot sweep
+  stores every company's rows on disk).
+- Browser-side (server ≤ 0.5 s): page switches 1.2-2 s are full page loads (header links are
+  `href`s → new Streamlit session each time); Screening grid actions (AG Grid iframe);
+  Forecasting dialog and chart hover (Plotly re-render); CSV download. Client-side navigation
+  would be an architecture change, not a tuning fix.
+
+### Connection-pool waits
+
+The after-index scenario-1 log showed page queries that ran in 0.28 s after waiting
+`checkout_ms=2514` for a connection (9 user queries waited > 1 s, up to 2.8 s; one 5.6 s on a
+redeploy). Each engine kept 5 connections; beyond that, connections were opened for a burst and
+closed on return, so every burst repeated the TLS handshake (1.9-2.5 s from the laptop; the
+config notes ~4 s on Azure). STG MySQL: `max_connections` 341, peak use 186, `wait_timeout`
+8 h, 343k connections opened in 6.2 days. `DB_POOL_SIZE` default 5 → 10 (overflow 10 kept):
+up to 20 per engine, 40 per process; an App Setting still overrides it.
+
+Follow-up: the local `.env` sets `DB_POOL_SIZE=5`, so the test runs kept 5 regardless of the
+code default; STG uses App Settings, which may also set it. In the final run, page queries
+still waited ~2.5 s for a connection 8 times in scenario 1 — the laptop's TLS handshake time.
+`core/database.py` notes the Azure in-region handshake at ~250 ms, so on STG the same wait is
+~10x smaller. A separate pool for background work (so page requests always find a warm
+connection) is the complete fix; not done — it touches ~10 background entry points and its
+value depends on STG's handshake time, which was not measurable from here.

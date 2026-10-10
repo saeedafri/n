@@ -218,16 +218,19 @@ _SEC_QUERY = """
 
 # ROW_NUMBER picks the newest overview row per ticker. Without it the table
 # returns one row per daily ETL run and every officer is duplicated ~80x.
+# The ranking reads only (ticker, ingested_at, id) from idx_ticker_ingested; payloads
+# are fetched for the 75 winners only. Ranking with payload_json in the window read every
+# snapshot's JSON (~9.5k rows): 7.3 s cold vs 1.7 s, same rows.
 _YF_QUERY = """
-    SELECT ticker, payload_json
-    FROM (
-        SELECT ticker, payload_json,
+    SELECT o.ticker, o.payload_json
+    FROM coreiq_yf_company_overview o
+    JOIN (
+        SELECT id,
                ROW_NUMBER() OVER (
                    PARTITION BY ticker ORDER BY ingested_at DESC
                ) AS _rn
         FROM coreiq_yf_company_overview
-    ) _ranked
-    WHERE _rn = 1
+    ) _ranked ON _ranked.id = o.id AND _ranked._rn = 1
 """
 
 # Year-end USD rate per currency: ~20 years x 10 currencies = ~200 rows, so the

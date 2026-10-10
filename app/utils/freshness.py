@@ -174,7 +174,11 @@ def _check(names, live_times, force_signature=False):
             entry = _REGISTRY.get(name)
         if entry is None:
             continue
-        meta = mat.read_meta(name) or {}
+        meta = mat.read_meta(name)
+        if not meta:
+            # Nothing on disk yet: its first caller is building it. Queuing a rebuild
+            # here ran the same build twice (People universe +6 s on a fresh deploy).
+            continue
         built_times = meta.get("update_times") or {}
         # NULL → NULL is no write (see _loop); force_signature covers NULL tables.
         moved = [s["table"] for s in entry["sources"]
