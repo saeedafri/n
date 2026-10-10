@@ -386,7 +386,7 @@ def _warm_ratios_screening() -> None:
     """
     from concurrent.futures import ThreadPoolExecutor
     from data.repository import RatiosRepository
-    from data.screening_service import get_base_company_universe
+    from data.screening_service import get_base_company_universe, _screening_date_window
 
     try:
         tickers = list(get_base_company_universe()["ticker"].values)
@@ -394,10 +394,13 @@ def _warm_ratios_screening() -> None:
         return
     if not tickers:
         return
+    # The same window a default (FY, Latest) Ratios criterion asks for, so this
+    # fills the cache entry screening actually reads. None dates crash the filter.
+    start_date, end_date = _screening_date_window("FY", "Latest", None)
 
     def _one(tk):
         try:
-            RatiosRepository.get_ratios_data(tk, None, None, "annual")
+            RatiosRepository.get_ratios_data(tk, start_date, end_date, "annual")
         except Exception:
             pass
 

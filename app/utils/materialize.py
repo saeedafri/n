@@ -342,6 +342,11 @@ _CHECKED = set()               # names whose disk copy was signature-checked thi
 _CHECKED_LOCK = threading.Lock()
 
 
+def storing():
+    """True when materialized copies are written: the switch is on and a cache dir is writable."""
+    return _materialize_on() and bool(_cache_dir())
+
+
 def on_disk(name):
     """True when a materialized copy of `name` is on disk (read with no DB trip)."""
     _d = _cache_dir() if _materialize_on() else None

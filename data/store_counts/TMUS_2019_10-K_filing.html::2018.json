@@ -1,0 +1,14 @@
+{
+ "ticker": "TMUS",
+ "fiscal_year": 2018,
+ "value": 2200,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "As of December 31, 2018, we primarily leased approximately 2,200 T-Mobile and Metro by T-Mobile retail locations, including stores and kiosks ranging in size from approximately 100 square feet to 17,000 square feet.",
+ "fye_date": "2018-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TMUS/2019/10-K/filing.html::2018",
+ "extractor_version": 5
+}

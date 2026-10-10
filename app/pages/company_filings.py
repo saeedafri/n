@@ -588,7 +588,7 @@ def _ensure_local_blob_optimized(blob_name: str, use_temp: bool = False) -> Opti
         return local_path
 
     except Exception as e:
-        log_structured_error(e, page="company_filings", component="_ensure_local_blob_optimized", operation="DOWNLOAD_BLOB")
+        log_structured_error(e, page="company_filings", component="_ensure_local_blob_optimized", operation="DOWNLOAD_BLOB", context=f"blob={blob_name!r}")
         # FALLBACK: Try original method
         return _ensure_local_blob(blob_name)
 
@@ -1520,7 +1520,7 @@ def _ensure_local_blob(blob_name: str) -> Optional[str]:
 
         return local_path
     except Exception as e:
-        log_structured_error(e, page="company_filings", component="_ensure_local_blob", operation="DOWNLOAD_BLOB")
+        log_structured_error(e, page="company_filings", component="_ensure_local_blob", operation="DOWNLOAD_BLOB", context=f"blob={blob_name!r}")
         if _is_blob_not_found(e):
             _missing_blobs()[blob_name] = _perf_time.time()   # both download paths said so
         return None
@@ -3615,64 +3615,20 @@ def main():
 
         if search_term.strip():
             doc_type_dir = doc_type  # doc_type is already the raw DB value (e.g. 10-Q-Q1)
-
-
-
             try:
-                _db_search_start = _perf_time.time()
-
-                search_results = FilingMetricRepository.search(
+                # Shared with the repository: a search that matches nothing skips the
+                # AI fallback without a DB transaction when it has nothing to read
+                # (was ~3 s on every such search).
+                search_results, used_llm = FilingMetricRepository.search_with_llm_fallback(
                     ticker=company,
                     report_fiscal_year=int(year),
                     doc_type=doc_type_dir,
                     query=search_term,
                     limit=500,
                 )
-                _db_search_elapsed = _perf_time.time() - _db_search_start
-
-                # Count by source
-                _source_counts = {}
-                for r in search_results:
-                    src = r.source or 'unknown'
-                    _source_counts[src] = _source_counts.get(src, 0) + 1
-
-
-                # Count by source
-                _source_counts = {}
-                for r in search_results:
-                    src = r.source or 'unknown'
-                    _source_counts[src] = _source_counts.get(src, 0) + 1
-
-
+                used_llm = used_llm and bool(search_results)
             except Exception as e:
                 log_error(f"DB search error: {e}", exc_info=True)
-
-            if not search_results:
-
-                import os as _os
-                if _os.getenv("OPENAI_API_KEY", "").strip():
-                    try:
-                        _llm_start = _perf_time.time()
-
-                        with st.spinner("Searching document with AI..."):
-                            from core.llm_extractor import LLMExtractor
-                            from core.database import db_manager as _dbm
-                            engine = _dbm._engine
-                            if engine:
-                                with engine.begin() as conn:
-                                    llm_res = LLMExtractor.extract(
-                                        conn=conn,
-                                        ticker=company,
-                                        report_fiscal_year=int(year),
-                                        doc_type=doc_type_dir,
-                                        query=search_term,
-                                    )
-                                if llm_res:
-                                    search_results = llm_res
-                                    used_llm = True
-                                    _llm_elapsed_ms = (_perf_time.time() - _llm_start) * 1000
-                    except Exception as e:
-                        log_error(f"[LLM] extraction error: {e}", exc_info=True)
 
             # Log search to history
             _total_search_elapsed = _perf_time.time() - _search_start

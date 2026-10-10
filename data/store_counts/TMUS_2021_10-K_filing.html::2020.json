@@ -1,0 +1,14 @@
+{
+ "ticker": "TMUS",
+ "fiscal_year": 2020,
+ "value": 3400,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "approximately 3,400 T-Mobile and Metro by T-Mobile retail locations",
+ "fye_date": "2020-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TMUS/2021/10-K/filing.html::2020",
+ "extractor_version": 5
+}

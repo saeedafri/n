@@ -176,9 +176,9 @@ def _check(names, live_times, force_signature=False):
             continue
         meta = mat.read_meta(name) or {}
         built_times = meta.get("update_times") or {}
+        # NULL → NULL is no write (see _loop); force_signature covers NULL tables.
         moved = [s["table"] for s in entry["sources"]
-                 if live_times.get(s["table"]) is None
-                 or live_times.get(s["table"]) != built_times.get(s["table"])]
+                 if live_times.get(s["table"]) != built_times.get(s["table"])]
         if not moved and not force_signature:
             continue
         live_sig = mat._live_signature(entry["sources"], fresh=True)
@@ -219,7 +219,14 @@ def _loop():
             if full:
                 last_full = time.time()
             _check(names, live, force_signature=full)
-            moved = {t for t in tables if live.get(t) is None or live.get(t) != seen.get(t)}
+            # NULL = no write since the MySQL restart: a write sets it, so NULL → NULL
+            # is not a move (the fallback signature pass above still checks those
+            # caches). Calling it a move re-copied coreiq_companies and re-queued
+            # every stored result reading it (~2,000) faster than they drain.
+            # A table first watched this pass (persist adds tables as results are
+            # read) has no earlier time to differ from: not a move either — each
+            # stored result still compares its own build times on read.
+            moved = {t for t in tables if t in seen and live.get(t) != seen.get(t)}
             first = not seen
             seen = dict(live)
             with _REG_LOCK:

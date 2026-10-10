@@ -1,0 +1,14 @@
+{
+ "ticker": "TOL",
+ "fiscal_year": 2017,
+ "value": 3200,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "mes Toll Brothers Apartment Living, Toll Brothers Campus Living and Toll Brothers Realty Trust. At October 31, 2017, we had approximately 3,200 units in for-rent apartment projects that were occupied or ready",
+ "fye_date": "2017-10-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TOL/2017/10-K/filing.html::2017",
+ "extractor_version": 5
+}

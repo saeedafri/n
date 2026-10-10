@@ -272,7 +272,11 @@ def _current(meta, wait=True, verified=None):
                 return None
     live = _live_times(tables)
     verified = verified or {}
-    return all(live.get(t) is not None and live.get(t) in (built.get(t), verified.get(t)) for t in tables)
+    # A NULL write time (no write since the MySQL restart) is a real value: a write
+    # sets it. Requiring non-NULL made every result reading coreiq_companies stale on
+    # every read — ~150 identical rebuilds a minute, all day.
+    # A table missing from `built` (time unreadable at build) never matches a NULL.
+    return all(t in live and live[t] in (built.get(t, "?"), verified.get(t, "?")) for t in tables)
 
 
 def _empty(value):

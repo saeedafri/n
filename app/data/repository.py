@@ -11594,18 +11594,25 @@ class SegmentDataRepository:
         built; the freshness check on first read refreshes changed ones.
         Returns how many tickers were built.
         """
-        from utils.materialize import on_disk, write_materialized
+        from utils.materialize import on_disk, storing, write_materialized
+        if not storing():
+            return 0    # nothing would be kept: the sweep only loaded the DB
         built = 0
         for ticker in tickers:
             name = f"segment_rows_{ticker}"
             if not re.fullmatch(r"[A-Za-z0-9.^-]{1,20}", ticker or "") or on_disk(name):
                 continue
+            started = time.perf_counter()
             try:
                 rows = SegmentDataRepository._query_all_db_rows(ticker, raising=True)
             except Exception:
                 continue
             write_materialized(name, {"rows": rows}, SegmentDataRepository._segment_rows_sources(ticker))
             built += 1
+            # Run ~25% of the time: decoding ~10k rows per company held the one
+            # core the app has, and page loads waited behind it (perf run 10-Oct:
+            # repeat loads 0.9 s -> 2.4 s while the sweep ran unthrottled).
+            time.sleep(3 * (time.perf_counter() - started))
         return built
 
     @staticmethod
@@ -12834,11 +12841,13 @@ class SegmentDataRepository:
     @staticmethod
     def current_data_version(ticker: str) -> str:
         """Changes whenever the company's rows in coreiq_filing_metrics_v5 do: a row
-        added (newest id), removed (count) or re-inserted (insert time)."""
+        added or re-inserted (newest id — ids are auto-increment) or removed (count).
+        Index-only (0.4 s); MAX(data_insert_timestamp) read every row (6-7 s idle,
+        45-85 s during the boot warm-up) and only ever moved with MAX(id)."""
         row = db_manager.fetch_one(
-            "SELECT MAX(id) AS newest, COUNT(*) AS n, MAX(data_insert_timestamp) AS loaded "
+            "SELECT MAX(id) AS newest, COUNT(*) AS n "
             "FROM coreiq_filing_metrics_v5 WHERE ticker = :ticker", {"ticker": ticker}) or {}
-        return f"{row.get('newest')}:{row.get('n')}:{row.get('loaded')}"
+        return f"{row.get('newest')}:{row.get('n')}"
 
     @staticmethod
     def _within_dates(tables: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:

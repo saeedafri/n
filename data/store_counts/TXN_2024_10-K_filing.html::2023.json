@@ -1,0 +1,14 @@
+{
+ "ticker": "TXN",
+ "fiscal_year": 2023,
+ "value": 2163,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 2,163 | | | 5,611 | | | 12 | | | 2,343 | | | 6,017 | | | 11 |",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TXN/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

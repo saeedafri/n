@@ -1,0 +1,14 @@
+{
+ "ticker": "TSLA",
+ "fiscal_year": 2016,
+ "value": 265,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "d our retail footprint. We refer to these as “Service Plus” locations. Including all of our stores, galleries, Service Plus and service facilities, we operated 265 locations around the world as of December 31, 2016. Tesla Supercharger Network We cont",
+ "fye_date": "2016-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TSLA/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

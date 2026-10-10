@@ -1,0 +1,14 @@
+{
+ "ticker": "TOL",
+ "fiscal_year": 2024,
+ "value": 4500,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "partners under the brand names Toll Brothers Apartment Living and Toll Brothers Campus Living. At October 31, 2024, we had approximately 4,500 units in for-rent apartment projects that were occupied or ready",
+ "fye_date": "2024-10-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TOL/2024/10-K/filing.html::2024",
+ "extractor_version": 5
+}

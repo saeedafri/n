@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2025,
+ "value": 55,
+ "confidence": "medium",
+ "basis": "L1_xbrl",
+ "evidence": "XBRL us-gaap:NumberOfStores (2 facts)",
+ "fye_date": "2025-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UPBD/2026/10-K/filing.html::2025",
+ "extractor_version": 5
+}
