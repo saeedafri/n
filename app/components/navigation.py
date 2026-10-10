@@ -319,6 +319,18 @@ def _inject_transition_js() -> None:
     /* else: no client link → native navigation proceeds (link still works) */
   }, true);
 
+  /* ── Dropdown search: show matches from the top ──
+     Opening a selectbox scrolls its virtual list to the current choice; typing
+     filters the list but keeps that offset, so the first match sits above the
+     viewport. Reset the list to the top after React re-renders it. */
+  doc.addEventListener('input', function(e){
+    var t = e.target;
+    if (!t || !t.closest || !t.closest('[data-baseweb="select"]')) return;
+    win.requestAnimationFrame(function(){ win.requestAnimationFrame(function(){
+      doc.querySelectorAll('[data-testid="stSelectboxVirtualDropdown"] > div').forEach(function(s){ s.scrollTop = 0; });
+    }); });
+  }, true);
+
   /* ── URL-change poller: covers any pushState nav not from a header click ── */
   win.__csLhPath = win.location.pathname + win.location.hash;
   setInterval(function(){
