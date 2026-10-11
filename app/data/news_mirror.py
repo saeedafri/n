@@ -245,7 +245,29 @@ def _schema(c):
     c.execute(f"CREATE INDEX IF NOT EXISTS ix_avc_symbol ON {COMPANIES['source']} (symbol)")
     c.execute("CREATE TABLE IF NOT EXISTS mirror_state (k TEXT PRIMARY KEY, v TEXT)")
     _word_index(c)
+    _title_index(c)
     c.commit()
+
+
+def _title_index(c):
+    """{key}_title_fts: trigrams of every article's norm_title, kept in step by triggers
+    like tx_words. A title substring search over a year scanned ~1.4M index entries
+    (282 MB for AV) — 4.5-6.6 s whenever those pages were not in memory; the trigrams
+    narrow it to the candidate rows first (see _title_candidates)."""
+    for key in ("av", "yf"):
+        src, fts = TABLES[key]["source"], f"{key}_title_fts"
+        c.execute(f"""CREATE VIRTUAL TABLE IF NOT EXISTS {fts} USING fts5(norm_title,
+                      content='{src}', content_rowid='id', tokenize='trigram', detail=none)""")
+        c.execute(f"""CREATE TRIGGER IF NOT EXISTS {fts}_ai AFTER INSERT ON {src} BEGIN
+                      INSERT INTO {fts}(rowid, norm_title) VALUES (new.id, new.norm_title); END""")
+        c.execute(f"""CREATE TRIGGER IF NOT EXISTS {fts}_ad AFTER DELETE ON {src} BEGIN
+                      INSERT INTO {fts}({fts}, rowid, norm_title) VALUES ('delete', old.id, old.norm_title); END""")
+        c.execute(f"""CREATE TRIGGER IF NOT EXISTS {fts}_au AFTER UPDATE OF norm_title ON {src} BEGIN
+                      INSERT INTO {fts}({fts}, rowid, norm_title) VALUES ('delete', old.id, old.norm_title);
+                      INSERT INTO {fts}(rowid, norm_title) VALUES (new.id, new.norm_title); END""")
+        if _get_state(c, f"{key}:title_fts") != "1":
+            c.execute(f"INSERT INTO {fts}({fts}) VALUES ('rebuild')")
+            _set_state(c, f"{key}:title_fts", "1")
 
 
 def _word_index(c):
@@ -849,10 +871,53 @@ def _tx_tie(m):
 _DATETIME_TEXT = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
 
 
+_TITLE_FTS_MAX = 6000      # candidates; above this the time-ordered scan reaches LIMIT sooner
+_NORM_LIKE = re.compile(r"(?<![\w.])((\w+\.)?)norm_title LIKE :(\w+)")
+_YF_TIME_ORDER = re.compile(r"(?<![\w.])(\w+\.)?published_at\s+(ASC|DESC)\b(?!\s*,)", re.I)
+
+
+def _title_candidates(c, sql, p):
+    """Add `AND id IN (trigram candidates)` to each plain `norm_title LIKE '%word%'`.
+    Same rows: every title containing the word contains all its trigrams, and the LIKE
+    still decides. Skipped for words under 3 characters or with % / _ (wildcards in the
+    original LIKE), and for common words, where the scan finds its LIMIT in the newest
+    rows first ('quarterly': scan 0.05 s, candidates 2.2 s; 'tariff': 5.9 s vs 0.7 s)."""
+    keys = [k for k in ("av", "yf") if TABLES[k]["source"] in sql]
+    if len(keys) != 1 or _get_state(c, f"{keys[0]}:title_fts") != "1":
+        return sql
+    fts = f"{keys[0]}_title_fts"
+
+    def narrow(m):
+        alias, name = m.group(1), m.group(3)
+        value = p.get(name)
+        if not (isinstance(value, str) and len(value) >= 5 and value[0] == value[-1] == "%"):
+            return m.group(0)
+        word = value[1:-1]
+        if "%" in word or "_" in word:
+            return m.group(0)
+        match = " AND ".join('"' + g.replace('"', '""') + '"'
+                             for g in sorted({word[i:i + 3] for i in range(len(word) - 2)}))
+        n = c.execute(f"SELECT COUNT(*) FROM (SELECT rowid FROM {fts} WHERE {fts} MATCH ? "
+                      f"LIMIT {_TITLE_FTS_MAX + 1})", (match,)).fetchone()[0]
+        if n > _TITLE_FTS_MAX:
+            return m.group(0)
+        p[f"{name}__fts"] = match
+        return f"({m.group(0)} AND {alias}id IN (SELECT rowid FROM {fts} WHERE {fts} MATCH :{name}__fts))"
+    narrowed = _NORM_LIKE.sub(narrow, sql)
+    if narrowed != sql and keys[0] == "yf":
+        # The scan returned equal timestamps in ix_yf_2 order (published_at, norm_title,
+        # id); keep that order so the same rows survive a LIMIT edge.
+        narrowed = _YF_TIME_ORDER.sub(
+            lambda m: f"{m.group(0)}, {m.group(1) or ''}norm_title {m.group(2)}, {m.group(1) or ''}id {m.group(2)}",
+            narrowed)
+    return narrowed
+
+
 def query(sql, params):
     """Run repository news SQL against the copy. Rows as dicts, datetimes restored."""
     sql2, p2 = _to_sqlite(sql, params)
     c = _conn()
+    sql2 = _title_candidates(c, sql2, p2)
     out = []
     for row in c.execute(sql2, p2):
         d = dict(row)

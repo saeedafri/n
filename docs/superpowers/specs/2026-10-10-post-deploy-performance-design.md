@@ -297,3 +297,55 @@ still waited ~2.5 s for a connection 8 times in scenario 1 — the laptop's TLS 
 ~10x smaller. A separate pool for background work (so page requests always find a warm
 connection) is the complete fix; not done — it touches ~10 background entry points and its
 value depends on STG's handshake time, which was not measurable from here.
+
+### Newsroom 1-year search on a warm copy (final run)
+
+The redeploy run still showed 3.0-5.3 s for the 1-year `tariff` search, 14 and 62 min after
+boot, all from the local copy (no MySQL query). Through the same app code in a separate process
+it takes 0.59 s (AV) / 0.17 s (YF). At the moment of the search the server was running the
+Newsroom page's own background prefetch — 4 workers loading weekly article chunks — with CPU at
+~100%. From the copy a week loads in 0.08-0.10 s (AV) / 0.01-0.03 s (YF), so the prefetch had
+nothing to warm. `_spawn_background_prefetch` now returns when both copies are ready.
+
+### Key Devs universe without materialization (scenario 3)
+
+Still 10.9 s with `PAGE_MATERIALIZE=0`. `EXPLAIN ANALYZE` (5.6 s in MySQL, cold): 2.3 s for the
+distinct-ticker skip scan over the partitioned `coreiq_company_events`, 3.2 s for 4,698
+lookups into `coreiq_av_companies_all` (0.68 ms each, reading full rows for name / status /
+exchange / country). A covering index is not possible: those columns total ~5,200 bytes in
+utf8mb4, over InnoDB's 3,072-byte key limit, and prefix columns cannot cover. With
+materialization on (STG's setting) this universe is built once and stored on disk, so users do
+not wait for it there.
+
+### Newsroom 1-year search — trigram title index in the local copy
+
+The prefetch fix did not move it (5.65 s in the next run, CPU 2-23% during the search): the
+time was disk reads. A year of titles is ~70% of `ix_av_2` (282 MB) plus `ix_yf_2` (70 MB);
+this 17 GB laptop pages those out between searches (73k pageouts), and STG's 4.8 GB box runs
+the app beside the 4.9 GB copy, so warming them once (`_warm_title_indexes`) cannot hold.
+
+The copy now keeps `av_title_fts` / `yf_title_fts`: FTS5, `tokenize='trigram'`, `detail=none`,
+external content on the article tables, maintained by insert/update/delete triggers exactly
+like `tx_words` (built once with `rebuild`, flag `{key}:title_fts` in `mirror_state`; 67 s for
+2.7M titles here, ~258 MB). For a plain `norm_title LIKE '%word%'` (word ≥ 3 characters, no `%`
+or `_`), `query()` counts the word's trigram candidates (LIMIT 6001, 1-28 ms) and, when there
+are ≤ 6,000, adds `AND id IN (candidates)`; the LIKE still decides, so rows are unchanged.
+Common words keep the scan (it reaches LIMIT among the newest rows first). On the narrowed YF
+query the scan's tie order (published_at, norm_title, id) is added so the same rows survive a
+LIMIT edge.
+
+Checks: 13 keywords × 4 ranges (8 days to 5 years) through `search_av/yf_articles_by_title`:
+0 mismatches against the scan (after the tie-order fix). 1-year `tariff`: 4.98 s → 0.06 s;
+`supply chain` 0.48 → 0.28 s; common words unchanged (`ai` 0.05 s). Trigger check (scratchpad
+`t_fts_sync.py`): insert, INSERT OR REPLACE with a new title, UPDATE, DELETE all keep the index
+in step.
+
+### Final verification (2026-10-11 00:52-01:59, redeploy with cache reused, all fixes)
+
+- Newsroom 1-year `tariff` search: server 71 ms, action 0.48 s (was 5.3-13.9 s across runs);
+  same 861 AV articles.
+- Against the original baseline (same 784 measured actions): first-visit total 670 s → 341 s
+  (-49%), 427 of 503 under 1 s (428 before); repeat total 165 s → 166 s, 242 of 281 under 1 s
+  (251 before). Stored-result rebuilds: 9,883 → 2. DB connection drops: 0.
+- Remaining errors are known and non-performance: missing `filing.html` for M 2024/2025
+  10-Q-Q1 in Azure, the `classifier_version` ALTER noise, M&A auto-enrichment.

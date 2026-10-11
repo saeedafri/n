@@ -449,6 +449,12 @@ def _spawn_background_prefetch(
     The thread does NOT touch st.session_state (no add_script_run_ctx needed).
     It only calls @st.cache_data-decorated functions to warm them.
     """
+    # Served from the local news copy, a week's query takes ~0.1 s, so there is
+    # nothing to pre-warm; the 4 workers only competed for the CPU with the visitor's
+    # own requests (a 1-year search: 0.6 s alone, 3-5 s while this ran).
+    if _news_mirror.ready("av") and _news_mirror.ready("yf"):
+        return
+
     prefetch_to = base_date_from - timedelta(days=1)
     prefetch_from = prefetch_to - timedelta(days=extra_weeks * 7 - 1)
 
