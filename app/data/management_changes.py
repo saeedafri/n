@@ -685,6 +685,18 @@ def _filing_units_by_accession() -> Dict[tuple, tuple]:
         return {}
 
 
+def is_company_not_person(person: str, company_word: str, situation: str) -> bool:
+    """The filer's own name read as a person: "Lithia Motors", "Meta Platforms",
+    "Honeywell Aerospace" (71 of 7,142 events, 2026-10-12). A real person in an
+    8-K is always referred to as "Mr./Ms. Surname" somewhere in the item, which
+    is what keeps "Wendy C. Arlin" (Wendy's) — her company shares her first name."""
+    words = (person or "").split()
+    if not words or not company_word or words[0].lower().strip(".,’'s") != company_word.strip("’'s"):
+        return False
+    surname = words[-1].strip(".,")
+    return not re.search(rf"\b(?:Mr|Ms|Mrs|Dr)\.?\s+{re.escape(surname)}\b", situation)
+
+
 def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
                   units: Optional[Dict[tuple, tuple]] = None) -> pd.DataFrame:
     """Flatten stored 5.02 rows into one row per person event.
@@ -701,7 +713,10 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
                                  operation="extract_events", context=str(r.get("event_id")))
             continue
         filed = pd.Timestamp(r.get("edgar_filing_date") or r.get("event_date"))
+        company_word = short_name((names or {}).get((r.get("ticker") or "").strip(), "")).split(" ")[0].lower()
         for e in events:
+            if is_company_not_person(e.get("person"), company_word, r.get("situation") or ""):
+                continue
             ticker = (r.get("ticker") or "").strip()
             year, unit = (units or {}).get((ticker, accession_of(r.get("source_ref"))), (None, ""))
             e.update(ticker=ticker, filing_date=filed, source_ref=r.get("source_ref") or "",
@@ -809,9 +824,10 @@ def get_management_changes() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v3", _build_management_changes, sources,
+        "management_changes_v4", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

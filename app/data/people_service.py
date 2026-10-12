@@ -74,7 +74,7 @@ _NAME_TITLE_WORDS = {
     "svp", "sevp", "evp", "vp", "and", "&", "ceo", "cfo", "coo", "president",
     "retired", "former", "division", "enterprise", "sector", "corporate",
     "special", "strategic", "technical", "advisor", "founder", "chief",
-    "officer", "executive", "chairman",
+    "officer", "executive", "chairman", "group",
 }
 # Never part of WHO someone is. Yahoo prefixes every officer with an honorific,
 # so first-token keys read "Mr." as the first name and merged Bernard Arnault
@@ -109,7 +109,23 @@ def clean_person_name(name):
     if not all(_is_title_token(t) for t in tokens):
         while len(tokens) > 1 and _is_title_token(tokens[-1]):
             tokens.pop()
-    return _NAME_TRAILING_MARKS.sub("", " ".join(tokens)).strip(" ,;.")
+    # A footnote can sit before the title word ("Todd Underwood 2 Corporate"),
+    # so it is only exposed once the title word is gone.
+    text = _NAME_FOOTNOTE.sub("", " ".join(tokens)).strip()
+    return _NAME_TRAILING_MARKS.sub("", text).strip(" ,;.")
+
+
+# Business-unit labels the proxy extractor read as a name ("Consumer Brands",
+# "Anthropologie Group", "Abercrombie & Fitch/ abercrombie kids").
+_NOT_PERSON_WORDS = {"brands", "group", "systems", "kids", "stores", "division", "segment",
+                     "consumer", "international", "retail", "corporate"}
+
+
+def is_person_name(name: str) -> bool:
+    """False for a cleaned "name" that is a business unit, not a person."""
+    tokens = (name or "").split()
+    return (len(tokens) >= 2 and "&" not in name and "/" not in name
+            and not any(t.lower().strip(".,") in _NOT_PERSON_WORDS for t in tokens))
 
 
 def person_key(name):
@@ -271,6 +287,8 @@ def _sec_records(rows: List[Dict[str, Any]]) -> List[dict]:
     for r in rows:
         ticker = (r.get("ticker") or "").strip()
         name = clean_person_name(r.get("executive_name"))
+        if not is_person_name(name):
+            continue
         title = (r.get("position") or "").strip()
         out.append({
             "ticker":                 ticker,
@@ -758,8 +776,8 @@ def get_people_universe() -> pd.DataFrame:
         # _v2: the frame's columns and dedupe changed (2026-10-07). The disk copy
         # is keyed on the source tables only, so without a new name a deploy
         # would keep serving the old snapshot.
-        # _v3: Unknown folded into Other + SEC/Yahoo merge (2026-10-09).
-        "people_universe_v3", _build_people_universe, sources,
+        # _v4: business-unit "names" dropped, footnote-before-title fix (2026-10-12).
+        "people_universe_v4", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
 
@@ -945,10 +963,10 @@ def build_people_summary(criterion: dict) -> str:
     if forms:
         parts.append(", ".join(str(f) for f in forms))
 
-    if criterion.get("show_moves_only"):
-        parts.append("Executive moves only")
-    elif criterion.get("show_management_changes"):
+    if criterion.get("show_management_changes"):
         parts.append("+ Management changes")
+    if criterion.get("show_moves") or criterion.get("show_moves_only"):
+        parts.append("+ Executive moves")
 
     return " · ".join(parts) if parts else "All people"
 

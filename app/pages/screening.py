@@ -4839,7 +4839,7 @@ def _people_criterion_from_widgets(values: dict) -> dict:
         "money_min":       values.get("money_min") if metric else None,
         "money_max":       values.get("money_max") if metric else None,
         "show_management_changes": bool(values.get("show_management_changes")),
-        "show_moves_only": bool(values.get("show_moves_only")),
+        "show_moves": bool(values.get("show_moves")),
     }
     if metric:
         criterion["display_col"] = metric
@@ -4939,10 +4939,10 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
             help="Adds appointments and departures for the same companies and people.",
             key=f"{key_prefix}_show_mc")
     with sc2:
-        show_moves_only = st.checkbox(
-            "Show executive moves only?",
-            value=bool(pf.get("show_moves_only", False)),
-            help="Only executives who left one company and joined another (board seats included).",
+        show_moves = st.checkbox(
+            "Show executive moves?",
+            value=bool(pf.get("show_moves", pf.get("show_moves_only", False))),
+            help="Adds executives who left one company and joined another (board seats included).",
             key=f"{key_prefix}_show_moves")
 
     return {
@@ -4957,7 +4957,7 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
         "money_min": float(money_min) if money_min is not None else None,
         "money_max": float(money_max) if money_max is not None else None,
         "show_management_changes": show_management_changes,
-        "show_moves_only": show_moves_only,
+        "show_moves": show_moves,
     }
 
 
@@ -4975,7 +4975,7 @@ def _validate_people_values(values: dict) -> Optional[str]:
     a_lo, a_hi = values.get("age_min"), values.get("age_max")
     if a_lo is not None and a_hi is not None and a_lo > a_hi:
         return "Min age cannot be greater than max age."
-    if not values.get("show_moves_only") and not values.get("show_metrics"):
+    if not values.get("show_metrics"):
         return "Pick at least one compensation metric to show."
     return None
 
@@ -5540,10 +5540,9 @@ def _build_criterion_details_html(criterion: dict) -> str:
         if criterion.get("filing_forms"):
             detail_items.append(
                 f"<strong>Filing form:</strong> {', '.join(criterion['filing_forms'])}")
-        if criterion.get("show_moves_only"):
-            detail_items.append("<strong>Showing:</strong> executive moves only")
-        elif criterion.get("show_management_changes"):
-            detail_items.append("<strong>Showing:</strong> executives + management changes")
+        _shown = ["executives"] + (["management changes"] if criterion.get("show_management_changes") else []) \
+            + (["executive moves"] if criterion.get("show_moves") or criterion.get("show_moves_only") else [])
+        detail_items.append(f"<strong>Showing:</strong> {', '.join(_shown)}")
         if detail_items:
             detail_html = "<br>".join(
                 f"<span class='criterion-detail-kv'>{d}</span>" for d in detail_items)
@@ -6748,21 +6747,23 @@ def _render_people_results():
         # One branded loader per Show Results; it removes itself once the first
         # results grid has painted (components/loading.render_sticky_loader).
         from components.loading import render_sticky_loader
-        render_sticky_loader("Loading People")
+        render_sticky_loader("Loading People", until_run_ends=True)
 
         t_people = time.perf_counter()
         tickers_in_scope = set(company_df["ticker"].unique())
         company_meta = _people_company_meta(company_df)
-        moves_only = any(c.get("show_moves_only") for c in people_criteria)
+        # Each "Show …?" box adds its own section; the executives grid is always
+        # there. (A "moves ONLY" rule hid executives and management changes when
+        # both boxes were ticked — reported 2026-10-12.) Any criterion can switch a
+        # section on; "show_moves_only" is the pre-2026-10-12 key for the same box.
         show_changes = any(c.get("show_management_changes") for c in people_criteria)
-
-        if moves_only:
-            _render_executive_moves(tickers_in_scope, people_criteria, company_meta)
-            return
+        show_moves = any(c.get("show_moves") or c.get("show_moves_only") for c in people_criteria)
 
         _render_people_grid(tickers_in_scope, people_criteria, company_meta, t_people)
         if show_changes:
             _render_management_changes(tickers_in_scope, people_criteria, company_meta)
+        if show_moves:
+            _render_executive_moves(tickers_in_scope, people_criteria, company_meta)
 
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_results",
@@ -6848,8 +6849,10 @@ def _render_results_header(html: str, display_df: pd.DataFrame, file_stem: str,
         st.markdown(f"<p class='results-header' style='margin:0;'>{heading}{html}</p>",
                     unsafe_allow_html=True)
     with dl:
+        # Deferred: built on click. Building all three workbooks up front cost
+        # seconds per Show Results (7,125 management-change rows).
         _render_excel_js_download(
-            _build_people_excel(display_df),
+            lambda: _build_people_excel(display_df),
             f"{file_stem}_{_dt_now.now().strftime('%Y%m%d_%H%M')}.xlsx",
             label="Excel",
         )

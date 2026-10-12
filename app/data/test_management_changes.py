@@ -201,6 +201,15 @@ def test_move_pay_comparison():
     assert out["pay_change_pct"] == round((15 / 99 - 1) * 100, 1)
 
 
+def test_company_name_is_not_a_person():
+    from data.management_changes import is_company_not_person
+    assert is_company_not_person("Lithia Motors", "lithia", "Lithia Motors, Inc. announced that a director resigned.")
+    assert is_company_not_person("Honeywell Aerospace", "honeywell", "elected Mr. Madsen to lead Honeywell Aerospace")
+    # Wendy's: the person shares the company's first word but IS a person.
+    assert not is_company_not_person("Wendy C. Arlin", "wendy", "elected Ms. Arlin as a director")
+    assert not is_company_not_person("John Smith", "lithia", "Mr. Smith resigned")
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

@@ -227,3 +227,19 @@ Fixed on the way (both pre-existing):
 * People grid with no years chosen opened on 2013…: year columns run newest-first when no year is selected (chronological when years are chosen).
 
 Frame: `management_changes_v3` (filing_year / filing_unit added). Build ~56s cold; the v5 lookup runs beside the events query.
+
+---
+
+## 12. Round 4 — fixes from user testing (2026-10-12 PM)
+
+| Reported | Root cause | Fix |
+|---|---|---|
+| Both boxes ticked → only "49 executive moves", no executives / management changes | "Show executive moves **only**" overrode every other section | Sections are independent: Executives always; Management Changes and Executive Moves each added by their own box ("Show executive moves?") |
+| Spinner missing on a second Show Results | React reused the overlay node carrying last run's hidden style; the remover hid at once because the old grid was still painted | Host tag alternates per call (fresh node), remover re-shows then waits for the run to END (`until_run_ends`) before checking paint |
+| ~5s Show Results | Three Excel workbooks (7k rows) built on every render | Excel built on click (deferred `lazy_download_button`) |
+| "Abercrombie & Fitch/ abercrombie kids" as an executive | Proxy extractor read business-unit labels as names | `is_person_name` drops 12 such names; footnote-before-title ("Todd Underwood 2 Corporate") fixed. Frame `people_universe_v4` |
+| "Lithia Motors" as an executive in Management Changes | Filer's own name read as a person (84 events) | `is_company_not_person`: company-word name never referred to as Mr./Ms. → dropped. Frame `management_changes_v4` |
+
+Verified (Playwright, testing :8501 and STG checkout :8503, identical): both boxes → 1,840 executives + 7,041 management changes + 88 moves; Show Results twice → identical, spinner both times (visible ~0.15s → hidden ~1.1s with all three grids painted); Edit keeps both boxes; CFO + $1–20mm + 2024/2025 → 107 / 788; CEO + moves → 374 / 15; every Excel row count equals its on-screen count; Key Devs 22 events in 0.8s.
+
+Data limits (not bugs): compensation exists for 1,869 people at 160 of 540 companies (the "383 companies have no executive data" note is accurate). Executive moves: 92 in total — 1,838 officer appointments exist in 2016–2026 and a move needs both ends on file. Option: the DEF 14A Pay-versus-Performance XBRL in `coreiq_company_events` adds CEO pay for 287 more companies, but its CEO name is wrong when the CEO changed (Amazon 2022 names Bezos for Jassy's pay) — needs a decision.

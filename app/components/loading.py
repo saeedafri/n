@@ -520,12 +520,20 @@ _STICKY_REMOVER_JS = """
     var doc = window.parent.document;
     var ov = doc.getElementById('cs-sticky-loader');
     if(!ov) return;
+    // React keeps the SAME overlay node across reruns (only attributes change),
+    // so the hide styles this script set on the last run are still on it. Show
+    // it again for this run; it is hidden below once this run's content is in.
+    ov.style.transition=''; ov.style.opacity='1'; ov.style.visibility='visible';
     var main = doc.querySelector('[data-testid="stMain"]') || doc.body;
     // Hide ONLY once the heavy content has actually PAINTED — never on a "DOM settled"
     // heuristic, because during the server-compute wait the DOM is idle (looks settled)
     // while the grid/calendar has not rendered yet. "Painted" = the AgGrid / calendar
     // iframe has real height, OR a "No results" alert has appeared (nothing to render).
     function ready(){
+      // A page that re-renders results the user has already seen (People: Show
+      // Results twice) still has the OLD grid painted, so "a grid has height" is
+      // true at once. There the run must have finished first.
+      if(__UNTIL_RUN_ENDS__ && scriptRunning()) return false;
       var f = main.querySelector('iframe[title*="agGrid"],iframe[title*="aggrid"],iframe[title*="calendar"]');
       if(f && f.clientHeight > 60) return true;
       var t = main.querySelector('[data-testid="stDataFrame"],[data-testid="stTable"]');
@@ -588,13 +596,16 @@ class _NoOpHolder:
         return None
 
 
-def render_sticky_loader(label: str = "Loading"):
+def render_sticky_loader(label: str = "Loading", until_run_ends: bool = False):
     """Branded overlay that PERSISTS until the page's heavy content has actually painted
     client-side (AgGrid results grid / streamlit_calendar), then fades itself out via JS.
     Use on pages whose results render in an iframe AFTER Python returns, so the spinner
     never disappears onto a blank area (the screening "2000 events found + blank grid"
     and the earnings-calendar cases). Call ONCE, early in the render — the JS self-removes,
     so NO .empty() is needed. Returns a no-op holder so legacy `.empty()` calls are safe.
+
+    `until_run_ends`: also wait for the Streamlit run to finish before hiding — for
+    pages whose previous results stay painted while the next run computes.
     """
     try:
         # Both carriers (the overlay markdown and the 0-height remover iframe) are
@@ -603,15 +614,27 @@ def render_sticky_loader(label: str = "Loading"):
         # containers takes them out of the flow; the overlay itself is fixed, so it
         # still covers the viewport. The host div survives the overlay's removal,
         # so the page does not jump when the loader goes.
+        # A per-run token: identical markup is NOT re-mounted on a rerun, so the
+        # overlay the script hid last time stayed hidden — the second Show Results
+        # showed no spinner. A new token = a fresh overlay and a re-run script.
+        import time as _time
+        run_token = _time.time_ns()
+        # React reuses the overlay's DOM node when only attributes change, keeping
+        # the hidden style the remover set last run — the 2nd Show Results showed
+        # nothing. Alternating the host's TAG each call forces a brand-new node.
+        st.session_state["_cs_loader_calls"] = st.session_state.get("_cs_loader_calls", 0) + 1
+        host_tag = "section" if st.session_state["_cs_loader_calls"] % 2 else "div"
         st.markdown(
             "<style>div[data-testid='stElementContainer']:has(.cs-loader-host),"
             "div[data-testid='stElementContainer']:has(iframe[srcdoc*='cs-sticky-loader']){"
             "position:absolute!important;width:0!important;height:0!important;"
             "margin:0!important;padding:0!important;}</style>"
-            f"<div class='cs-loader-host'>{_branded_overlay_html(label, oid='cs-sticky-loader')}</div>",
+            f"<{host_tag} class='cs-loader-host' data-run='{run_token}'>"
+            f"{_branded_overlay_html(label, oid='cs-sticky-loader')}</{host_tag}>",
             unsafe_allow_html=True)
         from streamlit.components.v1 import html as _sthtml
-        _sthtml(_STICKY_REMOVER_JS, height=0)
+        _sthtml(_STICKY_REMOVER_JS.replace("__UNTIL_RUN_ENDS__", "true" if until_run_ends else "false")
+                + f"<!-- run {run_token} -->", height=0)
     except Exception as e:
         log_structured_error(e, page="loading", component="render_sticky_loader", operation="render sticky loader")
     return _NoOpHolder()
