@@ -3239,6 +3239,9 @@ def main():
     _url_ticker   = st.query_params.get("ticker", "")
     _url_doc_type = st.query_params.get("doc_type", "")   # e.g. "10-K", "10-Q-Q1"
     _url_year     = st.query_params.get("year", "")       # e.g. "2026"
+    # e.g. "filing_106": one 8-K / 6-K inside the year (People Screening's
+    # Management Changes links straight to the filing a change came from).
+    _url_filing_unit = st.query_params.get("filing_unit", "")
     _active_ticker = st.session_state.get("active_ticker", "")
 
 
@@ -3279,9 +3282,20 @@ def main():
         st.session_state.cf_company = available_tickers[0] if available_tickers else DEFAULT_FALLBACK_TICKER
 
     # Apply deep-link doc_type param (e.g. from Key Developments source_ref link)
-    _valid_doc_types = set(DOCUMENT_TYPES) if DOCUMENT_TYPES else {"10-K"}
+    _valid_doc_types = (set(DOCUMENT_TYPES) if DOCUMENT_TYPES else {"10-K"}) | set(FILING_UNIT_DOC_TYPES)
     if _url_doc_type and _url_doc_type in _valid_doc_types:
         st.session_state.cf_doc_type = _url_doc_type
+        # The widget keeps its own key, so a deep link must set it — but only
+        # once per link: the params stay in the URL, and re-applying them on
+        # every rerun would snap the user's own choice back to the linked doc.
+        _link = (_url_ticker, _url_doc_type, _url_year, _url_filing_unit)
+        if st.session_state.get("_cf_applied_link") != _link:
+            st.session_state["_cf_applied_link"] = _link
+            st.session_state["cf_doc_type_select"] = _url_doc_type
+            if _url_year:
+                st.session_state["cf_year_select"] = _url_year
+            if _url_filing_unit:
+                st.session_state["_cf_url_filing_unit"] = _url_filing_unit
     elif 'cf_doc_type' not in st.session_state:
         # Land on the most recent 10-K or 10-Q (SEC or non-SEC equivalent)
         # rather than always defaulting to 10-K regardless of what is newest.
@@ -3441,6 +3455,10 @@ def main():
 
             # Sync cf_filing_unit from the display number stored in session state
             # (display number = 1-based position in sorted ascending list)
+            _wanted_unit = st.session_state.pop("_cf_url_filing_unit", "")
+            if _wanted_unit in available_filing_units:
+                st.session_state.cf_filing_unit = _wanted_unit
+                st.session_state["cf_filing_unit_select"] = available_filing_units.index(_wanted_unit) + 1
             if st.session_state.cf_filing_unit not in available_filing_units:
                 st.session_state.cf_filing_unit = get_default_filing_unit(available_filing_units) if available_filing_units else ""
 

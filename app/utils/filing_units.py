@@ -7,7 +7,7 @@ These document types have multiple filings per year, stored in sub-folders:
   {ticker}/{year}/8-K/filing_95/filing.html  (filing unit 95)
   ...
 
-The filing_unit column in coreiq_filing_metrics_v2 table stores these values.
+The filing_unit column in coreiq_filing_metrics_v5 stores these values.
 """
 import os
 import re
@@ -101,10 +101,13 @@ def _get_filing_units_from_db(ticker: str, year: str, doc_type: str) -> Optional
     try:
         from core.database import db_manager
 
-        # Use storage_year for 8-K/6-K (report_fiscal_year is NULL for those)
+        # Use storage_year for 8-K/6-K (report_fiscal_year is NULL for those).
+        # v5, not v2: v2 stopped taking new filings (COTY 2026 ends at filing_172,
+        # May; v5 has 173-177 through September), and v5 is what the rest of this
+        # page — years, doc types, the landing pick — already reads. 0.25s vs 5.2s.
         rows = db_manager.execute_query_readonly("""
             SELECT DISTINCT filing_unit
-            FROM coreiq_filing_metrics_v2
+            FROM coreiq_filing_metrics_v5
             WHERE ticker = :ticker
               AND storage_year = :year
               AND doc_type = :doc_type
@@ -154,19 +157,15 @@ def get_filing_units(ticker: str, year: str, doc_type: str, use_cache: bool = Tr
     if not year or str(year).strip() == "":
         return []
 
-    # Use filesystem first - it has complete data (all filing units)
-    filing_units = _get_filing_units_from_filesystem(ticker, year, doc_type)
-
-    # Fallback to DB only if filesystem returns nothing
+    # The DB lists every filing the pipeline stored. The local blob cache holds
+    # only what this server happened to download (COTY 2026: one of eight), so it
+    # is the fallback, never the source — reading it first hid newer 8-Ks.
+    if use_cache:
+        filing_units = _get_filing_units_from_db(ticker, year, doc_type)
+    else:
+        filing_units = _get_filing_units_from_db.__wrapped__(ticker, year, doc_type)
     if not filing_units:
-        if use_cache:
-            filing_units = _get_filing_units_from_db(ticker, year, doc_type)
-        else:
-            # Direct DB query without cache
-            filing_units = _get_filing_units_from_db.__wrapped__(ticker, year, doc_type)
-
-        if filing_units is None:
-            filing_units = []
+        filing_units = _get_filing_units_from_filesystem(ticker, year, doc_type)
 
     # Sort by number ascending
     return _sort_filing_units(filing_units)

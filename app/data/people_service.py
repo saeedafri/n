@@ -781,6 +781,18 @@ def _apply_money_filter(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
     if not col or col not in df.columns:
         return df
 
+    # Min / Max (either may be blank) — the form since 2026-10-12. Saved criteria
+    # from before carry an operator + value1/value2 and take the path below.
+    low, high = criterion.get("money_min"), criterion.get("money_max")
+    if low is not None or high is not None:
+        values = df[col]
+        mask = values.notna()
+        if low is not None:
+            mask &= values >= float(low) * DB_SCALE
+        if high is not None:
+            mask &= values <= float(high) * DB_SCALE
+        return df[mask.fillna(False).astype(bool)]
+
     v1 = criterion.get("money_value1")
     v2 = criterion.get("money_value2")
     if v1 is None:
@@ -847,8 +859,8 @@ def apply_people_criterion(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
         out = out[out["executive_name"].str.contains(
             name_contains, case=False, na=False, regex=False)]
 
-    if not criterion.get("include_former", False):
-        out = out[~out["is_former"].astype(bool)]
+    # Former executives are always in (2026-10-12): a "Former CFO" row is still
+    # that person's pay for that year, and the manager wanted no toggle for it.
 
     years = criterion.get("years") or []
     if years:
@@ -894,7 +906,15 @@ def build_people_summary(criterion: dict) -> str:
         parts.append(f'Name contains "{criterion["name_contains"]}"')
 
     metric = criterion.get("money_metric")
-    if metric and criterion.get("money_value1") is not None:
+    low, high = criterion.get("money_min"), criterion.get("money_max")
+    if metric and (low is not None or high is not None):
+        if low is not None and high is not None:
+            parts.append(f"{metric} ${low:,.1f}mm – ${high:,.1f}mm")
+        elif low is not None:
+            parts.append(f"{metric} ≥ ${low:,.1f}mm")
+        else:
+            parts.append(f"{metric} ≤ ${high:,.1f}mm")
+    elif metric and criterion.get("money_value1") is not None:
         operator = criterion.get("money_operator") or "Greater Than"
         v1 = criterion["money_value1"]
         if operator == "Between" and criterion.get("money_value2") is not None:
@@ -925,8 +945,10 @@ def build_people_summary(criterion: dict) -> str:
     if forms:
         parts.append(", ".join(str(f) for f in forms))
 
-    if criterion.get("include_former"):
-        parts.append("incl. former")
+    if criterion.get("show_moves_only"):
+        parts.append("Executive moves only")
+    elif criterion.get("show_management_changes"):
+        parts.append("+ Management changes")
 
     return " · ".join(parts) if parts else "All people"
 
@@ -935,7 +957,8 @@ def build_people_summary(criterion: dict) -> str:
 # YEAR-COLUMN GRID — pure pandas, no DB, no st.*
 # =============================================================================
 
-def pivot_people_years(df: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
+def pivot_people_years(df: pd.DataFrame, metrics: List[str],
+                       newest_first: bool = False) -> pd.DataFrame:
     """One row per executive x metric, one column per year.
 
         Executive  Title  Metric  2024  2025  2026
@@ -947,6 +970,9 @@ def pivot_people_years(df: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
     An executive with no value for any chosen metric keeps one row with blank
     years — the person is in scope, the pay simply was not disclosed.
     `df` may carry Company / Industry / Country of Incorporation already joined.
+    Year columns run oldest -> newest (chosen years compare left to right);
+    `newest_first` reverses them — with NO years chosen every year since 2013
+    is a column, and oldest-first opened the grid on a wall of empty columns.
     """
     if df is None or df.empty:
         return pd.DataFrame()
@@ -976,7 +1002,7 @@ def pivot_people_years(df: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
                                  values="value", aggfunc="first")
                     .reset_index())
         grid.columns.name = None
-        year_cols = sorted(c for c in grid.columns if str(c).isdigit())
+        year_cols = sorted((c for c in grid.columns if str(c).isdigit()), reverse=newest_first)
         missing = identity[~identity.set_index(who).index.isin(grid.set_index(who).index)]
         grid = grid.merge(identity, on=who, how="left")
         if not missing.empty:

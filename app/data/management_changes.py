@@ -584,7 +584,7 @@ CHANGE_COLUMNS = [
     "is_board", "notice_date", "effective_date", "effective_note", "replaces", "replaced_by",
     "reason", "no_disagreement", "confidence", "age", "role_start", "role_end", "years_in_role",
     "moved_from", "moved_from_title", "moved_from_date",
-    "evidence", "source_ref", "event_id",
+    "evidence", "source_ref", "event_id", "filing_year", "filing_unit",
 ]
 
 
@@ -656,11 +656,42 @@ def mark_moves(df: pd.DataFrame, bodies: Dict[int, str], names: Dict[str, str]) 
     return df
 
 
-def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> pd.DataFrame:
+_ACCESSION = re.compile(r"/data/\d+/(\d{10})(\d{2})(\d{6})/")
+
+_UNITS_QUERY = """
+    SELECT DISTINCT ticker, storage_year, filing_unit, filing_accession
+    FROM coreiq_filing_metrics_v5
+    WHERE doc_type = '8-K'
+      AND filing_unit IS NOT NULL AND filing_unit <> ''
+      AND ticker IN (SELECT ticker FROM coreiq_companies)
+"""
+
+
+def accession_of(source_ref: str) -> str:
+    """'…/Archives/edgar/data/910406/000119312526405350/hain.htm' -> '0001193125-26-405350'."""
+    m = _ACCESSION.search(source_ref or "")
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else ""
+
+
+def _filing_units_by_accession() -> Dict[tuple, tuple]:
+    """(ticker, accession) -> (storage_year, filing_unit): where an 8-K lives on
+    our Company Filings page. 96% of 5.02 events resolve (STG, 2026-10-12)."""
+    try:
+        return {(str(r["ticker"]), str(r["filing_accession"])): (r["storage_year"], r["filing_unit"])
+                for r in db_manager.execute_query_readonly(_UNITS_QUERY) or []}
+    except Exception as exc:
+        log_structured_error(exc, page="management_changes", component="_filing_units_by_accession",
+                             operation="fetch_filing_units")
+        return {}
+
+
+def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
+                  units: Optional[Dict[tuple, tuple]] = None) -> pd.DataFrame:
     """Flatten stored 5.02 rows into one row per person event.
 
     `names` (ticker -> company name) enables move detection; without it no
-    appointment is flagged as a move."""
+    appointment is flagged as a move. `units` ((ticker, accession) -> (year,
+    filing_unit)) lets the UI open the filing on our own Company Filings page."""
     records = []
     for r in rows:
         try:
@@ -671,8 +702,10 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
             continue
         filed = pd.Timestamp(r.get("edgar_filing_date") or r.get("event_date"))
         for e in events:
-            e.update(ticker=(r.get("ticker") or "").strip(), filing_date=filed,
-                     source_ref=r.get("source_ref") or "", event_id=r.get("event_id"))
+            ticker = (r.get("ticker") or "").strip()
+            year, unit = (units or {}).get((ticker, accession_of(r.get("source_ref"))), (None, ""))
+            e.update(ticker=ticker, filing_date=filed, source_ref=r.get("source_ref") or "",
+                     event_id=r.get("event_id"), filing_year=year, filing_unit=unit or "")
             # The filing date is the announcement when the text gives none.
             e["notice_date"] = e.get("notice_date") or filed
             records.append(e)
@@ -739,12 +772,18 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
 def _build_management_changes() -> pd.DataFrame:
     import time as _time
     t0 = _time.perf_counter()
-    try:
-        rows = db_manager.execute_query_readonly(_EVENTS_QUERY) or []
-    except Exception as exc:
-        log_structured_error(exc, page="management_changes", component="_build_management_changes",
-                             operation="fetch_502_events")
-        rows = []
+    from concurrent.futures import ThreadPoolExecutor
+    # The filing-unit lookup (~31s cold) does not depend on the events query
+    # (~27s), so they run side by side.
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        units_job = pool.submit(_filing_units_by_accession)
+        try:
+            rows = db_manager.execute_query_readonly(_EVENTS_QUERY) or []
+        except Exception as exc:
+            log_structured_error(exc, page="management_changes", component="_build_management_changes",
+                                 operation="fetch_502_events")
+            rows = []
+        units = units_job.result()
     try:
         names = {str(r["ticker"]): r["name"] for r in
                  db_manager.execute_query_readonly(_COMPANIES_QUERY) or [] if r.get("ticker")}
@@ -752,9 +791,10 @@ def _build_management_changes() -> pd.DataFrame:
         log_structured_error(exc, page="management_changes", component="_build_management_changes",
                              operation="fetch_company_names")
         names = {}
-    df = build_changes(rows, names)
+    df = build_changes(rows, names, units)
     log_timing("MGMT_CHANGES_BUILD", (_time.perf_counter() - t0) * 1000,
-               details=f"filings={len(rows)} events={len(df)}")
+               details=f"filings={len(rows)} events={len(df)} "
+                       f"linked={int(df['filing_unit'].astype(bool).sum()) if len(df) else 0}")
     return df
 
 
@@ -769,8 +809,9 @@ def get_management_changes() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
-        # _v2: age + tenure columns (2026-10-09). Bump on any column change.
-        "management_changes_v2", _build_management_changes, sources,
+        # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
+        # Bump on any column change.
+        "management_changes_v3", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

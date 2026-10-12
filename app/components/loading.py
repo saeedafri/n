@@ -597,7 +597,19 @@ def render_sticky_loader(label: str = "Loading"):
     so NO .empty() is needed. Returns a no-op holder so legacy `.empty()` calls are safe.
     """
     try:
-        st.markdown(_branded_overlay_html(label, oid="cs-sticky-loader"), unsafe_allow_html=True)
+        # Both carriers (the overlay markdown and the 0-height remover iframe) are
+        # invisible, but each still took a flex gap — ~32px of blank space between
+        # the Show Results row and the results. Absolute-positioning their element
+        # containers takes them out of the flow; the overlay itself is fixed, so it
+        # still covers the viewport. The host div survives the overlay's removal,
+        # so the page does not jump when the loader goes.
+        st.markdown(
+            "<style>div[data-testid='stElementContainer']:has(.cs-loader-host),"
+            "div[data-testid='stElementContainer']:has(iframe[srcdoc*='cs-sticky-loader']){"
+            "position:absolute!important;width:0!important;height:0!important;"
+            "margin:0!important;padding:0!important;}</style>"
+            f"<div class='cs-loader-host'>{_branded_overlay_html(label, oid='cs-sticky-loader')}</div>",
+            unsafe_allow_html=True)
         from streamlit.components.v1 import html as _sthtml
         _sthtml(_STICKY_REMOVER_JS, height=0)
     except Exception as e:

@@ -139,6 +139,13 @@ def test_money_filter_boundaries():
                "money_value1": 4.999999, "money_value2": 5.000001}
     assert names(between) == ["Exactly5", "Just over", "Just under"], names(between)
 
+    # Min / Max form (2026-10-12): both inclusive, either may be blank.
+    tc = {"money_metric": "Total Compensation"}
+    assert names(dict(tc, money_min=5.0)) == ["Exactly5", "Just over"]
+    assert names(dict(tc, money_max=5.0)) == ["Exactly5", "Just under"]
+    assert names(dict(tc, money_min=5.0, money_max=5.0)) == ["Exactly5"]
+    assert "Missing" not in names(dict(tc, money_min=0.0))
+
     # A missing value is never counted as zero.
     assert "Missing" not in names(lt)
     assert "Missing" not in names(gt)
@@ -188,22 +195,21 @@ def test_field_filters():
     # An empty criterion filters nothing at all.
     assert len(apply_people_criterion(df, {})) == 4
 
-    # Former executives are excluded unless explicitly included.
-    assert names({}) == ["Ann Chief", "Bob Finance", "Cara Merch"], names({})
-    assert names({"include_former": True}) == \
-        ["Ann Chief", "Bob Finance", "Cara Merch", "Dan Gone"]
+    # Former executives are always included (no toggle since 2026-10-12).
+    assert names({}) == ["Ann Chief", "Bob Finance", "Cara Merch", "Dan Gone"], names({})
+    assert names({"include_former": False}) == names({})
 
-    assert names({"roles": ["CEO"]}) == ["Ann Chief"]
-    assert names({"roles": ["CEO", "CFO"]}) == ["Ann Chief", "Bob Finance"]
+    assert names({"roles": ["CEO"]}) == ["Ann Chief", "Dan Gone"]
+    assert names({"roles": ["CEO", "CFO"]}) == ["Ann Chief", "Bob Finance", "Dan Gone"]
     assert names({"title_contains": "merchandising"}) == ["Cara Merch"]
     assert names({"name_contains": "finance"}) == ["Bob Finance"]
     assert names({"years": [2024]}) == ["Bob Finance"]
-    assert names({"years": [2024, 2025]}) == ["Ann Chief", "Bob Finance", "Cara Merch"]
+    assert names({"years": [2024, 2025]}) == ["Ann Chief", "Bob Finance", "Cara Merch", "Dan Gone"]
     assert names({"sources": ["YFinance"]}) == ["Cara Merch"]
     assert names({"filing_forms": ["PRE 14A"]}) == ["Bob Finance"]
 
     # Age: a missing age is excluded by an age bound, never treated as 0.
-    assert names({"age_min": 50}) == ["Ann Chief"]
+    assert names({"age_min": 50}) == ["Ann Chief", "Dan Gone"]
     assert names({"age_max": 50}) == ["Bob Finance"]
     assert names({"age_min": 40, "age_max": 60}) == ["Ann Chief", "Bob Finance"]
 
@@ -583,6 +589,8 @@ def test_year_pivot():
     pq = grid[grid["executive_name"] == "P Q"].iloc[0]
     assert pq["Metric"] == "Salary" and pq["2024"] == 1.0 and pq["2025"] == 2.0 and pq["title"] == "CEO"
     assert (grid["executive_name"] == "No Pay").sum() == 1      # in scope, pay undisclosed
+    newest = pivot_people_years(df, ["Salary"], newest_first=True)
+    assert list(newest.columns[-2:]) == ["2025", "2024"], newest.columns
     two = pivot_people_years(df, ["Salary", "Bonus"])
     assert list(two[two["executive_name"] == "P Q"]["Metric"]) == ["Salary", "Bonus"]
     print("  year pivot: OK")

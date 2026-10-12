@@ -204,3 +204,26 @@ while the old copy keeps serving.
 
 **E2E (Playwright, system Chrome, video recorded then deleted), both testing :8501 and STG checkout :8503:**
 Companies (Discount Stores → 4 rows), Key Devs (Management Changes → 25 rows), People (CFO · Salary + Bonus · 2024–2026 → 148 executives / 133 companies, columns 2024/2025/2026, no source columns, 0.23s), Management Changes (534 / 256, tenure columns), Executive Moves, Company Filings (BOO absent, ASICS years 2015–2026 only). No page errors.
+
+---
+
+## 11. Round 3 — People Attributes as the single control surface (2026-10-12)
+
+| Request | Implementation |
+|---|---|
+| Compensation filter as Min / Max | "Compensation filter" metric + **Min ($mm)** + **Max ($mm)** (either blank). `people_service._apply_money_filter` reads `money_min` / `money_max`, inclusive; saved operator-style criteria still work and re-open as a range |
+| Former executives always included | Checkbox removed; `apply_people_criterion` no longer excludes "Former …" titles |
+| Criteria behave like the other filters | Criterion card summary + "View filter details" list role, metrics shown, Min–Max, years, age and what is shown |
+| "Show management changes?" | Checkbox in People Attributes. Management Changes renders only when it is ticked |
+| Management Changes content | No toggles: board seats, every confidence tier, the **Confidence** column and the **Source Text** are always shown |
+| Filing link → our Company Filings page | Each 5.02 event carries `(filing_year, filing_unit)` from `coreiq_filing_metrics_v5.filing_accession` (9,094 / 9,449 events, 96%). Link: `/company_filings?ticker=…&doc_type=8-K&year=…&filing_unit=filing_N`. Company Filings now accepts 8-K / 6-K / proxy deep links plus `filing_unit`, applied once per link |
+| "Show executive moves only?" | Checkbox in People Attributes; when ticked ONLY the Executive Moves grid renders. Board-seat moves always included |
+| Loader | `render_sticky_loader("Loading People")` on Show Results; stays until the first grid paints |
+| White space | Section title + count + Excel on one row; the loader's two invisible carriers taken out of the flex flow (70px → 37px between Show Results and the first header) |
+
+Fixed on the way (both pre-existing):
+* **Company Filings' Filing Unit list read the partial local download cache first, then the frozen v2 table.** COTY 2026 offered one or three 8-Ks; v5 has eight (through September). `utils/filing_units.py` now reads v5 (0.25s vs 5.2s) with the local cache only as a fallback.
+* **Every criterion card showed "B6" instead of ▶** — `'\25B6'` inside a non-raw Python string is an octal escape; now `'\\25B6'`.
+* People grid with no years chosen opened on 2013…: year columns run newest-first when no year is selected (chronological when years are chosen).
+
+Frame: `management_changes_v3` (filing_year / filing_unit added). Build ~56s cold; the v5 lookup runs beside the events query.

@@ -1546,7 +1546,7 @@ div:has(.scr-loading-overlay) {
 }
 .criterion-details summary::-webkit-details-marker { display: none; }
 .criterion-details summary::before {
-  content: '\25B6';
+  content: '\\25B6';   /* \\ in Python source: '\25' alone is an octal escape that rendered as "B6" */
   font-size: 0.6rem;
   margin-right: 6px;
   display: inline-block;
@@ -4822,30 +4822,27 @@ def _people_criterion_from_widgets(values: dict) -> dict:
     Shared by the palette form and the inline detail-panel form so the two can
     never build a differently-shaped criterion.
     """
+    metric = values.get("money_metric")
+    metric = metric if metric and metric != "— none —" else None
     criterion = {
         "type":            "people",
         "roles":           list(values.get("roles") or []),
         "title_contains":  (values.get("title_contains") or "").strip(),
         "name_contains":   (values.get("name_contains") or "").strip(),
-        "include_former":  bool(values.get("include_former")),
+        # Former executives are always included (no toggle since 2026-10-12).
+        "include_former":  True,
         "years":           sorted(int(y) for y in (values.get("years") or [])),
         "age_min":         values.get("age_min"),
         "age_max":         values.get("age_max"),
         "show_metrics":    list(values.get("show_metrics") or []),
-        "money_metric":    None,
-        "money_operator":  None,
-        "money_value1":    None,
-        "money_value2":    None,
+        "money_metric":    metric,
+        "money_min":       values.get("money_min") if metric else None,
+        "money_max":       values.get("money_max") if metric else None,
+        "show_management_changes": bool(values.get("show_management_changes")),
+        "show_moves_only": bool(values.get("show_moves_only")),
     }
-
-    metric = values.get("money_metric")
-    if metric and metric != "— none —":
-        criterion["money_metric"]   = metric
-        criterion["money_operator"] = values.get("money_operator") or "Greater Than"
-        criterion["money_value1"]   = values.get("money_value1")
-        criterion["money_value2"]   = values.get("money_value2")
-        criterion["display_col"]    = metric
-
+    if metric:
+        criterion["display_col"] = metric
     criterion["summary"] = build_people_summary(criterion)
     return criterion
 
@@ -4860,29 +4857,24 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
     roles = st.multiselect(
         "Role / Title",
         options=PEOPLE_ROLES,
-        default=[r for r in (pf.get("roles") or []) if r in PEOPLE_ROLES],
+        default=[PEOPLE_ROLE_OTHER if r == PEOPLE_ROLE_UNKNOWN else r
+                 for r in (pf.get("roles") or []) if r in PEOPLE_ROLES + [PEOPLE_ROLE_UNKNOWN]],
+        placeholder="Any role",
         help="Grouped from the executive's title text. Leave empty for any role.",
         key=f"{key_prefix}_roles",
     )
-
     tc1, tc2 = st.columns(2)
     with tc1:
         title_contains = st.text_input(
-            "Title contains",
-            value=pf.get("title_contains", ""),
+            "Title contains", value=pf.get("title_contains", ""),
             placeholder="e.g. merchandising",
             help="Searches the full job title as filed, not the grouped role.",
-            key=f"{key_prefix}_title_contains",
-        )
+            key=f"{key_prefix}_title_contains")
     with tc2:
         name_contains = st.text_input(
-            "Name contains",
-            value=pf.get("name_contains", ""),
-            placeholder="e.g. cook",
-            key=f"{key_prefix}_name_contains",
-        )
+            "Name contains", value=pf.get("name_contains", ""),
+            placeholder="e.g. cook", key=f"{key_prefix}_name_contains")
 
-    st.markdown("**Compensation**")
     show_metrics = st.multiselect(
         "Compensation metrics to show",
         options=PEOPLE_MONEY_COLUMNS,
@@ -4891,133 +4883,100 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
         help="Only these metrics appear in the results. Pick several to compare them.",
         key=f"{key_prefix}_show_metrics",
     )
-    st.caption("Optional threshold — filter executives on one metric:")
-    mc1, mc2, mc3, mc4 = st.columns([2.4, 2, 1.6, 1.6])
+
     _metric_options = ["— none —"] + PEOPLE_MONEY_COLUMNS
     _pf_metric = pf.get("money_metric")
+    # A criterion saved before Min/Max carries an operator; show it as a range.
+    _pf_min = pf.get("money_min")
+    _pf_max = pf.get("money_max")
+    if _pf_min is None and _pf_max is None and pf.get("money_value1") is not None:
+        _op = pf.get("money_operator") or "Greater Than"
+        if _op == "Between":
+            _pf_min, _pf_max = pf.get("money_value1"), pf.get("money_value2")
+        elif _op.startswith("Less"):
+            _pf_max = pf.get("money_value1")
+        else:
+            _pf_min = pf.get("money_value1")
+    mc1, mc2, mc3 = st.columns([2.4, 1.3, 1.3])
     with mc1:
         money_metric = st.selectbox(
-            "Metric",
+            "Compensation filter",
             options=_metric_options,
-            index=(_metric_options.index(_pf_metric)
-                   if _pf_metric in _metric_options else 0),
-            key=f"{key_prefix}_money_metric",
-        )
+            index=_metric_options.index(_pf_metric) if _pf_metric in _metric_options else 0,
+            help="Keep executives whose value for this metric is within Min–Max.",
+            key=f"{key_prefix}_money_metric")
     with mc2:
-        money_operator = st.selectbox(
-            "Operator",
-            options=OPERATORS,
-            index=(OPERATORS.index(pf.get("money_operator"))
-                   if pf.get("money_operator") in OPERATORS else 0),
-            key=f"{key_prefix}_money_operator",
-        )
+        money_min = st.number_input(
+            "Min ($mm)", value=_pf_min, min_value=0.0, step=0.5, format="%.2f",
+            placeholder="No minimum", key=f"{key_prefix}_money_min")
     with mc3:
-        money_value1 = st.number_input(
-            "Value ($mm)",
-            value=float(pf.get("money_value1") or 0.0),
-            step=0.5, format="%.2f",
-            key=f"{key_prefix}_money_value1",
-        )
-    with mc4:
-        money_value2 = st.number_input(
-            "and ($mm)",
-            value=float(pf.get("money_value2") or 0.0),
-            step=0.5, format="%.2f",
-            key=f"{key_prefix}_money_value2",
-        )
-    # These four are NEVER disabled on each other's values. Widgets inside an
-    # st.form do not rerun the script until submit, so `disabled=(metric ==
-    # "— none —")` would be evaluated against the PREVIOUS render: pick a
-    # metric and the Value box stays greyed out, with no way to type a
-    # threshold. Validation on submit does this job instead.
-    _partial = ", ".join(
-        m for m in PEOPLE_MONEY_COLUMNS if PEOPLE_MONEY_SOURCE_HINT.get(m) == "YFinance")
-    st.caption(
-        f"Values are in $ millions. The second box applies to **Between** only. "
-        f"{_partial} are reported for some companies only; an executive with no "
-        f"value for the chosen metric does not match."
-    )
+        money_max = st.number_input(
+            "Max ($mm)", value=_pf_max, min_value=0.0, step=0.5, format="%.2f",
+            placeholder="No maximum", key=f"{key_prefix}_money_max")
 
-    st.markdown("**Compensation years**")
-    years = st.multiselect(
-        "Compensation years (select one or more)",
-        options=PEOPLE_YEARS,
-        default=[y for y in (pf.get("years") or []) if y in PEOPLE_YEARS],
-        placeholder="Select one or more years — each becomes a column",
-        help="Pick several years (e.g. 2024, 2025, 2026) to compare them side by side. "
-             "Leave empty for every year on file.",
-        key=f"{key_prefix}_years",
-    )
-    # Source / filing-form filters are no longer offered (the published view does
-    # not expose provenance); re-saving a criterion drops any old hidden ones.
-    sources, filing_forms = [], []
-
-    ac1, ac2, ac3 = st.columns([1.6, 1.6, 5])
+    yc, ac1, ac2 = st.columns([2.4, 1.3, 1.3])
+    with yc:
+        years = st.multiselect(
+            "Compensation years (select one or more)",
+            options=PEOPLE_YEARS,
+            default=[y for y in (pf.get("years") or []) if y in PEOPLE_YEARS],
+            placeholder="All years — each selected year becomes a column",
+            key=f"{key_prefix}_years")
     with ac1:
         age_min = st.number_input(
-            "Min age", min_value=0, max_value=120,
-            value=int(pf.get("age_min") or 0),
-            key=f"{key_prefix}_age_min",
-        )
+            "Min age", value=pf.get("age_min"), min_value=18, max_value=100, step=1,
+            placeholder="Any", key=f"{key_prefix}_age_min")
     with ac2:
         age_max = st.number_input(
-            "Max age", min_value=0, max_value=120,
-            value=int(pf.get("age_max") or 0),
-            key=f"{key_prefix}_age_max",
-        )
-    with ac3:
-        include_former = st.checkbox(
-            "Include former executives",
-            value=bool(pf.get("include_former", False)),
-            help="Titles filed as 'Former ...'. Excluded by default.",
-            key=f"{key_prefix}_include_former",
-        )
-    st.caption("Age is not disclosed for every executive — leave both at 0 to ignore it.")
+            "Max age", value=pf.get("age_max"), min_value=18, max_value=100, step=1,
+            placeholder="Any", key=f"{key_prefix}_age_max")
+
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        show_management_changes = st.checkbox(
+            "Show management changes?",
+            value=bool(pf.get("show_management_changes", False)),
+            help="Adds appointments and departures for the same companies and people.",
+            key=f"{key_prefix}_show_mc")
+    with sc2:
+        show_moves_only = st.checkbox(
+            "Show executive moves only?",
+            value=bool(pf.get("show_moves_only", False)),
+            help="Only executives who left one company and joined another (board seats included).",
+            key=f"{key_prefix}_show_moves")
 
     return {
         "roles": roles,
         "title_contains": title_contains,
         "name_contains": name_contains,
-        "include_former": include_former,
         "years": years,
-        # 0 is the "unset" sentinel for both age bounds: a real executive age is
-        # never 0, and number_input has no empty state.
-        "age_min": int(age_min) if age_min else None,
-        "age_max": int(age_max) if age_max else None,
-        "sources": sources,
-        "filing_forms": filing_forms,
+        "age_min": int(age_min) if age_min is not None else None,
+        "age_max": int(age_max) if age_max is not None else None,
         "show_metrics": show_metrics,
         "money_metric": money_metric,
-        "money_operator": money_operator,
-        "money_value1": float(money_value1) if money_metric != "— none —" else None,
-        "money_value2": float(money_value2) if money_operator == "Between" else None,
+        "money_min": float(money_min) if money_min is not None else None,
+        "money_max": float(money_max) if money_max is not None else None,
+        "show_management_changes": show_management_changes,
+        "show_moves_only": show_moves_only,
     }
 
 
 def _validate_people_values(values: dict) -> Optional[str]:
     """Return an error message when the collected People values cannot screen."""
     metric = values.get("money_metric")
-    if metric and metric != "— none —":
-        if values.get("money_operator") == "Between":
-            v1, v2 = values.get("money_value1"), values.get("money_value2")
-            if not v1 and not v2:
-                return "Enter both values for a Between comparison."
-            if v1 is not None and v2 is not None and float(v1) == float(v2):
-                return "Between needs two different values."
-
-    lo, hi = values.get("age_min"), values.get("age_max")
+    has_metric = bool(metric and metric != "— none —")
+    lo, hi = values.get("money_min"), values.get("money_max")
+    if has_metric and lo is None and hi is None:
+        return f"Enter a Min or Max for {metric}, or set Compensation filter to — none —."
     if lo is not None and hi is not None and lo > hi:
+        return "Min cannot be greater than Max."
+    if (lo is not None or hi is not None) and not has_metric:
+        return "Choose which metric the Min / Max applies to."
+    a_lo, a_hi = values.get("age_min"), values.get("age_max")
+    if a_lo is not None and a_hi is not None and a_lo > a_hi:
         return "Min age cannot be greater than max age."
-
-    has_any = any([
-        values.get("roles"), values.get("title_contains"), values.get("name_contains"),
-        values.get("years"), values.get("sources"), values.get("filing_forms"),
-        values.get("show_metrics"),
-        lo is not None, hi is not None,
-        metric and metric != "— none —",
-    ])
-    if not has_any:
-        return "Select at least one people filter."
+    if not values.get("show_moves_only") and not values.get("show_metrics"):
+        return "Pick at least one compensation metric to show."
     return None
 
 
@@ -5551,7 +5510,15 @@ def _build_criterion_details_html(criterion: dict) -> str:
         if criterion.get("name_contains"):
             detail_items.append(
                 f"<strong>Name contains:</strong> {criterion['name_contains']}")
-        if criterion.get("money_metric") and criterion.get("money_value1") is not None:
+        if criterion.get("show_metrics"):
+            detail_items.append(
+                f"<strong>Metrics shown:</strong> {', '.join(criterion['show_metrics'])}")
+        _lo, _hi = criterion.get("money_min"), criterion.get("money_max")
+        if criterion.get("money_metric") and (_lo is not None or _hi is not None):
+            _rng = (f"${_lo:,.2f}mm – ${_hi:,.2f}mm" if _lo is not None and _hi is not None
+                    else f"min ${_lo:,.2f}mm" if _lo is not None else f"max ${_hi:,.2f}mm")
+            detail_items.append(f"<strong>{criterion['money_metric']}:</strong> {_rng}")
+        elif criterion.get("money_metric") and criterion.get("money_value1") is not None:
             _op = criterion.get("money_operator", "")
             _v1 = criterion.get("money_value1")
             _v2 = criterion.get("money_value2")
@@ -5561,10 +5528,8 @@ def _build_criterion_details_html(criterion: dict) -> str:
             detail_items.append(
                 f"<strong>{criterion['money_metric']}:</strong> {_cond}")
         if criterion.get("years"):
-            _ys = criterion["years"]
             detail_items.append(
-                f"<strong>Years:</strong> "
-                f"{_ys[0] if len(_ys) == 1 else f'{_ys[0]}–{_ys[-1]}'}")
+                f"<strong>Years:</strong> {', '.join(str(y) for y in sorted(criterion['years']))}")
         if criterion.get("age_min") is not None or criterion.get("age_max") is not None:
             detail_items.append(
                 f"<strong>Age:</strong> {criterion.get('age_min') or ''}"
@@ -5575,8 +5540,10 @@ def _build_criterion_details_html(criterion: dict) -> str:
         if criterion.get("filing_forms"):
             detail_items.append(
                 f"<strong>Filing form:</strong> {', '.join(criterion['filing_forms'])}")
-        if criterion.get("include_former"):
-            detail_items.append("<strong>Includes former executives</strong>")
+        if criterion.get("show_moves_only"):
+            detail_items.append("<strong>Showing:</strong> executive moves only")
+        elif criterion.get("show_management_changes"):
+            detail_items.append("<strong>Showing:</strong> executives + management changes")
         if detail_items:
             detail_html = "<br>".join(
                 f"<span class='criterion-detail-kv'>{d}</span>" for d in detail_items)
@@ -6778,103 +6745,24 @@ def _render_people_results():
             st.info("No companies match the current criteria. Try relaxing a filter.")
             return
 
+        # One branded loader per Show Results; it removes itself once the first
+        # results grid has painted (components/loading.render_sticky_loader).
+        from components.loading import render_sticky_loader
+        render_sticky_loader("Loading People")
+
         t_people = time.perf_counter()
-
-        # Disk read on every rerun after the first build — no SQL here.
-        people_df = get_people_universe()
-        if people_df is None or people_df.empty:
-            st.info("No executive compensation data is available.")
-            return
-
         tickers_in_scope = set(company_df["ticker"].unique())
-        scoped = people_df[people_df["ticker"].isin(tickers_in_scope)]
+        company_meta = _people_company_meta(company_df)
+        moves_only = any(c.get("show_moves_only") for c in people_criteria)
+        show_changes = any(c.get("show_management_changes") for c in people_criteria)
 
-        if scoped.empty:
-            st.info(
-                "No executive data for the companies matching the current criteria. "
-                "Executive data does not cover every company."
-            )
+        if moves_only:
+            _render_executive_moves(tickers_in_scope, people_criteria, company_meta)
             return
 
-        # People Attributes criteria stack as AND. They decide WHO is shown; the
-        # grid then shows those people's selected metrics for the selected years,
-        # so a threshold met in 2025 still shows 2024 and 2026 beside it.
-        filtered = scoped
-        for criterion in people_criteria:
-            filtered = apply_people_criterion(filtered, criterion)
-
-        if filtered.empty:
-            st.info("No people match the current People Attributes filters. "
-                    "Try relaxing one.")
-            return
-
-        no_threshold = [dict(c, money_metric=None) for c in people_criteria]
-        shown_rows = scoped
-        for criterion in no_threshold:
-            shown_rows = apply_people_criterion(shown_rows, criterion)
-        who = filtered[["ticker", "executive_name"]].drop_duplicates()
-        shown_rows = shown_rows.merge(who, on=["ticker", "executive_name"], how="inner")
-
-        metrics: List[str] = []
-        for criterion in people_criteria:
-            for m in (criterion.get("show_metrics") or []) + [criterion.get("money_metric")]:
-                if m and m not in metrics:
-                    metrics.append(m)
-        metrics = metrics or list(PEOPLE_DEFAULT_SHOW_METRICS)
-
-        merged = shown_rows.merge(_people_company_meta(company_df), on="ticker", how="left")
-        if "Company" in merged.columns:
-            merged["Company"] = merged["Company"].fillna(merged["ticker"].astype(str))
-        merged = _fill_age_from_filings(merged)
-
-        grid = pivot_people_years(merged, metrics)
-        display_df = _format_people_display(grid)
-
-        log_timing("PEOPLE_RESULTS_PIPELINE", (time.perf_counter() - t_people) * 1000,
-                   details=f"universe={len(people_df)} scoped={len(scoped)} "
-                           f"people={len(who)} shown={len(display_df)} "
-                           f"metrics={len(metrics)} criteria={len(people_criteria)}")
-
-        _hdr_col, _dl_col = st.columns([8, 2])
-        with _hdr_col:
-            st.markdown(
-                f"<p class='results-header'>"
-                f"<strong>{len(who)}</strong> executives across "
-                f"<strong>{who['ticker'].nunique()}</strong> companies · "
-                f"{', '.join(metrics)}</p>",
-                unsafe_allow_html=True,
-            )
-        with _dl_col:
-            from datetime import datetime as _dt_now
-            _ts = _dt_now.now().strftime("%Y%m%d_%H%M")
-            _render_excel_js_download(
-                _build_people_excel(display_df),
-                f"People_Screening_{_ts}.xlsx",
-                label="Excel",
-            )
-
-        # Publish the COMPLETE domain for every categorical column. The grid
-        # paginates, so without this its header filter offers only the values on
-        # the loaded page — and since the Excel export honours the filter model,
-        # a partial domain silently drops real rows from the download.
-        _domains = {}
-        for _col in ("Role", "Metric", "Industry", "Country of Incorporation", "Company"):
-            if _col in display_df.columns:
-                _domains[_col] = sorted(
-                    v for v in display_df[_col].astype(str).unique() if str(v).strip())
-
-        _render_filterable_results_grid(
-            display_df,
-            key="people_results_grid",
-            empty_message="No executive compensation records found.",
-            pinned_column="Executive Name",
-            filter_domains=_domains or None,
-        )
-
-        _render_people_coverage_note(people_df, tickers_in_scope)
-
-        _render_management_changes(tickers_in_scope, people_criteria,
-                                   _people_company_meta(company_df))
+        _render_people_grid(tickers_in_scope, people_criteria, company_meta, t_people)
+        if show_changes:
+            _render_management_changes(tickers_in_scope, people_criteria, company_meta)
 
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_results",
@@ -6882,57 +6770,140 @@ def _render_people_results():
         st.error("Something went wrong. Please try again.")
 
 
+def _render_people_grid(tickers_in_scope: set, people_criteria: List[dict],
+                        company_meta: pd.DataFrame, t_people: float) -> None:
+    """Executives x metric rows with one column per year (people_service.pivot_people_years)."""
+    # Disk read on every rerun after the first build — no SQL here.
+    people_df = get_people_universe()
+    if people_df is None or people_df.empty:
+        st.info("No executive compensation data is available.")
+        return
+
+    scoped = people_df[people_df["ticker"].isin(tickers_in_scope)]
+    if scoped.empty:
+        st.info("No executive data for the companies matching the current criteria. "
+                "Executive data does not cover every company.")
+        return
+
+    # People Attributes criteria stack as AND. They decide WHO is shown; the
+    # grid then shows those people's selected metrics for the selected years,
+    # so a value inside Min–Max in 2025 still shows 2024 and 2026 beside it.
+    filtered = scoped
+    for criterion in people_criteria:
+        filtered = apply_people_criterion(filtered, criterion)
+    if filtered.empty:
+        st.info("No people match the current People Attributes filters. Try relaxing one.")
+        return
+
+    shown_rows = scoped
+    for criterion in people_criteria:
+        shown_rows = apply_people_criterion(shown_rows, dict(criterion, money_metric=None))
+    who = filtered[["ticker", "executive_name"]].drop_duplicates()
+    shown_rows = shown_rows.merge(who, on=["ticker", "executive_name"], how="inner")
+
+    metrics: List[str] = []
+    for criterion in people_criteria:
+        for m in (criterion.get("show_metrics") or []) + [criterion.get("money_metric")]:
+            if m and m not in metrics:
+                metrics.append(m)
+    metrics = metrics or list(PEOPLE_DEFAULT_SHOW_METRICS)
+
+    merged = shown_rows.merge(company_meta, on="ticker", how="left")
+    if "Company" in merged.columns:
+        merged["Company"] = merged["Company"].fillna(merged["ticker"].astype(str))
+    merged = _fill_age_from_filings(merged)
+    any_years = any(c.get("years") for c in people_criteria)
+    display_df = _format_people_display(
+        pivot_people_years(merged, metrics, newest_first=not any_years))
+
+    log_timing("PEOPLE_RESULTS_PIPELINE", (time.perf_counter() - t_people) * 1000,
+               details=f"universe={len(people_df)} scoped={len(scoped)} "
+                       f"people={len(who)} shown={len(display_df)} "
+                       f"metrics={len(metrics)} criteria={len(people_criteria)}")
+
+    _render_results_header(
+        f"<strong>{len(who)}</strong> executives across "
+        f"<strong>{who['ticker'].nunique()}</strong> companies · {', '.join(metrics)}",
+        display_df, "People_Screening", title="Executives")
+    _render_filterable_results_grid(
+        display_df,
+        key="people_results_grid",
+        empty_message="No executive compensation records found.",
+        pinned_column="Executive Name",
+        filter_domains=_full_domains(display_df, ("Role", "Metric", "Industry",
+                                                  "Country of Incorporation", "Company")),
+    )
+    _render_people_coverage_note(people_df, tickers_in_scope)
+
+
+def _render_results_header(html: str, display_df: pd.DataFrame, file_stem: str,
+                           title: str = "") -> None:
+    """Section title + count on the left, Excel on the right — ONE row, so a
+    section costs one block gap instead of three."""
+    from datetime import datetime as _dt_now
+    hdr, dl = st.columns([8, 2], vertical_alignment="center")
+    with hdr:
+        heading = (f"<span style='font-size:1.15rem;font-weight:700;color:#1f2937;"
+                   f"margin-right:14px;'>{title}</span>" if title else "")
+        st.markdown(f"<p class='results-header' style='margin:0;'>{heading}{html}</p>",
+                    unsafe_allow_html=True)
+    with dl:
+        _render_excel_js_download(
+            _build_people_excel(display_df),
+            f"{file_stem}_{_dt_now.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            label="Excel",
+        )
+
+
+def _full_domains(display_df: pd.DataFrame, columns) -> Optional[Dict[str, List[str]]]:
+    """The COMPLETE value set per categorical column. The grid paginates, so
+    without this its header filter offers only values on the loaded page — and
+    the Excel export honours the filter model, so rows would silently drop."""
+    domains = {c: sorted(v for v in display_df[c].astype(str).unique() if v.strip())
+               for c in columns if c in display_df.columns}
+    return domains or None
+
+
+def _filter_changes_for_people(df: pd.DataFrame, people_criteria: List[dict]) -> pd.DataFrame:
+    """The People Attributes name / title / role filters, applied to 8-K events
+    so the event grids describe the same people as the executive grid."""
+    for criterion in people_criteria:
+        if criterion.get("name_contains"):
+            df = df[df["person"].str.contains(criterion["name_contains"], case=False,
+                                              regex=False, na=False)]
+        if criterion.get("title_contains"):
+            wanted = criterion["title_contains"]
+            df = df[df["title"].str.contains(wanted, case=False, regex=False, na=False)
+                    | df["previous_title"].str.contains(wanted, case=False, regex=False, na=False)]
+        if criterion.get("roles"):
+            roles = {PEOPLE_ROLE_OTHER if r == PEOPLE_ROLE_UNKNOWN else r for r in criterion["roles"]}
+            df = df[df["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER).isin(roles)]
+    return df
+
+
+def _filing_page_link(ticker, year, unit) -> str:
+    """Our own Company Filings page opened on the exact 8-K, never sec.gov."""
+    if not ticker or pd.isna(year) or not unit:
+        return ""
+    return f"/company_filings?ticker={ticker}&doc_type=8-K&year={int(year)}&filing_unit={unit}"
+
+
 def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict],
                                company_meta: pd.DataFrame) -> None:
-    """Appointments and departures read from 8-K Item 5.02, for the same companies
-    and the same name / title / role filters as the People grid above.
-
-    The frame is materialized (data/management_changes.py), so this is pandas only.
-    Lower-confidence rows (no title or no timing found in the text) and the source
-    sentence are opt-in: the default view is the hand-validated High tier.
+    """Appointments and departures read from 8-K Item 5.02 for the companies and
+    people in scope. Everything is shown: board seats, every confidence tier, the
+    source sentence, and a link to the filing on our Company Filings page.
     """
     try:
         t0 = time.perf_counter()
         changes = get_management_changes()
         if changes is None or changes.empty:
             return
-        st.markdown("#### Management Changes")
-        c1, c2, c3, c4 = st.columns([2.2, 1.6, 1.8, 1.6])
-        with c1:
-            kinds = st.multiselect("Change", ["Appointment", "Departure"],
-                                   default=["Appointment", "Departure"], key="scr_mc_kinds")
-        with c2:
-            include_board = st.checkbox("Include board seats", value=True, key="scr_mc_board")
-        with c3:
-            include_low = st.checkbox("Include lower-confidence", value=False, key="scr_mc_low",
-                                      help="Rows where the filing text gave no title or no "
-                                           "effective timing. Review against the source.")
-        with c4:
-            show_source = st.checkbox("Show source text", value=False, key="scr_mc_source")
-
         df = changes[changes["ticker"].isin(tickers_in_scope)
-                     & changes["change"].isin(kinds or ["Appointment", "Departure"])]
-        if not include_board:
-            df = df[df["role"].astype(str) != "Board"]
-        if not include_low:
-            df = df[df["confidence"].astype(str) == "High"]
-        # The People Attributes filters mean the same thing here.
-        for criterion in people_criteria:
-            if criterion.get("name_contains"):
-                df = df[df["person"].str.contains(criterion["name_contains"], case=False,
-                                                  regex=False, na=False)]
-            if criterion.get("title_contains"):
-                wanted = criterion["title_contains"]
-                df = df[df["title"].str.contains(wanted, case=False, regex=False, na=False)
-                        | df["previous_title"].str.contains(wanted, case=False, regex=False, na=False)]
-            if criterion.get("roles"):
-                roles = {PEOPLE_ROLE_OTHER if r == PEOPLE_ROLE_UNKNOWN else r
-                         for r in criterion["roles"]}
-                df = df[df["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER)
-                        .isin(roles)]
-
+                     & changes["change"].isin(["Appointment", "Departure"])]
+        df = _filter_changes_for_people(df, people_criteria)
         if df.empty:
-            st.info("No management changes on file for these companies and filters.")
+            st.info("Management Changes: none on file for these companies and filters.")
             return
 
         out = df.merge(company_meta, on="ticker", how="left")
@@ -6961,13 +6932,12 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
                 out["role_end"].notna(),
                 out["role_start"].notna().map({True: "present", False: ""})),
             "Years in Role":    out["years_in_role"].map(lambda v: "" if pd.isna(v) else f"{v:.1f}"),
+            "Confidence":       out["confidence"].astype(str),
+            "Source Text":      out["evidence"],
+            "Filing":           [_filing_page_link(t, y, u) for t, y, u in
+                                 zip(out["ticker"], out["filing_year"], out["filing_unit"])],
         })
-        if include_low:
-            display["Confidence"] = out["confidence"].astype(str)
-        if show_source:
-            display["Source Text"] = out["evidence"]
-            display["Filing"] = out["source_ref"]
-        # Columns that are blank for every row of this result say nothing.
+        # Columns blank for every row of this result say nothing.
         display = display[[c for c in display.columns
                            if c in ("Company", "Executive Name", "Change")
                            or display[c].astype(str).str.strip().ne("").any()]]
@@ -6975,62 +6945,46 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
         log_timing("MGMT_CHANGES_RENDER", (time.perf_counter() - t0) * 1000,
                    details=f"universe={len(changes)} shown={len(display)}")
 
-        _hdr, _dl = st.columns([8, 2])
-        with _hdr:
-            st.markdown(
-                f"<p class='results-header'><strong>{len(display)}</strong> management changes "
-                f"across <strong>{display['Ticker'].nunique() if 'Ticker' in display else 0}"
-                f"</strong> companies</p>", unsafe_allow_html=True)
-        with _dl:
-            from datetime import datetime as _dt_now
-            _render_excel_js_download(
-                _build_people_excel(display),
-                f"Management_Changes_{_dt_now.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                label="Excel",
-            )
-        _domains = {col: sorted(v for v in display[col].astype(str).unique() if v.strip())
-                    for col in ("Change", "Event", "Role", "Company") if col in display}
+        _render_results_header(
+            f"<strong>{len(display)}</strong> management changes across "
+            f"<strong>{display['Ticker'].nunique()}</strong> companies",
+            display.drop(columns=["Filing"], errors="ignore"), "Management_Changes",
+            title="Management Changes")
         _render_filterable_results_grid(
             display,
             key="people_mgmt_changes_grid",
             empty_message="No management changes found.",
             pinned_column="Executive Name",
-            link_columns=["Filing"] if show_source else None,
-            filter_domains=_domains,
+            link_columns=["Filing"] if "Filing" in display.columns else None,
+            filter_domains=_full_domains(display, ("Change", "Event", "Role", "Company",
+                                                   "Confidence")),
         )
-        st.caption("Read from current-report disclosures of officer and director changes. "
-                   "Announced = date the change was disclosed; Effective = date it takes effect, "
-                   "as stated in the filing. Years in Role is measured from the stated "
-                   "appointment date to the stated departure date (or today); roles that began "
-                   "before 2016 have no start date on file and are left blank.")
-        _render_executive_moves(changes, tickers_in_scope, company_meta)
+        st.caption("Announced = date the change was disclosed; Effective = date it takes "
+                   "effect, as stated. Years in Role runs from the stated appointment to the "
+                   "stated departure (or today); roles that began before 2016 are blank. "
+                   "Confidence: High = title and timing both read from the text.")
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_management_changes",
                              operation="render_management_changes")
         st.error("Management changes could not be loaded.")
 
 
-def _render_executive_moves(changes: pd.DataFrame, tickers_in_scope: set,
+def _render_executive_moves(tickers_in_scope: set, people_criteria: List[dict],
                             company_meta: pd.DataFrame) -> None:
-    """Executives who left one company and were appointed at another, with their
-    pay before and after where both proxies are on file.
+    """Executives who left one company and were appointed at another (board
+    seats included), with pay before and after where both are on file.
 
     A move is only listed when the new company's own filing names the old one
     (data/management_changes.mark_moves) — a shared name alone is not a move.
     """
     try:
+        changes = get_management_changes()
         moves = changes[(changes["moved_from"].astype(str) != "")
                         & (changes["ticker"].isin(tickers_in_scope)
                            | changes["moved_from"].isin(tickers_in_scope))]
+        moves = _filter_changes_for_people(moves, people_criteria)
         if moves.empty:
-            return
-        st.markdown("#### Executive Moves")
-        include_board = st.checkbox("Include moves into board seats", value=False,
-                                    key="scr_moves_board")
-        if not include_board:
-            moves = moves[moves["role"].astype(str) != "Board"]
-        if moves.empty:
-            st.info("No officer moves between companies in scope.")
+            st.info("Executive Moves: none between companies match these filters.")
             return
         moves = moves.assign(_key=moves["person"].map(person_key)).sort_values("notice_date") \
                      .drop_duplicates(["_key", "moved_from", "ticker"]).drop(columns="_key")
@@ -7051,6 +7005,7 @@ def _render_executive_moves(changes: pd.DataFrame, tickers_in_scope: set,
             "Left":             moves["moved_from_date"].dt.strftime("%Y-%m-%d").fillna(""),
             "To Company":       moves["ticker"].astype(str).map(lambda t: names.get(t, t)),
             "New Title":        moves["titles"].fillna(""),
+            "Role":             moves["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER),
             "Joined":           moves["effective_date"].fillna(moves["notice_date"]).dt.strftime("%Y-%m-%d"),
             "Prior Total Pay":  moves["prior_pay"].map(money),
             "Prior Pay Year":   moves["prior_pay_year"].map(year),
@@ -7058,11 +7013,12 @@ def _render_executive_moves(changes: pd.DataFrame, tickers_in_scope: set,
             "New Pay Year":     moves["new_pay_year"].map(year),
             "Pay Change %":     moves["pay_change_pct"].map(lambda v: "" if pd.isna(v) else f"{v:+.1f}%"),
         }).sort_values("Joined", ascending=False)
-        st.markdown(f"<p class='results-header'><strong>{len(display)}</strong> moves</p>",
-                    unsafe_allow_html=True)
+        _render_results_header(f"<strong>{len(display)}</strong> executive moves",
+                               display, "Executive_Moves", title="Executive Moves")
         _render_filterable_results_grid(display, key="people_moves_grid",
                                         empty_message="No executive moves found.",
-                                        pinned_column="Executive Name", height=360)
+                                        pinned_column="Executive Name",
+                                        filter_domains=_full_domains(display, ("Role",)))
         st.caption("Pay is total compensation for the latest year disclosed at the old "
                    "company and the first year disclosed at the new one; blank where "
                    "that company's pay is not on file.")
