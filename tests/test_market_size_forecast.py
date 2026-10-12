@@ -15,6 +15,8 @@ import os
 import sys
 import threading
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -932,3 +934,162 @@ def test_a_short_series_warns_about_sarimax_without_blocking():
     check = engine.validate_upload(frame, "Date", "Sales", "Monthly")
     assert check["ok"] is True
     assert any("SARIMAX" in a["title"] for a in check["advisories"])
+
+
+# ── AI Forecast Assistant: the context it is given ─────────────────
+
+def _real_outcome(periods=48, horizon=3):
+    """A genuine run, so the context is built from real model output."""
+    index = pd.date_range("2020-01-31", periods=periods, freq="ME")
+    rng = np.random.default_rng(5)
+    values = (np.linspace(200.0, 420.0, periods)
+              * (1 + 0.10 * np.sin(np.arange(periods) / 12 * 2 * np.pi))
+              * rng.normal(1.0, 0.01, periods))
+    series = pd.Series(values, index=index, name=engine.TARGET_COL)
+    frame = series.to_frame()
+    diagnostics = engine.data_diagnostics(series, "Monthly", "auto-detect")
+    sarima = engine.run_sarima(series, "Monthly", horizon)
+    return {
+        "loaded": engine.LoadedSeries(frame=frame),
+        "series": series,
+        "diagnostics": diagnostics,
+        "freq_name": "Monthly",
+        "horizon": horizon,
+        "settings": {"date_col": "Date", "value_col": "Sales"},
+        "results": {"SARIMA": sarima},
+        "notes": [],
+    }
+
+
+def test_the_assistant_is_told_to_say_run_first_when_there_is_no_run():
+    from components import forecast_assistant as fa
+    for empty in (None, {}, {"results": {}}):
+        assert "NO_RESULTS" in fa.build_context(empty)
+
+
+def test_the_context_carries_the_numbers_the_page_shows():
+    from components import forecast_assistant as fa
+    outcome = _real_outcome()
+    context = fa.build_context(outcome)
+    sarima = outcome["results"]["SARIMA"]
+    diagnostics = outcome["diagnostics"]
+
+    assert f"{sarima['mape']:.2f}%" in context, "MAPE must be quotable"
+    assert f"{sarima['rmse']:,.0f}" in context, "RMSE must be quotable"
+    assert str(sarima["order"]) in context, "the chosen order must be quotable"
+    assert f"{sarima['best_aic']:.2f}" in context, "AIC must be quotable"
+    assert f"{diagnostics['adf_p']:.4f}" in context
+    assert f"{diagnostics['kpss_p']:.4f}" in context
+    # each test on its own line with its verdict spelled out, so a small
+    # model cannot pair the wrong p-value with the wrong PASS/FAIL
+    assert "Ljung-Box at lag" in context
+    assert "Shapiro-Wilk: p=" in context
+    assert "Durbin-Watson: " in context
+    assert "Residual verdict: " in context
+    for line in context.splitlines():
+        if "-> PASS" in line or "-> FAIL" in line:
+            assert line.count("->") == 1, f"two verdicts on one line: {line}"
+    assert "BEST=SARIMA" in context
+
+
+def test_every_forecast_period_reaches_the_context():
+    from components import forecast_assistant as fa
+    outcome = _real_outcome(horizon=6)
+    context = fa.build_context(outcome)
+    forecast = outcome["results"]["SARIMA"]["forecast"]
+    assert context.count("    FC ") == len(forecast) == 6
+    for when, row in forecast.iterrows():
+        assert f"FC {pd.Timestamp(when):%Y-%m}: {row['mean']:,.0f}" in context
+
+
+def test_walk_forward_rows_reach_the_context():
+    from components import forecast_assistant as fa
+    outcome = _real_outcome()
+    context = fa.build_context(outcome)
+    expected = len(outcome["results"]["SARIMA"]["wf_actual"])
+    assert context.count("    WF ") == expected
+
+
+def test_a_zero_series_reports_mape_as_unavailable_not_as_a_number():
+    """MAPE is infinite with a zero in the series; the model must not quote it."""
+    from components import forecast_assistant as fa
+    outcome = _real_outcome()
+    outcome["results"]["SARIMA"]["mape"] = float("inf")
+    context = fa.build_context(outcome)
+    assert "inf" not in context.lower().split("ingestion")[0].replace("information", "")
+    assert "n/a (series contains zero)" in context
+    assert "BEST=SARIMA" in context and "RMSE" in context
+
+
+def test_ingestion_problems_are_mentioned_so_the_model_can_explain_them():
+    from components import forecast_assistant as fa
+    outcome = _real_outcome()
+    outcome["loaded"] = engine.LoadedSeries(
+        frame=outcome["loaded"].frame, duplicates_merged=2, snapped_to_period_end=48)
+    context = fa.build_context(outcome)
+    assert "2 duplicate period(s) summed" in context
+    assert "48 date(s) snapped to period end" in context
+
+
+def test_ollama_is_the_only_backend(monkeypatch):
+    """The portal's OpenAI key is for filing extraction and must stay unused."""
+    from components import forecast_assistant as fa
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-should-never-be-touched")
+
+    monkeypatch.setattr(fa, "_ollama_models", lambda: ["llama3.1:8b"])
+    assert fa.available_models() == ["llama3.1:8b"]
+
+    monkeypatch.setattr(fa, "_ollama_models", lambda: [])
+    assert fa.available_models() == [], "no OpenAI fallback may exist"
+
+    source = Path(fa.__file__).read_text()
+    assert "chat.completions" not in source
+    assert "from openai import" not in source
+    assert 'getenv("OPENAI_API_KEY"' not in source
+
+
+def test_a_backend_failure_never_raises_into_the_page(monkeypatch):
+    from components import forecast_assistant as fa
+
+    def boom(messages, model):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(fa, "_stream_ollama", boom)
+    text = "".join(fa.stream_reply([{"role": "user", "content": "hi"}], "llama3.1:8b"))
+    assert "could not reach Ollama" in text
+    assert "forecast above is unaffected" in text
+
+
+def test_the_configured_model_is_offered_first(monkeypatch):
+    from components import forecast_assistant as fa
+    monkeypatch.setattr(fa, "_ollama_models", lambda: ["mistral", "llama3.1:8b", "phi3"])
+    monkeypatch.setattr(fa, "OLLAMA_MODEL", "llama3.1:8b")
+    assert fa.available_models()[0] == "llama3.1:8b"
+    assert sorted(fa.available_models()) == ["llama3.1:8b", "mistral", "phi3"]
+
+
+def test_an_absent_configured_model_does_not_hide_the_others(monkeypatch):
+    from components import forecast_assistant as fa
+    monkeypatch.setattr(fa, "_ollama_models", lambda: ["mistral"])
+    monkeypatch.setattr(fa, "OLLAMA_MODEL", "llama3.1:8b")
+    assert fa.available_models() == ["mistral"]
+
+
+def test_each_residual_test_carries_its_own_verdict():
+    """A small model mislabelled a PASS when four tests shared one line."""
+    from components import forecast_assistant as fa
+    outcome = _real_outcome()
+    context = fa.build_context(outcome)
+    checks = engine.residual_diagnostics(outcome["results"]["SARIMA"]["residuals"])
+
+    expected = "PASS" if checks["lb_short"] > 0.05 else "FAIL"
+    line = next(l for l in context.splitlines()
+                if l.strip().startswith(f"Ljung-Box at lag {checks['lags'][0]}:"))
+    assert f"p={checks['lb_short']:.4f}" in line
+    assert f"-> {expected}" in line, f"verdict contradicts the p-value: {line}"
+
+    verdict = next(l for l in context.splitlines() if "Residual verdict:" in l)
+    if checks["failures"]:
+        assert all(f in verdict for f in checks["failures"])
+    else:
+        assert "all four tests PASS" in verdict

@@ -36,8 +36,25 @@ os.environ.setdefault("APP_ENV", "LOCAL")
 import numpy as np
 import pandas as pd
 
-HANDOVER = Path("/Users/mohdsaeedafri/Downloads/Salesforecastingtool")
-RECORDED = HANDOVER / "Sales_forecast_tool –Updated/results.json"
+def _find(name: str) -> Path:
+    """Locate a handover artefact wherever the folder currently sits."""
+    roots = [Path("/tmp/sft/Sales_forecast_tool \u2013Updated"),
+             Path("/Users/mohdsaeedafri/Downloads/Sales_forecasting_tool"),
+             Path("/Users/mohdsaeedafri/Downloads/Sales_forecasting_tool/Sales_forecast_tool \u2013Updated"),
+             Path("/Users/mohdsaeedafri/Downloads/Salesforecastingtool"),
+             Path("/Users/mohdsaeedafri/Downloads/Salesforecastingtool/Sales_forecast_tool \u2013Updated")]
+    for root in roots:
+        if (root / name).is_file():
+            return root / name
+    return roots[0] / name
+
+
+HANDOVER = next((p for p in (
+    Path("/tmp/sft/Sales_forecast_tool \u2013Updated"),
+    Path("/Users/mohdsaeedafri/Downloads/Sales_forecasting_tool"),
+    Path("/Users/mohdsaeedafri/Downloads/Salesforecastingtool"),
+) if p.is_dir()), Path("/Users/mohdsaeedafri/Downloads/Sales_forecasting_tool"))
+RECORDED = _find("results.json")
 
 from data import market_size_forecast_service as svc   # noqa: E402
 
@@ -76,7 +93,7 @@ def row(label: str, theirs, ours, recorded, scale=None) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--theirs", required=True)
-    parser.add_argument("--excel", default=str(HANDOVER / "TestingDataset.xlsx"))
+    parser.add_argument("--excel", default=str(_find("TestingDataset.xlsx")))
     parser.add_argument("--horizon", type=int, default=60)
     parser.add_argument("--freq", default="Monthly")
     args = parser.parse_args()

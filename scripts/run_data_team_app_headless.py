@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import pickle
 import sys
 import types
@@ -35,7 +36,29 @@ matplotlib.use("Agg")
 
 warnings.filterwarnings("ignore")
 
-THEIR_APP = Path("/Users/mohdsaeedafri/Downloads/Salesforecastingtool/app_New.py")
+def _locate_their_app() -> Path:
+    """Where the handover's app.py is on this machine.
+
+    The folder has been re-downloaded under different names, so look in each
+    known spot rather than pinning one path that goes stale. Override with
+    FORECAST_HANDOVER_APP when it lives somewhere else.
+    """
+    override = os.getenv("FORECAST_HANDOVER_APP", "").strip()
+    candidates = [Path(override)] if override else []
+    candidates += [
+        Path("/Users/mohdsaeedafri/Downloads/Sales_forecasting_tool/app_New.py"),
+        Path("/Users/mohdsaeedafri/Downloads/Salesforecastingtool/app_New.py"),
+        Path("/tmp/sft/Sales_forecast_tool \u2013Updated/app.py"),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise SystemExit(
+        "Cannot find the handover app.py. Point FORECAST_HANDOVER_APP at it.\n"
+        "Looked in:\n  " + "\n  ".join(str(c) for c in candidates))
+
+
+THEIR_APP = _locate_their_app()
 
 # The ONLY edits --compat makes to their file, printed on every run so the diff
 # is never taken on trust. statsmodels 0.15 dropped `verbose` from

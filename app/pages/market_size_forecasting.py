@@ -35,6 +35,7 @@ new_rerun_id("market_size_forecasting")
 
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
+from components.forecast_assistant import render_assistant
 from components.loading import inject_red_spinner_css
 from components.navigation import render_header, render_coresight_footer
 from components.styles import hide_sidebar, render_styles, set_page_layout
@@ -960,6 +961,7 @@ _OVERLAY_JS = """
     }
   }
   var label = el.querySelector('.msf-ov-label');
+  if (W.__msfOverlayPoll === undefined || W.__msfOverlayPoll === null) W.__msfRunFinished = 0;
   if (label) label.textContent = __LABEL__;
   var bar = el.querySelector('.msf-ov-bar');
   if (bar) bar.style.width = __PCT__ + '%';
@@ -968,7 +970,7 @@ _OVERLAY_JS = """
   // this iframe. Streamlit may drop the iframe on any rerun; the overlay and
   // its poller must not go with it.
   if (W.__msfOverlayPoll) return;
-  var t0 = Date.now(), lastBusy = Date.now();
+  var t0 = Date.now();
   function cleanup() {
     try { W.clearInterval(W.__msfOverlayPoll); } catch (e) {}
     W.__msfOverlayPoll = null;
@@ -982,16 +984,45 @@ _OVERLAY_JS = """
     var clock = node.querySelector('.msf-ov-clock');
     var secs = (Date.now() - t0) / 1000;
     if (clock) clock.textContent = secs.toFixed(0) + 's elapsed';
-    // Streamlit shows its status widget for as long as the script is running.
-    // Gone, and still gone a moment later, means the server has finished and
-    // the results have been painted.
-    if (doc.querySelector('[data-testid="stStatusWidget"]')) lastBusy = Date.now();
-    else if (Date.now() - lastBusy > 900) cleanup();
-    if (secs > 1200) cleanup();           // never strand the page
+    // Come down only on a POSITIVE signal that there is something to show.
+    //
+    // This used to watch Streamlit's own status widget and clean up once it
+    // had been gone a moment. That widget is an internal that tracks the
+    // websocket, not the server: in testing it never appeared at all, so the
+    // overlay removed itself mid-run and left the page white — exactly the
+    // failure it exists to prevent. Widening the window from 900ms to 3s only
+    // moved the white flash later. So it is not consulted at all now.
+    //
+    // What is left are three things that genuinely mean "stop waiting":
+    // the results rendered, an error rendered, or the server said it finished
+    // and nothing rendered within a grace period.
+    var text = doc.body.innerText || '';
+    if (/Forecast ready/.test(text)) { cleanup(); return; }
+    if (doc.querySelector('[data-testid="stAlertContainer"]') &&
+        /cannot be forecast|could not be|failed/i.test(text)) { cleanup(); return; }
+    if (W.__msfRunFinished && Date.now() - W.__msfRunFinished > 8000) cleanup();
+    if (secs > 1800) cleanup();           // never strand the page
   }, 200);
 })();
 </script>
 """
+
+
+_OVERLAY_DONE_JS = """
+<script>
+(function () {
+  // The server has returned. The overlay still waits for the results to paint,
+  // but if nothing paints this stamp lets it give up in seconds rather than
+  // hanging on until the long timeout.
+  try { window.parent.__msfRunFinished = Date.now(); } catch (e) {}
+})();
+</script>
+"""
+
+
+def _overlay_server_finished() -> None:
+    """Tell the overlay the Python side is done, however the run ended."""
+    components.html(_OVERLAY_DONE_JS, height=0)
 
 
 def _run_overlay(text: str, share: float) -> None:
@@ -1904,6 +1935,19 @@ def _hero(outcome: Dict[str, Any]) -> None:
         f'{_chips(*chips)}</div>', unsafe_allow_html=True)
 
 
+def _mount_assistant(outcome) -> None:
+    """The research team's assistant, at the foot of the page as in their tool.
+
+    Mounted on every path, not only after a run: theirs is always on screen and
+    says "Run analysis to load context" when there is nothing yet, so the
+    feature is discoverable before you have results rather than after.
+    """
+    _section("AI Forecast Assistant",
+             "Ask about these results in plain English. It is given the full run, "
+             "so every number it quotes is one of the numbers above.")
+    render_assistant(outcome)
+
+
 def _render_preview(settings: Dict[str, Any]) -> None:
     preview = settings["raw"]
     st.markdown(
@@ -1952,6 +1996,7 @@ def main() -> None:
 
     if not settings["ready"]:
         st.session_state.pop(f"{KEY}outcome", None)
+        _mount_assistant(None)
         render_coresight_footer(full_width=True, stick_to_bottom=True)
         tracker.finish()
         return
@@ -1975,12 +2020,16 @@ def main() -> None:
             # Streamlit stops running, so it stays up across the whole fit and
             # disappears only when the results are actually on screen.
             _run_overlay("Reading your file", 0.02)
-            st.session_state[f"{KEY}outcome"] = _run_analysis(settings, None)
+            try:
+                st.session_state[f"{KEY}outcome"] = _run_analysis(settings, None)
+            finally:
+                _overlay_server_finished()
         tracker.step_end("ANALYSIS")
 
     outcome = st.session_state.get(f"{KEY}outcome")
     if not outcome:
         _render_preview(settings)
+        _mount_assistant(None)
         render_coresight_footer(full_width=True, stick_to_bottom=True)
         tracker.finish()
         return
@@ -2035,6 +2084,8 @@ def main() -> None:
             st.caption("Each stage is cached on exactly its own inputs, so re-running "
                        "after changing one setting only refits what that setting "
                        "affects.")
+
+    _mount_assistant(outcome)
 
     render_coresight_footer(full_width=True, stick_to_bottom=True)
     tracker.finish()
