@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Market Size Forecasting — Data File Format</title>
+<style>
+@page { size: A4; margin: 2.54cm; }
+body { margin: 0; font-family: Georgia, serif; font-size: 11.5pt; line-height: 1.45; color: #111; text-align: justify; }
+h1, h2, h3, p, ul, li, hr, table { margin: 0; padding: 0; }
+h1 { font-size: 30pt; letter-spacing: -0.01em; margin-bottom: 2pt; }
+p.date { font-size: 14pt; font-weight: bold; margin-bottom: 22pt; }
+h2 { font-size: 19pt; margin-top: 16pt; }
+h3 { font-size: 13pt; margin-top: 13pt; margin-bottom: 4pt; }
+p { margin-bottom: 6pt; }
+ul { padding-left: 18pt; }
+li { padding-left: 2pt; margin-bottom: 3pt; }
+li::marker { font-size: 9pt; }
+hr { border: 0; border-top: 0.8px solid #bfbfbf; margin-top: 22pt; margin-bottom: 16pt; }
+h1, h2, h3 { break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 7pt 0 10pt; font-size: 10.5pt; }
+th { text-align: left; font-weight: bold; border-bottom: 0.8px solid #999; padding: 3pt 8pt 3pt 0; }
+td { padding: 3pt 8pt 3pt 0; border-bottom: 0.5px solid #e2e2e2; vertical-align: top; }
+td.ok { color: #1a7f3c; font-weight: bold; }
+td.no { color: #a3121f; font-weight: bold; }
+code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 9.8pt; background: #f4f4f4; padding: 0 2pt; }
+table.sample { width: auto; }
+table.sample td, table.sample th { padding-right: 26pt; }
+p.note { font-size: 10.5pt; color: #444; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>Market Size Forecasting</h1>
+<p class="date">Data File Format — October 2026</p>
+
+<p>This is what a spreadsheet must look like before the Market Size Forecasting
+page will forecast it. The page checks the file on upload and refuses to run if
+anything is wrong, so a file that passes this guide will model cleanly.</p>
+
+<h2>What the file needs</h2>
+
+<p><strong>Two columns. One of dates, one of numbers.</strong> Nothing else is
+required, and any extra columns are ignored.</p>
+
+<table class="sample">
+<tr><th>Date</th><th>Sales</th></tr>
+<tr><td>2024-01-31</td><td>412,800</td></tr>
+<tr><td>2024-02-29</td><td>388,100</td></tr>
+<tr><td>2024-03-31</td><td>441,650</td></tr>
+</table>
+
+<p>The first row must be the column headings. Column names are detected
+automatically — <code>Date</code>, <code>Month</code>, <code>Period</code> and
+<code>Sales</code>, <code>Revenue</code>, <code>Value</code> all work, and both
+can be overridden from a dropdown after upload if the page picks the wrong one.</p>
+
+<p>Accepted file types: <code>.xlsx</code>, <code>.xls</code> and
+<code>.csv</code>.</p>
+
+<h2>Date formats</h2>
+
+<p>Any of these spellings is read correctly. Use <strong>one style for the whole
+column</strong> — a column that mixes two styles will have the minority rows
+rejected.</p>
+
+<table>
+<tr><th style="width:30%">Style</th><th>Accepted examples</th></tr>
+<tr><td>Full date</td><td><code>2024-01-31</code> · <code>31/01/2024</code></td></tr>
+<tr><td>Month and year</td><td><code>2024-01</code> · <code>Jan 2024</code> · <code>Jan-24</code> · <code>Dec '22</code> · <code>Dec&rsquo;22</code></td></tr>
+<tr><td>Statistical</td><td><code>2024M01</code> &nbsp;(as FRED and BLS publish)</td></tr>
+<tr><td>Quarter</td><td><code>Q1 2024</code> · <code>2024Q1</code> · <code>2024-Q1</code> · <code>Q1-2024</code></td></tr>
+<tr><td>Year only</td><td><code>2024</code></td></tr>
+</table>
+
+<p>A label naming a period rather than a day — <code>Jan 2024</code>, say — is
+placed at the end of that period, so it lands on 31 January. The page reports how
+many rows it moved.</p>
+
+<p>Frequency (weekly, monthly, quarterly, annual) is inferred from the spacing
+between your dates and sets the seasonal period. It can be overridden after
+upload.</p>
+
+<h2>Number formats</h2>
+
+<p>Values may be formatted for reading. All of these are understood:</p>
+
+<table>
+<tr><th style="width:30%">Formatting</th><th>Example</th></tr>
+<tr><td>Thousands separators</td><td><code>1,234</code> · <code>1 234</code></td></tr>
+<tr><td>Currency symbols</td><td><code>$1,234</code> · <code>&pound;1,234</code> · <code>&euro;1,234</code></td></tr>
+<tr><td>Percentages</td><td><code>12.5%</code></td></tr>
+<tr><td>Accounting negatives</td><td><code>(87)</code> &nbsp;read as &minus;87</td></tr>
+</table>
+
+<p>Leave a cell <strong>empty</strong> where there is no value. Do not write
+<code>n/a</code>, <code>-</code> or <code>NA</code> — those are text, and text in
+the value column cannot be forecast.</p>
+
+<hr>
+
+<h2>What breaks a file</h2>
+
+<h3>One row covering two months</h3>
+<p>A label such as <code>Jan/Feb '23</code> — as China's National Bureau of
+Statistics publishes, combining January and February around Chinese New Year.
+A single figure covering two months cannot be placed in one month without
+distorting it. <strong>Split the figure across two rows</strong>, or relabel the
+row as the single period it represents.</p>
+
+<h3>Title or merged cells above the headings</h3>
+<p>The first row of the sheet must be the column names. A report title, a logo
+row or merged cells above them will be read as the headings.</p>
+
+<h3>Totals and subtotal rows</h3>
+<p>A "Total" or "FY2024" row mixed in with the periods is read as another period
+and distorts the series. Remove them before uploading.</p>
+
+<h3>Two date styles in one column</h3>
+<p>Mixing <code>2024-01-31</code> and <code>Jan '24</code> in the same column
+means the minority style is rejected. Pick one.</p>
+
+<h3>Repeated periods</h3>
+<p>Two rows for the same period are <em>combined</em> (summed) and the page tells
+you it happened. That is usually intended — but check it is.</p>
+
+<h3>Gaps</h3>
+<p>Missing periods are allowed and reported. They are treated as missing, not as
+zero. A long run of them weakens the forecast.</p>
+
+<h2>Minimum history</h2>
+
+<ul>
+  <li><strong>4 periods</strong> — the least that will fit any model at all.</li>
+  <li><strong>24 periods</strong> — needed before SARIMAX will use the FRED
+      macroeconomic indicators. Below that, SARIMAX is skipped and SARIMA and
+      Prophet still run.</li>
+</ul>
+
+<p>More history is better: the seasonal models need at least two full cycles to
+see a seasonal pattern, so two years of monthly data is a sensible floor and
+three or more is comfortable.</p>
+
+<hr>
+
+<h2>What happens if something is wrong</h2>
+
+<p>The page checks the file <strong>before</strong> offering to forecast it. If
+there is a problem, the <em>Run analysis</em> button does not appear and the page
+names what is wrong, which cells caused it, and what to change. Nothing is
+forecast from a file the page only half understood.</p>
+
+<p>Problems that stop the run:</p>
+<ul>
+  <li>Dates that cannot be read — the offending labels are listed by name</li>
+  <li>A value column holding no numbers</li>
+  <li>Fewer than four usable periods</li>
+</ul>
+
+<p>Things the page tells you about but still runs:</p>
+<ul>
+  <li>Repeated periods that were combined</li>
+  <li>Periods with no value</li>
+  <li>A series too short for SARIMAX</li>
+</ul>
+
+<h2>Before you send a file — quick check</h2>
+
+<ul>
+  <li>Row 1 is the column headings, nothing above it</li>
+  <li>One date column, one value column</li>
+  <li>One date style throughout</li>
+  <li>No combined periods such as <code>Jan/Feb</code></li>
+  <li>No totals or subtotal rows</li>
+  <li>Blank cells where data is missing, not <code>n/a</code></li>
+  <li>At least 24 periods if the macroeconomic drivers matter to you</li>
+</ul>
+
+<p class="note">The same guidance is available inside the portal at any time —
+the <strong>File format</strong> button at the top of the Market Size Forecasting
+page.</p>
+
+</body>
+</html>
