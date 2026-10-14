@@ -1853,8 +1853,8 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
     _section(("Year-over-year (YoY) growth" if annual else
               f"{period_on_period[0].upper()}{period_on_period[1:]} and "
               f"{year_on_year} growth"),
-             f"Every {noun}'s value beside the previous {noun}"
-             + ("" if annual else f" and the same {noun} a year earlier")
+             f"Every {noun}'s sales and its growth on the previous {noun}"
+             + ("" if annual else f" and on the same {noun} a year earlier")
              + " — the uploaded history, and the forecast periods on the same basis "
                "when you pick a model.")
 
@@ -1881,24 +1881,31 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
     table = engine.growth_table(
         outcome["loaded"].frame[engine.TARGET_COL], freq_name, forecast)
 
-    # Annual data has one growth block only — a year on the previous year is
-    # already year-on-year — so there is no separate same-period column.
-    year_ago_col = f"Same {noun} last year"
     actual = table[table["Type"] == "Actual"]
     latest = actual.iloc[-1] if len(actual) else None
     if latest is not None:
+        # The table sits on a regular grid, so the row n places above the last
+        # one is literally n periods earlier — the base each growth % divides by.
+        sales = actual[engine.TARGET_COL]
+
+        def earlier(places: int):
+            return sales.iloc[-1 - places] if len(sales) > places else None
+
+        season = int(engine.FREQ_CONFIGS[freq_name]["s"])
         cards = st.columns(3)
         with cards[0]:
             _card(f"Latest {noun}", f"{latest[engine.TARGET_COL]:,.0f}", latest["Period"])
         with cards[1]:
-            _card(f"{period_on_period} growth", _percent(latest[f"{prefix} growth %"]),
-                  f"vs {latest[f'Previous {noun}']:,.0f}"
-                  if pd.notna(latest[f"Previous {noun}"]) else "no earlier period")
+            _card(f"{period_on_period} growth", _percent(latest[f"{prefix}%"]),
+                  f"vs {earlier(1):,.0f}" if pd.notna(earlier(1))
+                  else "no earlier period")
         with cards[2]:
-            if year_ago_col in table.columns:
-                _card(f"{year_on_year} growth", _percent(latest["YoY growth %"]),
-                      f"vs {latest[year_ago_col]:,.0f}"
-                      if pd.notna(latest[year_ago_col]) else "no period a year back")
+            # Annual data has one growth block only — a year on the previous
+            # year is already year-on-year — so its YoY% is the card beside this.
+            if season > 1:
+                _card(f"{year_on_year} growth", _percent(latest["YoY%"]),
+                      f"vs {earlier(season):,.0f}" if pd.notna(earlier(season))
+                      else "no period a year back")
             else:
                 _card("Periods", f"{len(actual):,}", "actual rows in this table")
 
@@ -1911,7 +1918,7 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
     # cell as the word "None", which on a growth table — where the first rows
     # genuinely have nothing to compare against — reads as a fault. The
     # download below carries the unformatted numbers.
-    growth_cols = [c for c in table.columns if c.endswith("growth %")]
+    growth_cols = [c for c in table.columns if c.endswith("%")]
     value_cols = [c for c in table.columns
                   if c not in growth_cols and c not in ("Period", "Type")]
     places = 0 if table[engine.TARGET_COL].abs().max() >= 100 else 2
@@ -1921,7 +1928,7 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
             lambda v: "—" if pd.isna(v) else f"{v:,.{places}f}")
     for column in growth_cols:
         display[column] = display[column].map(
-            lambda v: "—" if pd.isna(v) else f"{v:+,.2f}%")
+            lambda v: "—" if pd.isna(v) else f"{v:,.2f}%")
     styled = display.style.map(
         lambda text: "color: #A3121F" if str(text).startswith("-") else "",
         subset=growth_cols)
@@ -1942,8 +1949,50 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
            "the " + ("top" if newest_first else "end") + " of the table."
            if forecast is not None else
            "Pick a model above to carry the table on through the forecast periods."))
-    _export_buttons(table, "market_size_growth"
-                    + ("" if picked not in results else f"_{picked.lower()}"))
+    stem = "market_size_growth" + ("" if picked not in results
+                                   else f"_{picked.lower()}")
+    _export_buttons(table, stem)
+
+    if not annual:
+        _render_annual_rollup(outcome, freq_name, forecast, newest_first, stem)
+
+
+def _render_annual_rollup(outcome: Dict[str, Any], freq_name: str,
+                          forecast, newest_first: bool, stem: str) -> None:
+    """Calendar-year totals and their growth — what the analysts work from.
+
+    The periods above summed into years, history and forecast in the same
+    column, with the rate taken on the yearly totals. Follows the same model
+    picker as the table above it.
+    """
+    unit = engine.FREQ_CONFIGS[freq_name]["unit"]
+    table = engine.annual_rollup(
+        outcome["loaded"].frame[engine.TARGET_COL], freq_name, forecast)
+
+    _section("Annual sales and growth",
+             f"The {unit} above summed into calendar years, and the "
+             "year-on-year rate taken on those yearly totals.")
+    if newest_first:
+        table = table.iloc[::-1].reset_index(drop=True)
+
+    display = table.copy()
+    display[engine.TARGET_COL] = display[engine.TARGET_COL].map(
+        lambda v: "—" if pd.isna(v) else f"{v:,.0f}")
+    display["YoY%"] = display["YoY%"].map(
+        lambda v: "—" if pd.isna(v) else f"{v:,.2f}%")
+    styled = display.style.map(
+        lambda text: "color: #A3121F" if str(text).startswith("-") else "",
+        subset=["YoY%"])
+    st.dataframe(styled, use_container_width=True, hide_index=True,
+                 height=min(520, 35 * (len(display) + 1) + 3),
+                 column_config={column: {"alignment": "right"}
+                                for column in (engine.TARGET_COL, "YoY%")})
+    st.caption(
+        f"Each year is the sum of its {unit}. A year the upload and the forecast "
+        f"do not cover in full is marked with how many {unit} of it are there, and "
+        "carries no rate — a short year measured against a whole one reads as a "
+        "collapse that never happened.")
+    _export_buttons(table, f"{stem}_annual")
 
 
 def _render_comparison_tab(outcome: Dict[str, Any]) -> None:

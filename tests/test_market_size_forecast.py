@@ -1111,26 +1111,24 @@ def test_growth_table_reports_month_on_month_and_year_on_year():
     assert set(table["Type"]) == {"Actual"}
     assert len(table) == len(history)
 
-    # Feb 2022: 1100 from 1000 — +100, +10%.
-    february = table.iloc[1]
-    assert february["Previous month"] == 1000
-    assert february["MoM change"] == 100
-    assert february["MoM growth %"] == 10.0
-    assert pd.isna(february["YoY growth %"]), "no month a year before Feb 2022"
+    assert list(table.columns) == ["Period", "Type", "Sales", "MoM%", "YoY%"]
 
-    # Jan 2023: 2200 from 1000 twelve months earlier — +1200, +120%.
+    # Feb 2022: 1100 from 1000 — +10%.
+    february = table.iloc[1]
+    assert february["Sales"] == 1100
+    assert february["MoM%"] == 10.0
+    assert pd.isna(february["YoY%"]), "no month a year before Feb 2022"
+
+    # Jan 2023: 2200 from 1000 twelve months earlier — +120%.
     january = table[table["Period"] == "Jan 2023"].iloc[0]
-    assert january["Same month last year"] == 1000
-    assert january["YoY change"] == 1200
-    assert january["YoY growth %"] == 120.0
+    assert january["YoY%"] == 120.0
 
 
 def test_growth_table_has_nothing_to_compare_on_the_first_row():
     table = engine.growth_table(_growth_history(), "Monthly")
     first = table.iloc[0]
-    assert pd.isna(first["Previous month"])
-    assert pd.isna(first["MoM change"])
-    assert pd.isna(first["MoM growth %"])
+    assert pd.isna(first["MoM%"])
+    assert pd.isna(first["YoY%"])
     assert first["Sales"] == 1000
 
 
@@ -1145,9 +1143,11 @@ def test_forecast_rows_continue_from_the_last_actual_period():
 
     handover = table.iloc[len(history)]
     assert handover["Period"] == "Jan 2025"
-    assert handover["Previous month"] == history.iloc[-1], \
+    last_actual = history.iloc[-1]
+    assert handover["MoM%"] == round((4600 - last_actual) / last_actual * 100, 2), \
         "the first forecast month must be measured against the last actual one"
-    assert handover["Same month last year"] == history.loc["2024-01-31"]
+    year_ago = history.loc["2024-01-31"]
+    assert handover["YoY%"] == round((4600 - year_ago) / year_ago * 100, 2)
 
 
 def test_a_forecast_overlapping_history_does_not_duplicate_periods():
@@ -1163,9 +1163,9 @@ def test_a_forecast_overlapping_history_does_not_duplicate_periods():
 def test_growth_from_zero_is_blank_not_infinite():
     index = pd.date_range("2024-01-31", periods=3, freq="ME")
     table = engine.growth_table(pd.Series([0.0, 500.0, 750.0], index=index), "Monthly")
-    assert pd.isna(table.iloc[1]["MoM growth %"]), "nothing grows from zero"
-    assert table.iloc[1]["MoM change"] == 500, "the absolute change is still reported"
-    assert table.iloc[2]["MoM growth %"] == 50.0
+    assert pd.isna(table.iloc[1]["MoM%"]), "nothing grows from zero"
+    assert table.iloc[1]["Sales"] == 500, "the value itself is still reported"
+    assert table.iloc[2]["MoM%"] == 50.0
 
 
 def test_a_blank_period_blanks_its_growth_but_keeps_the_row():
@@ -1176,33 +1176,31 @@ def test_a_blank_period_blanks_its_growth_but_keeps_the_row():
 
     assert len(table) == 30
     assert pd.isna(table.iloc[5]["Sales"])
-    assert pd.isna(table.iloc[5]["MoM growth %"])
-    assert pd.isna(table.iloc[6]["MoM growth %"]), "the month after a blank has no base"
-    assert pd.notna(table.iloc[7]["MoM growth %"])
+    assert pd.isna(table.iloc[5]["MoM%"])
+    assert pd.isna(table.iloc[6]["MoM%"]), "the month after a blank has no base"
+    assert pd.notna(table.iloc[7]["MoM%"])
 
 
 def test_growth_percent_keeps_its_direction_when_a_series_goes_negative():
     index = pd.date_range("2024-01-31", periods=3, freq="ME")
     table = engine.growth_table(pd.Series([-200.0, -100.0, -300.0], index=index),
                                 "Monthly")
-    assert table.iloc[1]["MoM growth %"] == 50.0, "a loss halving is growth"
-    assert table.iloc[2]["MoM growth %"] == -200.0
+    assert table.iloc[1]["MoM%"] == 50.0, "a loss halving is growth"
+    assert table.iloc[2]["MoM%"] == -200.0
 
 
-@pytest.mark.parametrize("freq_name,freq,prefix,noun,first", [
-    ("Weekly", "W", "WoW", "week", "2024-01-07"),
-    ("Monthly", "ME", "MoM", "month", "Jan 2024"),
-    ("Quarterly", "QE", "QoQ", "quarter", "Q1 2024"),
+@pytest.mark.parametrize("freq_name,freq,prefix,first", [
+    ("Weekly", "W", "WoW", "2024-01-07"),
+    ("Monthly", "ME", "MoM", "Jan 2024"),
+    ("Quarterly", "QE", "QoQ", "Q1 2024"),
 ])
 def test_each_frequency_names_its_own_periods_and_growth(freq_name, freq, prefix,
-                                                         noun, first):
+                                                         first):
     index = pd.date_range("2024-01-01", periods=8, freq=freq)
     table = engine.growth_table(
         pd.Series(np.arange(8, dtype=float) + 1, index=index), freq_name)
     assert table["Period"].iloc[0] == first
-    assert f"{prefix} growth %" in table.columns
-    assert f"Previous {noun}" in table.columns
-    assert f"Same {noun} last year" in table.columns
+    assert list(table.columns) == ["Period", "Type", "Sales", f"{prefix}%", "YoY%"]
 
 
 def test_annual_data_gets_one_growth_block_not_two():
@@ -1211,9 +1209,8 @@ def test_annual_data_gets_one_growth_block_not_two():
     table = engine.growth_table(pd.Series(np.arange(6, dtype=float) + 1, index=index),
                                "Annual")
     assert table["Period"].iloc[0] == "2018"
-    assert list(table.columns) == ["Period", "Type", "Sales", "Previous year",
-                                   "YoY change", "YoY growth %"]
-    assert table.iloc[1]["YoY growth %"] == 100.0
+    assert list(table.columns) == ["Period", "Type", "Sales", "YoY%"]
+    assert table.iloc[1]["YoY%"] == 100.0
 
 
 def test_the_year_on_year_shift_follows_the_frequency():
@@ -1221,8 +1218,8 @@ def test_the_year_on_year_shift_follows_the_frequency():
     index = pd.date_range("2022-03-31", periods=8, freq="QE")
     values = pd.Series([100.0, 110, 120, 130, 200, 220, 240, 260], index=index)
     table = engine.growth_table(values, "Quarterly")
-    assert table.iloc[4]["Same quarter last year"] == 100
-    assert table.iloc[4]["YoY growth %"] == 100.0
+    assert table.iloc[4]["QoQ%"] == round((200 - 130) / 130 * 100, 2)
+    assert table.iloc[4]["YoY%"] == 100.0, "four quarters back, not twelve"
 
 
 def test_the_growth_table_survives_a_round_trip_through_the_download():
@@ -1232,3 +1229,116 @@ def test_the_growth_table_survives_a_round_trip_through_the_download():
     restored = pd.read_csv(io.StringIO(table.to_csv(index=False)))
     assert list(restored.columns) == list(table.columns)
     pd.testing.assert_frame_equal(restored, table, check_dtype=False)
+
+
+# ── annual roll-up ─────────────────────────────────────────────────
+
+def _whole_years(start="2020-01-31", years=3, step=100.0, first=1000.0):
+    """Whole calendar years of monthly data, so every year is comparable."""
+    index = pd.date_range(start, periods=12 * years, freq="ME")
+    return pd.Series(np.arange(12 * years, dtype=float) * step + first, index=index)
+
+
+def test_annual_rollup_sums_the_periods_and_takes_growth_on_the_totals():
+    history = _whole_years()
+    table = engine.annual_rollup(history, "Monthly")
+
+    assert list(table.columns) == ["Year", "Type", "Sales", "YoY%"]
+    assert list(table["Year"]) == ["2020", "2021", "2022"]
+    assert set(table["Type"]) == {"Actual"}
+
+    for year, row in zip((2020, 2021, 2022), table.itertuples()):
+        assert row.Sales == history[history.index.year == year].sum()
+
+    first, second = table.iloc[0]["Sales"], table.iloc[1]["Sales"]
+    assert pd.isna(table.iloc[0]["YoY%"]), "no year before the first one"
+    assert table.iloc[1]["YoY%"] == round((second - first) / first * 100, 2)
+
+
+def test_the_forecast_years_continue_the_annual_table():
+    history = _whole_years()
+    forecast = pd.Series(np.full(12, 9000.0),
+                         index=pd.date_range("2023-01-31", periods=12, freq="ME"))
+    table = engine.annual_rollup(history, "Monthly", forecast)
+
+    assert list(table["Year"]) == ["2020", "2021", "2022", "2023"]
+    assert table.iloc[3]["Type"] == "Forecast"
+    assert table.iloc[3]["Sales"] == 12 * 9000.0
+    last_actual = table.iloc[2]["Sales"]
+    assert table.iloc[3]["YoY%"] == round(
+        (12 * 9000.0 - last_actual) / last_actual * 100, 2), \
+        "the first forecast year is measured against the last actual year"
+
+
+def test_a_year_that_is_part_actual_and_part_forecast_says_so():
+    history = pd.Series(np.full(18, 100.0),
+                        index=pd.date_range("2020-01-31", periods=18, freq="ME"))
+    forecast = pd.Series(np.full(6, 200.0),
+                         index=pd.date_range("2021-07-31", periods=6, freq="ME"))
+    table = engine.annual_rollup(history, "Monthly", forecast)
+
+    assert table.iloc[1]["Type"] == "Actual + forecast"
+    assert table.iloc[1]["Sales"] == 6 * 100.0 + 6 * 200.0
+    assert table.iloc[1]["YoY%"] == 50.0, "a whole year, even if half forecast"
+
+
+def test_a_part_year_is_marked_and_left_without_a_rate():
+    """Eight months against twelve is a shorter year, not a fall in sales."""
+    history = pd.Series(np.full(20, 100.0),
+                        index=pd.date_range("2020-01-31", periods=20, freq="ME"))
+    table = engine.annual_rollup(history, "Monthly")
+
+    assert table.iloc[1]["Type"] == "Actual · 8 of 12 months"
+    assert table.iloc[1]["Sales"] == 800.0, "the total it does have is still shown"
+    assert pd.isna(table.iloc[1]["YoY%"])
+
+
+def test_the_year_after_a_part_year_has_nothing_whole_to_measure_against():
+    history = pd.Series(np.full(22, 100.0),
+                        index=pd.date_range("2020-07-31", periods=22, freq="ME"))
+    table = engine.annual_rollup(history, "Monthly")
+
+    assert table.iloc[0]["Type"] == "Actual · 6 of 12 months"
+    assert table.iloc[1]["Type"] == "Actual"
+    assert pd.isna(table.iloc[1]["YoY%"]), "2021 is whole, but 2020 is half a year"
+
+
+def test_a_blank_month_makes_its_year_incomplete():
+    frame = monthly_series(24)
+    frame.loc[3, "Sales"] = np.nan
+    loaded = engine.load_series(frame, "Date", "Sales", "Monthly")
+    table = engine.annual_rollup(loaded.frame[engine.TARGET_COL], "Monthly")
+
+    assert "11 of 12 months" in table.iloc[0]["Type"]
+    assert pd.isna(table.iloc[1]["YoY%"]), "the year before it is missing a month"
+
+
+def test_a_skipped_year_does_not_carry_a_rate_across_the_gap():
+    index = (list(pd.date_range("2020-01-31", periods=12, freq="ME"))
+             + list(pd.date_range("2022-01-31", periods=12, freq="ME")))
+    table = engine.annual_rollup(
+        pd.Series(np.full(24, 100.0), index=pd.DatetimeIndex(index)), "Monthly")
+
+    assert list(table["Year"]) == ["2020", "2022"]
+    assert pd.isna(table.iloc[1]["YoY%"]), "2021 is not in the data at all"
+
+
+@pytest.mark.parametrize("freq_name,freq,per_year", [
+    ("Quarterly", "QE", 4),
+    ("Monthly", "ME", 12),
+])
+def test_the_roll_up_knows_how_many_periods_a_year_holds(freq_name, freq, per_year):
+    index = pd.date_range("2020-01-01", periods=per_year * 2, freq=freq)
+    table = engine.annual_rollup(pd.Series(np.full(per_year * 2, 50.0), index=index),
+                                 freq_name)
+    assert list(table["Type"]) == ["Actual", "Actual"], \
+        f"{per_year} {freq_name.lower()} periods is a whole year"
+    assert table.iloc[1]["YoY%"] == 0.0
+
+
+def test_the_annual_table_survives_a_round_trip_through_the_download():
+    import io
+    table = engine.annual_rollup(_whole_years(), "Monthly")
+    restored = pd.read_csv(io.StringIO(table.to_csv(index=False)))
+    assert list(restored.columns) == list(table.columns)
+    assert list(restored["Year"].astype(str)) == list(table["Year"])

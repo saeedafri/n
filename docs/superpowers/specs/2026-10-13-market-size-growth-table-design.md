@@ -22,17 +22,12 @@ shows one row per period:
 | `Period` | `Jan 2024`, `Q1 2024`, `2024`, or a week's end date |
 | `Type` | `Actual` for uploaded history, `Forecast` for model periods |
 | `Sales` | that period's value |
-| `Previous month` | the value one period earlier |
-| `MoM change` | `Sales − Previous month` |
-| `MoM growth %` | that change over the earlier period |
-| `Same month last year` | the value one year earlier |
-| `YoY change` | `Sales − Same month last year` |
-| `YoY growth %` | that change over the year-earlier period |
+| `MoM%` | growth on the period before |
+| `YoY%` | growth on the same period a year earlier |
 
-The column names follow the data's frequency: `WoW` / `MoM` / `QoQ`, and
-`Previous week` / `Previous quarter` / `Previous year`. Annual data gets one
-growth block only — a year against the previous year is already
-year-on-year — so it has no separate `Same year last year` column.
+The period-on-period name follows the data's frequency: `WoW%` / `MoM%` /
+`QoQ%`. Annual data gets one growth block only — a year against the previous
+year is already year-on-year — so it has `YoY%` and nothing else.
 
 Three controls:
 
@@ -92,8 +87,16 @@ already displays.
 the word `None`. On a growth table the first row, and every row after a gap,
 genuinely has nothing to compare against, so a column of `None`s reads as a
 fault. The displayed copy is formatted to strings (`—` for blank, thousands
-separators, signed percentages, negatives in red) and right-aligned through the
-column config; the download keeps the raw numbers.
+separators, percentages to two places, negatives in red) and right-aligned
+through the column config; the download keeps the raw numbers.
+
+**Only the growth, not its arithmetic.** The first cut also carried the base
+values and the absolute changes — `Previous month`, `MoM change`,
+`Same month last year`, `YoY change`. Nine columns to say what three say: the
+base of every comparison is already a row of the same table, and the change in
+currency is `Sales` minus that row. Dropped on 2026-10-14 against the format
+the business team sent back (`Year · Sales · YoY%`), which is now the shape of
+both the grid and the download.
 
 ## Verification
 
@@ -142,6 +145,42 @@ absent from every section, and confirms CSV **and** Excel are offered wherever
 a table is exportable. Clean on the dev tree and on the `market-data-stg`
 checkout. The card-rise animation moves a card up to 10px while it plays, so
 the check waits for `document.getAnimations()` to settle before measuring.
+
+## Annual roll-up, 2026-10-14
+
+The data team sent `Growth.xlsx`: monthly history, then monthly projections,
+then the two summed into calendar years with the rate taken on the yearly
+totals. "The analysts usually require Annual sales and Annual growth rates."
+
+So a second table sits under the period table whenever the data is sub-annual
+— `Year · Type · Sales · YoY%` — built by `annual_rollup()` beside
+`growth_table()` in the service. It follows the same model picker and the same
+Newest first toggle, and has CSV and Excel of its own
+(`market_size_growth_<model>_annual`). Annual uploads do not get it: the table
+above already is it.
+
+Decisions:
+
+* **It is a sum, not a resample.** Calendar years over the combined
+  history-plus-forecast series, `YoY% = (total − previous total) / previous
+  total × 100` — the sheet's arithmetic, reproduced to the decimal.
+* **A year the data does not cover in full carries no rate.** Their sheet runs
+  Jan–Dec throughout, so it never meets the case; in the portal it is the
+  normal one — an upload ending in June, a two-month horizon, a month blank in
+  the middle. Eight months against twelve reads as a 33% collapse that never
+  happened. Such a year still shows its total, marked in `Type`
+  (`Actual · 8 of 12 months`), and its rate — and the next year's — is blank.
+  Likewise across a year the upload skips entirely.
+* **`Type` carries the mix.** `Actual`, `Forecast`, or `Actual + forecast` for
+  the year the handover falls in.
+
+Verified against `Growth.xlsx` itself: the engine reproduces all thirteen of
+the analysts' years, sales and rate, with zero mismatches, and the portal
+driven through the browser reproduces 2018–2025 from the same history
+(`market_size_growth_prophet_annual.csv`). `.claude/dev/msf_growth_check.py`
+rebuilds the roll-up from the period table's own download — sums per year,
+rate on the totals, blank where a year is short — for every model, on monthly,
+quarterly and weekly fixtures.
 
 ## Not done
 

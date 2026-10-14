@@ -1526,19 +1526,12 @@ def _growth_percent(current: pd.Series, base: pd.Series) -> np.ndarray:
     return ((current - base) / base.abs() * 100).round(2).to_numpy()
 
 
-def growth_table(history: pd.Series, freq_name: str,
-                 forecast: Optional[pd.Series] = None) -> pd.DataFrame:
-    """Every period's value beside its previous period and the same period a year back.
+def history_and_forecast(history: pd.Series,
+                         forecast: Optional[pd.Series] = None):
+    """The uploaded series with the forecast stacked on the end, and a kind per row.
 
-    History and forecast are stacked into one series before the shifts, so the
-    first forecast period is measured against the last actual one instead of
-    restarting. Annual data gets one growth block only: a year on the previous
-    year is already year-on-year.
+    Periods the forecast repeats are dropped: an actual value always wins.
     """
-    config = FREQ_CONFIGS[freq_name]
-    season = int(config['s'])
-    noun = config['unit'][:-1]
-
     values = pd.Series(history, dtype=float)
     kinds = ['Actual'] * len(values)
     if forecast is not None and len(forecast):
@@ -1546,20 +1539,72 @@ def growth_table(history: pd.Series, freq_name: str,
         ahead = ahead[pd.DatetimeIndex(ahead.index) > values.index.max()]
         values = pd.concat([values, ahead])
         kinds += ['Forecast'] * len(ahead)
+    return values, kinds
 
-    previous = values.shift(1)
-    prefix = PERIOD_ON_PERIOD[freq_name]
+
+def growth_table(history: pd.Series, freq_name: str,
+                 forecast: Optional[pd.Series] = None) -> pd.DataFrame:
+    """Every period's value and its growth: Period, Sales, MoM%, YoY%.
+
+    History and forecast are stacked into one series before the shifts, so the
+    first forecast period is measured against the last actual one instead of
+    restarting. Annual data gets one growth block only: a year on the previous
+    year is already year-on-year.
+    """
+    season = int(FREQ_CONFIGS[freq_name]['s'])
+    values, kinds = history_and_forecast(history, forecast)
+
     table = pd.DataFrame({
         'Period': period_labels(values.index, freq_name),
         'Type': kinds,
         TARGET_COL: values.round(2).to_numpy(),
-        f'Previous {noun}': previous.round(2).to_numpy(),
-        f'{prefix} change': (values - previous).round(2).to_numpy(),
-        f'{prefix} growth %': _growth_percent(values, previous),
+        f'{PERIOD_ON_PERIOD[freq_name]}%': _growth_percent(values, values.shift(1)),
     })
     if season > 1:
-        year_ago = values.shift(season)
-        table[f'Same {noun} last year'] = year_ago.round(2).to_numpy()
-        table['YoY change'] = (values - year_ago).round(2).to_numpy()
-        table['YoY growth %'] = _growth_percent(values, year_ago)
+        table['YoY%'] = _growth_percent(values, values.shift(season))
     return table
+
+
+def annual_rollup(history: pd.Series, freq_name: str,
+                  forecast: Optional[pd.Series] = None) -> pd.DataFrame:
+    """The periods summed into calendar years, with growth taken on the totals.
+
+    What the analysts work from: monthly (or weekly, or quarterly) sales added
+    up per calendar year — history first, then the forecast periods — and the
+    year-on-year rate measured on those yearly totals, not on the periods.
+
+    A year the data does not cover in full still gets its total, marked with
+    how much of the year it is, but no growth rate: eight months of one year
+    against twelve of the last is not growth, it is a shorter year. Nor is a
+    rate carried across a year the upload skips entirely.
+    """
+    config = FREQ_CONFIGS[freq_name]
+    values, kinds = history_and_forecast(history, forecast)
+    index = pd.DatetimeIndex(values.index)
+    kinds = pd.Series(kinds, index=index)
+
+    rows = []
+    for year in sorted(set(index.year)):
+        inside = index.year == year
+        sales = values[inside]
+        covered = int(sales.notna().sum())
+        whole = len(pd.date_range(f'{year}-01-01', f'{year}-12-31',
+                                  freq=config['alias']))
+        kind = sorted(set(kinds[inside]))
+        label = kind[0] if len(kind) == 1 else 'Actual + forecast'
+        if covered < whole:
+            label += f" · {covered} of {whole} {config['unit']}"
+        rows.append({'Year': str(year), 'Type': label,
+                     TARGET_COL: sales.sum(min_count=1),
+                     '_year': year, '_whole': covered == whole})
+
+    table = pd.DataFrame(rows, columns=['Year', 'Type', TARGET_COL,
+                                        '_year', '_whole'])
+    totals = table[TARGET_COL].astype(float)
+    like_for_like = (table['_whole'].fillna(False)
+                     & table['_whole'].shift(1, fill_value=False)
+                     & (table['_year'].diff() == 1))
+    table[TARGET_COL] = totals.round(2)
+    table['YoY%'] = np.where(like_for_like,
+                             _growth_percent(totals, totals.shift(1)), np.nan)
+    return table.drop(columns=['_year', '_whole'])
