@@ -171,6 +171,9 @@ h1 a[href], h2 a[href], h3 a[href], h4 a[href], h5 a[href], h6 a[href] {{ displa
     border: 1px solid {BORDER};
     border-radius: 18px;
     height: 132px;
+    /* Streamlit stacks consecutive column rows with no gap, so a second row of
+       cards — and whatever follows the cards — sat flush against the first. */
+    margin-bottom: 16px;
     padding: 16px 18px 14px;
     box-shadow: 0 10px 28px rgba(17, 24, 39, 0.05);
     overflow: hidden;
@@ -1468,17 +1471,15 @@ def _render_diagnostics_tab(outcome: Dict[str, Any]) -> None:
         st.info("Not enough history for seasonal decomposition — it needs at least "
                 f"two full cycles of {config['decomp_period']} periods.")
 
+    # Only worth the space when something went wrong — a clean "32/32 loaded" box
+    # is noise under the decomposition chart.
     status = outcome.get("fred_status") or {}
-    if status:
-        ok = [k for k, v in status.items() if v == "ok"]
-        failed = {k: v for k, v in status.items() if v != "ok"}
-        with st.expander(f"FRED data pull — {len(ok)}/{len(status)} variables loaded"):
-            if failed:
-                st.warning(f"{len(failed)} variable(s) failed")
-                _table(pd.DataFrame({"Variable": list(failed),
-                                     "Reason": list(failed.values())}))
-            else:
-                st.success("All FRED variables loaded")
+    failed = {k: v for k, v in status.items() if v != "ok"}
+    if failed:
+        with st.expander(f"FRED data pull — {len(failed)} of {len(status)} "
+                         "variables failed"):
+            _table(pd.DataFrame({"Variable": list(failed),
+                                 "Reason": list(failed.values())}))
 
 
 def _render_residuals(resid, key: str):
@@ -1845,7 +1846,13 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
     results = outcome["results"]
 
     annual = engine.FREQ_CONFIGS[freq_name]["s"] == 1
-    _section("Year-on-year growth" if annual else f"{prefix} and YoY growth",
+    # "month-over-month (MoM)" — spelled out beside the abbreviation everywhere it
+    # labels something, so nobody has to know the shorthand.
+    period_on_period = f"{noun}-over-{noun} ({prefix})"
+    year_on_year = "year-over-year (YoY)"
+    _section(("Year-over-year (YoY) growth" if annual else
+              f"{period_on_period[0].upper()}{period_on_period[1:]} and "
+              f"{year_on_year} growth"),
              f"Every {noun}'s value beside the previous {noun}"
              + ("" if annual else f" and the same {noun} a year earlier")
              + " — the uploaded history, and the forecast periods on the same basis "
@@ -1884,12 +1891,12 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
         with cards[0]:
             _card(f"Latest {noun}", f"{latest[engine.TARGET_COL]:,.0f}", latest["Period"])
         with cards[1]:
-            _card(f"{prefix} growth", _percent(latest[f"{prefix} growth %"]),
+            _card(f"{period_on_period} growth", _percent(latest[f"{prefix} growth %"]),
                   f"vs {latest[f'Previous {noun}']:,.0f}"
                   if pd.notna(latest[f"Previous {noun}"]) else "no earlier period")
         with cards[2]:
             if year_ago_col in table.columns:
-                _card("YoY growth", _percent(latest["YoY growth %"]),
+                _card(f"{year_on_year} growth", _percent(latest["YoY growth %"]),
                       f"vs {latest[year_ago_col]:,.0f}"
                       if pd.notna(latest[year_ago_col]) else "no period a year back")
             else:
@@ -1925,7 +1932,9 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
                  column_config={column: {"alignment": "right"}
                                 for column in value_cols + growth_cols})
     st.caption(
-        f"Growth is the change as a percentage of the earlier {noun}. It is blank "
+        (f"**{prefix}** is {period_on_period.split(' (')[0]}; **YoY** is year-over-year. "
+         if not annual else "**YoY** is year-over-year. ")
+        + f"Growth is the change as a percentage of the earlier {noun}. It is blank "
         f"where there is no earlier {noun} to compare against, where that {noun} was "
         "blank in the upload, or where it was zero — nothing grows from zero. "
         + ("Forecast rows carry the chosen model's central forecast, so the first "
@@ -2176,14 +2185,8 @@ def main() -> None:
     renderers[section](outcome)
     tracker.step_end("RENDER")
 
-    stage_times = outcome.get("stage_times") or []
-    if stage_times:
-        with st.expander(f"Timing — analysis {outcome.get('total_ms', 0):,.0f}ms", expanded=False):
-            _table(pd.DataFrame(
-                [{"Stage": label, "Milliseconds": round(ms)} for label, ms in stage_times]))
-            st.caption("Each stage is cached on exactly its own inputs, so re-running "
-                       "after changing one setting only refits what that setting "
-                       "affects.")
+    # Stage timings are still measured and logged (MSF_RUN_ANALYSIS in the server
+    # log); they are no longer drawn on the page.
 
     _mount_assistant(outcome)
 

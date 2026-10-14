@@ -116,6 +116,33 @@ Clean on 11 fixtures from `scripts/build_ingestion_fixtures.py`: month-end,
 CSV, formatted numbers, no column-name hints, accounting negatives, missing
 periods, duplicate dates, quarterly, weekly, annual and year-only.
 
+## UI clean-up, 2026-10-14
+
+Raised after the first review of the Growth section; applies to the whole page.
+
+* **Card spacing.** `.msf-card` had no bottom margin, and Streamlit stacks
+  consecutive `st.columns` rows with no gap — so the second row of KPI cards,
+  and whatever followed the cards (the outlier banner, a chart, a table), sat
+  flush against them. One rule, `margin-bottom: 16px`, fixes every section:
+  Diagnostics, Growth, SARIMAX, SARIMA, Prophet and Comparison all measure a
+  16px gap below every card now.
+* **Timing box removed.** The `Timing — analysis …ms` expander at the foot of
+  the page is gone. The measurements are still taken and still logged as
+  `MSF_RUN_ANALYSIS` in the server log, so `/logs` keeps the per-stage numbers.
+* **FRED data-pull box only on failure.** A "32/32 variables loaded" expander
+  under the decomposition chart is noise; it now renders only when a variable
+  actually failed, and names those variables and reasons.
+* **MoM / YoY spelled out.** The Growth heading, both KPI cards and the caption
+  carry the full form beside the abbreviation ("Month-over-month (MoM)"). The
+  table columns stay short so the table and its download stay narrow.
+
+Verified with `.claude/dev/msf_ui_spacing_check.py`, which measures the real
+pixel gap below every card in the browser, asserts both removed boxes are
+absent from every section, and confirms CSV **and** Excel are offered wherever
+a table is exportable. Clean on the dev tree and on the `market-data-stg`
+checkout. The card-rise animation moves a card up to 10px while it plays, so
+the check waits for `document.getAnimations()` to settle before measuring.
+
 ## Not done
 
 * No chart. The table and the download were what was asked for.
