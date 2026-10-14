@@ -1838,6 +1838,105 @@ def _render_prophet_tab(outcome: Dict[str, Any]) -> None:
     _render_forecast_block(result, outcome, MODEL_COLORS["Prophet"], "prophet_forecast")
 
 
+def _render_growth_tab(outcome: Dict[str, Any]) -> None:
+    freq_name = outcome["freq_name"]
+    noun = engine.FREQ_CONFIGS[freq_name]["unit"][:-1]
+    prefix = engine.PERIOD_ON_PERIOD[freq_name]
+    results = outcome["results"]
+
+    annual = engine.FREQ_CONFIGS[freq_name]["s"] == 1
+    _section("Year-on-year growth" if annual else f"{prefix} and YoY growth",
+             f"Every {noun}'s value beside the previous {noun}"
+             + ("" if annual else f" and the same {noun} a year earlier")
+             + " — the uploaded history, and the forecast periods on the same basis "
+               "when you pick a model.")
+
+    # Listed in the order the sections above use, not the order the models
+    # happened to finish in — they are fitted on threads, so that order moves.
+    choices = ["History only"] + [m for m in ("SARIMAX", "SARIMA", "Prophet")
+                                  if m in results]
+    if st.session_state.get(f"{KEY}growth_model") not in choices:
+        st.session_state[f"{KEY}growth_model"] = (
+            min(results, key=lambda m: _ranking_metric(results[m]))
+            if results else choices[0])
+    controls = st.columns([3, 1])
+    with controls[0]:
+        picked = st.segmented_control("Continue the table with", choices,
+                                      key=f"{KEY}growth_model")
+    with controls[1]:
+        newest_first = st.toggle(
+            "Newest first", key=f"{KEY}growth_newest",
+            help="Show the most recent periods — and the forecast — at the top. "
+                 "The download follows whatever you choose here.")
+    picked = picked if picked in choices else choices[0]
+
+    forecast = results[picked]["forecast"]["mean"] if picked in results else None
+    table = engine.growth_table(
+        outcome["loaded"].frame[engine.TARGET_COL], freq_name, forecast)
+
+    # Annual data has one growth block only — a year on the previous year is
+    # already year-on-year — so there is no separate same-period column.
+    year_ago_col = f"Same {noun} last year"
+    actual = table[table["Type"] == "Actual"]
+    latest = actual.iloc[-1] if len(actual) else None
+    if latest is not None:
+        cards = st.columns(3)
+        with cards[0]:
+            _card(f"Latest {noun}", f"{latest[engine.TARGET_COL]:,.0f}", latest["Period"])
+        with cards[1]:
+            _card(f"{prefix} growth", _percent(latest[f"{prefix} growth %"]),
+                  f"vs {latest[f'Previous {noun}']:,.0f}"
+                  if pd.notna(latest[f"Previous {noun}"]) else "no earlier period")
+        with cards[2]:
+            if year_ago_col in table.columns:
+                _card("YoY growth", _percent(latest["YoY growth %"]),
+                      f"vs {latest[year_ago_col]:,.0f}"
+                      if pd.notna(latest[year_ago_col]) else "no period a year back")
+            else:
+                _card("Periods", f"{len(actual):,}", "actual rows in this table")
+
+    # Each row carries its own comparison values, so the order is a reading
+    # preference and nothing more.
+    if newest_first:
+        table = table.iloc[::-1].reset_index(drop=True)
+
+    # Written out as text rather than left as numbers: the grid prints a blank
+    # cell as the word "None", which on a growth table — where the first rows
+    # genuinely have nothing to compare against — reads as a fault. The
+    # download below carries the unformatted numbers.
+    growth_cols = [c for c in table.columns if c.endswith("growth %")]
+    value_cols = [c for c in table.columns
+                  if c not in growth_cols and c not in ("Period", "Type")]
+    places = 0 if table[engine.TARGET_COL].abs().max() >= 100 else 2
+    display = table.copy()
+    for column in value_cols:
+        display[column] = display[column].map(
+            lambda v: "—" if pd.isna(v) else f"{v:,.{places}f}")
+    for column in growth_cols:
+        display[column] = display[column].map(
+            lambda v: "—" if pd.isna(v) else f"{v:+,.2f}%")
+    styled = display.style.map(
+        lambda text: "color: #A3121F" if str(text).startswith("-") else "",
+        subset=growth_cols)
+    # Figures read as text here, and a text column defaults to left-aligned.
+    # `alignment` is in the column config proto but not yet in the typed
+    # helpers, so it goes in as a plain dict.
+    st.dataframe(styled, use_container_width=True, height=520, hide_index=True,
+                 column_config={column: {"alignment": "right"}
+                                for column in value_cols + growth_cols})
+    st.caption(
+        f"Growth is the change as a percentage of the earlier {noun}. It is blank "
+        f"where there is no earlier {noun} to compare against, where that {noun} was "
+        "blank in the upload, or where it was zero — nothing grows from zero. "
+        + ("Forecast rows carry the chosen model's central forecast, so the first "
+           "forecast row is measured against your last actual period — they are at "
+           "the " + ("top" if newest_first else "end") + " of the table."
+           if forecast is not None else
+           "Pick a model above to carry the table on through the forecast periods."))
+    _export_buttons(table, "market_size_growth"
+                    + ("" if picked not in results else f"_{picked.lower()}"))
+
+
 def _render_comparison_tab(outcome: Dict[str, Any]) -> None:
     results = outcome["results"]
     config = engine.FREQ_CONFIGS[outcome["freq_name"]]
@@ -2044,7 +2143,7 @@ def main() -> None:
     _hero(outcome)
 
     ran = outcome["settings"]
-    labels = ["Diagnostics"]
+    labels = ["Diagnostics", "Growth"]
     if ran["run_sarimax"]:
         labels.append("SARIMAX")
     if ran["run_sarima"]:
@@ -2068,6 +2167,7 @@ def main() -> None:
 
     renderers = {
         "Diagnostics": _render_diagnostics_tab,
+        "Growth": _render_growth_tab,
         "SARIMAX": _render_sarimax_tab,
         "SARIMA": _render_sarima_tab,
         "Prophet": _render_prophet_tab,

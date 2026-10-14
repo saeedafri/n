@@ -1093,3 +1093,142 @@ def test_each_residual_test_carries_its_own_verdict():
         assert all(f in verdict for f in checks["failures"])
     else:
         assert "all four tests PASS" in verdict
+
+
+# ── period-on-period growth table ──────────────────────────────────
+
+def _growth_history():
+    """Three years of monthly data with known, easy arithmetic."""
+    index = pd.date_range("2022-01-31", periods=36, freq="ME")
+    return pd.Series(np.arange(36, dtype=float) * 100 + 1000, index=index)
+
+
+def test_growth_table_reports_month_on_month_and_year_on_year():
+    history = _growth_history()
+    table = engine.growth_table(history, "Monthly")
+
+    assert list(table["Period"][:2]) == ["Jan 2022", "Feb 2022"]
+    assert set(table["Type"]) == {"Actual"}
+    assert len(table) == len(history)
+
+    # Feb 2022: 1100 from 1000 — +100, +10%.
+    february = table.iloc[1]
+    assert february["Previous month"] == 1000
+    assert february["MoM change"] == 100
+    assert february["MoM growth %"] == 10.0
+    assert pd.isna(february["YoY growth %"]), "no month a year before Feb 2022"
+
+    # Jan 2023: 2200 from 1000 twelve months earlier — +1200, +120%.
+    january = table[table["Period"] == "Jan 2023"].iloc[0]
+    assert january["Same month last year"] == 1000
+    assert january["YoY change"] == 1200
+    assert january["YoY growth %"] == 120.0
+
+
+def test_growth_table_has_nothing_to_compare_on_the_first_row():
+    table = engine.growth_table(_growth_history(), "Monthly")
+    first = table.iloc[0]
+    assert pd.isna(first["Previous month"])
+    assert pd.isna(first["MoM change"])
+    assert pd.isna(first["MoM growth %"])
+    assert first["Sales"] == 1000
+
+
+def test_forecast_rows_continue_from_the_last_actual_period():
+    history = _growth_history()
+    forecast = pd.Series([4600.0, 4700.0],
+                         index=pd.date_range("2025-01-31", periods=2, freq="ME"))
+    table = engine.growth_table(history, "Monthly", forecast)
+
+    assert list(table["Type"][-2:]) == ["Forecast", "Forecast"]
+    assert len(table) == len(history) + 2
+
+    handover = table.iloc[len(history)]
+    assert handover["Period"] == "Jan 2025"
+    assert handover["Previous month"] == history.iloc[-1], \
+        "the first forecast month must be measured against the last actual one"
+    assert handover["Same month last year"] == history.loc["2024-01-31"]
+
+
+def test_a_forecast_overlapping_history_does_not_duplicate_periods():
+    history = _growth_history()
+    overlapping = pd.Series(
+        [99.0, 4600.0], index=pd.to_datetime(["2024-12-31", "2025-01-31"]))
+    table = engine.growth_table(history, "Monthly", overlapping)
+    assert len(table) == len(history) + 1
+    assert table["Period"].is_unique
+    assert table.iloc[-2]["Sales"] == history.iloc[-1], "actuals win over a forecast"
+
+
+def test_growth_from_zero_is_blank_not_infinite():
+    index = pd.date_range("2024-01-31", periods=3, freq="ME")
+    table = engine.growth_table(pd.Series([0.0, 500.0, 750.0], index=index), "Monthly")
+    assert pd.isna(table.iloc[1]["MoM growth %"]), "nothing grows from zero"
+    assert table.iloc[1]["MoM change"] == 500, "the absolute change is still reported"
+    assert table.iloc[2]["MoM growth %"] == 50.0
+
+
+def test_a_blank_period_blanks_its_growth_but_keeps_the_row():
+    frame = monthly_series(30)
+    frame.loc[5, "Sales"] = np.nan
+    loaded = engine.load_series(frame, "Date", "Sales", "Monthly")
+    table = engine.growth_table(loaded.frame[engine.TARGET_COL], "Monthly")
+
+    assert len(table) == 30
+    assert pd.isna(table.iloc[5]["Sales"])
+    assert pd.isna(table.iloc[5]["MoM growth %"])
+    assert pd.isna(table.iloc[6]["MoM growth %"]), "the month after a blank has no base"
+    assert pd.notna(table.iloc[7]["MoM growth %"])
+
+
+def test_growth_percent_keeps_its_direction_when_a_series_goes_negative():
+    index = pd.date_range("2024-01-31", periods=3, freq="ME")
+    table = engine.growth_table(pd.Series([-200.0, -100.0, -300.0], index=index),
+                                "Monthly")
+    assert table.iloc[1]["MoM growth %"] == 50.0, "a loss halving is growth"
+    assert table.iloc[2]["MoM growth %"] == -200.0
+
+
+@pytest.mark.parametrize("freq_name,freq,prefix,noun,first", [
+    ("Weekly", "W", "WoW", "week", "2024-01-07"),
+    ("Monthly", "ME", "MoM", "month", "Jan 2024"),
+    ("Quarterly", "QE", "QoQ", "quarter", "Q1 2024"),
+])
+def test_each_frequency_names_its_own_periods_and_growth(freq_name, freq, prefix,
+                                                         noun, first):
+    index = pd.date_range("2024-01-01", periods=8, freq=freq)
+    table = engine.growth_table(
+        pd.Series(np.arange(8, dtype=float) + 1, index=index), freq_name)
+    assert table["Period"].iloc[0] == first
+    assert f"{prefix} growth %" in table.columns
+    assert f"Previous {noun}" in table.columns
+    assert f"Same {noun} last year" in table.columns
+
+
+def test_annual_data_gets_one_growth_block_not_two():
+    """A year against the previous year is already year-on-year."""
+    index = pd.date_range("2018-12-31", periods=6, freq="YE")
+    table = engine.growth_table(pd.Series(np.arange(6, dtype=float) + 1, index=index),
+                               "Annual")
+    assert table["Period"].iloc[0] == "2018"
+    assert list(table.columns) == ["Period", "Type", "Sales", "Previous year",
+                                   "YoY change", "YoY growth %"]
+    assert table.iloc[1]["YoY growth %"] == 100.0
+
+
+def test_the_year_on_year_shift_follows_the_frequency():
+    """Quarterly YoY is four periods back, not twelve."""
+    index = pd.date_range("2022-03-31", periods=8, freq="QE")
+    values = pd.Series([100.0, 110, 120, 130, 200, 220, 240, 260], index=index)
+    table = engine.growth_table(values, "Quarterly")
+    assert table.iloc[4]["Same quarter last year"] == 100
+    assert table.iloc[4]["YoY growth %"] == 100.0
+
+
+def test_the_growth_table_survives_a_round_trip_through_the_download():
+    """What the Download CSV button hands over is what the table shows."""
+    import io
+    table = engine.growth_table(_growth_history(), "Monthly")
+    restored = pd.read_csv(io.StringIO(table.to_csv(index=False)))
+    assert list(restored.columns) == list(table.columns)
+    pd.testing.assert_frame_equal(restored, table, check_dtype=False)

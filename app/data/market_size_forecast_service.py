@@ -1496,3 +1496,70 @@ def forecast_spread(results: Dict[str, Dict[str, Any]]) -> float:
             if np.isfinite(gap).any():
                 worst = max(worst, float(np.nanmax(gap)))
     return worst
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  PERIOD-ON-PERIOD GROWTH
+# ═══════════════════════════════════════════════════════════════════
+
+PERIOD_ON_PERIOD = {'Weekly': 'WoW', 'Monthly': 'MoM', 'Quarterly': 'QoQ', 'Annual': 'YoY'}
+
+PERIOD_LABEL_FORMAT = {'Weekly': '%Y-%m-%d', 'Monthly': '%b %Y', 'Annual': '%Y'}
+
+
+def period_labels(index, freq_name: str) -> List[str]:
+    """Readable period names: 'Jan 2024', 'Q1 2024', '2024', or a week's end date."""
+    index = pd.DatetimeIndex(index)
+    if freq_name == 'Quarterly':
+        return [f"Q{date.quarter} {date.year}" for date in index]
+    return list(index.strftime(PERIOD_LABEL_FORMAT[freq_name]))
+
+
+def _growth_percent(current: pd.Series, base: pd.Series) -> np.ndarray:
+    """Change as a percentage of the earlier period.
+
+    Divided by the absolute base so a series that crosses zero still reports
+    the direction it actually moved. A zero base is left blank — there is
+    nothing to grow from.
+    """
+    base = base.replace(0, np.nan)
+    return ((current - base) / base.abs() * 100).round(2).to_numpy()
+
+
+def growth_table(history: pd.Series, freq_name: str,
+                 forecast: Optional[pd.Series] = None) -> pd.DataFrame:
+    """Every period's value beside its previous period and the same period a year back.
+
+    History and forecast are stacked into one series before the shifts, so the
+    first forecast period is measured against the last actual one instead of
+    restarting. Annual data gets one growth block only: a year on the previous
+    year is already year-on-year.
+    """
+    config = FREQ_CONFIGS[freq_name]
+    season = int(config['s'])
+    noun = config['unit'][:-1]
+
+    values = pd.Series(history, dtype=float)
+    kinds = ['Actual'] * len(values)
+    if forecast is not None and len(forecast):
+        ahead = pd.Series(forecast, dtype=float)
+        ahead = ahead[pd.DatetimeIndex(ahead.index) > values.index.max()]
+        values = pd.concat([values, ahead])
+        kinds += ['Forecast'] * len(ahead)
+
+    previous = values.shift(1)
+    prefix = PERIOD_ON_PERIOD[freq_name]
+    table = pd.DataFrame({
+        'Period': period_labels(values.index, freq_name),
+        'Type': kinds,
+        TARGET_COL: values.round(2).to_numpy(),
+        f'Previous {noun}': previous.round(2).to_numpy(),
+        f'{prefix} change': (values - previous).round(2).to_numpy(),
+        f'{prefix} growth %': _growth_percent(values, previous),
+    })
+    if season > 1:
+        year_ago = values.shift(season)
+        table[f'Same {noun} last year'] = year_ago.round(2).to_numpy()
+        table['YoY change'] = (values - year_ago).round(2).to_numpy()
+        table['YoY growth %'] = _growth_percent(values, year_ago)
+    return table
