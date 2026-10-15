@@ -4598,23 +4598,14 @@ def apply_keydevs_criterion(
     date_clause = _build_keydev_date_clause(criterion)
 
     if not detail_column:
-        # Membership only — index-served on idx_ticker_cat, no headline TEXT.
-        display_col = criterion.get("display_col") or "Key Developments"
-        try:
-            rows = db_manager.execute_query_readonly(
-                f"SELECT DISTINCT ticker FROM coreiq_company_events "
-                f"WHERE event_category IN ({cat_sql}) {ticker_clause} "
-                f"{date_clause}"
-            ) or []
-        except Exception as exc:
-            log_error(f"[SCREENING] apply_keydevs_criterion (membership) failed: {exc}")
-            rows = []
-        hits = {r["ticker"] for r in rows if r.get("ticker")}
-        out = working_df.copy()
-        out[display_col] = out["ticker"].map(lambda t: "Yes" if t in hits else None)
-        return out, {
+        # Key Devs mode: results are one row per EVENT from the event query, and
+        # this criterion never drops a company, so a per-company "has an event"
+        # marker is never shown. The DISTINCT ticker scan it used to run took
+        # 33-45 s on STG for an undated category (loose index scan across every
+        # date partition) — on each Add Criteria / Show Results (2026-10-16).
+        return working_df.copy(), {
             "type": "keydevs", "rows_in": rows_in, "rows_out": rows_in,
-            "with_data": len(hits), "detail_column": False, "elapsed_ms": 0,
+            "detail_column": False, "elapsed_ms": 0,
         }
 
     # Step 1+2 merged: single ROW_NUMBER() query replaces filter + headline queries
@@ -5029,6 +5020,106 @@ def get_keydevs_events_for_tickers(
 KEYDEV_PER_INDUSTRY = 8
 
 
+KEYDEV_EVENT_INDEX = "keydev_event_index_v1"
+KEYDEV_INDEX_SOURCES = [{"table": "coreiq_company_events", "signal": "MAX(event_id)"}]
+_keydev_index_started = False
+
+
+def build_keydev_event_index() -> pd.DataFrame:
+    rows = db_manager.execute_query_readonly_raising(
+        "SELECT event_id, event_date, ticker, event_category FROM coreiq_company_events")
+    df = pd.DataFrame(rows, columns=["event_id", "event_date", "ticker", "event_category"])
+    df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce")
+    return df.astype({"ticker": "category", "event_category": "category"})
+
+
+def keydev_event_index() -> Optional[pd.DataFrame]:
+    """(event_id, event_date, ticker, event_category) for every event, from disk.
+
+    None until the first build lands — that build (~217k rows, 10-20 s) runs in
+    the background, never on a click; callers fall back to SQL meanwhile.
+    """
+    from utils.materialize import materialized_or_build, on_disk, storing
+    global _keydev_index_started
+
+    def build():
+        return materialized_or_build(KEYDEV_EVENT_INDEX, build_keydev_event_index,
+                                     KEYDEV_INDEX_SOURCES)
+
+    if not storing():
+        return None
+    if not on_disk(KEYDEV_EVENT_INDEX):
+        if not _keydev_index_started:
+            import threading
+            _keydev_index_started = True
+
+            def build_in_background():
+                try:
+                    build()
+                    log_warning("[SCREENING] keydev event index written")
+                except Exception as exc:
+                    log_error(f"[SCREENING] keydev event index build failed: {exc!r}")
+            threading.Thread(target=build_in_background, name="keydev-index-build",
+                             daemon=True).start()
+        return None
+    return build()
+
+
+def pick_per_industry(index: pd.DataFrame, industries: pd.Series, categories, start, end,
+                      lo: int, hi: int) -> pd.DataFrame:
+    """Rows lo+1..hi of each industry's events, newest first — the same pick as the
+    ROW_NUMBER() OVER (PARTITION BY industry) query, done in memory."""
+    rows = index[index["event_category"].isin(list(categories))]
+    if start is not None:
+        rows = rows[rows["event_date"] >= start]
+    if end is not None:
+        rows = rows[rows["event_date"] <= end]
+    rows = rows.assign(industry=rows["ticker"].astype(str).map(industries).fillna(""))
+    rows = rows.sort_values(["event_date", "event_id"], ascending=False)
+    rank = rows.groupby("industry", sort=False).cumcount()
+    return rows[(rank >= lo) & (rank < hi)]
+
+
+def _keydev_industry_window_query(categories, cat_sql: str, date_clause: str,
+                                  lo: int, hi: int) -> str:
+    """The SQL pick, used until the event index is on disk."""
+    return f"""
+        SELECT
+            e.event_id,
+            e.event_date,
+            e.event_subtype,
+            e.event_category,
+            e.ticker,
+            e.headline,
+            e.situation,
+            e.source,
+            e.source_ref,
+            e.source_detail,
+            {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
+        FROM (
+            SELECT t.event_id FROM (
+                SELECT e2.event_id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY COALESCE(c2.primary_industry_coresight,
+                                                 sc2.primary_industry_coresight,
+                                                 nsc2.industry)
+                           ORDER BY e2.event_date DESC, e2.event_id DESC
+                       ) AS rn
+                FROM coreiq_company_events e2
+                LEFT JOIN coreiq_companies c2          ON c2.ticker  = e2.ticker
+                LEFT JOIN coreiq_sec_companies_all sc2 ON sc2.ticker = e2.ticker
+                LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc2 ON nsc2.ticker = e2.ticker
+                WHERE e2.event_category IN ({cat_sql})
+                  {date_clause}
+            ) t
+            WHERE t.rn > {lo} AND t.rn <= {hi}
+        ) picked
+        JOIN coreiq_company_events e ON e.event_id = picked.event_id
+        {_KEYDEV_COMPANY_JOINS}
+        ORDER BY e.event_date DESC, e.event_id DESC
+    """
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 @persistent("keydevs_events")
 def get_keydevs_events_by_industry(
@@ -5074,41 +5165,38 @@ def get_keydevs_events_by_industry(
     hi = lo + max(1, int(per_industry))
 
     with_ma = MA_KEYDEV_CATEGORY in (categories or ())
-    query = f"""
-        SELECT
-            e.event_id,
-            e.event_date,
-            e.event_subtype,
-            e.event_category,
-            e.ticker,
-            e.headline,
-            e.situation,
-            e.source,
-            e.source_ref,
-            e.source_detail,
-            {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
-        FROM (
-            SELECT t.event_id FROM (
-                SELECT e2.event_id,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY COALESCE(c2.primary_industry_coresight,
-                                                 sc2.primary_industry_coresight,
-                                                 nsc2.industry)
-                           ORDER BY e2.event_date DESC, e2.event_id DESC
-                       ) AS rn
-                FROM coreiq_company_events e2
-                LEFT JOIN coreiq_companies c2          ON c2.ticker  = e2.ticker
-                LEFT JOIN coreiq_sec_companies_all sc2 ON sc2.ticker = e2.ticker
-                LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc2 ON nsc2.ticker = e2.ticker
-                WHERE e2.event_category IN ({cat_sql})
-                  {date_clause}
-            ) t
-            WHERE t.rn > {lo} AND t.rn <= {hi}
-        ) picked
-        JOIN coreiq_company_events e ON e.event_id = picked.event_id
-        {_KEYDEV_COMPANY_JOINS}
-        ORDER BY e.event_date DESC, e.event_id DESC
-    """
+    index = keydev_event_index()
+    if index is not None:
+        # Pick in memory and fetch only the picked rows by primary key: the
+        # window query below joins three company tables over every matching
+        # event and took 50 s on STG for Management Changes / All History.
+        first = get_all_companies_universe().drop_duplicates("ticker")
+        industries = pd.Series(first["sector"].values,
+                               index=first["ticker"].astype(str)).replace("", pd.NA)
+        # The DB's CURDATE() (UTC), so this window and the SQL count agree.
+        today = pd.Timestamp.now(tz="UTC").normalize().tz_localize(None)
+        start = (pd.Timestamp(start_date) if start_date
+                 else today - pd.Timedelta(days=int(days)) if days is not None and not end_date
+                 else None)
+        end = pd.Timestamp(end_date) if end_date else None
+        picked = pick_per_industry(index, industries, categories, start, end, lo, hi)
+        if picked.empty:
+            return pd.DataFrame(), False
+        ids = ", ".join(str(int(i)) for i in picked["event_id"])
+        query = f"""
+            SELECT
+                e.event_id, e.event_date, e.event_subtype, e.event_category, e.ticker,
+                e.headline, e.situation, e.source, e.source_ref, e.source_detail,
+                {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
+            FROM coreiq_company_events e
+            {_KEYDEV_COMPANY_JOINS}
+            WHERE e.event_id IN ({ids})
+              AND e.event_date BETWEEN '{picked["event_date"].min():%Y-%m-%d}'
+                                   AND '{picked["event_date"].max():%Y-%m-%d}'
+            ORDER BY e.event_date DESC, e.event_id DESC
+        """
+    else:
+        query = _keydev_industry_window_query(categories, cat_sql, date_clause, lo, hi)
     try:
         rows = db_manager.execute_query_readonly(query)
     except Exception as exc:
@@ -6334,13 +6422,13 @@ def recompute_working_set(
     # Prefer composite (ticker, company_name) membership — ticker alone wrongly
     # over-includes a shared-ticker sibling (TSCO=Tractor Supply/Tesco) that is
     # not actually in the watchlist, and collapses the company count.
-    if allowed_members:
+    if allowed_members is not None:
         before_wl = len(working_df)
         working_df = filter_universe_to_members(working_df, allowed_members)
         log_info(f"[TIMING] SCREENING_WATCHLIST_FILTER | "
                  f"before={before_wl} after={len(working_df)} "
                  f"watchlist_members={len(allowed_members)}")
-    elif allowed_tickers:
+    elif allowed_tickers is not None:
         before_wl = len(working_df)
         working_df = working_df[working_df["ticker"].isin(allowed_tickers)].reset_index(drop=True)
         log_info(f"[TIMING] SCREENING_WATCHLIST_FILTER | "
@@ -6737,7 +6825,9 @@ def filter_universe_to_members(
       • normal ticker (unique in the universe) → match by ticker alone;
       • shared ticker → disambiguate by case-insensitive company_name.
     """
-    if df is None or len(df) == 0 or not members:
+    # None = no watchlist. An EMPTY watchlist (or one whose read failed) keeps
+    # nothing — never the whole universe.
+    if df is None or len(df) == 0 or members is None:
         return df
     members = list(members)
     wl_tickers = {t for t, _ in members}
@@ -6774,9 +6864,9 @@ def criteria_stack_fingerprint(
     """
     visible = [c for c in active_criteria if not c.get("hidden")]
     parts = [_criterion_fingerprint(c) for c in visible]
-    if allowed_members:
+    if allowed_members is not None:
         wl_key = sorted((str(t), str(n)) for t, n in allowed_members)
-    elif allowed_tickers:
+    elif allowed_tickers is not None:
         wl_key = sorted(allowed_tickers)
     else:
         wl_key = None

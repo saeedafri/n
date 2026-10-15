@@ -518,3 +518,120 @@ No Title contains or Name contains field appears anywhere.
 - ACI 2024: Sankaran and McCollam both carry $7,882,248. The filing says $15,240,511 for Sankaran.
 - DLTR: McNeely's pay is filed under Jeffrey Davis.
 - CFR: Stead carries Rhodes's numbers.
+
+## 10. Round 5 (2026-10-16): Key Devs parity, watchlist scope, "Other" role, speed
+
+### 10.1 Key Devs "Management Changes" vs People — what differs and why
+
+Key Devs lists one row per stored EVENT (each 8-K, 6-K and news article). People
+lists one row per person CHANGE: an 8-K naming three directors is three rows, and
+six articles about one CEO appointment (GIS, 2026-09-30) are one row with the other
+outlets under Also Reported By. Raw counts therefore never match; coverage was
+measured per event instead (last 30 days, 152 Key Devs events):
+
+| Outcome | Events |
+|---|---|
+| Listed in People (same event) | 34 |
+| Same change, another source (folded into the People row) | 68 |
+| News that is not a people change (insider trades, earnings previews, lawsuits, buybacks) | 21 |
+| 6-K stored as cover page only (data team: text cut at 2,000 chars) | 14 |
+| News about another company's appointment filed under a former employer | ~8 |
+| 8-K with no named change in the stored text (pay-only, or text cut to exhibit boilerplate) | 4 |
+
+Root causes fixed:
+
+1. **Extractor recall (8-K 5.02).** Real wording the regexes missed: bare "depart"
+   (KMB 2026-10-01, Russell Torres), "is/will be leaving", "ceased serving",
+   "suspended from", "their respective retirements", "not to seek re-election"
+   (no "for"), "transition to the role of", "became a member", accented names
+   (María Fernanda Mejía), "Ms. Sarah G. McCoy" (honorific on the full name), and
+   board seats with no title ("elected Joaquin Duato as an independent member of the
+   Board", PEP 2026-09-17). Possessives ("Mr. Vestberg’s Verizon Board") and
+   "… Companies" no longer read as people, which also replaced wrong-person rows
+   ("Lowe's Companies" → Angela Braly). Measured on all 9,051 stored filings:
+   filings with a named change 5,758 → 5,971; +346 events, −25 (most of the 25 are
+   the wrong-person rows replaced). Sampled gains ~90% correct.
+2. **News for non-Coresight companies.** Company names came from coreiq_companies
+   (540), so every article about any other ticker failed "is this about the
+   company" and was dropped. Names now come from the all-companies universe
+   (~4,800), Coresight spelling first.
+3. **Appointments filed under the former employer.** "Five Below Appoints Former
+   Ulta Beauty CFO Scott Settersten to Board" is stored under ULTA. When the
+   headline's subject is another company with a unique short name, the change is
+   filed under that company (FIVE).
+4. **Period date.** People filtered on the date stated in the text ("On October 1,
+   …"), days before the filing; Key Devs filters on the filing/article date. People
+   now filters on the disclosure date too (new "Disclosed" column; "Announced" kept).
+
+Frame `management_changes_v8`: 10,346 rows, 477 companies (v7: 10,054 / 442).
+
+### 10.2 Universe: 558 → 4,793
+
+People screened `get_base_company_universe()` (the Coresight list). It now uses the
+same universe as Key Devs (`_all_companies_on()` covers People), and with no
+watchlist and no Industry/Geography criterion the scope is `None` = every ticker,
+so a company added to the data tomorrow appears without a universe rebuild.
+
+### 10.3 Watchlist scope
+
+* **Key Devs** ignored the watchlist whenever no Industry/Geography criterion was
+  present: the `ALL_TICKERS` shortcut dropped the ticker list. It now applies only
+  when no watchlist is active (`_watchlist_on()`).
+* **Empty watchlist / failed member read** returned the whole universe
+  (`if not members: return df`, and truthiness checks on `[]`). An active watchlist
+  with no members now scopes to zero companies, in `filter_universe_to_members`,
+  `recompute_working_set` and every Show Results path.
+* **People** applies one scope (`_in_scope`) to all four sections. Executive Moves
+  keeps a move when either company is in the watchlist (a watchlist company losing
+  an executive is its news too).
+
+### 10.4 Role "Other"
+
+`people_service.role_bucket`: any role the dropdown does not list (blank, the
+retired "Unknown", a bucket added later) is Other — in the filters and in the Role
+column. Every role selected = no role selected, by construction.
+
+### 10.5 Speed
+
+Key Devs: adding a criterion ran `SELECT DISTINCT ticker … WHERE event_category IN
+(…)` to mark companies "has an event". Undated, MySQL's loose index scan over 35
+date partitions took 33 s (45 s with the category index forced). Key Devs mode never
+shows that marker, so the query is gone from that path.
+
+Key Devs, unbounded screen (no Industry/Geography/watchlist): the first page is the
+newest 8 events per industry, picked with `ROW_NUMBER() OVER (PARTITION BY industry)`
+over every matching event joined to three company tables. DB-side alone (ids only,
+no text) that took 25 s for Management Changes / All History and 37.5 s for M&A.
+New `keydev_event_index_v1`: (event_id, event_date, ticker, event_category) for all
+217k events, 0.9 MB on disk, signal MAX(event_id), built in the boot warm-up
+(`_warm_keydevs_screening`) or in a background thread on first use — never on a
+click. `pick_per_industry` does the pick in pandas (ms) and only the ~540 picked
+rows are fetched by primary key (`event_id IN (...)` + a date range for partition
+pruning). Until the index exists the SQL pick is used. The in-memory pick returned
+the same events as SQL except shared-ticker duplicates (SQL listed LULU's news under
+both Lululemon and "Lulu Retail Holdings"); the window boundary uses UTC, like
+`CURDATE()`. Local (VPN) Show Results for Management Changes / All History: 51.7 s
+→ 13.3 s; the remaining time is summary text over the VPN, which STG does not pay.
+
+People Show Results (all in-process, materialized frames): 239–658 ms locally,
+including Management Changes All History (8,002 rows).
+
+### 10.7 Verification (Playwright, localhost:8504 testing and :8505 STG checkout)
+
+| Check | Result |
+|---|---|
+| Key Devs Mgmt Changes 7 / 30 days / All History | 14 / 156 / 10,713 (= DB COUNT) |
+| People Mgmt Changes 7 / 30 days / All History | 4 / 45 (35 cos) / 8,002 (475 cos); Excel rows equal; equal to pandas recount |
+| People universe | 4,793 companies (was 558) |
+| Roles, Mgmt Changes 365 d: empty / all 17 / Other | 966 / 966 / 94 |
+| Roles, Remuneration: empty / all 16 / Other | 3,932 / 3,932 / 345 executives |
+| Watchlist Coresight-100 (99 cos): Mgmt Changes / Remuneration / Layoffs | 1,515 / 1,133 / 375 rows, 0 tickers outside the watchlist |
+| Watchlist, Key Devs All History | 2,226 events, 0 outside (before: every company) |
+| Watchlist, Companies | 99 matched, Excel 99, 0 outside |
+
+### 10.6 Files
+
+`app/data/management_changes.py`, `app/data/people_service.py`,
+`app/data/screening_service.py`, `app/pages/screening.py`, `app/utils/cache_manager.py`, tests in
+`app/data/test_management_changes.py`, `app/data/test_people_service.py`,
+`tests/test_screening_keydevs_columns.py`.

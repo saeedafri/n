@@ -46,6 +46,7 @@ from data.screening_config import (
     PEOPLE_ROLE_OTHER,
     PEOPLE_ROLE_PATTERNS,
     PEOPLE_ROLE_UNKNOWN,
+    PEOPLE_ROLES,
 )
 
 try:
@@ -169,6 +170,15 @@ def classify_role(title: Optional[str]) -> str:
         if rx.search(text):
             return name
     return PEOPLE_ROLE_OTHER
+
+
+def role_bucket(roles: pd.Series) -> pd.Series:
+    """Role as the Role dropdown lists it. Anything it does not list — blank,
+    the retired "Unknown", a bucket added later — is Other, so selecting Other
+    (or every role) never drops a row."""
+    listed = set(PEOPLE_ROLES) | {PEOPLE_ROLE_BOARD}
+    values = roles.astype(str)
+    return values.where(values.isin(listed), PEOPLE_ROLE_OTHER)
 
 
 def is_former_title(title: Optional[str]) -> bool:
@@ -962,7 +972,7 @@ def apply_people_criterion(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
     if roles:
         # Saved criteria may still name the retired "Unknown" bucket.
         wanted = {PEOPLE_ROLE_OTHER if str(r) == PEOPLE_ROLE_UNKNOWN else str(r) for r in roles}
-        out = out[out["role"].astype(str).isin(wanted)]
+        out = out[role_bucket(out["role"]).isin(wanted)]
 
     title_contains = (criterion.get("title_contains") or "").strip()
     if title_contains:

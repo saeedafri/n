@@ -147,13 +147,13 @@ internal revenue code section rule regulation exhibit
 management finance inventory operations marketing sales merchandising strategy technology supply
 chain place stores brands foods retail products services partners capital digital commercial
 banking segment division business americas asia pacific emerging markets consumer global
-news release immediate about industry leader veteran insider exec tech yes no takes temporary medical leave
+news release immediate about industry leader veteran insider exec tech yes no takes temporary medical leave companies
 """.split())
-_NAME_WORD = r"[A-Z][a-zA-Z'’\-]+"
+_NAME_WORD = r"[A-ZÀ-ÖØ-Þ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+"
 _NAME = re.compile(
     rf"\b{_NAME_WORD}(?:\s+(?:[A-Z]\.|{_NAME_WORD}|[A-Z]\.\s*[A-Z]\.)){{1,3}}"
     r"(?:,?\s+(?:Jr\.|Sr\.|II\b|III\b|IV\b))?")
-_HONORIFIC = re.compile(r"\b(?:Mr|Ms|Mrs|Dr|Messrs)\.?\s+(?P<surname>[A-Z][a-zA-Z\-]+(?:['’][A-Z][a-zA-Z\-]+)?)")
+_HONORIFIC = re.compile(r"\b(?:Mr|Ms|Mrs|Dr|Messrs)\.?\s+(?P<surname>[A-ZÀ-Þ][a-zA-ZÀ-ÿ\-]+(?:['’][A-Z][a-zA-Z\-]+)?)")
 
 
 # "death of NAME", "appointed NAME", "replacing NAME": whatever follows is a person.
@@ -188,12 +188,19 @@ def known_people(body: str) -> Dict[str, str]:
         while len(words) > 2 and words[0].lower() in _NOT_NAME:
             words = words[1:]
         name = re.sub(r"[’']s$", "", " ".join(words))
-        if not _is_name(name):
+        # "Mr. Vestberg’s Verizon Board": a possessive ends the name.
+        if not _is_name(name) or re.search(r"[’']s\s", name):
             continue
         last = re.sub(r",?\s+(?:Jr\.|Sr\.|II|III|IV)$", "", name).split()[-1].strip(".,")
         lead = body[max(0, m.start() - 40):m.start()]
+        # "Ms. Sarah G. McCoy has resigned": the honorific is on the full name.
         if surnames and last not in surnames and not _NAME_LEAD.search(lead):
-            continue
+            if not re.search(r"\b(?:Mr|Ms|Mrs|Dr)\.?\s+$", lead):
+                continue
+            # "Ms. Mears Watkins" after "Shaunte D. Mears Watkins": the full spelling.
+            longer = re.search(rf"\b{_NAME_WORD}\s+(?:[A-Z]\.\s+)?{re.escape(name)}\b", body)
+            if longer and _is_name(longer.group(0)):
+                name = longer.group(0)
         # The first full spelling wins; later ones are usually the same person.
         people.setdefault(last, name)
     return people
@@ -300,17 +307,19 @@ def title_apposition(sentence: str, name_end: int) -> str:
 
 _DEPART = re.compile(
     r"\b(?:resign\w*|retire[sd]?\b|retiring\b|(?:his|her|their|planned|upcoming|intended|announced|anticipated)\s+retirement|"
-    r"retirement\s+(?:of|from|as|effective)|step(?:s|ped|ping)?\s+down|depart(?:s|ed|ing|ure)\b|"
+    r"retirement\s+(?:of|from|as|effective)|(?<!such\s)retirements|step(?:s|ped|ping)?\s+down|depart(?:s|ed|ing|ure)?\b|"
     r"(?:was|were|been|has|have|Board|Company)\s+terminated|terminated\s+(?:the\s+)?(?:employment|services)\s+of|"
     r"termination\s+of\s+(?:Mr|Ms|Mrs|Dr)\.?\s|"
-    r"separat(?:e|ed|ion)\s+from|will\s+leave|leave\s+the\s+Company|left\s+the\s+Company|"
-    r"(?:not|decline\w*|not\s+to)\s+(?:to\s+)?(?:stand|seek|run)\s+for\s+re-?\s?election|"
+    r"separat(?:e|ed|ion)\s+from|will\s+leave|(?:be|is|are)\s+leaving|leave\s+the\s+Company|left\s+the\s+Company|ceased\s+serving|suspended\s+from|"
+    r"(?:not|decline\w*|not\s+to)\s+(?:to\s+)?(?:stand|seek|run)\s+(?:for\s+)?re-?\s?election|"
     r"not\s+be\s+(?:standing|nominated)|cease[sd]?\s+to\s+(?:serve|be)|removed|"
     r"passed\s+away|death\s+of|will\s+not\s+be\s+re-?nominated|no\s+longer)", re.I)
 _APPOINT = re.compile(
     r"\b(?:appoint\w*|(?<!re-)(?<!re)(?<!re- )elect(?:ed|ion|s)?\b|named|promot\w*|hired|hire\s+of|"
     r"(?:will|to)\s+succeed|succeed(?:s|ed)\b|assum(?:e|es|ed|ing)\s+the\s+(?:role|position|title|duties|responsibilit)\w*|"
-    r"(?:will|to)\s+(?:serve|join|become)|join(?:s|ed)\s+the\s+Company|commence\w*\s+employment)", re.I)
+    r"(?:will|to)\s+(?:serve|join|become)|join(?:s|ed)\s+the\s+Company|commence\w*\s+employment|"
+    r"transition\w*\s+(?:to|into)\s+(?:the\s+|a\s+)?(?:newly\s+created\s+|new\s+)?(?:role|position)|"
+    r"became\s+(?:a\s+)?(?:member|director))", re.I)
 # A sentence about compensation, not about who holds the job.
 _COMP = re.compile(
     r"\b(?:base\s+salary|bonus|equity\s+award|restricted\s+stock|RSUs?|PSUs?|stock\s+options?|"
@@ -341,6 +350,12 @@ _REASON = re.compile(
     r"|\bwithout\s+cause|\bfor\s+cause\b|\bmutual(?:ly)?\s+agree\w*", re.I)
 _INTERIM = re.compile(r"\b(?:interim|acting)\b", re.I)
 _PROMOTE = re.compile(r"\bpromot\w*|\b(?:currently|presently)\s+(?:serves|serving)\b", re.I)
+
+
+# Right after the name: a seat on the board itself, not on one of its committees.
+_BOARD_SEAT_AFTER = re.compile(
+    r"[\s,]*(?:\d{2},?\s+)?(?:as\s+(?:an?\s+)?(?:new\s+)?(?:independent\s+|non-executive\s+|Class\s+[IVX]+\s+)*"
+    r"(?:member\s+of\s+(?:the|its|our)\s+Board|director\b)|to\s+(?:the|its|our)\s+Board\b(?!\s*['’]s))", re.I)
 
 
 def _departure_type(sentence: str) -> str:
@@ -450,6 +465,9 @@ def extract_events(situation: str) -> List[dict]:
                         # "elected NAME, 54, ... to succeed OTHER as Chief Executive Officer"
                         m = _SUCCEED_AS.search(sentence, verb.start())
                         stated = _clean_title(m.group("t")) if m else ""
+                    if not stated and _BOARD_SEAT_AFTER.match(sentence, name_end if pos > verb.start() else verb.end()):
+                        # "elected Joaquin Duato as an independent member of the Board"
+                        stated = "Director"
                     if not stated and not re.search(r"succe", verb.group(0), re.I):
                         # An appointment with no title is usually a committee seat.
                         continue
@@ -834,10 +852,37 @@ def _news_event(person: str, kind: str, title: str, headline: str, confidence: s
     if not _is_name(person) or re.search(r"\b(?:Inc|Corp|Co|Ltd|LLC|Group|Holdings|Brands|Stores)\b", person):
         return None
     title = _N_TITLE_END.sub("", title.strip()).strip(" .")
+    if re.fullmatch(r"(?:its\s+|the\s+)?Board(?:\s+of\s+Directors)?", title, re.I):
+        title = "Director"
     if kind == "Appointment" and not re.match(rf"(?:\S+\s+){{0,4}}{_N_ROLE_WORDS}", title, re.I):
         return None
     return {"person": person, "change": kind, "title": title, "confidence": confidence,
             "event_type": "Appointment" if kind == "Appointment" else "Departure", "evidence": headline}
+
+
+def _clean_headline(headline: str) -> str:
+    text = re.sub(r"\s+", " ", (headline or "").replace("’", "'")).strip()
+    text = re.sub(r"\s*\((?:[A-Z.:]+\s*:?\s*)+\)", "", text)                 # "(PG:NYSE)"
+    return re.sub(r"\s+By\s+Investing\.com$|\s+[-|]\s+[A-Z][\w .&]+$", "", text)
+
+
+def tickers_by_short_name(names: Dict[str, str]) -> Dict[str, str]:
+    """short_name -> ticker, for names only one company uses."""
+    owners: Dict[str, set] = {}
+    for ticker, name in names.items():
+        key = short_name(name).lower()
+        if key:
+            owners.setdefault(key, set()).add(ticker)
+    return {key: next(iter(t)) for key, t in owners.items() if len(t) == 1}
+
+
+def appointing_company(headline: str, index: Dict[str, str]) -> Optional[str]:
+    """Ticker of the company a headline says made an appointment: "Five Below
+    Appoints Former Ulta Beauty CFO ..." -> FIVE. The feed often files such a
+    story under the person's former employer (ULTA)."""
+    m = _N_ACTIVE_AS.search(_clean_headline(headline))
+    m = m or _N_ACTIVE.search(_clean_headline(headline))
+    return index.get(short_name(m.group("co")).lower()) if m else None
 
 
 def parse_news(headline: str, summary: str, company: str) -> List[dict]:
@@ -846,14 +891,16 @@ def parse_news(headline: str, summary: str, company: str) -> List[dict]:
     Medium confidence: read from the headline. Low: the headline names the
     change and the role but not the person ("Five Below names COO"), so the
     person is the summary's event for that role."""
-    text = re.sub(r"\s+", " ", (headline or "").replace("’", "'")).strip()
-    text = re.sub(r"\s*\((?:[A-Z.:]+\s*:?\s*)+\)", "", text)                 # "(PG:NYSE)"
-    text = re.sub(r"\s+By\s+Investing\.com$|\s+[-|]\s+[A-Z][\w .&]+$", "", text)
+    text = _clean_headline(headline)
     m = _N_ACTIVE_AS.search(text) or _N_ACTIVE.search(text)
     if m and _about_company(m.group("co"), company):
         title, second = m.group("title"), _N_SECOND.search(m.group("title"))
         title = title[:second.start()] if second else title
         words = m.group("person").split()
+        # "Appoints Former Ulta Beauty CFO Scott Settersten": the name follows the role.
+        roles_at = [i for i, w in enumerate(words) if _N_ROLE.fullmatch(w.strip(",."))]
+        if roles_at and len(words) - roles_at[-1] > 2:
+            words = words[roles_at[-1] + 1:]
         # "Appoints Tech Industry Leader Pat Gelsinger": descriptors before the name.
         while len(words) > 2 and words[0].lower().strip(".,") in _NOT_NAME:
             words.pop(0)
@@ -899,10 +946,17 @@ def build_news_changes(rows: List[dict], names: Dict[str, str]) -> pd.DataFrame:
     """One row per change a news item reports; several outlets reporting the
     same change within 30 days collapse into the first, the rest listed."""
     records = []
+    index = tickers_by_short_name(names)
     for r in rows:
         ticker = (r.get("ticker") or "").strip()
         when = pd.Timestamp(r.get("event_date")) if r.get("event_date") else pd.NaT
-        for e in parse_news(r.get("headline") or "", r.get("situation") or "", names.get(ticker, "")):
+        found = parse_news(r.get("headline") or "", r.get("situation") or "", names.get(ticker, ""))
+        if not found:
+            other = appointing_company(r.get("headline") or "", index)
+            if other and other != ticker:
+                ticker = other
+                found = parse_news(r.get("headline") or "", r.get("situation") or "", names[other])
+        for e in found:
             e.update(ticker=ticker, filing_date=when, notice_date=when, role=_role_of(e["title"], e["evidence"]),
                      is_board=_is_board(e["title"], e["evidence"]), source_ref=r.get("source_ref") or "",
                      event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
@@ -949,13 +1003,22 @@ def _build_management_changes() -> pd.DataFrame:
     t0 = _time.perf_counter()
     # Raises: a timeout read as "no events" would be materialized and served.
     rows = db_manager.execute_query_readonly_raising(_EVENTS_QUERY)
+    names: Dict[str, str] = {}
     try:
-        names = {str(r["ticker"]): r["name"] for r in
-                 db_manager.execute_query_readonly(_COMPANIES_QUERY) or [] if r.get("ticker")}
+        # Every ticker with events (~4,800), so news and moves work beyond the
+        # 540 Coresight companies; the Coresight spelling wins where both exist.
+        from data.screening_service import get_all_companies_universe
+        wide = get_all_companies_universe()
+        names = {str(t): str(n) for t, n in zip(wide["ticker"], wide["company_name"]) if t and n}
+    except Exception as exc:
+        log_structured_error(exc, page="management_changes", component="_build_management_changes",
+                             operation="fetch_all_company_names")
+    try:
+        names.update({str(r["ticker"]): r["name"] for r in
+                      db_manager.execute_query_readonly(_COMPANIES_QUERY) or [] if r.get("ticker")})
     except Exception as exc:
         log_structured_error(exc, page="management_changes", component="_build_management_changes",
                              operation="fetch_company_names")
-        names = {}
     df = build_changes(rows, names)
     try:
         news_rows = db_manager.execute_query_readonly_raising(_NEWS_QUERY) or []
@@ -995,6 +1058,9 @@ def get_management_changes() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v8: wider extraction (depart / leaving / ceased serving / re-election,
+        #      accented names), news for every ticker, appointments re-filed
+        #      under the appointing company (2026-10-16).
         # _v7: news rows' moved_from "" not NaN — NaN was counted as a move (2026-10-15).
         # _v6: filing_year / filing_unit dropped — the 8-K is resolved when its link is
         #      opened; the bulk lookup timed out and blocked the build (2026-10-15).
@@ -1002,7 +1068,7 @@ def get_management_changes() -> pd.DataFrame:
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v7", _build_management_changes, sources,
+        "management_changes_v8", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

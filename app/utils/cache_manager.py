@@ -366,10 +366,14 @@ def _warm_keydevs_screening() -> None:
     Paying it on this thread means nobody in the UI ever does.
     """
     from data.screening_service import (
+        KEYDEV_EVENT_INDEX, KEYDEV_INDEX_SOURCES, build_keydev_event_index,
         get_keydev_subtypes_by_category, get_all_companies_universe)
+    from utils.materialize import materialized_or_build
 
     get_all_companies_universe()
     get_keydev_subtypes_by_category()
+    # The lean event index the unbounded per-industry page is picked from.
+    materialized_or_build(KEYDEV_EVENT_INDEX, build_keydev_event_index, KEYDEV_INDEX_SOURCES)
 
 
 def _warm_store_locations_screening() -> None:

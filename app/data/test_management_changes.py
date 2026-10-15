@@ -268,6 +268,58 @@ def test_news_repeats_fold_into_filing():
     assert sorted(rest["source"]) == ["CNBC", "Reuters"] and len(rest) == 2
 
 
+
+def test_wording_the_extractor_used_to_miss():
+    """Real 5.02 prose that yielded no person before 2026-10-16."""
+    # KMB 2026-10-01: bare "depart", "the Corporation".
+    got = events("On September 29, 2026, Russell Torres, the Corporation’s President and Chief "
+                 "Operating Officer, notified the Corporation that he will depart the Corporation "
+                 "effective November 2, 2026 to pursue other opportunities.")
+    assert ("Russell Torres", "Departure") in got
+    # KBH 2026-01-07: "not to seek re-election" (no "for").
+    got = events("(b) On January 6, 2026, director James C. Weaver informed KB Home of his decision "
+                 "not to seek re-election at KB Home’s 2026 Annual Meeting of Stockholders. Mr. Weaver "
+                 "will carry out the remainder of his term.")
+    assert got[("James C. Weaver", "Departure")]["event_type"] == "Not Standing for Re-election"
+    # GO 2022-02-02: accented name.
+    got = events("On January 28, 2022, María Fernanda Mejía informed Grocery Outlet Holding Corp. of her "
+                 "decision, effective February 2, 2022, to resign as a Class III member of the Board.")
+    assert any(p.endswith("Mejía") and c == "Departure" for p, c in got)
+    # ZUMZ 2021-06-02: honorific on the full name.
+    got = events("(d) Departure of Director Effective as of June 3, 2021, Ms. Sarah G. McCoy has resigned "
+                 "from the Board of Directors of Zumiez Inc. Ms. McCoy will remain an advisor.")
+    assert ("Sarah G. McCoy", "Departure") in got
+    # CTRN 2025-01-21: "is leaving the Company".
+    got = events("On January 21, 2025, Citi Trends, Inc. announced that Vivek Bhargava, Senior Vice "
+                 "President of Supply Chain, is leaving the Company, effective January 21, 2025.")
+    assert ("Vivek Bhargava", "Departure") in got
+    # PEP 2026-09-17: a board seat with no title is a director appointment.
+    got = events("On September 17, 2026, the Board of Directors of PepsiCo, Inc. elected Joaquin Duato as "
+                 "an independent member of the Board, effective December 1, 2026. Mr. Duato will serve "
+                 "on the Audit Committee of the Board, effective December 1, 2026.")
+    assert got[("Joaquin Duato", "Appointment")]["role"] == "Board"
+
+
+def test_possessive_company_is_not_a_person():
+    """VZ 2025-10-04: "Mr. Vestberg’s Verizon Board" once displaced the new CEO."""
+    got = events("On October 4, 2025, the Verizon Board of Directors appointed Daniel H. Schulman as "
+                 "Chief Executive Officer, effective immediately, and Hans E. Vestberg stepped down as "
+                 "Chairman and Chief Executive Officer. Mr. Vestberg’s Verizon equity awards will vest. "
+                 "Mr. Schulman, 67, joined the Board in 2018.")
+    assert ("Daniel H. Schulman", "Appointment") in got
+    assert not any("Verizon" in p for p, _ in got)
+
+
+def test_news_filed_under_the_former_employer():
+    """The feed files "Five Below Appoints Former Ulta Beauty CFO ..." under ULTA."""
+    from data.management_changes import build_news_changes
+    names = {"ULTA": "Ulta Beauty, Inc.", "FIVE": "Five Below, Inc."}
+    rows = [{"event_id": 1, "ticker": "ULTA", "event_date": "2026-09-24", "source": "AV News — Reuters",
+             "headline": "Five Below Appoints Former Ulta Beauty CFO Scott Settersten to Board",
+             "situation": "", "source_ref": ""}]
+    df = build_news_changes(rows, names)
+    assert list(zip(df["ticker"], df["person"])) == [("FIVE", "Scott Settersten")]
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

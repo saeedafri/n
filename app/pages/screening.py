@@ -351,6 +351,7 @@ from data.people_service import (
     period_mask,
     person_key,
     pivot_people_years,
+    role_bucket,
 )
 from data.screening_service import (
     get_all_industries,
@@ -572,7 +573,7 @@ def _set_active_watchlist_scope(wl_id):
     members = [(c["ticker"], c.get("company_name") or "") for c in cos]
     tickers = {t for t, _ in members}
     try:
-        count = len(filter_universe_to_members(get_base_company_universe(), members))
+        count = len(filter_universe_to_members(_screening_universe(), members))
     except Exception:
         count = len(members)
     st.session_state.scr_watchlist_tickers = tickers
@@ -898,7 +899,13 @@ def _all_companies_on() -> bool:
     96% for industry. A Country criterion therefore drops the 42% that have no
     country at all — a coverage gap in that column, not a Coresight-only universe.
     """
-    return st.session_state.get("scr_screen_for") == "Key Devs"
+    return st.session_state.get("scr_screen_for") in ("Key Devs", "People")
+
+
+def _watchlist_on() -> bool:
+    """A watchlist is active. Its member list may be EMPTY (an empty watchlist,
+    or a failed read) — that scope is zero companies, never the whole universe."""
+    return st.session_state.get("scr_watchlist_members") is not None
 
 
 def _screening_universe():
@@ -5088,7 +5095,8 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str, category: s
         values["date_fields"] = _collect_keydevs_date_fields(
             pf if same else None, f"{key_prefix}_{category}",
             PEOPLE_DEFAULT_TIMEFRAME[category])
-        st.caption("Period is the date the change was announced."
+        st.caption("Period is the date the change was disclosed (filing or article date), "
+                   "as in Key Devs."
                    if category == PEOPLE_CATEGORY_CHANGES
                    else "Period is the date the executive joined the new company.")
         return values
@@ -5876,6 +5884,10 @@ def _render_active_criteria():
                 # when the filter is working perfectly; the real count is the
                 # record count above the results grid.
                 count_html = ""
+            elif ctype == "keydevs" and dbg.get("detail_column") is False:
+                # Key Devs mode counts events, in the results header; no
+                # per-company scan runs for the card (screening_service).
+                count_html = ""
             elif ctype in FILTERING_CRITERION_TYPES or shows_available_data_only(criterion):
                 count_html = (f"<br><span class='criterion-card-count'>"
                               f"{rows_out} companies matched</span>")
@@ -5934,7 +5946,7 @@ def _render_status_bar():
             try:
                 wl_tickers = st.session_state.get("scr_watchlist_tickers")
                 wl_name    = st.session_state.get("scr_active_watchlist_name")
-                if wl_tickers:
+                if wl_tickers is not None:
                     # True company count (composite identity), not len(ticker set).
                     total = st.session_state.get("scr_watchlist_count")
                     if total is None:
@@ -6005,12 +6017,10 @@ def _render_keydevs_results():
                     _sync_criteria_fingerprint()
                     if _needs_results_recompute():
                         _trigger_recompute()
-                else:
-                    wl_members = st.session_state.get("scr_watchlist_members")
-                    if wl_members:
-                        st.session_state.scr_working_df = filter_universe_to_members(
-                            get_base_company_universe(), wl_members
-                        )
+                elif _watchlist_on():
+                    st.session_state.scr_working_df = filter_universe_to_members(
+                        _screening_universe(), st.session_state.scr_watchlist_members
+                    )
                 st.session_state.scr_show_results = True
 
         with col_clear:
@@ -6047,6 +6057,7 @@ def _render_keydevs_results():
         # working set already IS every event ticker — send the sentinel so the
         # query drops its IN list entirely instead of naming all 4,327 tickers.
         _tickers = (ALL_TICKERS if _all_companies_on() and not _narrowing_criteria(criteria)
+                    and not _watchlist_on()
                     else tuple(df["ticker"].values))
         if not keydev_criteria:
             # No Key Dev criterion — all categories, default 1-year window.
@@ -6857,6 +6868,8 @@ def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
         "ticker": "Ticker", "executive_name": "Executive Name", "title": "Title",
         "role": "Role", "age": "Age", "year_born": "Year Born",
     })
+    if "Role" in out.columns:
+        out["Role"] = role_bucket(out["Role"])
     year_cols = [c for c in out.columns if str(c).isdigit()]
     for col in year_cols:
         out[col] = out[col].apply(lambda v: f"${v:,.0f}" if pd.notna(v) else "")
@@ -6943,15 +6956,13 @@ def _render_people_results():
                     _sync_criteria_fingerprint()
                     if _needs_results_recompute():
                         _trigger_recompute()
+                elif _watchlist_on():
+                    st.session_state.scr_working_df = filter_universe_to_members(
+                        _screening_universe(), st.session_state.scr_watchlist_members
+                    )
                 else:
-                    wl_members = st.session_state.get("scr_watchlist_members")
-                    if wl_members:
-                        st.session_state.scr_working_df = filter_universe_to_members(
-                            get_base_company_universe(), wl_members
-                        )
-                    else:
-                        # People-only screen: every company is in scope.
-                        st.session_state.scr_working_df = get_base_company_universe()
+                    # People-only screen: every company is in scope.
+                    st.session_state.scr_working_df = _screening_universe()
                 st.session_state.scr_show_results = True
 
         with col_clear:
@@ -6975,7 +6986,11 @@ def _render_people_results():
         render_sticky_loader("Loading People", until_run_ends=True)
 
         t_people = time.perf_counter()
-        tickers_in_scope = set(company_df["ticker"].unique())
+        # None = every company, including ones added to the data after the
+        # universe was last built. A watchlist or an Industry / Geography
+        # criterion makes it the exact ticker set — nothing outside it is shown.
+        narrowed = _watchlist_on() or _narrowing_criteria(company_criteria)
+        tickers_in_scope = set(company_df["ticker"].astype(str)) if narrowed else None
         company_meta = _people_company_meta(company_df)
         # One section per category the criteria name, each filtered only by its
         # own criteria and reading only its own dataset — a remuneration screen
@@ -7007,7 +7022,14 @@ def _render_people_results():
         st.error("Something went wrong. Please try again.")
 
 
-def _render_people_grid(tickers_in_scope: set, people_criteria: List[dict],
+def _in_scope(tickers: pd.Series, scope: Optional[set]) -> pd.Series:
+    """True for rows whose ticker is in the People scope (None = all)."""
+    if scope is None:
+        return pd.Series(True, index=tickers.index)
+    return tickers.astype(str).isin(scope)
+
+
+def _render_people_grid(tickers_in_scope: Optional[set], people_criteria: List[dict],
                         company_meta: pd.DataFrame, t_people: float) -> None:
     """Executives x metric rows with one column per year (people_service.pivot_people_years)."""
     # Disk read on every rerun after the first build — no SQL here.
@@ -7016,7 +7038,7 @@ def _render_people_grid(tickers_in_scope: set, people_criteria: List[dict],
         st.info("No executive compensation data is available.")
         return
 
-    scoped = people_df[people_df["ticker"].isin(tickers_in_scope)]
+    scoped = people_df[_in_scope(people_df["ticker"], tickers_in_scope)]
     if scoped.empty:
         st.info("No executive data for the companies matching the current criteria. "
                 "Executive data does not cover every company.")
@@ -7119,7 +7141,7 @@ def _filter_changes_for_people(df: pd.DataFrame, people_criteria: List[dict],
                     | df["previous_title"].str.contains(wanted, case=False, regex=False, na=False)]
         if criterion.get("roles"):
             roles = {PEOPLE_ROLE_OTHER if r == PEOPLE_ROLE_UNKNOWN else r for r in criterion["roles"]}
-            df = df[df["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER).isin(roles)]
+            df = df[role_bucket(df["role"]).isin(roles)]
     return df
 
 
@@ -7132,14 +7154,14 @@ def _source_link(ticker, source, source_ref) -> str:
     return source_ref or ""
 
 
-def _render_people_events(category: str, tickers_in_scope: set, people_criteria: List[dict],
+def _render_people_events(category: str, tickers_in_scope: Optional[set], people_criteria: List[dict],
                           company_meta: pd.DataFrame) -> None:
     """One People event category (shareholder votes, layoffs, ...) for the
     companies in scope, filtered by each criterion's period."""
     label = PEOPLE_CATEGORIES[category]
     try:
         events = get_people_events(category)
-        df = events[events["ticker"].isin(tickers_in_scope)]
+        df = events[_in_scope(events["ticker"], tickers_in_scope)]
         for criterion in people_criteria:
             df = df[period_mask(df["event_date"], criterion)]
         if df.empty:
@@ -7178,7 +7200,7 @@ def _render_people_events(category: str, tickers_in_scope: set, people_criteria:
         st.error(f"{label} could not be loaded. Please try again shortly.")
 
 
-def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict],
+def _render_management_changes(tickers_in_scope: Optional[set], people_criteria: List[dict],
                                company_meta: pd.DataFrame) -> None:
     """Appointments and departures read from 8-K Item 5.02 for the companies and
     people in scope. Everything is shown: board seats, every confidence tier, the
@@ -7191,8 +7213,11 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
             st.info("Management changes are not available right now. Please try again shortly.")
             return
         events = changes[changes["change"].isin(["Appointment", "Departure"])]
-        df = events[events["ticker"].isin(tickers_in_scope)]
-        df = _filter_changes_for_people(df, people_criteria, df["notice_date"])
+        df = events[_in_scope(events["ticker"], tickers_in_scope)]
+        # The period reads the DISCLOSURE date (filing / article), the same
+        # date Key Devs filters on. The date stated in the text ("On October 1,
+        # ...") is days earlier and dropped fresh 8-Ks from a 7-day window.
+        df = _filter_changes_for_people(df, people_criteria, df["filing_date"])
         if df.empty:
             st.info("Management Changes: none announced in this period for these "
                     "companies and filters. Latest on file: "
@@ -7208,6 +7233,7 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
         display = pd.DataFrame({
             "Company":          out["Company"].astype(str),
             "Ticker":           out["ticker"].astype(str),
+            "Disclosed":        day("filing_date"),
             "Announced":        day("notice_date"),
             "Effective":        day("effective_date").where(day("effective_date") != "",
                                                             out["effective_note"].fillna("")),
@@ -7216,7 +7242,7 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
             "Event":            out["event_type"].astype(str),
             "Title(s)":         out["titles"].fillna(""),
             "Previous Title":   out["previous_title"].fillna(""),
-            "Role":             out["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER),
+            "Role":             role_bucket(out["role"]),
             "Succeeds":         out["replaces"].fillna(""),
             "Succeeded By":     out["replaced_by"].fillna(""),
             "Reason":           out["reason"].fillna(""),
@@ -7258,8 +7284,9 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
         )
         st.caption("Sources: SEC 8-K (Item 5.02), SEC 6-K and executive news. A change "
                    "reported by several sources is listed once, from the filing when there is "
-                   "one; the others are under Also Reported By. Announced = date the change was "
-                   "disclosed (news: publication date); Effective = date it takes effect, as "
+                   "one; the others are under Also Reported By. Disclosed = filing or article date "
+                   "(the date the period filters on); Announced = date the filing gives for the "
+                   "change; Effective = date it takes effect, as "
                    "stated. Years in Role runs from the stated appointment to the stated "
                    "departure (or today); roles that began before 2016 are blank. Confidence: "
                    "High = title and timing read from a filing; Medium = from a filing without "
@@ -7270,7 +7297,7 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
         st.error("Management changes could not be loaded.")
 
 
-def _render_executive_moves(tickers_in_scope: set, people_criteria: List[dict],
+def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: List[dict],
                             company_meta: pd.DataFrame) -> None:
     """Executives who left one company and were appointed at another (board
     seats included), with pay before and after where both are on file.
@@ -7280,9 +7307,11 @@ def _render_executive_moves(tickers_in_scope: set, people_criteria: List[dict],
     """
     try:
         changes = get_management_changes()
+        # A move between two companies is listed when EITHER is in scope: a
+        # watchlist company losing an executive is as much its news as gaining one.
         moves = changes[(changes["moved_from"].astype(str) != "")
-                        & (changes["ticker"].isin(tickers_in_scope)
-                           | changes["moved_from"].isin(tickers_in_scope))]
+                        & (_in_scope(changes["ticker"], tickers_in_scope)
+                           | _in_scope(changes["moved_from"], tickers_in_scope))]
         moves = _filter_changes_for_people(
             moves, people_criteria, moves["effective_date"].fillna(moves["notice_date"]))
         if moves.empty:
@@ -7308,7 +7337,7 @@ def _render_executive_moves(tickers_in_scope: set, people_criteria: List[dict],
             "Left":             moves["moved_from_date"].dt.strftime("%Y-%m-%d").fillna(""),
             "To Company":       moves["ticker"].astype(str).map(lambda t: names.get(t, t)),
             "New Title":        moves["titles"].fillna(""),
-            "Role":             moves["role"].astype(str).replace(PEOPLE_ROLE_UNKNOWN, PEOPLE_ROLE_OTHER),
+            "Role":             role_bucket(moves["role"]),
             "Joined":           moves["effective_date"].fillna(moves["notice_date"]).dt.strftime("%Y-%m-%d"),
             "Prior Total Pay":  moves["prior_pay"].map(money),
             "Prior Pay Year":   moves["prior_pay_year"].map(year),
@@ -7359,13 +7388,15 @@ def _fill_age_from_filings(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
-def _render_people_coverage_note(people_df: pd.DataFrame, tickers_in_scope: set) -> None:
+def _render_people_coverage_note(people_df: pd.DataFrame, tickers_in_scope: Optional[set]) -> None:
     """Say how many in-scope companies have no people data at all.
 
     Executive compensation covers a minority of the universe (SEC proxies plus
     YFinance officer listings). Without this, a short result looks like a bug
     rather than a coverage gap.
     """
+    if tickers_in_scope is None:
+        return
     try:
         covered = set(people_df["ticker"].astype(str).unique())
         missing = len(tickers_in_scope - covered)
@@ -8346,7 +8377,7 @@ def _render_results():
                     _trigger_recompute()
                 elif not criteria:
                     wl_members = st.session_state.get("scr_watchlist_members")
-                    if wl_members:
+                    if wl_members is not None:
                         st.session_state.scr_working_df = filter_universe_to_members(
                             get_base_company_universe(), wl_members
                         )

@@ -413,30 +413,23 @@ def test_dedupe_does_not_touch_distinct_events():
     assert len(keep_working_set_companies(grid, working)) == 5
 
 
-def test_keydev_membership_path_skips_the_detail_fetch(monkeypatch):
-    """Key Devs mode never shows the per-company detail column, so it must not
-    pay to build it. Profiled: the detail query is one network packet per row
-    (3,461 packets for 3,453 rows); membership needs 388."""
+def test_keydev_membership_path_runs_no_query(monkeypatch):
+    """Key Devs mode never shows a per-company key-dev column, and the DISTINCT
+    ticker scan it once ran took 33-45 s on STG for an undated category — so the
+    criterion runs no query there at all and stays non-filtering."""
     import data.screening_service as svc
-    seen = {}
-
-    def fake_query(q, *a, **kw):
-        seen["sql"] = " ".join(q.split())
-        return [{"ticker": "SBUX"}]
-
-    monkeypatch.setattr(svc.db_manager, "execute_query_readonly", fake_query)
+    calls = []
+    monkeypatch.setattr(svc.db_manager, "execute_query_readonly",
+                        lambda *a, **kw: calls.append(a) or [])
 
     out, dbg = svc.apply_keydevs_criterion(
         {"type": "keydevs", "categories": ["M&A Activity"],
          "display_col": "Key Developments"},
         COMPANIES, detail_column=False)
 
-    assert "SELECT DISTINCT ticker" in seen["sql"]
-    assert "headline" not in seen["sql"].lower()
-    assert "ROW_NUMBER" not in seen["sql"]
-    assert dbg["with_data"] == 1
-    assert dbg["rows_out"] == 3            # still non-filtering
-    assert list(out["Key Developments"]) == ["Yes", None, None]
+    assert calls == []
+    assert dbg["rows_out"] == 3 and dbg["detail_column"] is False
+    assert list(out["ticker"]) == list(COMPANIES["ticker"])
 
 
 def test_keydev_detail_path_still_fetches_headlines(monkeypatch):
@@ -544,14 +537,14 @@ def test_keydev_criterion_drops_the_in_list_when_all_tickers(monkeypatch):
     svc.apply_keydevs_criterion(
         {"type": "keydevs", "categories": ["M&A Activity"],
          "display_col": "Key Developments"},
-        COMPANIES, detail_column=False, all_tickers=True)
+        COMPANIES, detail_column=True, all_tickers=True)
 
     assert "ticker IN" not in seen["sql"]
 
     svc.apply_keydevs_criterion(
         {"type": "keydevs", "categories": ["M&A Activity"],
          "display_col": "Key Developments"},
-        COMPANIES, detail_column=False, all_tickers=False)
+        COMPANIES, detail_column=True, all_tickers=False)
 
     assert "ticker IN" in seen["sql"]
 
@@ -738,7 +731,6 @@ def test_keydev_criterion_still_annotates_never_drops_in_wide_mode(monkeypatch):
         all_companies=True, keydev_details=False)
 
     assert len(working) == 2, "the widened screen dropped a company"
-    assert trace[-1]["with_data"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -976,7 +968,7 @@ def test_key_devs_mode_always_covers_every_event_ticker():
     import inspect, pages.screening as page
 
     src = inspect.getsource(page._all_companies_on)
-    assert 'st.session_state.get("scr_screen_for") == "Key Devs"' in src
+    assert '"Key Devs"' in src
     assert "checkbox" not in src.lower()
     assert not hasattr(page, "_render_coverage_toggle"), "the opt-in checkbox must be gone"
 
@@ -1015,3 +1007,24 @@ def test_company_criteria_still_narrow_a_key_devs_screen(monkeypatch):
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_per_industry_pick_matches_the_window_query():
+    """Newest N per industry, newest first, ties by event_id — ROW_NUMBER() OVER
+    (PARTITION BY industry ORDER BY event_date DESC, event_id DESC), in memory."""
+    import data.screening_service as svc
+    index = pd.DataFrame({
+        "event_id": [1, 2, 3, 4, 5, 6],
+        "event_date": pd.to_datetime(["2026-10-01", "2026-10-02", "2026-10-02",
+                                      "2026-09-01", "2026-10-03", "2026-10-03"]),
+        "ticker": ["A", "A", "A", "B", "C", "A"],
+        "event_category": ["Management Changes"] * 5 + ["M&A Activity"],
+    })
+    industries = pd.Series({"A": "Food", "B": "Food", "C": None})
+    page = svc.pick_per_industry(index, industries, ("Management Changes",), None, None, 0, 2)
+    assert list(page["event_id"]) == [5, 3, 2]          # C (no industry) is its own group
+    page2 = svc.pick_per_industry(index, industries, ("Management Changes",), None, None, 2, 4)
+    assert list(page2["event_id"]) == [1, 4]
+    dated = svc.pick_per_industry(index, industries, ("Management Changes",),
+                                  pd.Timestamp("2026-10-02"), None, 0, 8)
+    assert sorted(dated["event_id"]) == [2, 3, 5]

@@ -714,3 +714,21 @@ def test_event_categories_are_people_categories():
     crit = [{"type": "people", "category": "shareholder_vote", "days": 30}]
     assert people_criteria_for(crit, "shareholder_vote") == crit
     assert people_criteria_for(crit, PEOPLE_CATEGORY_REMUNERATION) == []
+
+
+def test_other_role_covers_every_unlisted_role():
+    from data.people_service import role_bucket
+    roles = pd.Series(["CEO", "Board", "", "Unknown", "Chief Vibes Officer", "Other"])
+    assert list(role_bucket(roles)) == ["CEO", "Board", "Other", "Other", "Other", "Other"]
+    df = pd.DataFrame({"role": roles, "executive_name": list("abcdef")})
+    every = set(PEOPLE_ROLES) | {"Board"}
+    assert len(apply_people_criterion(df, {"roles": sorted(every)})) == len(df)
+    assert len(apply_people_criterion(df, {"roles": ["Other"]})) == 4
+
+
+def test_empty_watchlist_keeps_no_company():
+    from data.screening_service import filter_universe_to_members
+    universe = pd.DataFrame({"ticker": ["AAPL", "WMT"], "company_name": ["Apple", "Walmart"]})
+    assert len(filter_universe_to_members(universe, None)) == 2
+    assert len(filter_universe_to_members(universe, [])) == 0
+    assert list(filter_universe_to_members(universe, [("WMT", "Walmart")])["ticker"]) == ["WMT"]
