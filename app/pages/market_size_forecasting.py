@@ -562,7 +562,11 @@ def _comparison_chart(results: Dict[str, Dict[str, Any]]) -> go.Figure:
 # ═══════════════════════════════════════════════════════════════════
 
 def _table(df: pd.DataFrame, height: Optional[int] = None) -> None:
+    # A whole-number index is nothing but row numbers — 0, 1, 2, or whatever
+    # positions survived a sort — and reads as a nameless first column. An index
+    # that carries labels, dates or metric names, is part of the table and stays.
     st.dataframe(df, use_container_width=True,
+                 hide_index=pd.api.types.is_integer_dtype(df.index),
                  height=height or min(420, 44 + len(df) * 35))
 
 
@@ -1840,22 +1844,23 @@ def _render_prophet_tab(outcome: Dict[str, Any]) -> None:
 
 
 def _render_growth_tab(outcome: Dict[str, Any]) -> None:
-    freq_name = outcome["freq_name"]
-    noun = engine.FREQ_CONFIGS[freq_name]["unit"][:-1]
-    prefix = engine.PERIOD_ON_PERIOD[freq_name]
-    results = outcome["results"]
+    """Annual sales and the growth on them — the three columns the analysts work in.
 
+    The uploaded periods summed into calendar years, the chosen model's forecast
+    carried on in the same column, and the year-on-year rate taken on those
+    yearly totals. Nothing else: the data team's sheet is Year, Sales, YoY%.
+    """
+    freq_name = outcome["freq_name"]
+    unit = engine.FREQ_CONFIGS[freq_name]["unit"]
+    results = outcome["results"]
     annual = engine.FREQ_CONFIGS[freq_name]["s"] == 1
-    # "month-over-month (MoM)" — spelled out beside the abbreviation everywhere it
-    # labels something, so nobody has to know the shorthand.
-    period_on_period = f"{noun}-over-{noun} ({prefix})"
-    year_on_year = "year-over-year (YoY)"
-    _section(("Year-over-year (YoY) growth" if annual else
-              f"{period_on_period[0].upper()}{period_on_period[1:]} and "
-              f"{year_on_year} growth"),
-             f"Every {noun}'s sales and its growth on the previous {noun}"
-             + ("" if annual else f" and on the same {noun} a year earlier")
-             + " — the uploaded history, and the forecast periods on the same basis "
+
+    _section("Annual sales and year-over-year (YoY) growth",
+             ("Every year's sales and the rate on the year before"
+              if annual else
+              f"Your {unit} summed into calendar years, and the year-on-year rate "
+              "taken on those yearly totals")
+             + " — the uploaded history, and the forecast years on the same basis "
                "when you pick a model.")
 
     # Listed in the order the sections above use, not the order the models
@@ -1878,103 +1883,18 @@ def _render_growth_tab(outcome: Dict[str, Any]) -> None:
     picked = picked if picked in choices else choices[0]
 
     forecast = results[picked]["forecast"]["mean"] if picked in results else None
-    table = engine.growth_table(
+    table = engine.annual_rollup(
         outcome["loaded"].frame[engine.TARGET_COL], freq_name, forecast)
 
-    actual = table[table["Type"] == "Actual"]
-    latest = actual.iloc[-1] if len(actual) else None
-    if latest is not None:
-        # The table sits on a regular grid, so the row n places above the last
-        # one is literally n periods earlier — the base each growth % divides by.
-        sales = actual[engine.TARGET_COL]
-
-        def earlier(places: int):
-            return sales.iloc[-1 - places] if len(sales) > places else None
-
-        season = int(engine.FREQ_CONFIGS[freq_name]["s"])
-        cards = st.columns(3)
-        with cards[0]:
-            _card(f"Latest {noun}", f"{latest[engine.TARGET_COL]:,.0f}", latest["Period"])
-        with cards[1]:
-            _card(f"{period_on_period} growth", _percent(latest[f"{prefix}%"]),
-                  f"vs {earlier(1):,.0f}" if pd.notna(earlier(1))
-                  else "no earlier period")
-        with cards[2]:
-            # Annual data has one growth block only — a year on the previous
-            # year is already year-on-year — so its YoY% is the card beside this.
-            if season > 1:
-                _card(f"{year_on_year} growth", _percent(latest["YoY%"]),
-                      f"vs {earlier(season):,.0f}" if pd.notna(earlier(season))
-                      else "no period a year back")
-            else:
-                _card("Periods", f"{len(actual):,}", "actual rows in this table")
-
-    # Each row carries its own comparison values, so the order is a reading
-    # preference and nothing more.
+    # Each row carries its own comparison, so the order is a reading preference
+    # and nothing more.
     if newest_first:
         table = table.iloc[::-1].reset_index(drop=True)
 
     # Written out as text rather than left as numbers: the grid prints a blank
-    # cell as the word "None", which on a growth table — where the first rows
-    # genuinely have nothing to compare against — reads as a fault. The
-    # download below carries the unformatted numbers.
-    growth_cols = [c for c in table.columns if c.endswith("%")]
-    value_cols = [c for c in table.columns
-                  if c not in growth_cols and c not in ("Period", "Type")]
-    places = 0 if table[engine.TARGET_COL].abs().max() >= 100 else 2
-    display = table.copy()
-    for column in value_cols:
-        display[column] = display[column].map(
-            lambda v: "—" if pd.isna(v) else f"{v:,.{places}f}")
-    for column in growth_cols:
-        display[column] = display[column].map(
-            lambda v: "—" if pd.isna(v) else f"{v:,.2f}%")
-    styled = display.style.map(
-        lambda text: "color: #A3121F" if str(text).startswith("-") else "",
-        subset=growth_cols)
-    # Figures read as text here, and a text column defaults to left-aligned.
-    # `alignment` is in the column config proto but not yet in the typed
-    # helpers, so it goes in as a plain dict.
-    st.dataframe(styled, use_container_width=True, height=520, hide_index=True,
-                 column_config={column: {"alignment": "right"}
-                                for column in value_cols + growth_cols})
-    st.caption(
-        (f"**{prefix}** is {period_on_period.split(' (')[0]}; **YoY** is year-over-year. "
-         if not annual else "**YoY** is year-over-year. ")
-        + f"Growth is the change as a percentage of the earlier {noun}. It is blank "
-        f"where there is no earlier {noun} to compare against, where that {noun} was "
-        "blank in the upload, or where it was zero — nothing grows from zero. "
-        + ("Forecast rows carry the chosen model's central forecast, so the first "
-           "forecast row is measured against your last actual period — they are at "
-           "the " + ("top" if newest_first else "end") + " of the table."
-           if forecast is not None else
-           "Pick a model above to carry the table on through the forecast periods."))
-    stem = "market_size_growth" + ("" if picked not in results
-                                   else f"_{picked.lower()}")
-    _export_buttons(table, stem)
-
-    if not annual:
-        _render_annual_rollup(outcome, freq_name, forecast, newest_first, stem)
-
-
-def _render_annual_rollup(outcome: Dict[str, Any], freq_name: str,
-                          forecast, newest_first: bool, stem: str) -> None:
-    """Calendar-year totals and their growth — what the analysts work from.
-
-    The periods above summed into years, history and forecast in the same
-    column, with the rate taken on the yearly totals. Follows the same model
-    picker as the table above it.
-    """
-    unit = engine.FREQ_CONFIGS[freq_name]["unit"]
-    table = engine.annual_rollup(
-        outcome["loaded"].frame[engine.TARGET_COL], freq_name, forecast)
-
-    _section("Annual sales and growth",
-             f"The {unit} above summed into calendar years, and the "
-             "year-on-year rate taken on those yearly totals.")
-    if newest_first:
-        table = table.iloc[::-1].reset_index(drop=True)
-
+    # cell as the word "None", which on a growth table — where the first year
+    # genuinely has nothing to compare against — reads as a fault. The download
+    # below carries the unformatted numbers.
     display = table.copy()
     display[engine.TARGET_COL] = display[engine.TARGET_COL].map(
         lambda v: "—" if pd.isna(v) else f"{v:,.0f}")
@@ -1988,10 +1908,16 @@ def _render_annual_rollup(outcome: Dict[str, Any], freq_name: str,
                  column_config={column: {"alignment": "right"}
                                 for column in (engine.TARGET_COL, "YoY%")})
     st.caption(
-        f"Each year is the sum of its {unit}. A year the upload and the forecast "
-        "do not cover in full carries no rate — a short year measured against a "
-        "whole one reads as a collapse that never happened.")
-    _export_buttons(table, f"{stem}_annual")
+        f"Each year is the sum of its {unit}, and **YoY%** is that total against the "
+        "year before. A year the upload and the forecast do not cover in full carries "
+        "no rate — a short year measured against a whole one reads as a collapse that "
+        "never happened. "
+        + ("The years your history does not reach are the chosen model's forecast "
+           "summed the same way, so only those years change when you switch models."
+           if forecast is not None else
+           "Pick a model above to carry the table on through the forecast years."))
+    _export_buttons(table, "market_size_growth" + ("" if picked not in results
+                                                   else f"_{picked.lower()}"))
 
 
 def _render_comparison_tab(outcome: Dict[str, Any]) -> None:
@@ -2168,7 +2094,10 @@ def main() -> None:
     # The loader is held in a container created on EVERY run, so the element
     # tree above the tabs never shifts — otherwise the tabs remount and the
     # first combination-rank change bounces the user back to Diagnostics.
-    status_area = st.container()
+    # gap=None because the overlay posts one zero-height component per stage:
+    # they draw nothing, but at the default 16px they stacked into a white band
+    # under Run analysis as the run progressed.
+    status_area = st.container(gap=None)
     if run_clicked:
         tracker.step_start("ANALYSIS")
         with status_area:

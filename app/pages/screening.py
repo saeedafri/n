@@ -19,6 +19,7 @@ This iteration implements: Companies flow only.
 
 import json
 import hashlib
+import html
 import os
 import re
 import textwrap
@@ -330,6 +331,11 @@ from data.screening_config import (
     PEOPLE_ROLE_UNKNOWN,
     PEOPLE_ROLES,
     PEOPLE_YEARS,
+    PEOPLE_CATEGORIES,
+    PEOPLE_CATEGORY_CHANGES,
+    PEOPLE_CATEGORY_MOVES,
+    PEOPLE_CATEGORY_REMUNERATION,
+    PEOPLE_DEFAULT_TIMEFRAME,
     get_metric_labels,
     get_metric_info,
 )
@@ -338,6 +344,8 @@ from data.people_service import (
     apply_people_criterion,
     build_people_summary,
     get_people_universe,
+    people_criteria_for,
+    period_mask,
     person_key,
     pivot_people_years,
 )
@@ -371,6 +379,7 @@ from data.screening_service import (
     merge_company_columns,
     KeydevsQueryError,
     FILTERING_CRITERION_TYPES,
+    shows_available_data_only,
     get_keydevs_events_for_tickers,
     get_keydevs_events_count,
     keydev_subtype_domain,
@@ -1007,6 +1016,21 @@ def _remove_criterion(idx: int):
         st.error("Something went wrong. Please try again.")
 
 
+def _cancel_criterion_form():
+    """Close the open criterion form. Edit takes the criterion off the stack while
+    the form is open, so closing it without saving puts it back where it was —
+    otherwise Cancel (or clicking the palette button again) deleted it."""
+    prefill = st.session_state.get("scr_prefill")
+    idx = st.session_state.get("scr_prefill_idx")
+    if prefill is not None and idx is not None:
+        criteria = st.session_state.scr_active_criteria
+        criteria.insert(min(idx, len(criteria)), prefill)
+        _trigger_recompute()
+    st.session_state.scr_active_form = None
+    st.session_state.scr_prefill = None
+    st.session_state.scr_prefill_idx = None
+
+
 def _start_edit_criterion(idx: int):
     """Load an existing criterion into the form for editing."""
     try:
@@ -1016,7 +1040,16 @@ def _start_edit_criterion(idx: int):
         _trigger_recompute()
         st.session_state.scr_prefill = criterion
         st.session_state.scr_prefill_idx = idx
-        st.session_state.scr_active_form = criterion.get("type")
+        # Additional Data is a Statement Type of the Company Information form, so
+        # its Edit reopens that form — sending it to its own type routed it into
+        # the Key Developments form, which Companies mode does not even offer.
+        ctype = criterion.get("type")
+        st.session_state.scr_active_form = "financial" if ctype == "additional" else ctype
+        # Widget keys outlive a closed form; left in place they override the
+        # prefill (an Additional Data edit reopened on Income Statement).
+        for key in ("scr_fin_stmt_sel", "scr_fin_metric_sel", "scr_fin_segment_members",
+                    "scr_store_locations"):
+            st.session_state.pop(key, None)
     except Exception as e:
         log_structured_error(e, page="screening", component="_start_edit_criterion", operation="edit_criterion")
         st.error("Something went wrong. Please try again.")
@@ -1168,7 +1201,9 @@ def _company_display_name(row) -> str:
 def _format_screening_cell_value(val, unit: str = "") -> str:
     """Format a numeric screening result for HTML table display."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
-        return "N/A"
+        # Store counts list only companies that report them; a location one of
+        # those companies does not report is left blank, not "N/A".
+        return "" if unit == "count" else "N/A"
     try:
         fv = float(val)
     except (TypeError, ValueError):
@@ -1181,11 +1216,17 @@ def _format_screening_cell_value(val, unit: str = "") -> str:
         return f"{fv:,.2f}"
     if unit == "x":
         return f"{fv:,.2f}x" if fv >= 0.5 else f"{fv:,.2f}"
+    if unit == "count":
+        return f"{fv:,.0f}"
     return f"{fv:,.2f}"
 
 
 def _criterion_unit(criteria: List[dict], display_col: str) -> str:
     for c in criteria:
+        # Store counts are whole stores, not $mm.
+        if c.get("data_type") == "store_counts" and (
+                display_col == c.get("display_col") or display_col in (c.get("location_cols") or [])):
+            return "count"
         if not c.get("metric_info"):
             continue
         if (c.get("display_col") == display_col
@@ -1350,10 +1391,13 @@ def _get_additional_cols(criteria: List[dict]) -> List[str]:
         for c in criteria:
             if c.get("type") != "additional":
                 continue
-            # Store Count by Category contributes one column per category,
-            # the same way a year-range criterion contributes one per year.
-            for col in (c.get("category_cols") or
-                        ([c["display_col"]] if c.get("display_col") else [])):
+            # Store Count by location (or a saved by-Category screen) contributes
+            # one column per location, the way a year range contributes one per year.
+            if c.get("location_cols"):
+                own = c["location_cols"] + ["Store Count As Of"]
+            else:
+                own = c.get("category_cols") or ([c["display_col"]] if c.get("display_col") else [])
+            for col in own:
                 if col not in seen:
                     cols.append(col)
                     seen.add(col)
@@ -2324,7 +2368,8 @@ def _render_keydevs_period_radio(prefill: Optional[dict], key_prefix: str):
     )
 
 
-def _collect_keydevs_date_fields(prefill: Optional[dict], key_prefix: str) -> dict:
+def _collect_keydevs_date_fields(prefill: Optional[dict], key_prefix: str,
+                                 default_timeframe: str = "Last 7 Days") -> dict:
     """Timeframe selectbox or start/end date inputs (reads period mode from session)."""
     is_edit = bool(prefill)
     date_filter_mode = _keydevs_mode_from_session(key_prefix)
@@ -2340,7 +2385,7 @@ def _collect_keydevs_date_fields(prefill: Optional[dict], key_prefix: str) -> di
             if is_edit
             and prefill.get("timeframe_label") in tf_labels
             and prefill.get("date_filter_mode", "timeframe") == "timeframe"
-            else 1
+            else tf_labels.index(default_timeframe) if default_timeframe in tf_labels else 1
         )
         timeframe_label = st.selectbox(
             "Timeframe",
@@ -3813,15 +3858,12 @@ def _render_criteria_palette():
                     ):
                         if st.session_state.scr_active_form == ctype:
                             # Toggle off
-                            st.session_state.scr_active_form = None
-                            st.session_state.scr_prefill = None
-                            st.session_state.scr_prefill_idx = None
+                            _cancel_criterion_form()
                         else:
+                            # Leaving an edit for another form keeps the edited criterion.
+                            if st.session_state.scr_prefill:
+                                _cancel_criterion_form()
                             st.session_state.scr_active_form = ctype
-                            if st.session_state.scr_prefill and \
-                                    st.session_state.scr_prefill.get("type") != ctype:
-                                st.session_state.scr_prefill = None
-                                st.session_state.scr_prefill_idx = None
                         # Close any stale dialog left by X-dismiss
                         st.session_state["scr_saved_dlg_open"] = False
                         st.session_state["wl_dlg_open"] = False
@@ -3889,9 +3931,7 @@ def _render_industry_form():
                     )
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -3952,9 +3992,7 @@ def _render_geography_form():
                     cancelled = st.form_submit_button("Cancel")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -4032,6 +4070,7 @@ def _segment_options_cache_key(
 def _render_geo_hierarchy_filters(
     member_names: List[str],
     member_counts: dict,
+    noun: str = "segments",
 ) -> List[str]:
     """Region > Sub-region > Country > State > City cascade above the member list.
 
@@ -4081,11 +4120,11 @@ def _render_geo_hierarchy_filters(
     filtered = filter_members(member_names, selections, include_broader)
     if any(selections.values()):
         st.caption(
-            f"{len(filtered)} of {len(member_names)} segments match — "
+            f"{len(filtered)} of {len(member_names)} {noun} match — "
             "clear the filters above to see them all."
         )
         if not filtered:
-            st.info("No segment matches that combination. Widen a filter above.")
+            st.info(f"No {noun} match that combination. Widen a filter above.")
     # The tooltip on each member is where the hierarchy pays off in the picker.
     st.session_state["_scr_geo_paths"] = {m: describe_label(m) for m in filtered}
     return filtered
@@ -4312,14 +4351,21 @@ def _render_financial_form():
     """
     try:
         prefill = st.session_state.get("scr_prefill")
-        is_edit  = prefill and prefill.get("type") == "financial"
+        # An Additional Data criterion is saved as type "additional" but is
+        # authored here, under Statement Type = Additional Data.
+        is_edit  = prefill and prefill.get("type") in ("financial", "additional")
+        is_additional_edit = bool(is_edit and prefill.get("type") == "additional")
 
         with st.expander(_financial_label(), expanded=True):
             stmt_options = list(STATEMENT_CONFIG.keys())
 
             if is_edit:
                 default_stmt        = prefill.get("statement", stmt_options[0])
-                default_metric      = prefill.get("metric_info", {}).get("label")
+                default_metric      = (prefill.get("metric_info") or {}).get("label")
+                if is_additional_edit:
+                    default_stmt   = ADDITIONAL_DATA_STMT
+                    default_metric = next((label for label, dt in ADDITIONAL_DATA_TYPES.items()
+                                           if dt == prefill.get("data_type")), None)
                 default_op          = prefill.get("operator", "Greater Than")
                 default_v1          = float(prefill.get("value1", 0.0))
                 default_v2          = float(prefill.get("value2", 0.0))
@@ -4418,11 +4464,20 @@ def _render_financial_form():
                 operator = "Greater Than"
                 val1 = 0.0
                 val2 = 0.0
+                locations: List[str] = []
+                if ADDITIONAL_DATA_TYPES.get(metric_label) == "store_counts":
+                    st.markdown(
+                        '<p class="form-section-label" style="margin-top:12px;">'
+                        'Step 3 — Select Store Locations (optional)</p>',
+                        unsafe_allow_html=True,
+                    )
+                    locations = _render_store_locations_step(
+                        list(prefill.get("locations") or []) if is_additional_edit else [])
                 st.caption(
-                    f"{metric_label} is shown as a column for every company that "
-                    "reports it. Latest filed value; no value filter is applied."
+                    f"{metric_label} is shown only for companies that report it. "
+                    "Latest filed value; no value filter is applied."
                 )
-                _render_additional_stmt_submit(stmt, metric_label)
+                _render_additional_stmt_submit(stmt, metric_label, locations)
                 return
 
             if is_segment_stmt:
@@ -4668,9 +4723,7 @@ def _render_financial_form():
                     cancelled = st.form_submit_button("Cancel")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -4703,7 +4756,52 @@ def _render_financial_form():
         st.error("Something went wrong. Please try again.")
 
 
-def _render_additional_stmt_submit(stmt: str, metric_label: str) -> None:
+def _render_store_locations_step(default_locations: List[str]) -> List[str]:
+    """Step 3 for Store Count: the Geographical Segments cascade over store locations.
+
+    Same Region > Sub-region > Country > State > City grouping as the segment
+    members step. Picking specific locations wins; otherwise a cascade pick
+    means every location it leaves (choosing EMEA screens all EMEA locations);
+    picking nothing at all keeps the plain worldwide Store Count.
+    """
+    from data.screening_service import StoreLocationsPending, store_location_options
+
+    try:
+        options = store_location_options()
+    except StoreLocationsPending:
+        st.info("Store locations are being prepared for the first time — this takes a "
+                "few minutes. Leave Step 3 empty for the worldwide Store Count, or "
+                "reopen this form shortly.")
+        return []
+    names = [name for name, _count in options]
+    counts = dict(options)
+    shown = _render_geo_hierarchy_filters(names, counts, noun="locations")
+    paths = st.session_state.get("_scr_geo_paths", {})
+
+    def label(name: str) -> str:
+        trail = paths.get(name)
+        text = f"{name} ({counts.get(name, 0)} companies)"
+        return f"{text} — {trail}" if trail else text
+
+    # A saved location stays selectable whatever the cascade currently shows.
+    shown = shown + [n for n in default_locations if n in counts and n not in shown]
+    kwargs = dict(label="Store locations", options=shown, format_func=label,
+                  key="scr_store_locations",
+                  placeholder="All locations in the filters above — leave empty for any…",
+                  help="Leave empty to use every location the Region / Country filters keep.")
+    defaults = [n for n in default_locations if n in shown]
+    if defaults:
+        kwargs["default"] = defaults
+    picked = st.multiselect(**kwargs)
+    if picked:
+        return picked
+    cascade_active = any(st.session_state.get(f"scr_geo_level_{level}")
+                         for level in ("region", "sub_region", "country", "state", "city"))
+    return shown if cascade_active else []
+
+
+def _render_additional_stmt_submit(stmt: str, metric_label: str,
+                                   locations: Optional[List[str]] = None) -> None:
     """Add / Cancel for the Additional Data statement type.
 
     Produces a plain `additional` criterion — the same shape the existing
@@ -4723,19 +4821,22 @@ def _render_additional_stmt_submit(stmt: str, metric_label: str) -> None:
         cancelled = st.button("Cancel", key="scr_fin_cancel_additional")
 
     if cancelled:
-        st.session_state.scr_active_form = None
-        st.session_state.scr_prefill = None
-        st.session_state.scr_prefill_idx = None
+        _cancel_criterion_form()
         st.rerun()
 
     if submitted:
-        _add_criterion({
+        criterion = {
             "type":        "additional",
             "data_type":   data_type,
             "show_col":    True,
             "display_col": metric_label,
             "summary":     f"{stmt}: {metric_label}",
-        })
+        }
+        if locations:
+            criterion["locations"] = list(locations)
+            shown = ", ".join(locations[:3]) + (f" +{len(locations) - 3} more" if len(locations) > 3 else "")
+            criterion["summary"] = f"{stmt}: {metric_label} — {shown}"
+        _add_criterion(criterion)
         st.session_state.scr_prefill = None
         st.session_state.scr_prefill_idx = None
         st.rerun()
@@ -4778,9 +4879,7 @@ def _render_keydevs_form():
                     cancelled = st.form_submit_button("Cancel", width="content")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -4820,39 +4919,80 @@ def _people_criterion_from_widgets(values: dict) -> dict:
     """Assemble a People Attributes criterion from collected widget values.
 
     Shared by the palette form and the inline detail-panel form so the two can
-    never build a differently-shaped criterion.
+    never build a differently-shaped criterion. Only the chosen category's
+    fields are stored: a value left in another category's inputs is never
+    saved, so it cannot narrow a result nobody can see.
     """
-    metric = values.get("money_metric")
-    metric = metric if metric and metric != "— none —" else None
+    category = values.get("category") or PEOPLE_CATEGORY_REMUNERATION
     criterion = {
-        "type":            "people",
-        "roles":           list(values.get("roles") or []),
-        "title_contains":  (values.get("title_contains") or "").strip(),
-        "name_contains":   (values.get("name_contains") or "").strip(),
-        # Former executives are always included (no toggle since 2026-10-12).
-        "include_former":  True,
-        "years":           sorted(int(y) for y in (values.get("years") or [])),
-        "age_min":         values.get("age_min"),
-        "age_max":         values.get("age_max"),
-        "show_metrics":    list(values.get("show_metrics") or []),
-        "money_metric":    metric,
-        "money_min":       values.get("money_min") if metric else None,
-        "money_max":       values.get("money_max") if metric else None,
-        "show_management_changes": bool(values.get("show_management_changes")),
-        "show_moves": bool(values.get("show_moves")),
+        "type":           "people",
+        "category":       category,
+        "roles":          list(values.get("roles") or []),
+        "title_contains": (values.get("title_contains") or "").strip(),
+        "name_contains":  (values.get("name_contains") or "").strip(),
     }
-    if metric:
-        criterion["display_col"] = metric
+    if category == PEOPLE_CATEGORY_REMUNERATION:
+        metrics = list(values.get("show_metrics") or [])
+        low, high = values.get("money_min"), values.get("money_max")
+        criterion.update({
+            # Former executives are always included (no toggle since 2026-10-12).
+            "include_former": True,
+            "years":          sorted(int(y) for y in (values.get("years") or [])),
+            "age_min":        values.get("age_min"),
+            "age_max":        values.get("age_max"),
+            "show_metrics":   metrics,
+            "money_metrics":  metrics if (low is not None or high is not None) else [],
+            "money_min":      low,
+            "money_max":      high,
+        })
+    else:
+        _apply_keydevs_date_fields(criterion, values["date_fields"])
     criterion["summary"] = build_people_summary(criterion)
     return criterion
 
 
-def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
-    """Render the People Attributes inputs and return their raw values.
+def _render_people_category(prefill: Optional[dict], key_prefix: str) -> str:
+    """Category radio (+ the period radio for dated categories).
 
-    Every option list comes from screening_config — no DB call builds this form.
+    Outside st.form on purpose: a widget inside a form reports only on submit,
+    so switching category there would not swap the filters until Add was
+    pressed (same reason as _render_keydevs_period_radio).
+    """
+    cat_key = f"{key_prefix}_category"
+    seeded_key = f"{key_prefix}_seeded_for"
+    # Opening another criterion for editing re-seeds every input of this form
+    # from it; otherwise the inputs keep what the user last picked.
+    if st.session_state.get(seeded_key) != id(prefill) or cat_key not in st.session_state:
+        for key in [k for k in st.session_state if str(k).startswith(f"{key_prefix}_")]:
+            del st.session_state[key]
+        st.session_state[cat_key] = ((prefill or {}).get("category")
+                                     or (PEOPLE_CATEGORY_REMUNERATION if prefill
+                                         else PEOPLE_CATEGORY_CHANGES))
+        st.session_state[seeded_key] = id(prefill)
+
+    category = st.radio(
+        "Category",
+        options=list(PEOPLE_CATEGORIES),
+        format_func=PEOPLE_CATEGORIES.get,
+        horizontal=True,
+        help="Pick what to screen first; only that category's filters are shown "
+             "and only its data is loaded.",
+        key=cat_key,
+    )
+    if category != PEOPLE_CATEGORY_REMUNERATION:
+        same = (prefill or {}).get("category") == category
+        _render_keydevs_period_radio(prefill if same else None, f"{key_prefix}_{category}")
+    return category
+
+
+def _render_people_widgets(prefill: Optional[dict], key_prefix: str, category: str) -> dict:
+    """Render the inputs of one People category and return their raw values.
+
+    Role / title / name apply to every category. Every option list comes from
+    screening_config — no DB call builds this form.
     """
     pf = prefill or {}
+    same = (pf.get("category") or PEOPLE_CATEGORY_REMUNERATION) == category
 
     roles = st.multiselect(
         "Role / Title",
@@ -4874,18 +5014,19 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
         name_contains = st.text_input(
             "Name contains", value=pf.get("name_contains", ""),
             placeholder="e.g. cook", key=f"{key_prefix}_name_contains")
+    values = {"category": category, "roles": roles,
+              "title_contains": title_contains, "name_contains": name_contains}
 
-    show_metrics = st.multiselect(
-        "Compensation metrics to show",
-        options=PEOPLE_MONEY_COLUMNS,
-        default=[m for m in (pf.get("show_metrics") or PEOPLE_DEFAULT_SHOW_METRICS)
-                 if m in PEOPLE_MONEY_COLUMNS],
-        help="Only these metrics appear in the results. Pick several to compare them.",
-        key=f"{key_prefix}_show_metrics",
-    )
+    if category != PEOPLE_CATEGORY_REMUNERATION:
+        values["date_fields"] = _collect_keydevs_date_fields(
+            pf if same else None, f"{key_prefix}_{category}",
+            PEOPLE_DEFAULT_TIMEFRAME[category])
+        st.caption("Period is the date the change was announced."
+                   if category == PEOPLE_CATEGORY_CHANGES
+                   else "Period is the date the executive joined the new company.")
+        return values
 
-    _metric_options = ["— none —"] + PEOPLE_MONEY_COLUMNS
-    _pf_metric = pf.get("money_metric")
+    pf = pf if same else {}
     # A criterion saved before Min/Max carries an operator; show it as a range.
     _pf_min = pf.get("money_min")
     _pf_max = pf.get("money_max")
@@ -4897,14 +5038,24 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
             _pf_max = pf.get("money_value1")
         else:
             _pf_min = pf.get("money_value1")
+    # Before 2026-10-15 "metrics to show" and the one ranged metric were two
+    # pickers; an old criterion opens with both merged into the one list.
+    _pf_metrics = list(dict.fromkeys(
+        (pf.get("show_metrics") or [])
+        + ([pf["money_metric"]] if pf.get("money_metric") else [])
+        + (pf.get("money_metrics") or [])))
     mc1, mc2, mc3 = st.columns([2.4, 1.3, 1.3])
     with mc1:
-        money_metric = st.selectbox(
-            "Compensation filter",
-            options=_metric_options,
-            index=_metric_options.index(_pf_metric) if _pf_metric in _metric_options else 0,
-            help="Keep executives whose value for this metric is within Min–Max.",
-            key=f"{key_prefix}_money_metric")
+        show_metrics = st.multiselect(
+            "Compensation metrics",
+            options=PEOPLE_MONEY_COLUMNS,
+            default=[m for m in (_pf_metrics or PEOPLE_DEFAULT_SHOW_METRICS)
+                     if m in PEOPLE_MONEY_COLUMNS],
+            help="Shown in the results. Min / Max keeps executives whose value for "
+                 "any chosen metric is inside the range. Total Compensation comes "
+                 "from US proxies, Total Pay from non-US officer listings.",
+            key=f"{key_prefix}_show_metrics",
+        )
     with mc2:
         money_min = st.number_input(
             "Min ($mm)", value=_pf_min, min_value=0.0, step=0.5, format="%.2f",
@@ -4931,52 +5082,29 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str) -> dict:
             "Max age", value=pf.get("age_max"), min_value=18, max_value=100, step=1,
             placeholder="Any", key=f"{key_prefix}_age_max")
 
-    sc1, sc2 = st.columns(2)
-    with sc1:
-        show_management_changes = st.checkbox(
-            "Show management changes?",
-            value=bool(pf.get("show_management_changes", False)),
-            help="Adds appointments and departures for the same companies and people.",
-            key=f"{key_prefix}_show_mc")
-    with sc2:
-        show_moves = st.checkbox(
-            "Show executive moves?",
-            value=bool(pf.get("show_moves", pf.get("show_moves_only", False))),
-            help="Adds executives who left one company and joined another (board seats included).",
-            key=f"{key_prefix}_show_moves")
-
-    return {
-        "roles": roles,
-        "title_contains": title_contains,
-        "name_contains": name_contains,
+    values.update({
         "years": years,
         "age_min": int(age_min) if age_min is not None else None,
         "age_max": int(age_max) if age_max is not None else None,
         "show_metrics": show_metrics,
-        "money_metric": money_metric,
         "money_min": float(money_min) if money_min is not None else None,
         "money_max": float(money_max) if money_max is not None else None,
-        "show_management_changes": show_management_changes,
-        "show_moves": show_moves,
-    }
+    })
+    return values
 
 
 def _validate_people_values(values: dict) -> Optional[str]:
     """Return an error message when the collected People values cannot screen."""
-    metric = values.get("money_metric")
-    has_metric = bool(metric and metric != "— none —")
+    if values.get("category") != PEOPLE_CATEGORY_REMUNERATION:
+        return _apply_keydevs_date_fields({}, values["date_fields"])
+    if not values.get("show_metrics"):
+        return "Pick at least one compensation metric."
     lo, hi = values.get("money_min"), values.get("money_max")
-    if has_metric and lo is None and hi is None:
-        return f"Enter a Min or Max for {metric}, or set Compensation filter to — none —."
     if lo is not None and hi is not None and lo > hi:
         return "Min cannot be greater than Max."
-    if (lo is not None or hi is not None) and not has_metric:
-        return "Choose which metric the Min / Max applies to."
     a_lo, a_hi = values.get("age_min"), values.get("age_max")
     if a_lo is not None and a_hi is not None and a_lo > a_hi:
         return "Min age cannot be greater than max age."
-    if not values.get("show_metrics"):
-        return "Pick at least one compensation metric to show."
     return None
 
 
@@ -4988,8 +5116,9 @@ def _render_people_form():
         prefill_for_form = prefill if is_edit else None
 
         with st.expander("People Attributes", expanded=True):
+            category = _render_people_category(prefill_for_form, "scr_pp")
             with st.form("scr_people_form", clear_on_submit=False):
-                values = _render_people_widgets(prefill_for_form, "scr_pp")
+                values = _render_people_widgets(prefill_for_form, "scr_pp", category)
 
                 col_add, col_cancel, _ = st.columns([1.5, 2, 6.5])
                 with col_add:
@@ -5000,9 +5129,7 @@ def _render_people_form():
                     cancelled = st.form_submit_button("Cancel", width="content")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -5031,7 +5158,9 @@ def _inline_add_people(cid, working, wk_key, show_form_key):
     """Inline form to add a People Attributes criterion from a detail panel."""
     try:
         st.markdown("**New People Filter**")
-        values = _render_people_widgets(None, f"_scr_np_{cid}")
+        key_prefix = f"_scr_np_{cid}"
+        category = _render_people_category(None, key_prefix)
+        values = _render_people_widgets(None, key_prefix, category)
         c1, c2, _ = st.columns([1.5, 1.5, 6])
         with c1:
             if st.button("Add", key=f"_scr_npadd_{cid}", type="primary", width="stretch"):
@@ -5164,9 +5293,7 @@ def _render_biz_segments_form():  # kept for edit-prefill dispatch via _render_c
                     cancelled = st.form_submit_button("Cancel", width="content")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -5266,9 +5393,7 @@ def _render_geo_segments_form():
                     cancelled = st.form_submit_button("Cancel", width="content")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -5338,9 +5463,7 @@ def _render_additional_form():
                     cancelled = st.form_submit_button("Cancel", width="content")
 
                 if cancelled:
-                    st.session_state.scr_active_form = None
-                    st.session_state.scr_prefill = None
-                    st.session_state.scr_prefill_idx = None
+                    _cancel_criterion_form()
                     st.rerun()
 
                 if submitted:
@@ -5378,9 +5501,12 @@ def _render_criterion_form():
             _render_financial_form()
         elif atype == "people":
             _render_people_form()
-        elif atype in ("keydevs", "biz_segments", "geo_segments", "additional"):
-            # All segment / additional sub-types live inside the unified keydevs form
+        elif atype == "keydevs":
             _render_keydevs_form()
+        elif atype == "biz_segments":
+            _render_biz_segments_form()
+        elif atype == "geo_segments":
+            _render_geo_segments_form()
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_criterion_form", operation="dispatch_form")
         st.error("Something went wrong. Please try again.")
@@ -5501,6 +5627,12 @@ def _build_criterion_details_html(criterion: dict) -> str:
 
     elif ctype == "people":
         detail_items = []
+        _cat = criterion.get("category")
+        if _cat in PEOPLE_CATEGORIES:
+            detail_items.append(f"<strong>Category:</strong> {PEOPLE_CATEGORIES[_cat]}")
+            if _cat != PEOPLE_CATEGORY_REMUNERATION:
+                detail_items.append(
+                    f"<strong>Period:</strong> {keydevs_period_display_label(criterion) or 'All History'}")
         if criterion.get("roles"):
             detail_items.append(
                 f"<strong>Roles:</strong> {', '.join(criterion['roles'])}")
@@ -5514,10 +5646,11 @@ def _build_criterion_details_html(criterion: dict) -> str:
             detail_items.append(
                 f"<strong>Metrics shown:</strong> {', '.join(criterion['show_metrics'])}")
         _lo, _hi = criterion.get("money_min"), criterion.get("money_max")
-        if criterion.get("money_metric") and (_lo is not None or _hi is not None):
+        _ranged = criterion.get("money_metric") or " or ".join(criterion.get("money_metrics") or [])
+        if _ranged and (_lo is not None or _hi is not None):
             _rng = (f"${_lo:,.2f}mm – ${_hi:,.2f}mm" if _lo is not None and _hi is not None
                     else f"min ${_lo:,.2f}mm" if _lo is not None else f"max ${_hi:,.2f}mm")
-            detail_items.append(f"<strong>{criterion['money_metric']}:</strong> {_rng}")
+            detail_items.append(f"<strong>{_ranged}:</strong> {_rng}")
         elif criterion.get("money_metric") and criterion.get("money_value1") is not None:
             _op = criterion.get("money_operator", "")
             _v1 = criterion.get("money_value1")
@@ -5540,9 +5673,10 @@ def _build_criterion_details_html(criterion: dict) -> str:
         if criterion.get("filing_forms"):
             detail_items.append(
                 f"<strong>Filing form:</strong> {', '.join(criterion['filing_forms'])}")
-        _shown = ["executives"] + (["management changes"] if criterion.get("show_management_changes") else []) \
-            + (["executive moves"] if criterion.get("show_moves") or criterion.get("show_moves_only") else [])
-        detail_items.append(f"<strong>Showing:</strong> {', '.join(_shown)}")
+        if _cat is None:
+            _shown = ["executives"] + (["management changes"] if criterion.get("show_management_changes") else []) \
+                + (["executive moves"] if criterion.get("show_moves") or criterion.get("show_moves_only") else [])
+            detail_items.append(f"<strong>Showing:</strong> {', '.join(_shown)}")
         if detail_items:
             detail_html = "<br>".join(
                 f"<span class='criterion-detail-kv'>{d}</span>" for d in detail_items)
@@ -5588,8 +5722,11 @@ def _build_criterion_details_html(criterion: dict) -> str:
             f"  <summary>View filter details</summary>\n"
             f"  <div class='criterion-details-body' style='flex-direction:column;gap:2px;'>"
             f"  <span class='criterion-detail-kv'><strong>Data Type:</strong> {dt_label}</span>"
-            f"  </div>\n"
-            f"</details>"
+            + (f"  <span class='criterion-detail-kv'><strong>Locations:</strong> "
+               f"{html.escape(', '.join(criterion['locations']))}</span>"
+               if criterion.get("locations") else "")
+            + "  </div>\n"
+            "</details>"
         )
 
     return pills_html
@@ -5654,7 +5791,7 @@ def _render_active_criteria():
                 # when the filter is working perfectly; the real count is the
                 # record count above the results grid.
                 count_html = ""
-            elif ctype in FILTERING_CRITERION_TYPES:
+            elif ctype in FILTERING_CRITERION_TYPES or shows_available_data_only(criterion):
                 count_html = (f"<br><span class='criterion-card-count'>"
                               f"{rows_out} companies matched</span>")
             else:
@@ -6752,18 +6889,25 @@ def _render_people_results():
         t_people = time.perf_counter()
         tickers_in_scope = set(company_df["ticker"].unique())
         company_meta = _people_company_meta(company_df)
-        # Each "Show …?" box adds its own section; the executives grid is always
-        # there. (A "moves ONLY" rule hid executives and management changes when
-        # both boxes were ticked — reported 2026-10-12.) Any criterion can switch a
-        # section on; "show_moves_only" is the pre-2026-10-12 key for the same box.
-        show_changes = any(c.get("show_management_changes") for c in people_criteria)
-        show_moves = any(c.get("show_moves") or c.get("show_moves_only") for c in people_criteria)
+        # One section per category the criteria name, each filtered only by its
+        # own criteria and reading only its own dataset — a remuneration screen
+        # never loads 8-K events, a management-changes screen never loads pay.
+        # (people_criteria_for maps pre-category criteria to what they showed.)
+        changes_criteria = people_criteria_for(people_criteria, PEOPLE_CATEGORY_CHANGES)
+        moves_criteria = people_criteria_for(people_criteria, PEOPLE_CATEGORY_MOVES)
+        pay_criteria = people_criteria_for(people_criteria, PEOPLE_CATEGORY_REMUNERATION)
+        if not (changes_criteria or moves_criteria or pay_criteria):
+            st.info("Add a People Attributes criterion and choose a category — "
+                    "Management Changes, Executive Changes / Movements or "
+                    "Management Remuneration — to see people results.")
+            return
 
-        _render_people_grid(tickers_in_scope, people_criteria, company_meta, t_people)
-        if show_changes:
-            _render_management_changes(tickers_in_scope, people_criteria, company_meta)
-        if show_moves:
-            _render_executive_moves(tickers_in_scope, people_criteria, company_meta)
+        if changes_criteria:
+            _render_management_changes(tickers_in_scope, changes_criteria, company_meta)
+        if moves_criteria:
+            _render_executive_moves(tickers_in_scope, moves_criteria, company_meta)
+        if pay_criteria:
+            _render_people_grid(tickers_in_scope, pay_criteria, company_meta, t_people)
 
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_results",
@@ -6798,7 +6942,8 @@ def _render_people_grid(tickers_in_scope: set, people_criteria: List[dict],
 
     shown_rows = scoped
     for criterion in people_criteria:
-        shown_rows = apply_people_criterion(shown_rows, dict(criterion, money_metric=None))
+        shown_rows = apply_people_criterion(shown_rows, dict(criterion, money_metric=None,
+                                                             money_metrics=None))
     who = filtered[["ticker", "executive_name"]].drop_duplicates()
     shown_rows = shown_rows.merge(who, on=["ticker", "executive_name"], how="inner")
 
@@ -6867,10 +7012,12 @@ def _full_domains(display_df: pd.DataFrame, columns) -> Optional[Dict[str, List[
     return domains or None
 
 
-def _filter_changes_for_people(df: pd.DataFrame, people_criteria: List[dict]) -> pd.DataFrame:
-    """The People Attributes name / title / role filters, applied to 8-K events
-    so the event grids describe the same people as the executive grid."""
+def _filter_changes_for_people(df: pd.DataFrame, people_criteria: List[dict],
+                               dates: pd.Series) -> pd.DataFrame:
+    """The People Attributes period / name / title / role filters, applied to
+    8-K events. `dates` is the date the period is read against."""
     for criterion in people_criteria:
+        df = df[period_mask(dates.loc[df.index], criterion)]
         if criterion.get("name_contains"):
             df = df[df["person"].str.contains(criterion["name_contains"], case=False,
                                               regex=False, na=False)]
@@ -6901,12 +7048,15 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
         t0 = time.perf_counter()
         changes = get_management_changes()
         if changes is None or changes.empty:
+            st.info("Management changes are not available right now. Please try again shortly.")
             return
-        df = changes[changes["ticker"].isin(tickers_in_scope)
-                     & changes["change"].isin(["Appointment", "Departure"])]
-        df = _filter_changes_for_people(df, people_criteria)
+        events = changes[changes["change"].isin(["Appointment", "Departure"])]
+        df = events[events["ticker"].isin(tickers_in_scope)]
+        df = _filter_changes_for_people(df, people_criteria, df["notice_date"])
         if df.empty:
-            st.info("Management Changes: none on file for these companies and filters.")
+            st.info("Management Changes: none announced in this period for these "
+                    "companies and filters. Latest on file: "
+                    f"{events['notice_date'].max():%Y-%m-%d}.")
             return
 
         out = df.merge(company_meta, on="ticker", how="left")
@@ -6936,9 +7086,13 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
                 out["role_start"].notna().map({True: "present", False: ""})),
             "Years in Role":    out["years_in_role"].map(lambda v: "" if pd.isna(v) else f"{v:.1f}"),
             "Confidence":       out["confidence"].astype(str),
+            "Source":           out["source"].fillna("").astype(str),
+            "Also Reported By": out["also_reported"].fillna("").astype(str),
             "Source Text":      out["evidence"],
-            "Filing":           [_filing_page_link(t, y, u) for t, y, u in
-                                 zip(out["ticker"], out["filing_year"], out["filing_unit"])],
+            # 8-K: our Company Filings page. 6-K and news are not on it, so the
+            # filing on sec.gov or the article itself.
+            "Source Link":      [_filing_page_link(t, y, u) or (ref or "") for t, y, u, ref in
+                                 zip(out["ticker"], out["filing_year"], out["filing_unit"], out["source_ref"])],
         })
         # Columns blank for every row of this result say nothing.
         display = display[[c for c in display.columns
@@ -6951,21 +7105,25 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
         _render_results_header(
             f"<strong>{len(display)}</strong> management changes across "
             f"<strong>{display['Ticker'].nunique()}</strong> companies",
-            display.drop(columns=["Filing"], errors="ignore"), "Management_Changes",
+            display.drop(columns=["Source Link"], errors="ignore"), "Management_Changes",
             title="Management Changes")
         _render_filterable_results_grid(
             display,
             key="people_mgmt_changes_grid",
             empty_message="No management changes found.",
             pinned_column="Executive Name",
-            link_columns=["Filing"] if "Filing" in display.columns else None,
+            link_columns=["Source Link"] if "Source Link" in display.columns else None,
             filter_domains=_full_domains(display, ("Change", "Event", "Role", "Company",
-                                                   "Confidence")),
+                                                   "Confidence", "Source")),
         )
-        st.caption("Announced = date the change was disclosed; Effective = date it takes "
-                   "effect, as stated. Years in Role runs from the stated appointment to the "
-                   "stated departure (or today); roles that began before 2016 are blank. "
-                   "Confidence: High = title and timing both read from the text.")
+        st.caption("Sources: SEC 8-K (Item 5.02), SEC 6-K and executive news. A change "
+                   "reported by several sources is listed once, from the filing when there is "
+                   "one; the others are under Also Reported By. Announced = date the change was "
+                   "disclosed (news: publication date); Effective = date it takes effect, as "
+                   "stated. Years in Role runs from the stated appointment to the stated "
+                   "departure (or today); roles that began before 2016 are blank. Confidence: "
+                   "High = title and timing read from a filing; Medium = from a filing without "
+                   "timing, or a news headline; Low = person read from a news summary.")
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_management_changes",
                              operation="render_management_changes")
@@ -6985,9 +7143,11 @@ def _render_executive_moves(tickers_in_scope: set, people_criteria: List[dict],
         moves = changes[(changes["moved_from"].astype(str) != "")
                         & (changes["ticker"].isin(tickers_in_scope)
                            | changes["moved_from"].isin(tickers_in_scope))]
-        moves = _filter_changes_for_people(moves, people_criteria)
+        moves = _filter_changes_for_people(
+            moves, people_criteria, moves["effective_date"].fillna(moves["notice_date"]))
         if moves.empty:
-            st.info("Executive Moves: none between companies match these filters.")
+            st.info("Executive Moves: none between companies match this period and "
+                    "these filters.")
             return
         moves = moves.assign(_key=moves["person"].map(person_key)).sort_values("notice_date") \
                      .drop_duplicates(["_key", "moved_from", "ticker"]).drop(columns="_key")

@@ -36,6 +36,10 @@ from core.database import db_manager
 from data.screening_config import (
     DB_SCALE,
     OPERATOR_SQL,
+    PEOPLE_CATEGORIES,
+    PEOPLE_CATEGORY_CHANGES,
+    PEOPLE_CATEGORY_MOVES,
+    PEOPLE_CATEGORY_REMUNERATION,
     PEOPLE_MONEY_METRICS,
     PEOPLE_ROLE_OTHER,
     PEOPLE_ROLE_PATTERNS,
@@ -792,6 +796,28 @@ def _apply_money_filter(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
     Values arrive in $mm (every financial criterion in this app does) and are
     scaled by DB_SCALE, because the people tables store raw dollars.
     """
+    low, high = criterion.get("money_min"), criterion.get("money_max")
+    # Remuneration criteria (2026-10-15) range over every chosen metric: a row
+    # passes when ANY of them is inside Min–Max. The default pair is Total
+    # Compensation (SEC) and Total Pay (YFinance) — one person only ever has one
+    # of the two, so "any" keeps both sources in the screen.
+    ranged = criterion.get("money_metrics") or []
+    if ranged and (low is not None or high is not None):
+        cols = [PEOPLE_MONEY_METRICS[m] for m in ranged
+                if PEOPLE_MONEY_METRICS.get(m) in df.columns]
+        if not cols:
+            return df
+        mask = pd.Series(False, index=df.index)
+        for col in cols:
+            values = df[col]
+            inside = values.notna()
+            if low is not None:
+                inside &= values >= float(low) * DB_SCALE
+            if high is not None:
+                inside &= values <= float(high) * DB_SCALE
+            mask |= inside.fillna(False).astype(bool)
+        return df[mask]
+
     label = criterion.get("money_metric")
     if not label:
         return df
@@ -799,9 +825,8 @@ def _apply_money_filter(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
     if not col or col not in df.columns:
         return df
 
-    # Min / Max (either may be blank) — the form since 2026-10-12. Saved criteria
+    # Min / Max (either may be blank) — the form from 2026-10-12. Saved criteria
     # from before carry an operator + value1/value2 and take the path below.
-    low, high = criterion.get("money_min"), criterion.get("money_max")
     if low is not None or high is not None:
         values = df[col]
         mask = values.notna()
@@ -909,9 +934,62 @@ def apply_people_criterion(df: pd.DataFrame, criterion: dict) -> pd.DataFrame:
     return out
 
 
+def people_criteria_for(criteria: List[dict], category: str) -> List[dict]:
+    """The People criteria that screen `category`.
+
+    A criterion saved before categories (2026-10-15) has no "category": it was a
+    remuneration screen whose "Show management changes?" / "Show executive
+    moves?" boxes switched the event sections on, so it still counts for those.
+    """
+    out = []
+    for c in criteria:
+        if c.get("type") != "people":
+            continue
+        own = c.get("category")
+        if own == category:
+            out.append(c)
+        elif own is None and (
+                category == PEOPLE_CATEGORY_REMUNERATION
+                or (category == PEOPLE_CATEGORY_CHANGES and c.get("show_management_changes"))
+                or (category == PEOPLE_CATEGORY_MOVES
+                    and (c.get("show_moves") or c.get("show_moves_only")))):
+            out.append(c)
+    return out
+
+
+def period_mask(dates: pd.Series, criterion: dict, today=None) -> pd.Series:
+    """True where `dates` falls inside the criterion's period.
+
+    Same contract as the Key Devs period: a "timeframe" of N days means on or
+    after today minus N days (event_date >= CURDATE() - INTERVAL N DAY); a
+    "date_range" is inclusive at both ends; no days (All History) or no period
+    keeps every row. Dates are calendar days — filings carry no time of day.
+    """
+    dates = pd.to_datetime(dates, errors="coerce").dt.normalize()
+    if criterion.get("date_filter_mode") == "date_range":
+        mask = pd.Series(True, index=dates.index)
+        if criterion.get("start_date"):
+            mask &= dates >= pd.Timestamp(str(criterion["start_date"])[:10])
+        if criterion.get("end_date"):
+            mask &= dates <= pd.Timestamp(str(criterion["end_date"])[:10])
+        return mask.fillna(False).astype(bool)
+    days = criterion.get("days")
+    if days is None:
+        return pd.Series(True, index=dates.index)
+    today = pd.Timestamp(today or pd.Timestamp.now().date())
+    return (dates >= today - pd.Timedelta(days=int(days))).fillna(False).astype(bool)
+
+
 def build_people_summary(criterion: dict) -> str:
     """One-line label for the People criterion card."""
     parts = []
+    if criterion.get("category") in PEOPLE_CATEGORIES:
+        parts.append(PEOPLE_CATEGORIES[criterion["category"]])
+        if criterion["category"] != PEOPLE_CATEGORY_REMUNERATION:
+            if criterion.get("date_filter_mode") == "date_range":
+                parts.append(f"{criterion.get('start_date')} to {criterion.get('end_date')}")
+            elif criterion.get("timeframe_label"):
+                parts.append(criterion["timeframe_label"])
 
     roles = criterion.get("roles") or []
     if roles:
@@ -923,7 +1001,7 @@ def build_people_summary(criterion: dict) -> str:
     if criterion.get("name_contains"):
         parts.append(f'Name contains "{criterion["name_contains"]}"')
 
-    metric = criterion.get("money_metric")
+    metric = criterion.get("money_metric") or " or ".join(criterion.get("money_metrics") or [])
     low, high = criterion.get("money_min"), criterion.get("money_max")
     if metric and (low is not None or high is not None):
         if low is not None and high is not None:
@@ -942,7 +1020,7 @@ def build_people_summary(criterion: dict) -> str:
             parts.append(f"{metric} {symbol} ${v1:,.1f}mm")
 
     shown = criterion.get("show_metrics") or []
-    if shown:
+    if shown and shown != (criterion.get("money_metrics") or []):
         parts.append("Show: " + ", ".join(str(m) for m in shown))
 
     years = criterion.get("years") or []

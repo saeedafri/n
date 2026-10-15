@@ -13257,84 +13257,56 @@ def store_count_geo_label(ticker: str, has_country_rows: bool) -> str:
     return ", ".join(members) if members else STORE_COUNT_WORLDWIDE_LABEL
 
 
-# ── Continent grouping for Stores by Country (16-Jul-2026, per business) ────
-# A single-continent footprint is labeled by its continent instead of
-# "Worldwide"; multi-continent footprints get per-continent subtotals before
-# the worldwide total. Keys are the ISO-style names the edgartools
-# stores-by-country extraction emits (plus common variants).
-# "Australia & New Zealand" instead of the formal "Oceania" — clearer for
-# business users (16-Jul feedback); only AU/NZ ever appear for our retailers.
-CONTINENT_ORDER = ["North America", "South America", "Europe", "Asia",
-                   "Africa", "Australia & New Zealand", "Other"]
-
-COUNTRY_TO_CONTINENT = {
-    # North America (incl. Central America + Caribbean)
-    "United States": "North America", "Canada": "North America",
-    "Mexico": "North America", "Costa Rica": "North America",
-    "Panama": "North America", "Guatemala": "North America",
-    "Honduras": "North America", "Nicaragua": "North America",
-    "El Salvador": "North America", "Belize": "North America",
-    "Aruba": "North America", "Barbados": "North America",
-    "Jamaica": "North America", "Trinidad": "North America",
-    "Trinidad and Tobago": "North America",
-    "Dominican Republic": "North America", "Puerto Rico": "North America",
-    "U.S. Virgin Islands": "North America",
-    "United States Virgin Islands": "North America",
-    "Bahamas": "North America", "Cayman Islands": "North America",
-    "Bermuda": "North America", "Cuba": "North America",
-    "Haiti": "North America",
-    # South America
-    "Brazil": "South America", "Colombia": "South America",
-    "Chile": "South America", "Peru": "South America",
-    "Argentina": "South America", "Ecuador": "South America",
-    "Uruguay": "South America", "Paraguay": "South America",
-    "Bolivia": "South America", "Venezuela": "South America",
-    "Guyana": "South America", "Suriname": "South America",
-    # Europe
-    "United Kingdom": "Europe", "Ireland": "Europe", "France": "Europe",
-    "Spain": "Europe", "Sweden": "Europe", "Iceland": "Europe",
-    "Germany": "Europe", "Italy": "Europe", "Netherlands": "Europe",
-    "Belgium": "Europe", "Portugal": "Europe", "Poland": "Europe",
-    "Austria": "Europe", "Switzerland": "Europe", "Denmark": "Europe",
-    "Norway": "Europe", "Finland": "Europe", "Czechia": "Europe",
-    "Czech Republic": "Europe", "Greece": "Europe", "Hungary": "Europe",
-    "Romania": "Europe", "Luxembourg": "Europe",
-    # Asia
-    "China": "Asia", "Japan": "Asia", "South Korea": "Asia",
-    "Taiwan": "Asia", "India": "Asia", "Singapore": "Asia",
-    "Hong Kong": "Asia", "Malaysia": "Asia", "Thailand": "Asia",
-    "Philippines": "Asia", "Vietnam": "Asia", "Indonesia": "Asia",
-    "United Arab Emirates": "Asia", "Saudi Arabia": "Asia",
-    "Kuwait": "Asia", "Qatar": "Asia", "Bahrain": "Asia",
-    "Israel": "Asia", "Turkey": "Asia",
-    # Africa
-    "South Africa": "Africa", "Egypt": "Africa", "Morocco": "Africa",
-    "Nigeria": "Africa", "Kenya": "Africa",
-    # Australia & New Zealand (formally Oceania)
-    "Australia": "Australia & New Zealand",
-    "New Zealand": "Australia & New Zealand",
-}
+# ── Region grouping for Stores by Country ────────────────────────────────────
+# Countries are grouped by the Sub-region of the geographic-segment hierarchy
+# (geo_hierarchy.json, from the business's Countries Mapping.xlsx), so Stores by
+# Country and the Geographical Segments filters put every country in the same
+# place under the same name. 2026-10-15: replaced a hand-kept continent map that
+# disagreed with it (Mexico and the Caribbean under North America, the Gulf
+# states under Asia, Türkiye under Asia). A footprint inside one sub-region is
+# labeled by it, one inside one region by the region; multi-group footprints get
+# a subtotal per group before the total.
+STORE_GROUP_OTHER = "Other"
 
 
 def continent_of(country: str) -> str:
-    return COUNTRY_TO_CONTINENT.get((country or "").strip(), "Other")
+    """The hierarchy Sub-region a country sits in ("Other" when it has none)."""
+    from data.geo_hierarchy import node_for_label
+    node = node_for_label((country or "").strip())
+    return (node or {}).get("sub_region") or STORE_GROUP_OTHER
+
+
+def _store_group_region(group: str) -> str:
+    from data.geo_hierarchy import _hierarchy
+    return next((region for region, subs in _hierarchy()["tree"]["region"].items()
+                 if group in subs), "")
+
+
+def store_group_order(group: str):
+    """Americas, EMEA, APAC (the old continent order), North America first
+    within the Americas (US-first convention), names A-Z otherwise; Other last."""
+    region = _store_group_region(group)
+    rank = ("AMER", "EMEA", "APAC").index(region) if region in ("AMER", "EMEA", "APAC") else 3
+    return (group == STORE_GROUP_OTHER, rank, group != "North America (NORAM)", group)
+
+
+def store_total_label(name: str) -> str:
+    return f"Total {name}"
 
 
 def group_countries_by_continent(countries: Dict[str, Dict[int, Any]]):
-    """Group a stores-by-country mapping into ordered continent buckets.
+    """Group a stores-by-country mapping into ordered Sub-region buckets.
 
-    Returns [(continent, [country, ...], {year: subtotal}), ...] following
-    CONTINENT_ORDER; countries are United States-first then alphabetical
-    within their bucket, matching the existing display convention.
+    Returns [(sub_region, [country, ...], {year: subtotal}), ...]; countries are
+    United States-first then alphabetical within their bucket, matching the
+    existing display convention.
     """
     buckets: Dict[str, list] = {}
     for name in countries:
         buckets.setdefault(continent_of(name), []).append(name)
     grouped = []
-    for cont in CONTINENT_ORDER:
-        names = buckets.get(cont)
-        if not names:
-            continue
+    for cont in sorted(buckets, key=store_group_order):
+        names = buckets[cont]
         # exact match — "United States Virgin Islands" must not float first
         names.sort(key=lambda c: (c.strip().lower() not in ("united states", "us", "u.s.", "usa"), c))
         subtotal: Dict[int, int] = {}
@@ -13349,29 +13321,33 @@ def group_countries_by_continent(countries: Dict[str, Dict[int, Any]]):
 def stores_total_label(grouped, total_row: Dict[int, Any]) -> str:
     """Label for the final Stores by Country total row.
 
-    "Total (<continent>)" when a single continent's countries account for the
-    verified total exactly; "Total (Americas)" when exactly North + South
-    America together do; otherwise "Total (Worldwide)". The exact-coverage
-    check matters because the 2% reconciliation gate admits partial splits
-    (CMG lists only US restaurants while its total includes the 10-K's
-    "international" aggregate) — those must honestly stay Worldwide.
+    "Total <sub-region>" when one sub-region's countries account for the
+    verified total exactly; "Total <region>" (e.g. "Total AMER (Americas)") when
+    one region's do; otherwise "Total Worldwide". The exact-coverage check
+    matters because the 2% reconciliation gate admits partial splits (CMG lists
+    only US restaurants while its total includes the 10-K's "international"
+    aggregate) — those must honestly stay Worldwide.
     """
+    worldwide = store_total_label("Worldwide")
     if not grouped or not total_row:
-        return "Total (Worldwide)"
+        return worldwide
     sums: Dict[int, int] = {}
     for _, _, subtotal in grouped:
         for year, value in subtotal.items():
             sums[year] = sums.get(year, 0) + value
     covers = all(sums.get(year) == total
                  for year, total in total_row.items() if total is not None)
-    if not covers:
-        return "Total (Worldwide)"
-    continents = {cont for cont, _, _ in grouped}
-    if len(continents) == 1 and "Other" not in continents:
-        return f"Total ({next(iter(continents))})"
-    if continents == {"North America", "South America"}:
-        return "Total (Americas)"
-    return "Total (Worldwide)"
+    groups = {cont for cont, _, _ in grouped}
+    if not covers or STORE_GROUP_OTHER in groups:
+        return worldwide
+    if len(groups) == 1:
+        return store_total_label(next(iter(groups)))
+    regions = {_store_group_region(g) for g in groups}
+    if len(regions) == 1:
+        from data.geo_hierarchy import node_for_label
+        region = next(iter(regions))
+        return store_total_label((node_for_label(region) or {}).get("node") or region)
+    return worldwide
 
 
 # =============================================================================
@@ -13753,29 +13729,13 @@ class RatingsDataRepository:
         if _edgartools_path not in sys.path:
             sys.path.insert(0, _edgartools_path)
 
+        from data.segment_aliases import ISO2_COUNTRY_NAMES
+
         _STORE_CONCEPTS = {
             'us-gaap:numberofstores',
             'us-gaap:numberofrestaurants',
             'us-gaap:numberofunitsoperated',
             'us-gaap:numberofoperatinglocations',
-        }
-
-        # ISO-3166 alpha-2 → display name. Labels straight from filings are
-        # inconsistent ("Canadian Operations", "KOREA") — the member qname
-        # (country:CA) is the reliable identity.
-        _ISO_COUNTRY = {
-            "US": "United States", "CA": "Canada", "MX": "Mexico", "JP": "Japan",
-            "GB": "United Kingdom", "KR": "South Korea", "AU": "Australia",
-            "TW": "Taiwan", "CN": "China", "ES": "Spain", "FR": "France",
-            "IS": "Iceland", "SE": "Sweden", "NZ": "New Zealand", "IE": "Ireland",
-            "DE": "Germany", "IT": "Italy", "NL": "Netherlands", "BE": "Belgium",
-            "AT": "Austria", "CH": "Switzerland", "PL": "Poland", "PT": "Portugal",
-            "IN": "India", "BR": "Brazil", "CL": "Chile", "TH": "Thailand",
-            "SG": "Singapore", "MY": "Malaysia", "PH": "Philippines",
-            "VN": "Vietnam", "ID": "Indonesia", "HK": "Hong Kong",
-            "AE": "United Arab Emirates", "SA": "Saudi Arabia",
-            "ZA": "South Africa", "PR": "Puerto Rico", "NO": "Norway",
-            "DK": "Denmark", "FI": "Finland",
         }
 
         try:
@@ -13833,7 +13793,7 @@ class RatingsDataRepository:
                         if not _geo.startswith('country:'):
                             continue
                         _code = _geo.split(':', 1)[1].upper()
-                        country_label = _ISO_COUNTRY.get(
+                        country_label = ISO2_COUNTRY_NAMES.get(
                             _code, (f.get('dimension_member_label') or _code).title())
                         val = f.get('numeric_value')
                         if val is None:

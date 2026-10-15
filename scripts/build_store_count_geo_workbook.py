@@ -33,9 +33,16 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "app"))
 sys.path.insert(0, str(REPO / "scripts"))
 
-from data.repository import CONTINENT_ORDER, COUNTRY_TO_CONTINENT, continent_of  # noqa: E402
+from data.repository import STORE_GROUP_OTHER, store_group_order, continent_of  # noqa: E402
 from data.store_count_extractor import XBRL_CONCEPTS  # noqa: E402
 from data.store_count_sources import CONTINENT_BY_COUNTRY, normalise_country  # noqa: E402
+
+# Since 2026-10-15 the tab groups by the geographic-segment hierarchy's
+# Sub-region; these two describe that grouping for the countries we know.
+COUNTRY_TO_CONTINENT = {name: continent_of(name) for name in CONTINENT_BY_COUNTRY
+                        if continent_of(name) != STORE_GROUP_OTHER}
+CONTINENT_ORDER = sorted(set(COUNTRY_TO_CONTINENT.values()) | {STORE_GROUP_OTHER},
+                         key=store_group_order)
 from store_count_geo_labels import LEVELS, classify  # noqa: E402
 
 HEADER = PatternFill("solid", fgColor="1F3864")

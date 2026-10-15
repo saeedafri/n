@@ -404,16 +404,15 @@ STATEMENT_CONFIG = {
 
     # Additional Data — non-statement company facts pulled from
     # coreiq_filing_metrics_v5 (source='store_count' / 'credit_rating').
-    # Store Count by Category fans out the `dimension` field (stores, locations,
-    # restaurants, dealerships, warehouses…) into one column per category.
+    # Store Count can be narrowed to geographic locations (XBRL store facts on
+    # the geographic axis). "Store Count by Category" was retired 2026-10-15;
+    # saved screens that still carry it run through the service unchanged.
     "Additional Data": {
         "additional_data": True,
         "metrics": [
-            {"label": "Store Count",             "data_type": "store_counts",
+            {"label": "Store Count",   "data_type": "store_counts",
              "unit": "", "additional": True},
-            {"label": "Store Count by Category", "data_type": "store_counts_by_category",
-             "unit": "", "additional": True},
-            {"label": "Credit Rating",           "data_type": "credit_ratings",
+            {"label": "Credit Rating", "data_type": "credit_ratings",
              "unit": "", "additional": True},
         ],
     },
@@ -522,9 +521,8 @@ ADDITIONAL_DATA_STMT = "Additional Data"
 
 # UI label -> value stored on the criterion.
 ADDITIONAL_DATA_TYPES = {
-    "Store Count":             "store_counts",
-    "Store Count by Category": "store_counts_by_category",
-    "Credit Rating":           "credit_ratings",
+    "Store Count":   "store_counts",
+    "Credit Rating": "credit_ratings",
 }
 
 # Statement types whose Year selector offers a "Year range" mode (one display-only
@@ -829,3 +827,23 @@ PEOPLE_DEFAULT_SHOW_METRICS = ["Total Compensation", "Total Pay"]
 
 # Money columns, in display-label form — formatted as $ and dropped when empty.
 PEOPLE_MONEY_COLUMNS = list(PEOPLE_MONEY_METRICS.keys())
+
+# What a People Attributes criterion screens. Each one has its own filters and
+# reads only its own dataset: changes and moves come from 8-K Item 5.02
+# (management_changes), remuneration from the proxy / officer pay frame.
+PEOPLE_CATEGORY_CHANGES      = "management_changes"
+PEOPLE_CATEGORY_MOVES        = "executive_moves"
+PEOPLE_CATEGORY_REMUNERATION = "remuneration"
+PEOPLE_CATEGORIES = {
+    PEOPLE_CATEGORY_CHANGES:      "Management Changes",
+    PEOPLE_CATEGORY_MOVES:        "Executive Changes / Movements",
+    PEOPLE_CATEGORY_REMUNERATION: "Management Remuneration",
+}
+
+# Default period per dated category (labels from KEYDEV_TIMEFRAMES). A week is
+# the everyday management-changes check; moves are rare (~90 in ten years), so
+# a week would almost always be empty.
+PEOPLE_DEFAULT_TIMEFRAME = {
+    PEOPLE_CATEGORY_CHANGES: "Last 7 Days",
+    PEOPLE_CATEGORY_MOVES:   "All History",
+}

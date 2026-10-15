@@ -410,8 +410,9 @@ def test_the_card_counts_a_geo_segment_year_range_through_the_pipeline():
 
     assert criterion["year_cols"] == ["Revenues ($mm) — FY 2022–2023 [FY 2022]",
                                       "Revenues ($mm) — FY 2022–2023 [FY 2023]"]
-    assert trace[0]["with_data"] == 3        # MCD + both TSCO rows; KR is N/A
-    assert len(out) == 4                     # nobody dropped
+    assert trace[0]["with_data"] == 3        # MCD + both TSCO rows
+    # Segments show available data only (2026-10-15): KR has none, so it is not listed.
+    assert sorted(out["ticker"]) == ["MCD", "TSCO", "TSCO"]
 
 
 # ── a slice of a segment is not the segment ──────────────────────────────────

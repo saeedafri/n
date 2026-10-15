@@ -1185,13 +1185,13 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                 _parts.append('<td class="data-cell"></td>')
             _parts.append('</tr>')
 
-            # Continent grouping (16-Jul-2026, per business), Excel-report
-            # layout: each continent's countries first (indented under it),
-            # then that continent's bold subtotal, and the grand total LAST.
-            # Single continent → grand total labeled by the continent;
-            # exactly North + South America → "Total (Americas)";
-            # otherwise "Total (Worldwide)".
-            from data.repository import group_countries_by_continent, stores_total_label
+            # Sub-region grouping (geographic-segment hierarchy, 2026-10-15),
+            # Excel-report layout: each group's countries first (indented under
+            # it), then that group's bold subtotal, and the grand total LAST.
+            # One sub-region → total labeled by it; one region → by the region
+            # ("Total AMER (Americas)"); otherwise "Total Worldwide".
+            from data.repository import (group_countries_by_continent, store_total_label,
+                                         stores_total_label)
             _sbc_groups = group_countries_by_continent(sbc_countries)
             _multi_continent = len(_sbc_groups) > 1 and not _sbc_partial
             _country_indent = "indent-2" if _multi_continent else "indent-1"
@@ -1209,7 +1209,7 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
                             _parts.append('<td class="data-cell" style="text-align:center;">-</td>')
                     _parts.append('</tr>')
                 if _multi_continent:
-                    _parts.append(f'<tr class="row-total-strong"><td class="indent-1">Total ({html_escape(_cont)})</td>')
+                    _parts.append(f'<tr class="row-total-strong"><td class="indent-1">{html_escape(store_total_label(_cont))}</td>')
                     for yr in years:
                         _sv = _cont_totals.get(yr)
                         if _sv is not None:
@@ -4497,7 +4497,8 @@ def render_page():
                     # Worldwide via stores_total_label) last.
                     _sbc = _rat_data.get("stores_by_country", {}) or {}
                     if _sbc.get("countries"):
-                        from data.repository import group_countries_by_continent, stores_total_label
+                        from data.repository import (group_countries_by_continent, store_total_label,
+                                                     stores_total_label)
                         _sbc_part = bool(_sbc.get("partial"))
                         _sbc_hdr = ("Stores by Country (partial — as disclosed in 10-K; does not sum to total)"
                                     if _sbc_part else "Stores by Country")
@@ -4512,7 +4513,7 @@ def render_page():
                                 _rat_rows.append({"label": _cn, "values": _vals, "is_bold": False, "indent": _cn_indent, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
                             if _multi_cont:
                                 _vals = [int(_cont_totals.get(yr)) if _cont_totals.get(yr) is not None else None for yr in _rat_years]
-                                _rat_rows.append({"label": f"Total ({_cont})", "values": _vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
+                                _rat_rows.append({"label": store_total_label(_cont), "values": _vals, "is_bold": True, "indent": 1, "is_percent": False, "is_text": False, "has_separator": False, "is_estimated": [False] * len(_rat_years)})
                         _trow = _sbc.get("total_row", {})
                         if _trow:
                             _tlabel = stores_total_label(_sbc_groups, _trow)

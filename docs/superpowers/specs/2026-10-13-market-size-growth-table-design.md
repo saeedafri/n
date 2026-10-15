@@ -14,6 +14,10 @@ themselves, and the percentage change — positive or negative — with a downlo
 
 ## What it does
 
+> **Superseded on 2026-10-15** — the period table below was removed; the Growth
+> section is now the annual roll-up alone. See *Period table removed* at the
+> foot of this document. The rest of this section records what it was.
+
 A new **Growth** section sits between Diagnostics and the model sections. It
 shows one row per period:
 
@@ -192,3 +196,63 @@ quarterly and weekly fixtures.
 * No chart. The table and the download were what was asked for.
 * The assistant's context does not mention the growth table; it already has
   every underlying number.
+
+## Period table removed, 2026-10-15
+
+The business team looked at the section and asked for the data team's sheet and
+nothing beside it: *"Why are you still showing an extra table? I requested only
+three columns, year, sales, and year-over-year growth."* So the period table,
+its three KPI cards and the MoM caption are gone, and `_render_growth_tab()`
+renders the annual roll-up alone — for every frequency, annual uploads included,
+since `annual_rollup()` on annual data is the same table it would have drawn.
+One model picker, one Newest first toggle, one pair of downloads named
+`market_size_growth_<model>`.
+
+Two things they reported with it, both consequences of that table rather than
+faults in the numbers:
+
+* **"All three models predict the same numbers."** The three cards read
+  `actual.iloc[-1]` — the last *uploaded* period, which no model touches — and
+  the rows that do differ sat at the bottom of a 100+ row grid. Switching models
+  now moves the figures you can see: on `01_full_date_month_end`, 2026 reads
+  3,758,731 (SARIMAX) · 3,756,098 (SARIMA) · 3,750,653 (Prophet), against
+  2,762,543 for history alone.
+* **"I cannot see July 2020 and August 2023."** The period grid was a fixed
+  520px box scrolling internally — about fourteen rows of a hundred-odd on
+  screen. The annual table is one row per year and fits whole.
+
+`growth_table()` and `period_labels()` stay in the service with their tests. No
+caller remains in the app; they are a period's worth of work away if the monthly
+figures are ever wanted back, as a download or otherwise.
+
+`.claude/dev/msf_growth_check.py` was rewritten to match: it audits the one
+table (columns, rate recomputed from the file's own Sales, no rate across a
+skipped year), compares the History-only download with the engine reading the
+same workbook, proves the short-year blanks from the uploaded series itself,
+and — the check that answers the complaint — proves the history years are
+identical across models while the forecast years are not. Clean on all 21
+runnable fixtures on the dev tree and on five on the `market-data-stg` checkout.
+
+## Two UI faults found with it, 2026-10-15
+
+**The white band under Run analysis.** After a run, 193px of nothing sat between
+the button and the Forecast ready chip. The overlay posts its stage updates as
+`components.html(..., height=0)` — one courier iframe per stage, eleven of them
+by the end of a run. Each drew nothing, but they are real elements in
+`status_area`, and that vertical block carries Streamlit's default 16px gap: ten
+gaps, ~190px of white. Fixed with `st.container(gap=None)`, measured 193px → 33px
+(the ordinary spacing around the chip). Not `display: none` on the containers —
+a hidden subtree is no place for an iframe whose script has to run.
+
+**The nameless 0, 1, 2 column.** Every table drawn through `_table()` showed the
+pandas index. On most it was row numbers from zero; on the combination search it
+was whatever positions survived the sort. `_table()` now passes
+`hide_index=pd.api.types.is_integer_dtype(df.index)`: a whole-number index is an
+artefact and goes, a labelled one — the outlier dates, the comparison's metric
+names, the side-by-side forecast dates — is data and stays.
+
+Both verified in the browser on the dev tree and the `market-data-stg` checkout:
+the band measured, the overlay proved to still appear during the run and remove
+itself after, and every table's first column read out of the grid's
+accessibility tree (`Year`, `Period`, `Variable (lag)`, `Date`, …).
+

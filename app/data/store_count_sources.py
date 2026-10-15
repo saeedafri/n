@@ -76,7 +76,7 @@ def roll_up_continents(by_country: Dict[str, int]) -> Dict[str, int]:
     return totals
 
 
-_COUNTRY_AXIS = re.compile(r"(?i)geograph|country|countries|region")
+COUNTRY_AXIS = re.compile(r"(?i)geograph|country|countries|region")
 _STATE_MEMBER = re.compile(r"(?i)^(?:stpr:|state\s+of\s)")
 
 
@@ -124,7 +124,7 @@ def xbrl_by_year(rows: List[Dict[str, Any]]) -> Dict[int, StoreCount]:
                  if not f["is_dimensioned"] and 0 < f["numeric_value"] <= MAX_PLAUSIBLE_COUNT]
         geographic = [f for f in facts
                       if f["is_dimensioned"]
-                      and _COUNTRY_AXIS.search(str(f.get("full_dimension_label") or
+                      and COUNTRY_AXIS.search(str(f.get("full_dimension_label") or
                                                    f.get("dimension") or ""))
                       and 0 < f["numeric_value"] <= MAX_PLAUSIBLE_COUNT]
 

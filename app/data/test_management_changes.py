@@ -210,6 +210,64 @@ def test_company_name_is_not_a_person():
     assert not is_company_not_person("John Smith", "lithia", "Mr. Smith resigned")
 
 
+def test_news_headlines():
+    """Real Executive News headlines (coreiq_company_events, 2026-10-15)."""
+    from data.management_changes import parse_news
+
+    def one(headline, company, summary=""):
+        got = parse_news(headline, summary, company)
+        return (got[0]["change"], got[0]["person"], got[0]["role"] if "role" in got[0] else got[0]["title"]) if got else None
+
+    got = parse_news("Smith & Wesson Brands, Inc. Names Deana L. McPherson as CFO", "", "Smith & Wesson Brands, Inc.")
+    assert got and got[0]["person"] == "Deana L. McPherson" and got[0]["title"] == "CFO", got
+    assert one("Karen Lynch tapped as new CEO of CVS", "CVS Health")[:2] == ("Appointment", "Karen Lynch")
+    assert one("eBay names Jamie Iannone Chief Executive Officer", "eBay Inc.")[:2] == ("Appointment", "Jamie Iannone")
+    assert one("Jennifer LaClair steps down as Ally Financial CFO", "Ally Financial Inc.")[:2] == ("Departure", "Jennifer LaClair")
+    assert one("La-Z-Boy Q3 Profit Down; CEO Kurt Darrow To Retire", "La-Z-Boy Incorporated")[:2] == ("Departure", "Kurt Darrow")
+    got = parse_news("Lululemon names former Nike exec Heidi O’Neill as next CEO", "", "lululemon athletica inc.")
+    assert got and got[0]["person"] == "Heidi O'Neill", got
+    got = parse_news("Intel appoints Lip-Bu Tan as CEO to orchestrate turnaround at struggling chipmaker", "", "Intel Corporation")
+    assert got and got[0]["title"] == "CEO", got
+    got = parse_news("Intel Appoints Tech Industry Leader Pat Gelsinger as New CEO", "", "Intel Corporation")
+    assert got and got[0]["person"] == "Pat Gelsinger", got
+    two = parse_news("Dine Brands Appoints John Dillon as President of Denny's and David Schmidt as President of Keke's",
+                     "", "Dine Brands Global")
+    assert [e["person"] for e in two] == ["John Dillon", "David Schmidt"], two
+    # Another company's change filed under this ticker.
+    assert one("Northern Tool + Equipment taps Sleep Number exec as new CEO", "Sleep Number Corporation") is None
+    assert one("Lumenci Appoints Former Qualcomm President Derek Aberle to iLumOS Advisory Board", "QUALCOMM Incorporated") is None
+    assert one("Steve Menneto departs Polaris, named Malibu Boats CEO", "Malibu Boats, Inc.") is None
+    assert one("Redwood City-based Imperva taps former Oracle, Infor exec as new CEO", "Oracle Corporation") is None
+    assert one("Home Depot CEO Takes Temporary Medical Leave, Company Announces Interim Management Plan",
+               "The Home Depot, Inc.") is None
+    # Not a change at all.
+    assert one("Insider trades: P&G, Marvell Technology, TSMC among notable names (PG:NYSE)", "Procter & Gamble") is None
+    assert one("Clorox Announces November 2 Webcast of First-Quarter Fiscal Year 2027 Results", "The Clorox Company") is None
+    # The headline names the role only: the person comes from the summary.
+    got = parse_news("Dollar General names COO",
+                     "Dollar General Corporation announced that Jeff Owen has been appointed Chief Operating Officer, "
+                     "effective immediately.", "Dollar General Corporation")
+    assert got and got[0]["person"] == "Jeff Owen" and got[0]["confidence"] == "Low", got
+
+
+def test_news_repeats_fold_into_filing():
+    from data.management_changes import CHANGE_COLUMNS, _fold_repeats
+    day = pd.Timestamp("2026-03-02")
+
+    def row(source, when, person="Dana McNabb"):
+        r = dict.fromkeys(CHANGE_COLUMNS, "")
+        r.update(ticker="GIS", person=person, change="Appointment", notice_date=when, source=source)
+        return r
+
+    filings = pd.DataFrame([row("SEC 8-K", day)])
+    news = pd.DataFrame([row("Reuters", day + pd.Timedelta(days=1)),
+                         row("CNBC", day + pd.Timedelta(days=60)),
+                         row("Reuters", day, person="Someone Else")])
+    filings, rest = _fold_repeats(news, primary=filings)
+    assert filings.at[0, "also_reported"] == "Reuters"
+    assert sorted(rest["source"]) == ["CNBC", "Reuters"] and len(rest) == 2
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

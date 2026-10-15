@@ -372,6 +372,18 @@ def _warm_keydevs_screening() -> None:
     get_keydev_subtypes_by_category()
 
 
+def _warm_store_locations_screening() -> None:
+    """Start the store-location cache build (a ~3s-per-ticker sweep) on boot so
+    the Store Count location picker is ready before anyone opens it. A disk copy
+    makes this a read; with none, the build runs on its own thread."""
+    from data.screening_service import StoreLocationsPending, get_store_locations
+
+    try:
+        get_store_locations()
+    except StoreLocationsPending:
+        pass
+
+
 def _warm_ratios_screening() -> None:
     """Pre-fetch the per-ticker Ratios payload for the screening universe.
 
@@ -449,6 +461,10 @@ def _background_warmup_thread():
         # boot, so a first People visitor paid both cold builds (24s + 46s).
         threading.Thread(target=_warm_people_screening, daemon=True,
                          name="warm-people").start()
+        # Store locations: a ~4-5 min per-ticker sweep on a cold cache dir. Its
+        # own thread, or it waits minutes behind the calendar and Key Devs warms.
+        threading.Thread(target=_warm_store_locations_screening, daemon=True,
+                         name="warm-store-locations").start()
         from datetime import date, timedelta
 
         # ── Track 0: Calendar warmup (RUNS FIRST — it's the slowest page and the

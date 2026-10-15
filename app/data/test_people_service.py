@@ -21,9 +21,14 @@ from data.people_service import (
     classify_role,
     clean_person_name,
     is_former_title,
+    people_criteria_for,
+    period_mask,
     person_key,
 )
-from data.screening_config import DB_SCALE, PEOPLE_MONEY_METRICS, PEOPLE_ROLES
+from data.screening_config import (
+    DB_SCALE, PEOPLE_CATEGORY_CHANGES, PEOPLE_CATEGORY_MOVES,
+    PEOPLE_CATEGORY_REMUNERATION, PEOPLE_MONEY_METRICS, PEOPLE_ROLES,
+)
 
 
 def test_role_classification():
@@ -596,8 +601,89 @@ def test_year_pivot():
     print("  year pivot: OK")
 
 
+def test_range_over_chosen_metrics():
+    """One Min/Max over several metrics keeps a row when ANY chosen metric is in
+    range; a missing value never matches; no range filters nothing."""
+    df = _frame([
+        _person(executive_name="SEC exec", total_compensation=8 * DB_SCALE),
+        _person(executive_name="YF exec",  total_compensation=None, total_pay=3 * DB_SCALE),
+        _person(executive_name="Too high", total_compensation=50 * DB_SCALE),
+        _person(executive_name="No pay",   total_compensation=None),
+    ])
+
+    def names(criterion):
+        return sorted(apply_people_criterion(df, criterion)["executive_name"])
+
+    both = {"money_metrics": ["Total Compensation", "Total Pay"], "money_min": 1.0, "money_max": 10.0}
+    assert names(both) == ["SEC exec", "YF exec"], names(both)
+    assert names(dict(both, money_metrics=["Total Pay"])) == ["YF exec"]
+    assert names(dict(both, money_min=None)) == ["SEC exec", "YF exec"]
+    assert len(names({"money_metrics": ["Total Pay"]})) == 4, "no range must not filter"
+    assert names(dict(both, money_min=8.0, money_max=8.0)) == ["SEC exec"], "bounds inclusive"
+    print("  range over chosen metrics: OK")
+
+
+def test_category_routing():
+    """Each section sees only its own category's criteria; a criterion saved
+    before categories counts for what its boxes showed."""
+    changes = {"type": "people", "category": PEOPLE_CATEGORY_CHANGES, "roles": ["CFO"]}
+    moves = {"type": "people", "category": PEOPLE_CATEGORY_MOVES}
+    pay = {"type": "people", "category": PEOPLE_CATEGORY_REMUNERATION, "roles": ["CEO"]}
+    legacy = {"type": "people", "roles": ["COO"], "show_management_changes": True}
+    industry = {"type": "industry", "industries": ["Retail"]}
+    criteria = [changes, moves, pay, legacy, industry]
+
+    assert people_criteria_for(criteria, PEOPLE_CATEGORY_CHANGES) == [changes, legacy]
+    assert people_criteria_for(criteria, PEOPLE_CATEGORY_MOVES) == [moves]
+    assert people_criteria_for(criteria, PEOPLE_CATEGORY_REMUNERATION) == [pay, legacy]
+    assert people_criteria_for([changes], PEOPLE_CATEGORY_REMUNERATION) == [], \
+        "a management-changes role filter must not reach the pay grid"
+    assert people_criteria_for([dict(legacy, show_moves_only=True)], PEOPLE_CATEGORY_MOVES)
+    print("  category routing: OK")
+
+
+def test_period_mask():
+    """Same window as Key Devs: N days = on or after today - N; a date range is
+    inclusive; All History / no period keeps everything; NaT never matches a
+    bounded period."""
+    today = pd.Timestamp("2026-10-15")
+    dates = pd.Series(pd.to_datetime(
+        ["2026-10-15", "2026-10-08", "2026-10-07", "2026-09-01", None]))
+
+    def kept(criterion):
+        return list(period_mask(dates, criterion, today=today))
+
+    week = {"date_filter_mode": "timeframe", "days": 7}
+    assert kept(week) == [True, True, False, False, False], kept(week)
+    assert kept({"date_filter_mode": "timeframe", "days": None}) == [True] * 5
+    assert kept({}) == [True] * 5, "legacy criteria carry no period"
+    rng = {"date_filter_mode": "date_range", "start_date": "2026-09-01", "end_date": "2026-10-07"}
+    assert kept(rng) == [False, False, True, True, False], kept(rng)
+    one_day = dict(rng, start_date="2026-10-08", end_date="2026-10-08")
+    assert kept(one_day) == [False, True, False, False, False]
+    print("  period mask: OK")
+
+
+def test_category_summary():
+    s = build_people_summary({"category": PEOPLE_CATEGORY_CHANGES, "roles": ["CFO"],
+                              "date_filter_mode": "timeframe", "timeframe_label": "Last 7 Days"})
+    assert s == "Management Changes · Last 7 Days · CFO", s
+    s = build_people_summary({"category": PEOPLE_CATEGORY_MOVES, "date_filter_mode": "date_range",
+                              "start_date": "2026-01-01", "end_date": "2026-03-31"})
+    assert s == "Executive Changes / Movements · 2026-01-01 to 2026-03-31", s
+    s = build_people_summary({"category": PEOPLE_CATEGORY_REMUNERATION,
+                              "money_metrics": ["Total Compensation", "Total Pay"],
+                              "money_min": 1.0, "money_max": 20.0})
+    assert s == "Management Remuneration · Total Compensation or Total Pay $1.0mm – $20.0mm", s
+    print("  category summary: OK")
+
+
 if __name__ == "__main__":
     print("people_service self-check")
+    test_range_over_chosen_metrics()
+    test_category_routing()
+    test_period_mask()
+    test_category_summary()
     test_unknown_role_maps_to_other()
     test_sec_yahoo_merge()
     test_year_pivot()

@@ -147,6 +147,7 @@ internal revenue code section rule regulation exhibit
 management finance inventory operations marketing sales merchandising strategy technology supply
 chain place stores brands foods retail products services partners capital digital commercial
 banking segment division business americas asia pacific emerging markets consumer global
+news release immediate about industry leader veteran insider exec tech yes no takes temporary medical leave
 """.split())
 _NAME_WORD = r"[A-Z][a-zA-Z'’\-]+"
 _NAME = re.compile(
@@ -565,13 +566,24 @@ def _role_of(title: str, evidence: str) -> str:
 # UNIVERSE
 # =============================================================================
 
+# Filings: 8-K Item 5.02, and 6-K for foreign private issuers (2026-10-15).
+# The 6-K text is stored cut at 2,000 characters, mostly cover page, so only
+# about one in ten carries a readable change.
 _EVENTS_QUERY = """
-    SELECT event_id, ticker, edgar_filing_date, event_date, source_ref, situation
+    SELECT event_id, ticker, edgar_filing_date, event_date, source, source_ref, situation
     FROM coreiq_company_events
     WHERE is_active = 1
-      AND event_category IN ('Management Changes', 'Governance')
-      AND source = 'SEC EDGAR 8-K'
-      AND headline LIKE '%%Item 5.02%%'
+      AND ((event_category IN ('Management Changes', 'Governance')
+            AND source = 'SEC EDGAR 8-K' AND headline LIKE '%%Item 5.02%%')
+           OR (event_category = 'Management Changes' AND event_subtype = 'Management Change (6-K)'))
+"""
+
+# News about executives (Alpha Vantage and Yahoo feeds), read from the headline.
+_NEWS_QUERY = """
+    SELECT event_id, ticker, event_date, source, headline, situation, source_ref
+    FROM coreiq_company_events
+    WHERE is_active = 1
+      AND event_category = 'Management Changes' AND event_subtype = 'Executive News'
 """
 
 _COMPANIES_QUERY = """
@@ -585,6 +597,7 @@ CHANGE_COLUMNS = [
     "reason", "no_disagreement", "confidence", "age", "role_start", "role_end", "years_in_role",
     "moved_from", "moved_from_title", "moved_from_date",
     "evidence", "source_ref", "event_id", "filing_year", "filing_unit",
+    "source", "also_reported",
 ]
 
 
@@ -658,6 +671,9 @@ def mark_moves(df: pd.DataFrame, bodies: Dict[int, str], names: Dict[str, str]) 
 
 _ACCESSION = re.compile(r"/data/\d+/(\d{10})(\d{2})(\d{6})/")
 
+# ~100s against a 120s read timeout (DB cost is rows read; per-ticker batches
+# took 559s). execute_query_readonly turned a timeout into [] and on 2026-10-15
+# the frame was saved with 0 of 9,365 events linked, so this raises instead.
 _UNITS_QUERY = """
     SELECT DISTINCT ticker, storage_year, filing_unit, filing_accession
     FROM coreiq_filing_metrics_v5
@@ -675,14 +691,20 @@ def accession_of(source_ref: str) -> str:
 
 def _filing_units_by_accession() -> Dict[tuple, tuple]:
     """(ticker, accession) -> (storage_year, filing_unit): where an 8-K lives on
-    our Company Filings page. 96% of 5.02 events resolve (STG, 2026-10-12)."""
-    try:
-        return {(str(r["ticker"]), str(r["filing_accession"])): (r["storage_year"], r["filing_unit"])
-                for r in db_manager.execute_query_readonly(_UNITS_QUERY) or []}
-    except Exception as exc:
-        log_structured_error(exc, page="management_changes", component="_filing_units_by_accession",
-                             operation="fetch_filing_units")
-        return {}
+    our Company Filings page. 96% of 5.02 events resolve (STG, 2026-10-12).
+
+    Retries once, then raises: a frame built without links would be
+    materialized and served until the next 8-K arrives."""
+    for attempt in (1, 2):
+        try:
+            rows = db_manager.execute_query_readonly_raising(_UNITS_QUERY)
+            return {(str(r["ticker"]), str(r["filing_accession"])): (r["storage_year"], r["filing_unit"])
+                    for r in rows}
+        except Exception as exc:
+            log_structured_error(exc, page="management_changes", component="_filing_units_by_accession",
+                                 operation="fetch_filing_units", context=f"attempt={attempt}")
+            if attempt == 2:
+                raise
 
 
 def is_company_not_person(person: str, company_word: str, situation: str) -> bool:
@@ -720,7 +742,8 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
             ticker = (r.get("ticker") or "").strip()
             year, unit = (units or {}).get((ticker, accession_of(r.get("source_ref"))), (None, ""))
             e.update(ticker=ticker, filing_date=filed, source_ref=r.get("source_ref") or "",
-                     event_id=r.get("event_id"), filing_year=year, filing_unit=unit or "")
+                     event_id=r.get("event_id"), filing_year=year, filing_unit=unit or "",
+                     source=source_label(r.get("source")), also_reported="")
             # The filing date is the announcement when the text gives none.
             e["notice_date"] = e.get("notice_date") or filed
             records.append(e)
@@ -784,6 +807,178 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
     return df
 
 
+# =============================================================================
+# NEWS — executive appointments / departures read from news headlines
+# =============================================================================
+# Only about one news item in five is a change at the tagged company: the feed
+# also files insider trades, earnings previews, webcast notices and other
+# companies' appointments (Lumenci's advisory board under QCOM, Northern Tool's
+# CEO under SNBR). A headline is accepted only when it names the change AND its
+# subject is the ticker's own company.
+
+def source_label(source: Optional[str]) -> str:
+    """'SEC EDGAR 8-K' -> 'SEC 8-K'; 'AV News — Business Wire' -> 'Business Wire'."""
+    text = (source or "").strip()
+    if text.startswith("SEC EDGAR "):
+        return "SEC " + text[len("SEC EDGAR "):]
+    return re.sub(r"^(?:AV|YF)\s+News\s*[—\-–]\s*", "", text) or text
+
+
+# Title Case headlines capitalise "To", "As", "Will": never part of a name.
+_N_NOT_NAME = r"(?!(?:To|As|Will|And|Of|The|In|At|For|Is|Has|Was|With|After|Amid|Steps?|Resigns?|Retires?|Exits?|Named|Appointed)\b)"
+_N_PERSON = (rf"(?-i:(?P<person>(?:[A-Z]\.\s*)?{_N_NOT_NAME}[A-Z][a-zA-Z'’\-]+(?:\s+(?:[A-Z]\.|{_N_NOT_NAME}[A-Z][a-zA-Z'’\-]+|de|del|van|von|da|di|le|la)){{1,3}}"
+             r"(?![a-z])(?:,?\s+(?:Jr\.|Sr\.|II|III|IV))?))")
+_N_ROLE_WORDS = (r"(?:CEO|CFO|COO|CTO|CIO|CMO|CHRO|CRO|CDO|CPO|CCO|President|Chair(?:man|woman|person)?|"
+                 r"Chief\s+[A-Za-z]+(?:\s+(?:and\s+)?[A-Za-z]+){0,2}\s+Officer|Chief\s+Executive|General\s+Counsel|"
+                 r"(?:Senior\s+|Executive\s+)?(?:Vice\s+President|VP|EVP|SVP)|Director|Board(?:\s+of\s+Directors)?|"
+                 r"Treasurer|Controller|Head\s+of\s+[A-Za-z ]+|[A-Za-z&]+\s+(?:Leader|Chief))")
+_N_ROLE = re.compile(_N_ROLE_WORDS, re.I)
+_N_APPOINT_VERB = (r"(?:names?|appoints?|taps?|promotes?|hires?|elects?|picks?|selects?|elevates?|adds?|welcomes?|"
+                   r"nabs?|announces\s+(?:the\s+)?appointment\s+of)")
+_N_PASSIVE = r"(?:(?:has\s+been\s+|is\s+|was\s+)?(?:appointed|named|promoted|elected|tapped|hired|selected))"
+_N_LEAVE = (r"(?:(?:to\s+|will\s+)?(?:step(?:s|ping)?\s+down|resigns?|resignation|retires?|retirement|exits?|depart(?:s|ure)?|leaves?|"
+            r"(?:is\s+)?(?:stepping\s+down|leaving|departing|retiring|out)|ousted|fired|terminated))")
+_N_LEAVE_RE = re.compile(rf"\b{_N_LEAVE}\b", re.I)
+_N_APPOINT_RE = re.compile(rf"\b(?:{_N_APPOINT_VERB}|{_N_PASSIVE}|new)\b", re.I)
+# "Smith & Wesson Brands, Inc. Names Deana L. McPherson as CFO" / "eBay names Jamie Iannone Chief Executive Officer"
+_N_ACTIVE_HEAD = rf"^(?P<co>.+?)\s+{_N_APPOINT_VERB}\s+(?:(?:former|longtime|veteran|industry|new|its)\s+)*(?:\S+\s+){{0,3}}?{_N_PERSON}\s+"
+_N_ACTIVE_AS = re.compile(_N_ACTIVE_HEAD + r"(?:as|to(?:\s+its)?|to\s+the|to\s+be)\s+(?:its\s+|the\s+|new\s+|next\s+)*(?P<title>.+?)$", re.I)
+_N_ACTIVE = re.compile(_N_ACTIVE_HEAD + r"(?P<title>(?-i:[A-Z]).+?)$", re.I)
+# "Tyler Reddien Appointed CFO and COO of Capri Holdings" / "Shailesh Jejurikar is P&G's new CEO"
+_N_PASSIVE_RE = re.compile(rf"^{_N_PERSON}\s+(?:{_N_PASSIVE}\s+(?:as\s+)?(?:the\s+)?(?:new\s+)?(?P<title>.+?)(?:\s+(?:of|at)\s+(?P<co>.+))?"
+                           rf"|is\s+(?P<co2>.+?)(?:'s)\s+(?:new\s+|next\s+)(?P<title2>.+))$", re.I)
+# "Genesco CFO Harris to step down" / "...; CEO Kurt Darrow To Retire" / "Jennifer LaClair steps down as Ally Financial CFO"
+_N_LEAVE_PAT = re.compile(rf"(?:^|[;:]\s*)(?:(?P<co>[^;:]+?)(?:'s)?\s+)?(?P<title>{_N_ROLE_WORDS}(?:\s+and\s+{_N_ROLE_WORDS})?)?"
+                          rf"\s*,?\s*{_N_PERSON}\s*,?\s+(?P<verb>{_N_LEAVE})\b(?P<rest>[^,;]*)", re.I)
+_N_TITLE_END = re.compile(
+    r"\s*(?:,|;|:|\s+-\s+|\s+–\s+|\s+—\s+|\s+\||\s+effective\b|\s+by\b|\s+\(|\s+after\b|\s+amid\b|\s+in\b|"
+    r"\s+succeeding\b|\s+replacing\b|\s+to\s+(?-i:[a-z])|\s+and\s+(?:appoints|names|sets|posts|reports|raises|cuts|member)\b|"
+    r"\s+with\b|\s+on\s+(?:a\s+)?(?:permanent|interim)\b|\s+as\s+(?:part|it|the\s+company)\b|\s+following\b|"
+    r"\s+and\s+(?-i:[A-Z][a-z]+\s+[A-Z][a-z]+)\s+as\b).*$", re.I)
+_N_SECOND = re.compile(rf"\s+and\s+{_N_PERSON}\s+as\s+(?P<title>.+)$")
+
+
+def _about_company(text: Optional[str], company: str) -> bool:
+    word = short_name(company).lower().replace("’", "'")
+    return bool(word) and word in (text or "").lower().replace("’", "'")
+
+
+def _news_event(person: str, kind: str, title: str, headline: str, confidence: str) -> Optional[dict]:
+    person = re.sub(r"^\S+'s\s+", "", person.strip())          # "PNC's Jenn LaClair"
+    if not _is_name(person) or re.search(r"\b(?:Inc|Corp|Co|Ltd|LLC|Group|Holdings|Brands|Stores)\b", person):
+        return None
+    title = _N_TITLE_END.sub("", title.strip()).strip(" .")
+    if kind == "Appointment" and not re.match(rf"(?:\S+\s+){{0,4}}{_N_ROLE_WORDS}", title, re.I):
+        return None
+    return {"person": person, "change": kind, "title": title, "confidence": confidence,
+            "event_type": "Appointment" if kind == "Appointment" else "Departure", "evidence": headline}
+
+
+def parse_news(headline: str, summary: str, company: str) -> List[dict]:
+    """Appointments / departures one news item reports at `company`.
+
+    Medium confidence: read from the headline. Low: the headline names the
+    change and the role but not the person ("Five Below names COO"), so the
+    person is the summary's event for that role."""
+    text = re.sub(r"\s+", " ", (headline or "").replace("’", "'")).strip()
+    text = re.sub(r"\s*\((?:[A-Z.:]+\s*:?\s*)+\)", "", text)                 # "(PG:NYSE)"
+    text = re.sub(r"\s+By\s+Investing\.com$|\s+[-|]\s+[A-Z][\w .&]+$", "", text)
+    m = _N_ACTIVE_AS.search(text) or _N_ACTIVE.search(text)
+    if m and _about_company(m.group("co"), company):
+        title, second = m.group("title"), _N_SECOND.search(m.group("title"))
+        title = title[:second.start()] if second else title
+        words = m.group("person").split()
+        # "Appoints Tech Industry Leader Pat Gelsinger": descriptors before the name.
+        while len(words) > 2 and words[0].lower().strip(".,") in _NOT_NAME:
+            words.pop(0)
+        # "names Jamie Iannone Chief Executive Officer": the name ran into the title.
+        while len(words) > 2 and not _is_name(" ".join(words)):
+            title = words.pop() + " " + title
+        out = [_news_event(" ".join(words), "Appointment", title, headline, "Medium")]
+        if second:
+            out.append(_news_event(second.group("person"), "Appointment", second.group("title"), headline, "Medium"))
+        if out[0]:
+            return [e for e in out if e]
+    m = _N_PASSIVE_RE.search(text)
+    if m and _about_company(m.group("co") or m.group("co2") or text, company):
+        ev = _news_event(m.group("person"), "Appointment", m.group("title") or m.group("title2") or "", headline, "Medium")
+        if ev:
+            return [ev]
+    m = _N_LEAVE_PAT.search(text)
+    co, leave_title = (m.group("co"), m.group("title")) if m else (None, None)
+    if co and _N_ROLE.fullmatch(co.strip()):          # "; CEO Kurt Darrow To Retire"
+        co, leave_title = None, co
+    # "Menneto departs Polaris, named Malibu Boats CEO" is a Polaris departure:
+    # with no company before the person, it must follow the verb.
+    if m and _about_company(co or (text[:m.start()] + " " + m.group("rest")), company):
+        ev = _news_event(m.group("person"), "Departure", leave_title or "", headline, "Medium")
+        if ev:
+            return [ev]
+    role = _N_ROLE.search(text)
+    verb = _N_LEAVE_RE.search(text) or _N_APPOINT_RE.search(text)
+    kind = None if not verb else "Departure" if _N_LEAVE_RE.search(text) else "Appointment"
+    # The company must be the subject: "Imperva taps former Oracle exec" is not Oracle's.
+    if not (role and kind and _about_company(text[:min(role.start(), verb.start())], company)):
+        return []
+    wanted = _role_of(role.group(0), text)
+    for e in extract_events(summary or ""):
+        if e.get("change") == kind and e.get("person") and _is_name(e["person"]) \
+                and _role_of(e.get("title") or "", e.get("evidence") or "") == wanted:
+            return [{"person": e["person"], "change": kind, "title": e.get("title") or role.group(0),
+                     "confidence": "Low", "event_type": e.get("event_type") or kind, "evidence": headline}]
+    return []
+
+
+def build_news_changes(rows: List[dict], names: Dict[str, str]) -> pd.DataFrame:
+    """One row per change a news item reports; several outlets reporting the
+    same change within 30 days collapse into the first, the rest listed."""
+    records = []
+    for r in rows:
+        ticker = (r.get("ticker") or "").strip()
+        when = pd.Timestamp(r.get("event_date")) if r.get("event_date") else pd.NaT
+        for e in parse_news(r.get("headline") or "", r.get("situation") or "", names.get(ticker, "")):
+            e.update(ticker=ticker, filing_date=when, notice_date=when, role=_role_of(e["title"], e["evidence"]),
+                     is_board=_is_board(e["title"], e["evidence"]), source_ref=r.get("source_ref") or "",
+                     event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="",
+                     filing_unit="")
+            records.append(e)
+    df = pd.DataFrame(records, columns=CHANGE_COLUMNS)
+    return _fold_repeats(df) if len(df) else df
+
+
+def _fold_repeats(df: pd.DataFrame, primary: Optional[pd.DataFrame] = None, days: int = 30) -> pd.DataFrame:
+    """Drop rows that repeat an earlier report of the same change (same ticker,
+    person and change within `days`), naming their source on the row kept.
+
+    With `primary`, `df` rows repeating a `primary` row are folded into it and
+    the updated primary frame is returned alongside the remaining rows."""
+    keys = df["person"].map(person_key)
+    df = df.assign(_k=list(zip(df["ticker"], keys, df["change"]))).sort_values("notice_date")
+    kept: Dict[tuple, List[int]] = {}
+    target = primary
+    if primary is not None:
+        primary = primary.copy()
+        for i, k in zip(primary.index, zip(primary["ticker"], primary["person"].map(person_key), primary["change"])):
+            kept.setdefault(k, []).append(i)
+    keep_rows, extra = [], {}
+    for i, row in df.iterrows():
+        home = primary if primary is not None else df
+        match = next((j for j in kept.get(row["_k"], [])
+                      if abs((home.at[j, "notice_date"] - row["notice_date"]).days) <= days), None)
+        if match is None:
+            if primary is None:
+                kept.setdefault(row["_k"], []).append(i)
+            keep_rows.append(i)
+        else:
+            extra.setdefault(match, []).append(row["source"])
+    for j, sources in extra.items():
+        home = primary if primary is not None else df
+        prior = [s for s in str(home.at[j, "also_reported"] or "").split(", ") if s]
+        home.at[j, "also_reported"] = ", ".join(dict.fromkeys(prior + [s for s in sources if s != home.at[j, "source"]]))
+    rest = df.loc[keep_rows].drop(columns="_k")
+    return (primary, rest) if target is not None else rest
+
+
 def _build_management_changes() -> pd.DataFrame:
     import time as _time
     t0 = _time.perf_counter()
@@ -807,15 +1002,34 @@ def _build_management_changes() -> pd.DataFrame:
                              operation="fetch_company_names")
         names = {}
     df = build_changes(rows, names, units)
+    try:
+        news_rows = db_manager.execute_query_readonly_raising(_NEWS_QUERY) or []
+    except Exception as exc:
+        log_structured_error(exc, page="management_changes", component="_build_management_changes",
+                             operation="fetch_executive_news")
+        news_rows = []
+    news = build_news_changes(news_rows, names)
+    if len(news) and len(df):
+        df, news = _fold_repeats(news, primary=df)
+    if len(news):
+        news = news.assign(**{c: news[c].astype(str) for c in ("ticker", "change", "event_type", "role", "confidence")})
+        df = pd.concat([df.astype({c: str for c in ("ticker", "change", "event_type", "role", "confidence")}), news],
+                       ignore_index=True)
+        for col in ("filing_date", "notice_date", "effective_date"):
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+        for col in ("ticker", "change", "event_type", "role", "confidence"):
+            df[col] = df[col].fillna("").astype("category")
+        df = df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
     log_timing("MGMT_CHANGES_BUILD", (_time.perf_counter() - t0) * 1000,
-               details=f"filings={len(rows)} events={len(df)} "
+               details=f"filings={len(rows)} news_items={len(news_rows)} events={len(df)} "
+                       f"news_events={int((df['source'].astype(str) != '').sum() - df['source'].astype(str).str.startswith('SEC').sum()) if len(df) else 0} "
                        f"linked={int(df['filing_unit'].astype(bool).sum()) if len(df) else 0}")
     return df
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
 def get_management_changes() -> pd.DataFrame:
-    """Every 8-K Item 5.02 person event, materialized to disk."""
+    """Every executive change from 8-K Item 5.02, 6-K and executive news, materialized to disk."""
     from utils.materialize import materialized_or_build
     sources = [{
         "table": "coreiq_company_events",
@@ -824,10 +1038,11 @@ def get_management_changes() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v5: 6-K filings and executive news added; source / also_reported (2026-10-15).
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v4", _build_management_changes, sources,
+        "management_changes_v5", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

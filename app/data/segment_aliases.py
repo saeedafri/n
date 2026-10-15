@@ -186,6 +186,26 @@ def geo_iso_code(canonical_label: str) -> str:
     return (_label_map().get("iso_codes") or {}).get(canonical_label, "")
 
 
+# ISO-3166 alpha-2 → display name, for XBRL members on the geographic axis
+# (`country:CA`). The member qname is the reliable identity; the label beside it
+# is whatever the filer typed ("Canadian Operations", "KOREA"). Shared by the
+# Additional Data tab's Stores by Country and the screener's store locations.
+ISO2_COUNTRY_NAMES: Dict[str, str] = {
+    "US": "United States", "CA": "Canada", "MX": "Mexico", "JP": "Japan",
+    "GB": "United Kingdom", "KR": "South Korea", "AU": "Australia",
+    "TW": "Taiwan", "CN": "China", "ES": "Spain", "FR": "France",
+    "IS": "Iceland", "SE": "Sweden", "NZ": "New Zealand", "IE": "Ireland",
+    "DE": "Germany", "IT": "Italy", "NL": "Netherlands", "BE": "Belgium",
+    "AT": "Austria", "CH": "Switzerland", "PL": "Poland", "PT": "Portugal",
+    "IN": "India", "BR": "Brazil", "CL": "Chile", "TH": "Thailand",
+    "SG": "Singapore", "MY": "Malaysia", "PH": "Philippines",
+    "VN": "Vietnam", "ID": "Indonesia", "HK": "Hong Kong",
+    "AE": "United Arab Emirates", "SA": "Saudi Arabia",
+    "ZA": "South Africa", "PR": "Puerto Rico", "NO": "Norway",
+    "DK": "Denmark", "FI": "Finland",
+}
+
+
 # raw normalized key → canonical.  Read by SegmentDataRepository._geo_name_set()
 # to decide whether a member name denotes a geography at all.
 GEO_ALIAS_TO_CANONICAL: Dict[str, str] = _exact_map()

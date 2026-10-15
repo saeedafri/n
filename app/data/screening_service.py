@@ -64,13 +64,14 @@ from utils.ma_overrides_auto import sec_closure_for_event
 try:
     from utils.server_logger import (
         log_error, log_exception, log_info, log_timing, log_db_timing,
-        log_structured_error, timed_operation,
+        log_structured_error, log_warning, timed_operation,
     )
 except ImportError:
     import logging
     _lg = logging.getLogger(__name__)
     log_error = _lg.error
     log_info = _lg.info
+    log_warning = _lg.warning
     def log_structured_error(exc, **kw): _lg.error("%s %s", exc, kw)
     def log_timing(*a, **kw): pass
     def log_db_timing(*a, **kw): pass
@@ -470,6 +471,21 @@ def get_all_companies_universe() -> pd.DataFrame:
 # pipeline below honours that. Financial, key-dev and segment criteria remain
 # annotate-only — unchanged.
 FILTERING_CRITERION_TYPES = frozenset({"industry", "geography"})
+
+
+def shows_available_data_only(criterion: Dict) -> bool:
+    """Business / Geographical Segments and Additional Data list only companies
+    that have the data; every other financial statement keeps the universe and
+    shows N/A (multi-year views need the empty cells). An Additional Data
+    checkbox riding on an Income Statement criterion (`hidden`) annotates that
+    criterion's grid and must not shrink it.
+    """
+    if criterion.get("hidden"):
+        return False
+    ctype = criterion.get("type")
+    if ctype in ("additional", "biz_segments", "geo_segments"):
+        return True
+    return ctype == "financial" and criterion.get("statement") in SEGMENT_STATEMENT_TYPES
 
 
 class KeydevsQueryError(RuntimeError):
@@ -5576,6 +5592,204 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
         return {}
 
 
+# ── Store counts by geographic location ──────────────────────────────────────
+# The per-location counts are the XBRL store facts filers tag on a geographic
+# axis (us-gaap:NumberOfStores … by srt:StatementGeographicalAxis = country:CA,
+# stpr:TX, or a custom member such as "Other International"). Reading them costs
+# ~3s per ticker — `concept` has no index, so the only way in is the ticker
+# index — so they are materialized once and the screener reads them from disk.
+STORE_LOCATIONS_CACHE = "screening_store_locations_v1"
+# Signal: the store_count rows are rewritten whenever the store pipeline
+# re-ingests a 10-K, the same event that brings new geographic store facts.
+_STORE_LOCATION_SOURCES = [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
+                            "where": "source = 'store_count'"}]
+
+
+def store_location_name(member: str, member_label: str) -> str:
+    """The location a geographic store fact counts, named the way the
+    Geographical Segments filter names it.
+
+    `country:XX` is an ISO code, so the filer's spelling of it ("Canadian
+    Operations", "FRANCE") is irrelevant. Every other member is the filer's label
+    run through the business workbook (geo_label_map.json); a label the workbook
+    does not name is kept exactly as filed, never guessed at.
+    """
+    from data.segment_aliases import ISO2_COUNTRY_NAMES, canonicalize_geo_label
+
+    member = (member or "").strip()
+    label = " ".join(str(member_label or "").split())
+    if member.lower().startswith("country:"):
+        country = ISO2_COUNTRY_NAMES.get(member.split(":", 1)[1].upper())
+        if country:
+            return canonicalize_geo_label(country)
+    return canonicalize_geo_label(label or member)
+
+
+def resolve_store_locations(rows: Iterable[Dict]) -> Dict[str, Dict[str, Dict]]:
+    """{ticker: {location: {"count", "as_of"}}} — each location's latest figure.
+
+    Two facts for one location on one date are the same fleet counted twice (a
+    whole and a slice of it, or one qname under two labels), so the larger one
+    stands, as in store_count_sources.xbrl_by_year. Across dates the newest wins.
+    Locations are never added together: a country and its states are both kept
+    as reported.
+    """
+    from data.store_count_extractor import MAX_PLAUSIBLE_COUNT
+    from data.store_count_sources import COUNTRY_AXIS
+
+    best: Dict[Tuple[str, str], Dict] = {}
+    for row in rows:
+        axis = str(row.get("full_dimension_label") or row.get("dimension") or "")
+        if not COUNTRY_AXIS.search(axis):
+            continue
+        try:
+            count = int(float(row["numeric_value"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+        if not 0 < count <= MAX_PLAUSIBLE_COUNT:
+            continue
+        as_of = str(row.get("period_instant") or row.get("period_end") or "")[:10]
+        if not as_of:
+            continue
+        location = store_location_name(row.get("member"), row.get("dimension_member_label"))
+        if not location:
+            continue
+        key = (row["ticker"], location)
+        held = best.get(key)
+        if held is None or as_of > held["as_of"] or (as_of == held["as_of"] and count > held["count"]):
+            best[key] = {"count": count, "as_of": as_of}
+    out: Dict[str, Dict[str, Dict]] = {}
+    for (ticker, location), value in best.items():
+        out.setdefault(ticker, {})[location] = value
+    return out
+
+
+def _build_store_locations() -> Dict[str, Dict[str, Dict]]:
+    """Sweep every store-count ticker's geographic store facts (build-time only).
+
+    Read on a RAISING connection: execute_query_readonly turns a 120s timeout
+    into an empty list, and an empty list here is indistinguishable from "this
+    company tags no locations" — a batched first draft lost 100 of 146 tickers
+    exactly that way. One ticker per query keeps each read to a few seconds.
+    """
+    from sqlalchemy import text as sql_text
+    from data.store_count_extractor import XBRL_CONCEPTS
+
+    tickers = [r["ticker"] for r in db_manager.execute_query_readonly(
+        "SELECT DISTINCT ticker FROM coreiq_filing_metrics_v5 WHERE source = 'store_count'") or []]
+    if not tickers:
+        raise RuntimeError("no store_count tickers — refusing to materialize an empty store-location cache")
+    concepts = ", ".join(f"'{c}'" for c in XBRL_CONCEPTS)
+    query = sql_text(f"""
+        SELECT ticker, member, dimension, dimension_member_label, full_dimension_label,
+               numeric_value, period_instant, period_end
+        FROM coreiq_filing_metrics_v5 FORCE INDEX (idx_v5_ticker_dim_doctype)
+        WHERE ticker = :ticker AND is_dimensioned = 1 AND doc_type = '10-K'
+          AND concept IN ({concepts}) AND numeric_value IS NOT NULL
+    """)
+    db_manager.connect()
+
+    def fetch(ticker):
+        with db_manager._read_engine.connect() as conn:
+            return [dict(r) for r in conn.execute(query, {"ticker": ticker}).mappings()]
+
+    t_start = time.perf_counter()
+    rows: List[Dict] = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for part in pool.map(fetch, tickers):
+            rows.extend(part)
+    result = resolve_store_locations(rows)
+    log_timing("SCREENING_STORE_LOCATIONS_BUILD", (time.perf_counter() - t_start) * 1000,
+               f"tickers={len(tickers)} facts={len(rows)} with_locations={len(result)}")
+    return result
+
+
+class StoreLocationsPending(RuntimeError):
+    """The store-location cache is still being built for the first time."""
+
+
+_store_locations_started = False
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_store_locations() -> Dict[str, Dict[str, Dict]]:
+    """The materialized per-ticker store locations; {} until the first build lands.
+
+    Never builds on a request: with nothing on disk the build (minutes) is
+    started in the background and the caller is told there is nothing yet.
+    """
+    from utils.materialize import materialized_or_build, on_disk, storing
+
+    def build():
+        return materialized_or_build(STORE_LOCATIONS_CACHE, _build_store_locations,
+                                     _STORE_LOCATION_SOURCES,
+                                     clear=lambda: get_store_locations.clear())
+
+    def build_in_background():
+        # A daemon thread dies silently; these lines are the only trace of it.
+        log_warning("[SCREENING] store-locations first build started")
+        try:
+            build()
+            get_store_locations.clear()
+            log_warning("[SCREENING] store-locations first build written")
+        except Exception as exc:
+            log_error(f"[SCREENING] store-locations first build failed: {exc!r}")
+
+    global _store_locations_started
+    if storing() and not on_disk(STORE_LOCATIONS_CACHE):
+        if not _store_locations_started:
+            import threading
+            _store_locations_started = True
+            threading.Thread(target=build_in_background, name="store-locations-build",
+                             daemon=True).start()
+        raise StoreLocationsPending()
+    return build() or {}
+
+
+def store_location_options() -> List[Tuple[str, int]]:
+    """[(location, companies reporting it)], most-reported first."""
+    counts: Dict[str, int] = {}
+    for locations in get_store_locations().values():
+        for name in locations:
+            counts[name] = counts.get(name, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def store_location_column(location: str) -> str:
+    return f"Store Count — {location}"
+
+
+def _apply_store_counts_by_location(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    rows_in: int,
+    t_start: float,
+) -> Tuple[pd.DataFrame, Dict]:
+    """One column per chosen location, plus the as-of date(s) they come from.
+
+    Only companies that report at least one chosen location come back; the
+    pipeline drops the rest (Additional Data shows available data only).
+    """
+    locations = list(criterion.get("locations") or [])
+    by_ticker = get_store_locations()
+    out = working_df[working_df["ticker"].isin(
+        [t for t, held in by_ticker.items() if any(l in held for l in locations)])].copy()
+    col_names = [store_location_column(l) for l in locations]
+    for location, col in zip(locations, col_names):
+        out[col] = out["ticker"].map(
+            lambda t, _l=location: (by_ticker.get(t, {}).get(_l) or {}).get("count"))
+    out["Store Count As Of"] = out["ticker"].map(lambda t: ", ".join(sorted({
+        held["as_of"] for l, held in by_ticker.get(t, {}).items() if l in locations})))
+    criterion["location_cols"] = col_names
+    elapsed = (time.perf_counter() - t_start) * 1000
+    log_timing("SCREENING_STORE_COUNT_BY_LOCATION", elapsed,
+               f"locations={len(locations)} rows_in={rows_in} with_data={len(out)}")
+    return out.reset_index(drop=True), {
+        "type": "additional", "data_type": "store_counts", "location_cols": col_names,
+        "rows_in": rows_in, "rows_out": len(out), "with_data": len(out), "elapsed_ms": elapsed,
+    }
+
+
 # ── Criterion functions ──────────────────────────────────────────────────────
 
 def apply_biz_segments_criterion(
@@ -5808,6 +6022,8 @@ def apply_additional_criterion(
             return working_df.copy(), {"type": "additional", "rows_in": 0,
                                        "rows_out": 0, "elapsed_ms": 0}
         return _apply_store_counts_by_category(criterion, working_df, rows_in, t_start)
+    if data_type == "store_counts" and criterion.get("locations"):
+        return _apply_store_counts_by_location(criterion, working_df, rows_in, t_start)
 
     tickers = list(working_df["ticker"].values)
     if not tickers:
@@ -6137,6 +6353,8 @@ def recompute_working_set(
             criterion["quarter_cols"] = dbg["quarter_cols"]
         if dbg.get("year_cols"):
             criterion["year_cols"] = dbg["year_cols"]
+        if dbg.get("location_cols"):
+            criterion["location_cols"] = dbg["location_cols"]
 
         # Merge NEW value columns onto the full universe; missing → NaN (N/A)
         with_data = 0
@@ -6162,6 +6380,18 @@ def recompute_working_set(
                 y_cols = [c for c in criterion["year_cols"] if c in full_df.columns]
                 if y_cols:
                     with_data = int(full_df[y_cols].notna().any(axis=1).sum())
+
+        # Segments / Additional Data: only companies with a value stay. A failed
+        # criterion (degraded) keeps the universe rather than emptying the grid.
+        if shows_available_data_only(criterion) and not (dbg or {}).get("degraded"):
+            data_cols = [c for c in new_cols if c in full_df.columns]
+            if not data_cols and criterion.get("display_col") in full_df.columns:
+                data_cols = [criterion["display_col"]]
+            if data_cols:
+                full_df = full_df[full_df[data_cols].notna().any(axis=1)].reset_index(drop=True)
+            else:
+                full_df = full_df.iloc[0:0].copy()
+            with_data = len(full_df)
 
         # Industry / Geography NARROW the universe. Merging their column onto the
         # untouched 431-company universe and calling it done is why picking
@@ -6221,7 +6451,7 @@ def _criterion_fingerprint(criterion: Dict) -> str:
     Excludes ephemeral / derived fields (summary, display_col) so that
     two identical criteria always produce the same fingerprint.
     """
-    skip = {"summary", "display_col", "quarter_cols", "year_cols"}
+    skip = {"summary", "display_col", "quarter_cols", "year_cols", "location_cols"}
     safe = {k: v for k, v in criterion.items() if k not in skip}
     return json.dumps(safe, sort_keys=True, default=str)
 

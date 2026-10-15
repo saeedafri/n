@@ -456,6 +456,10 @@ body:has(.cs-al-ov) .cs-page-subspinner{display:none!important;}
   display:flex;align-items:center;justify-content:center;
   pointer-events:none!important;
   animation:cs-al-in .18s ease both, cs-al-failsafe .4s ease 6s forwards;}
+/* The sticky loader is hidden by its own script when the run ends and the
+   results have painted (600s cap). The 6s fade above cut it off mid-run: a
+   cold People screen showed no spinner from 6.5s until its grid drew at 16s. */
+#cs-sticky-loader.cs-al-ov{animation:cs-al-in .18s ease both;}
 @keyframes cs-al-in{from{opacity:0}to{opacity:1}}
 @keyframes cs-al-failsafe{to{opacity:0;visibility:hidden;pointer-events:none;}}
 /* Card: IDENTICAL to the boot-splash card (logo + ring + label + shimmer) so a
