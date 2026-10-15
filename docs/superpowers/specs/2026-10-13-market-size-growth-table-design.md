@@ -153,7 +153,8 @@ then the two summed into calendar years with the rate taken on the yearly
 totals. "The analysts usually require Annual sales and Annual growth rates."
 
 So a second table sits under the period table whenever the data is sub-annual
-— `Year · Type · Sales · YoY%` — built by `annual_rollup()` beside
+— `Year · Sales · YoY%`, the three columns their sheet has and no more — built
+by `annual_rollup()` beside
 `growth_table()` in the service. It follows the same model picker and the same
 Newest first toggle, and has CSV and Excel of its own
 (`market_size_growth_<model>_annual`). Annual uploads do not get it: the table
@@ -168,11 +169,15 @@ Decisions:
   Jan–Dec throughout, so it never meets the case; in the portal it is the
   normal one — an upload ending in June, a two-month horizon, a month blank in
   the middle. Eight months against twelve reads as a 33% collapse that never
-  happened. Such a year still shows its total, marked in `Type`
-  (`Actual · 8 of 12 months`), and its rate — and the next year's — is blank.
-  Likewise across a year the upload skips entirely.
-* **`Type` carries the mix.** `Actual`, `Forecast`, or `Actual + forecast` for
-  the year the handover falls in.
+  happened. Such a year still shows its total, and its rate — and the next
+  year's — is blank. Likewise across a year the upload skips entirely. The
+  caption under the table says so; the blank itself marks which years.
+* **Three columns, no fourth.** A first cut carried `Type` — `Actual`,
+  `Forecast`, `Actual + forecast`, and how much of a short year was there.
+  Asked for on 2026-10-15 in the shape the analysts work in: "just three
+  columns: year, sales, and year-over-year. Just three." The period table above
+  still names every row `Actual` or `Forecast`, which is where the mix is
+  readable.
 
 Verified against `Growth.xlsx` itself: the engine reproduces all thirteen of
 the analysts' years, sales and rate, with zero mismatches, and the portal

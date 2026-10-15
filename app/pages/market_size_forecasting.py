@@ -1989,9 +1989,8 @@ def _render_annual_rollup(outcome: Dict[str, Any], freq_name: str,
                                 for column in (engine.TARGET_COL, "YoY%")})
     st.caption(
         f"Each year is the sum of its {unit}. A year the upload and the forecast "
-        f"do not cover in full is marked with how many {unit} of it are there, and "
-        "carries no rate — a short year measured against a whole one reads as a "
-        "collapse that never happened.")
+        "do not cover in full carries no rate — a short year measured against a "
+        "whole one reads as a collapse that never happened.")
     _export_buttons(table, f"{stem}_annual")
 
 

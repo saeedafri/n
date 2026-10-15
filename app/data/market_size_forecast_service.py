@@ -1573,32 +1573,26 @@ def annual_rollup(history: pd.Series, freq_name: str,
     up per calendar year — history first, then the forecast periods — and the
     year-on-year rate measured on those yearly totals, not on the periods.
 
-    A year the data does not cover in full still gets its total, marked with
-    how much of the year it is, but no growth rate: eight months of one year
-    against twelve of the last is not growth, it is a shorter year. Nor is a
-    rate carried across a year the upload skips entirely.
+    A year the data does not cover in full still gets its total, but no growth
+    rate: eight months of one year against twelve of the last is not growth,
+    it is a shorter year. Nor is a rate carried across a year the upload skips
+    entirely.
     """
     config = FREQ_CONFIGS[freq_name]
-    values, kinds = history_and_forecast(history, forecast)
+    values = history_and_forecast(history, forecast)[0]
     index = pd.DatetimeIndex(values.index)
-    kinds = pd.Series(kinds, index=index)
 
     rows = []
     for year in sorted(set(index.year)):
-        inside = index.year == year
-        sales = values[inside]
-        covered = int(sales.notna().sum())
+        sales = values[index.year == year]
         whole = len(pd.date_range(f'{year}-01-01', f'{year}-12-31',
                                   freq=config['alias']))
-        kind = sorted(set(kinds[inside]))
-        label = kind[0] if len(kind) == 1 else 'Actual + forecast'
-        if covered < whole:
-            label += f" · {covered} of {whole} {config['unit']}"
-        rows.append({'Year': str(year), 'Type': label,
+        rows.append({'Year': str(year),
                      TARGET_COL: sales.sum(min_count=1),
-                     '_year': year, '_whole': covered == whole})
+                     '_year': year,
+                     '_whole': int(sales.notna().sum()) == whole})
 
-    table = pd.DataFrame(rows, columns=['Year', 'Type', TARGET_COL,
+    table = pd.DataFrame(rows, columns=['Year', TARGET_COL,
                                         '_year', '_whole'])
     totals = table[TARGET_COL].astype(float)
     like_for_like = (table['_whole'].fillna(False)

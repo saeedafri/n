@@ -1243,9 +1243,9 @@ def test_annual_rollup_sums_the_periods_and_takes_growth_on_the_totals():
     history = _whole_years()
     table = engine.annual_rollup(history, "Monthly")
 
-    assert list(table.columns) == ["Year", "Type", "Sales", "YoY%"]
+    assert list(table.columns) == ["Year", "Sales", "YoY%"], \
+        "the analysts asked for three columns and no more"
     assert list(table["Year"]) == ["2020", "2021", "2022"]
-    assert set(table["Type"]) == {"Actual"}
 
     for year, row in zip((2020, 2021, 2022), table.itertuples()):
         assert row.Sales == history[history.index.year == year].sum()
@@ -1262,7 +1262,6 @@ def test_the_forecast_years_continue_the_annual_table():
     table = engine.annual_rollup(history, "Monthly", forecast)
 
     assert list(table["Year"]) == ["2020", "2021", "2022", "2023"]
-    assert table.iloc[3]["Type"] == "Forecast"
     assert table.iloc[3]["Sales"] == 12 * 9000.0
     last_actual = table.iloc[2]["Sales"]
     assert table.iloc[3]["YoY%"] == round(
@@ -1270,25 +1269,24 @@ def test_the_forecast_years_continue_the_annual_table():
         "the first forecast year is measured against the last actual year"
 
 
-def test_a_year_that_is_part_actual_and_part_forecast_says_so():
+def test_a_year_that_is_part_actual_and_part_forecast_is_one_row():
     history = pd.Series(np.full(18, 100.0),
                         index=pd.date_range("2020-01-31", periods=18, freq="ME"))
     forecast = pd.Series(np.full(6, 200.0),
                          index=pd.date_range("2021-07-31", periods=6, freq="ME"))
     table = engine.annual_rollup(history, "Monthly", forecast)
 
-    assert table.iloc[1]["Type"] == "Actual + forecast"
+    assert list(table["Year"]) == ["2020", "2021"]
     assert table.iloc[1]["Sales"] == 6 * 100.0 + 6 * 200.0
     assert table.iloc[1]["YoY%"] == 50.0, "a whole year, even if half forecast"
 
 
-def test_a_part_year_is_marked_and_left_without_a_rate():
+def test_a_part_year_keeps_its_total_but_gets_no_rate():
     """Eight months against twelve is a shorter year, not a fall in sales."""
     history = pd.Series(np.full(20, 100.0),
                         index=pd.date_range("2020-01-31", periods=20, freq="ME"))
     table = engine.annual_rollup(history, "Monthly")
 
-    assert table.iloc[1]["Type"] == "Actual · 8 of 12 months"
     assert table.iloc[1]["Sales"] == 800.0, "the total it does have is still shown"
     assert pd.isna(table.iloc[1]["YoY%"])
 
@@ -1298,8 +1296,7 @@ def test_the_year_after_a_part_year_has_nothing_whole_to_measure_against():
                         index=pd.date_range("2020-07-31", periods=22, freq="ME"))
     table = engine.annual_rollup(history, "Monthly")
 
-    assert table.iloc[0]["Type"] == "Actual · 6 of 12 months"
-    assert table.iloc[1]["Type"] == "Actual"
+    assert table.iloc[0]["Sales"] == 600.0, "half of 2020 is in the upload"
     assert pd.isna(table.iloc[1]["YoY%"]), "2021 is whole, but 2020 is half a year"
 
 
@@ -1309,7 +1306,6 @@ def test_a_blank_month_makes_its_year_incomplete():
     loaded = engine.load_series(frame, "Date", "Sales", "Monthly")
     table = engine.annual_rollup(loaded.frame[engine.TARGET_COL], "Monthly")
 
-    assert "11 of 12 months" in table.iloc[0]["Type"]
     assert pd.isna(table.iloc[1]["YoY%"]), "the year before it is missing a month"
 
 
@@ -1331,9 +1327,8 @@ def test_the_roll_up_knows_how_many_periods_a_year_holds(freq_name, freq, per_ye
     index = pd.date_range("2020-01-01", periods=per_year * 2, freq=freq)
     table = engine.annual_rollup(pd.Series(np.full(per_year * 2, 50.0), index=index),
                                  freq_name)
-    assert list(table["Type"]) == ["Actual", "Actual"], \
-        f"{per_year} {freq_name.lower()} periods is a whole year"
-    assert table.iloc[1]["YoY%"] == 0.0
+    assert table.iloc[1]["YoY%"] == 0.0, \
+        f"{per_year} {freq_name.lower()} periods is a whole year, so it carries a rate"
 
 
 def test_the_annual_table_survives_a_round_trip_through_the_download():
