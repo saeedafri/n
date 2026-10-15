@@ -1,0 +1,14 @@
+{
+ "ticker": "YETI",
+ "fiscal_year": 2022,
+ "value": 13,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "Memphis, Tennessee, Australia, Canada, the United Kingdom, New Zealand, and the Netherlands. In addition, we lease and operate thirteen retail stores across the United States. We believe that our facilities,",
+ "fye_date": "2022-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YETI/2023/10-K/filing.html::2022",
+ "extractor_version": 5
+}

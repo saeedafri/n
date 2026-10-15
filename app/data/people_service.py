@@ -40,7 +40,9 @@ from data.screening_config import (
     PEOPLE_CATEGORY_CHANGES,
     PEOPLE_CATEGORY_MOVES,
     PEOPLE_CATEGORY_REMUNERATION,
+    PEOPLE_EVENT_CATEGORIES,
     PEOPLE_MONEY_METRICS,
+    PEOPLE_ROLE_BOARD,
     PEOPLE_ROLE_OTHER,
     PEOPLE_ROLE_PATTERNS,
     PEOPLE_ROLE_UNKNOWN,
@@ -677,6 +679,83 @@ def _merge_sources(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(index=drop).reset_index(drop=True)
 
 
+def _finish_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Column types of the stored frame."""
+    df["is_former"] = df["is_former"].fillna(False).astype(bool)
+    for col in ("year", "filing_year", "year_born", "confidence"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+    df["age"] = pd.to_numeric(df["age"], errors="coerce").astype("Int64")
+    for col in PEOPLE_MONEY_METRICS.values():
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["total_pay_local"] = pd.to_numeric(df["total_pay_local"], errors="coerce")
+    for col in ("ticker", "role", "source", "filing_form", "pay_currency"):
+        df[col] = df[col].astype(object).fillna("").astype("category")
+    for col in ("executive_name", "title", "filing_blob"):
+        df[col] = df[col].fillna("").astype(str)
+    return df
+
+
+def _proxy_records(proxy: pd.DataFrame) -> List[dict]:
+    """Map proxy_pay rows (edgartools-read Summary Compensation Tables) onto the
+    unified people schema. They are SEC proxies like coreiq_executives_compensation."""
+    out = []
+    for r in proxy.to_dict("records"):
+        name = clean_person_name(r.get("executive_name"))
+        if not is_person_name(name):
+            continue
+        title = (r.get("title") or "").strip()
+        filed = pd.to_datetime(r.get("filing_date"), errors="coerce")
+        out.append({
+            **{col: r.get(col) for col in ("salary", "bonus", "stock_awards", "option_awards",
+                                           "non_equity_incentive", "all_other_compensation",
+                                           "total_compensation")},
+            "ticker":          r.get("ticker"),
+            "executive_name":  name,
+            "title":           title,
+            "role":            classify_role(title),
+            "is_former":       is_former_title(title),
+            "year":            _to_int(r.get("year")),
+            "pay_currency":    "",
+            "source":          "SEC",
+            "filing_form":     "DEF 14A",
+            "filing_year":     None if pd.isna(filed) else filed.year,
+            "filing_blob":     r.get("url") or "",
+        })
+    return out
+
+
+def add_proxy_pay(universe: pd.DataFrame) -> pd.DataFrame:
+    """Add the proxy_pay rows for company-years coreiq_executives_compensation lacks.
+
+    That table stays the source wherever it has a company-year (it carries ten
+    years of history); proxy_pay fills the ~300 companies it does not cover and
+    the newest proxies it has not reached yet.
+    """
+    from data.proxy_pay import read_proxy_pay
+
+    proxy = read_proxy_pay()
+    if proxy.empty:
+        return universe
+    recs = pd.DataFrame(_proxy_records(proxy), columns=_FRAME_COLUMNS)
+    sec = universe[universe["source"].astype(str).eq("SEC")]
+    have = set(zip(sec["ticker"].astype(str), pd.to_numeric(sec["year"], errors="coerce")))
+    recs = recs[[(t, y) not in have for t, y in zip(recs["ticker"].astype(str), recs["year"])]]
+    if recs.empty:
+        return universe
+    # One person, one row in the year pivot: take the spelling already on file for
+    # that company ("JOANNE CREVOISERAT" in TPR's 2026 proxy is "Joanne
+    # Crevoiserat" in the table), else un-shout an all-caps name.
+    on_file = dict(zip(zip(sec["ticker"].astype(str), sec["executive_name"].map(person_key)),
+                       sec["executive_name"]))
+    recs["executive_name"] = [
+        on_file.get((t, person_key(n))) or (
+            re.sub(r"\bMc(\w)", lambda m: "Mc" + m.group(1).upper(), n.title())
+            if n.isupper() else n)
+        for t, n in zip(recs["ticker"].astype(str), recs["executive_name"])]
+    recs = _collapse_restatements(recs)
+    return _finish_frame(pd.concat([universe, recs], ignore_index=True))
+
+
 def _build_people_universe() -> pd.DataFrame:
     """Fetch BOTH people sources whole and return the unified frame.
 
@@ -724,18 +803,7 @@ def _build_people_universe() -> pd.DataFrame:
 
     df = _collapse_restatements(df)
     df = _merge_sources(df)
-
-    df["is_former"] = df["is_former"].fillna(False).astype(bool)
-    for col in ("year", "filing_year", "year_born", "confidence"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-    df["age"] = pd.to_numeric(df["age"], errors="coerce").astype("Int64")
-    for col in PEOPLE_MONEY_METRICS.values():
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df["total_pay_local"] = pd.to_numeric(df["total_pay_local"], errors="coerce")
-    for col in ("ticker", "role", "source", "filing_form", "pay_currency"):
-        df[col] = df[col].fillna("").astype("category")
-    for col in ("executive_name", "title", "filing_blob"):
-        df[col] = df[col].fillna("").astype(str)
+    df = _finish_frame(df)
 
     try:
         from utils.mem_opt import audit_frame_numbers, release_memory
@@ -776,7 +844,7 @@ def get_people_universe() -> pd.DataFrame:
             "signal": "SUM(CRC32(CONCAT_WS('|', ticker, ingested_at)))",
         },
     ]
-    return materialized_or_build(
+    universe = materialized_or_build(
         # _v2: the frame's columns and dedupe changed (2026-10-07). The disk copy
         # is keyed on the source tables only, so without a new name a deploy
         # would keep serving the old snapshot.
@@ -784,6 +852,9 @@ def get_people_universe() -> pd.DataFrame:
         "people_universe_v4", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
+    # Merged on read, not stored: proxy_pay grows in the background and clears
+    # this cache when it does (cache_manager._warm_people_screening).
+    return add_proxy_pay(universe)
 
 
 # =============================================================================
@@ -957,6 +1028,35 @@ def people_criteria_for(criteria: List[dict], category: str) -> List[dict]:
     return out
 
 
+def _build_people_events(category: str) -> pd.DataFrame:
+    event_category, subtypes = PEOPLE_EVENT_CATEGORIES[category]
+    names = ", ".join(f":s{i}" for i in range(len(subtypes)))
+    # Raises: a timeout read as "no events" would be materialized and served.
+    rows = db_manager.execute_query_readonly_raising(f"""
+        SELECT ticker, event_date, event_subtype, headline, source, source_ref
+        FROM coreiq_company_events
+        WHERE is_active = 1 AND event_category = :category AND event_subtype IN ({names})
+    """, {"category": event_category, **{f"s{i}": v for i, v in enumerate(subtypes)}})
+    df = pd.DataFrame(rows, columns=["ticker", "event_date", "event_subtype", "headline",
+                                     "source", "source_ref"])
+    df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce")
+    return df.sort_values("event_date", ascending=False, ignore_index=True)
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def get_people_events(category: str) -> pd.DataFrame:
+    """Every event of one People event category (PEOPLE_EVENT_CATEGORIES), all
+    tickers and dates — at most ~4,000 rows; scope and period are applied in
+    memory. Materialized: the read is ~30s cold (row-bound, not index-bound)."""
+    from utils.materialize import materialized_or_build
+    event_category, _ = PEOPLE_EVENT_CATEGORIES[category]
+    sources = [{"table": "coreiq_company_events", "signal": "MAX(event_id)",
+                "where": f"event_category = '{event_category}'"}]
+    return materialized_or_build(f"people_events_{category}_v1",
+                                 lambda: _build_people_events(category), sources,
+                                 clear=lambda: get_people_events.clear())
+
+
 def period_mask(dates: pd.Series, criterion: dict, today=None) -> pd.Series:
     """True where `dates` falls inside the criterion's period.
 
@@ -984,7 +1084,7 @@ def build_people_summary(criterion: dict) -> str:
     """One-line label for the People criterion card."""
     parts = []
     if criterion.get("category") in PEOPLE_CATEGORIES:
-        parts.append(PEOPLE_CATEGORIES[criterion["category"]])
+        parts.append(PEOPLE_CATEGORIES.get(criterion["category"], criterion["category"]))
         if criterion["category"] != PEOPLE_CATEGORY_REMUNERATION:
             if criterion.get("date_filter_mode") == "date_range":
                 parts.append(f"{criterion.get('start_date')} to {criterion.get('end_date')}")
@@ -993,7 +1093,8 @@ def build_people_summary(criterion: dict) -> str:
 
     roles = criterion.get("roles") or []
     if roles:
-        parts.append(", ".join(str(r) for r in roles[:4])
+        parts.append(", ".join("Director (Board)" if r == PEOPLE_ROLE_BOARD else str(r)
+                               for r in roles[:4])
                      + (f" +{len(roles) - 4}" if len(roles) > 4 else ""))
 
     if criterion.get("title_contains"):
@@ -1026,7 +1127,12 @@ def build_people_summary(criterion: dict) -> str:
     years = criterion.get("years") or []
     if years:
         ys = sorted(int(y) for y in years)
-        parts.append(f"FY {ys[0]}" if len(ys) == 1 else "FY " + ", ".join(str(y) for y in ys))
+        if len(ys) == 1:
+            parts.append(f"FY {ys[0]}")
+        elif ys == list(range(ys[0], ys[-1] + 1)):
+            parts.append(f"FY {ys[0]}–{ys[-1]}")
+        else:
+            parts.append("FY " + ", ".join(str(y) for y in ys))
 
     if criterion.get("age_min") is not None or criterion.get("age_max") is not None:
         lo = criterion.get("age_min")

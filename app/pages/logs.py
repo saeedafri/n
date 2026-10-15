@@ -3,6 +3,7 @@ System Logs Explorer - Debug Page
 Hidden page for finding and analyzing log files on the server.
 NOT FOR PUBLIC ACCESS - Admin only debug tool.
 """
+import gzip
 import os
 import re
 import platform
@@ -617,11 +618,13 @@ def main():
                         # Blob download, not st.download_button — see utils.media_url.
                         # Reading the log is deferred to the click too, so the viewer
                         # no longer pulls every segment into RAM on each render.
+                        # Gzipped: up to 80 MB of text is ~8 MB, and the transfer
+                        # India -> centralus was most of the wait.
                         lazy_download_button(
                             label="⬇️ Download Logs",
-                            filename=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
-                            build_fn=_log_download_bytes,
-                            mimetype="text/plain",
+                            filename=f"server-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log.gz",
+                            build_fn=lambda: gzip.compress(_log_download_bytes(), compresslevel=1),
+                            mimetype="application/gzip",
                             key="dl_server_logs",
                             page="logs",
                             width="stretch",

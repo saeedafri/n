@@ -525,7 +525,7 @@ def test_summary():
         "money_operator": "Greater Than", "money_value1": 5.0,
         "years": [2024, 2025, 2026],
     })
-    assert "CEO, CFO" in s and "Total Compensation > $5.0mm" in s and "FY 2024, 2025, 2026" in s, s
+    assert "CEO, CFO" in s and "Total Compensation > $5.0mm" in s and "FY 2024–2026" in s, s
     assert build_people_summary({}) == "All people"
     one_year = build_people_summary({"years": [2025]})
     assert "FY 2025" in one_year and "–" not in one_year, one_year
@@ -705,3 +705,12 @@ if __name__ == "__main__":
     test_empty_frame_is_safe()
     test_summary()
     print("ALL PASS")
+
+
+def test_event_categories_are_people_categories():
+    from data.screening_config import PEOPLE_CATEGORIES, PEOPLE_DEFAULT_TIMEFRAME, PEOPLE_EVENT_CATEGORIES
+    for cat in PEOPLE_EVENT_CATEGORIES:
+        assert cat in PEOPLE_CATEGORIES and cat in PEOPLE_DEFAULT_TIMEFRAME, cat
+    crit = [{"type": "people", "category": "shareholder_vote", "days": 30}]
+    assert people_criteria_for(crit, "shareholder_vote") == crit
+    assert people_criteria_for(crit, PEOPLE_CATEGORY_REMUNERATION) == []

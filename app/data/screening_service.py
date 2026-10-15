@@ -5592,13 +5592,116 @@ def _fetch_additional_display_values(ticker_tuple: tuple, data_type: str) -> Dic
         return {}
 
 
+# ── Store counts / credit ratings by fiscal year ─────────────────────────────
+# Every year on file, not just the latest: ~1,200 rows in all (0.8s warm, 6s on a
+# cold buffer), so they are materialized and the screener reads them from memory.
+ADDITIONAL_HISTORY_CACHE = "screening_additional_history_v1"
+_ADDITIONAL_HISTORY_SOURCES = [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
+                                "where": "source IN ('store_count', 'credit_rating')"}]
+
+
+def additional_year_column(display_col: str, year: int) -> str:
+    return f"{display_col} [FY {year}]"
+
+
+def resolve_additional_history(rows: Iterable[Dict]) -> Dict[str, Dict[str, Dict[int, object]]]:
+    """{data_type: {ticker: {fiscal_year: value}}} for store counts and credit ratings.
+
+    The year is the fiscal year of the value's own date (period_instant), the
+    rule the segment columns use: report_fiscal_year is the filing's label and
+    is a year late for 100 of 761 store-count rows (UAA's 2020-12-31 count is
+    filed under 2021). Rows without a date keep report_fiscal_year.
+    Within a year the newest date wins. Ties keep what the Latest value keeps:
+    the larger store count, the first-filed (lowest id) credit rating.
+    """
+    best: Dict[Tuple[str, str, int], Tuple] = {}
+    for row in sorted(rows, key=lambda r: r.get("id") or 0):
+        data_type = {"store_count": "store_counts", "credit_rating": "credit_ratings"}.get(row.get("source"))
+        day = row.get("period_instant")
+        year = SegmentDataRepository._fiscal_year_of(day) if day else row.get("report_fiscal_year")
+        if not data_type or not year:
+            continue
+        if data_type == "store_counts":
+            try:
+                value = int(float(row["numeric_value"]))
+            except (TypeError, ValueError, KeyError):
+                continue
+            rank = (str(day or ""), value)
+        else:
+            value = str(row.get("value") or "").strip()
+            if not value:
+                continue
+            rank = (str(day or ""),)
+        key = (data_type, row["ticker"], int(year))
+        held = best.get(key)
+        if held is None or rank > held[0]:
+            best[key] = (rank, value)
+    out: Dict[str, Dict[str, Dict[int, object]]] = {"store_counts": {}, "credit_ratings": {}}
+    for (data_type, ticker, year), (_rank, value) in best.items():
+        out[data_type].setdefault(ticker, {})[year] = value
+    return out
+
+
+def _build_additional_history() -> Dict[str, Dict[str, Dict[int, object]]]:
+    rows = db_manager.execute_query_readonly(
+        "SELECT id, ticker, source, report_fiscal_year, value, numeric_value, period_instant "
+        "FROM coreiq_filing_metrics_v5 WHERE source IN ('store_count', 'credit_rating')")
+    if not rows:
+        # [] is also what a read timeout returns; never materialize it as "no data".
+        raise RuntimeError("no store_count / credit_rating rows read")
+    return resolve_additional_history(rows)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_additional_history() -> Dict[str, Dict[str, Dict[int, object]]]:
+    from utils.materialize import materialized_or_build
+
+    return materialized_or_build(ADDITIONAL_HISTORY_CACHE, _build_additional_history,
+                                 _ADDITIONAL_HISTORY_SOURCES,
+                                 clear=lambda: get_additional_history.clear()) or {}
+
+
+def additional_data_years(data_type: str) -> List[int]:
+    """Fiscal years that have a value for this data type, newest first."""
+    years = {y for by_year in get_additional_history().get(data_type, {}).values() for y in by_year}
+    return sorted(years, reverse=True)
+
+
+def _apply_additional_years(
+    criterion: Dict,
+    working_df: pd.DataFrame,
+    rows_in: int,
+    t_start: float,
+) -> Tuple[pd.DataFrame, Dict]:
+    """One column per chosen fiscal year; only companies with a value in at least
+    one of them come back (Additional Data shows available data only)."""
+    data_type = criterion.get("data_type", "credit_ratings")
+    years = sorted({int(y) for y in (criterion.get("year_range") or [criterion["year"]])})
+    by_ticker = get_additional_history().get(data_type, {})
+    display_col = criterion.get("display_col") or "Value"
+    out = working_df[working_df["ticker"].isin(
+        [t for t, held in by_ticker.items() if any(y in held for y in years)])].copy()
+    col_names = [additional_year_column(display_col, y) for y in years]
+    for year, col in zip(years, col_names):
+        out[col] = out["ticker"].map(lambda t, _y=year: by_ticker.get(t, {}).get(_y))
+    criterion["year_cols"] = col_names
+    elapsed = (time.perf_counter() - t_start) * 1000
+    log_timing("SCREENING_ADDITIONAL_BY_YEAR", elapsed,
+               f"data_type={data_type} years={years} rows_in={rows_in} with_data={len(out)}")
+    return out.reset_index(drop=True), {
+        "type": "additional", "data_type": data_type, "year_cols": col_names,
+        "rows_in": rows_in, "rows_out": len(out), "with_data": len(out), "elapsed_ms": elapsed,
+    }
+
+
 # ── Store counts by geographic location ──────────────────────────────────────
 # The per-location counts are the XBRL store facts filers tag on a geographic
 # axis (us-gaap:NumberOfStores … by srt:StatementGeographicalAxis = country:CA,
 # stpr:TX, or a custom member such as "Other International"). Reading them costs
 # ~3s per ticker — `concept` has no index, so the only way in is the ticker
 # index — so they are materialized once and the screener reads them from disk.
-STORE_LOCATIONS_CACHE = "screening_store_locations_v1"
+# v2 adds the per-year counts ("years").
+STORE_LOCATIONS_CACHE = "screening_store_locations_v2"
 # Signal: the store_count rows are rewritten whenever the store pipeline
 # re-ingests a 10-K, the same event that brings new geographic store facts.
 _STORE_LOCATION_SOURCES = [{"table": "coreiq_filing_metrics_v5", "signal": "MAX(id)",
@@ -5626,13 +5729,15 @@ def store_location_name(member: str, member_label: str) -> str:
 
 
 def resolve_store_locations(rows: Iterable[Dict]) -> Dict[str, Dict[str, Dict]]:
-    """{ticker: {location: {"count", "as_of"}}} — each location's latest figure.
+    """{ticker: {location: {"count", "as_of", "years": {fiscal_year: count}}}} —
+    each location's latest figure plus its figure for every fiscal year.
 
     Two facts for one location on one date are the same fleet counted twice (a
     whole and a slice of it, or one qname under two labels), so the larger one
-    stands, as in store_count_sources.xbrl_by_year. Across dates the newest wins.
-    Locations are never added together: a country and its states are both kept
-    as reported.
+    stands, as in store_count_sources.xbrl_by_year. Across dates the newest wins,
+    overall and within a fiscal year (the year of the count's own date: a 10-K
+    repeats last year's count as a comparative). Locations are never added
+    together: a country and its states are both kept as reported.
     """
     from data.store_count_extractor import MAX_PLAUSIBLE_COUNT
     from data.store_count_sources import COUNTRY_AXIS
@@ -5654,13 +5759,17 @@ def resolve_store_locations(rows: Iterable[Dict]) -> Dict[str, Dict[str, Dict]]:
         location = store_location_name(row.get("member"), row.get("dimension_member_label"))
         if not location:
             continue
-        key = (row["ticker"], location)
-        held = best.get(key)
-        if held is None or as_of > held["as_of"] or (as_of == held["as_of"] and count > held["count"]):
-            best[key] = {"count": count, "as_of": as_of}
+        year = SegmentDataRepository._fiscal_year_of(date.fromisoformat(as_of))
+        for key in ((row["ticker"], location, None), (row["ticker"], location, year)):
+            held = best.get(key)
+            if held is None or as_of > held["as_of"] or (as_of == held["as_of"] and count > held["count"]):
+                best[key] = {"count": count, "as_of": as_of}
     out: Dict[str, Dict[str, Dict]] = {}
-    for (ticker, location), value in best.items():
-        out.setdefault(ticker, {})[location] = value
+    for (ticker, location, year), value in sorted(best.items(), key=lambda kv: kv[0][2] is not None):
+        if year is None:
+            out.setdefault(ticker, {})[location] = {**value, "years": {}}
+        else:
+            out[ticker][location]["years"][year] = value["count"]
     return out
 
 
@@ -5772,18 +5881,31 @@ def _apply_store_counts_by_location(
     """
     locations = list(criterion.get("locations") or [])
     by_ticker = get_store_locations()
+    years = sorted({int(y) for y in (criterion.get("year_range")
+                                     or ([criterion["year"]] if str(criterion.get("year", "")).isdigit() else []))})
+
+    def count(ticker, location, year=None):
+        held = by_ticker.get(ticker, {}).get(location) or {}
+        return held.get("count") if year is None else held.get("years", {}).get(year)
+
+    if years:
+        # One column per location per fiscal year; the year is in the heading.
+        cells = [(l, y, additional_year_column(store_location_column(l), y))
+                 for l in locations for y in years]
+    else:
+        cells = [(l, None, store_location_column(l)) for l in locations]
     out = working_df[working_df["ticker"].isin(
-        [t for t, held in by_ticker.items() if any(l in held for l in locations)])].copy()
-    col_names = [store_location_column(l) for l in locations]
-    for location, col in zip(locations, col_names):
-        out[col] = out["ticker"].map(
-            lambda t, _l=location: (by_ticker.get(t, {}).get(_l) or {}).get("count"))
-    out["Store Count As Of"] = out["ticker"].map(lambda t: ", ".join(sorted({
-        held["as_of"] for l, held in by_ticker.get(t, {}).items() if l in locations})))
+        [t for t in by_ticker if any(count(t, l, y) is not None for l, y, _c in cells)])].copy()
+    col_names = [col for _l, _y, col in cells]
+    for location, year, col in cells:
+        out[col] = out["ticker"].map(lambda t, _l=location, _y=year: count(t, _l, _y))
+    if not years:
+        out["Store Count As Of"] = out["ticker"].map(lambda t: ", ".join(sorted({
+            held["as_of"] for l, held in by_ticker.get(t, {}).items() if l in locations})))
     criterion["location_cols"] = col_names
     elapsed = (time.perf_counter() - t_start) * 1000
     log_timing("SCREENING_STORE_COUNT_BY_LOCATION", elapsed,
-               f"locations={len(locations)} rows_in={rows_in} with_data={len(out)}")
+               f"locations={len(locations)} years={years} rows_in={rows_in} with_data={len(out)}")
     return out.reset_index(drop=True), {
         "type": "additional", "data_type": "store_counts", "location_cols": col_names,
         "rows_in": rows_in, "rows_out": len(out), "with_data": len(out), "elapsed_ms": elapsed,
@@ -6024,6 +6146,8 @@ def apply_additional_criterion(
         return _apply_store_counts_by_category(criterion, working_df, rows_in, t_start)
     if data_type == "store_counts" and criterion.get("locations"):
         return _apply_store_counts_by_location(criterion, working_df, rows_in, t_start)
+    if criterion.get("year_range") or str(criterion.get("year", "")).isdigit():
+        return _apply_additional_years(criterion, working_df, rows_in, t_start)
 
     tickers = list(working_df["ticker"].values)
     if not tickers:

@@ -373,11 +373,17 @@ def _warm_keydevs_screening() -> None:
 
 
 def _warm_store_locations_screening() -> None:
-    """Start the store-location cache build (a ~3s-per-ticker sweep) on boot so
-    the Store Count location picker is ready before anyone opens it. A disk copy
-    makes this a read; with none, the build runs on its own thread."""
-    from data.screening_service import StoreLocationsPending, get_store_locations
+    """Load the Store Count / Credit Rating by-year history (one ~6s cold query)
+    and start the store-location cache build (a ~3s-per-ticker sweep) on boot so
+    both are ready before anyone opens Additional Data. A disk copy makes each a
+    read; with none, the location build runs on its own thread."""
+    from data.screening_service import (StoreLocationsPending, get_additional_history,
+                                        get_store_locations)
 
+    try:
+        get_additional_history()
+    except Exception as exc:
+        log_error(f"[WARMUP] additional-data history failed: {exc!r}")
     try:
         get_store_locations()
     except StoreLocationsPending:
@@ -433,11 +439,24 @@ def _warm_people_screening() -> None:
     first visitor to People Screening never does.
     """
     from data.management_changes import get_management_changes
-    from data.people_service import get_people_universe
+    from data.people_service import get_people_events, get_people_universe
+    from data.screening_config import PEOPLE_EVENT_CATEGORIES
 
     get_people_universe()
     # 8-K Item 5.02 events: ~27s fetch + ~12s regex when the disk copy is gone.
     get_management_changes()
+    # Layoffs & restructuring: ~5-35s when the disk copy is gone.
+    for category in PEOPLE_EVENT_CATEGORIES:
+        get_people_events(category)
+    # Proxy pay for the companies coreiq_executives_compensation lacks: only proxies
+    # not read before (~1-6s each; ~1,200 on an empty cache dir, saved every 25).
+    from data.proxy_pay import refresh_proxy_pay
+    try:
+        if refresh_proxy_pay():
+            get_people_universe.clear()
+    except Exception as exc:
+        log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
+                             operation="refresh_proxy_pay")
 
 
 def _background_warmup_thread():

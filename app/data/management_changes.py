@@ -596,7 +596,7 @@ CHANGE_COLUMNS = [
     "is_board", "notice_date", "effective_date", "effective_note", "replaces", "replaced_by",
     "reason", "no_disagreement", "confidence", "age", "role_start", "role_end", "years_in_role",
     "moved_from", "moved_from_title", "moved_from_date",
-    "evidence", "source_ref", "event_id", "filing_year", "filing_unit",
+    "evidence", "source_ref", "event_id",
     "source", "also_reported",
 ]
 
@@ -671,40 +671,10 @@ def mark_moves(df: pd.DataFrame, bodies: Dict[int, str], names: Dict[str, str]) 
 
 _ACCESSION = re.compile(r"/data/\d+/(\d{10})(\d{2})(\d{6})/")
 
-# ~100s against a 120s read timeout (DB cost is rows read; per-ticker batches
-# took 559s). execute_query_readonly turned a timeout into [] and on 2026-10-15
-# the frame was saved with 0 of 9,365 events linked, so this raises instead.
-_UNITS_QUERY = """
-    SELECT DISTINCT ticker, storage_year, filing_unit, filing_accession
-    FROM coreiq_filing_metrics_v5
-    WHERE doc_type = '8-K'
-      AND filing_unit IS NOT NULL AND filing_unit <> ''
-      AND ticker IN (SELECT ticker FROM coreiq_companies)
-"""
-
-
 def accession_of(source_ref: str) -> str:
     """'…/Archives/edgar/data/910406/000119312526405350/hain.htm' -> '0001193125-26-405350'."""
     m = _ACCESSION.search(source_ref or "")
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else ""
-
-
-def _filing_units_by_accession() -> Dict[tuple, tuple]:
-    """(ticker, accession) -> (storage_year, filing_unit): where an 8-K lives on
-    our Company Filings page. 96% of 5.02 events resolve (STG, 2026-10-12).
-
-    Retries once, then raises: a frame built without links would be
-    materialized and served until the next 8-K arrives."""
-    for attempt in (1, 2):
-        try:
-            rows = db_manager.execute_query_readonly_raising(_UNITS_QUERY)
-            return {(str(r["ticker"]), str(r["filing_accession"])): (r["storage_year"], r["filing_unit"])
-                    for r in rows}
-        except Exception as exc:
-            log_structured_error(exc, page="management_changes", component="_filing_units_by_accession",
-                                 operation="fetch_filing_units", context=f"attempt={attempt}")
-            if attempt == 2:
-                raise
 
 
 def is_company_not_person(person: str, company_word: str, situation: str) -> bool:
@@ -719,13 +689,11 @@ def is_company_not_person(person: str, company_word: str, situation: str) -> boo
     return not re.search(rf"\b(?:Mr|Ms|Mrs|Dr)\.?\s+{re.escape(surname)}\b", situation)
 
 
-def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
-                  units: Optional[Dict[tuple, tuple]] = None) -> pd.DataFrame:
+def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> pd.DataFrame:
     """Flatten stored 5.02 rows into one row per person event.
 
     `names` (ticker -> company name) enables move detection; without it no
-    appointment is flagged as a move. `units` ((ticker, accession) -> (year,
-    filing_unit)) lets the UI open the filing on our own Company Filings page."""
+    appointment is flagged as a move."""
     records = []
     for r in rows:
         try:
@@ -740,10 +708,8 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
             if is_company_not_person(e.get("person"), company_word, r.get("situation") or ""):
                 continue
             ticker = (r.get("ticker") or "").strip()
-            year, unit = (units or {}).get((ticker, accession_of(r.get("source_ref"))), (None, ""))
             e.update(ticker=ticker, filing_date=filed, source_ref=r.get("source_ref") or "",
-                     event_id=r.get("event_id"), filing_year=year, filing_unit=unit or "",
-                     source=source_label(r.get("source")), also_reported="")
+                     event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
             # The filing date is the announcement when the text gives none.
             e["notice_date"] = e.get("notice_date") or filed
             records.append(e)
@@ -939,8 +905,7 @@ def build_news_changes(rows: List[dict], names: Dict[str, str]) -> pd.DataFrame:
         for e in parse_news(r.get("headline") or "", r.get("situation") or "", names.get(ticker, "")):
             e.update(ticker=ticker, filing_date=when, notice_date=when, role=_role_of(e["title"], e["evidence"]),
                      is_board=_is_board(e["title"], e["evidence"]), source_ref=r.get("source_ref") or "",
-                     event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="",
-                     filing_unit="")
+                     event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
             records.append(e)
     df = pd.DataFrame(records, columns=CHANGE_COLUMNS)
     return _fold_repeats(df) if len(df) else df
@@ -982,18 +947,8 @@ def _fold_repeats(df: pd.DataFrame, primary: Optional[pd.DataFrame] = None, days
 def _build_management_changes() -> pd.DataFrame:
     import time as _time
     t0 = _time.perf_counter()
-    from concurrent.futures import ThreadPoolExecutor
-    # The filing-unit lookup (~31s cold) does not depend on the events query
-    # (~27s), so they run side by side.
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        units_job = pool.submit(_filing_units_by_accession)
-        try:
-            rows = db_manager.execute_query_readonly(_EVENTS_QUERY) or []
-        except Exception as exc:
-            log_structured_error(exc, page="management_changes", component="_build_management_changes",
-                                 operation="fetch_502_events")
-            rows = []
-        units = units_job.result()
+    # Raises: a timeout read as "no events" would be materialized and served.
+    rows = db_manager.execute_query_readonly_raising(_EVENTS_QUERY)
     try:
         names = {str(r["ticker"]): r["name"] for r in
                  db_manager.execute_query_readonly(_COMPANIES_QUERY) or [] if r.get("ticker")}
@@ -1001,7 +956,7 @@ def _build_management_changes() -> pd.DataFrame:
         log_structured_error(exc, page="management_changes", component="_build_management_changes",
                              operation="fetch_company_names")
         names = {}
-    df = build_changes(rows, names, units)
+    df = build_changes(rows, names)
     try:
         news_rows = db_manager.execute_query_readonly_raising(_NEWS_QUERY) or []
     except Exception as exc:
@@ -1019,11 +974,13 @@ def _build_management_changes() -> pd.DataFrame:
             df[col] = pd.to_datetime(df[col], errors="coerce")
         for col in ("ticker", "change", "event_type", "role", "confidence"):
             df[col] = df[col].fillna("").astype("category")
+        # News rows are never move-checked: "" like an 8-K with no move. Left NaN,
+        # they read as "nan" != "" and every news appointment listed as a move.
+        df[["moved_from", "moved_from_title"]] = df[["moved_from", "moved_from_title"]].fillna("")
         df = df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
     log_timing("MGMT_CHANGES_BUILD", (_time.perf_counter() - t0) * 1000,
                details=f"filings={len(rows)} news_items={len(news_rows)} events={len(df)} "
-                       f"news_events={int((df['source'].astype(str) != '').sum() - df['source'].astype(str).str.startswith('SEC').sum()) if len(df) else 0} "
-                       f"linked={int(df['filing_unit'].astype(bool).sum()) if len(df) else 0}")
+                       f"news_events={int((df['source'].astype(str) != '').sum() - df['source'].astype(str).str.startswith('SEC').sum()) if len(df) else 0}")
     return df
 
 
@@ -1038,11 +995,14 @@ def get_management_changes() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v7: news rows' moved_from "" not NaN — NaN was counted as a move (2026-10-15).
+        # _v6: filing_year / filing_unit dropped — the 8-K is resolved when its link is
+        #      opened; the bulk lookup timed out and blocked the build (2026-10-15).
         # _v5: 6-K filings and executive news added; source / also_reported (2026-10-15).
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v5", _build_management_changes, sources,
+        "management_changes_v7", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

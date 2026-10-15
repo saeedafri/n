@@ -834,16 +834,34 @@ PEOPLE_MONEY_COLUMNS = list(PEOPLE_MONEY_METRICS.keys())
 PEOPLE_CATEGORY_CHANGES      = "management_changes"
 PEOPLE_CATEGORY_MOVES        = "executive_moves"
 PEOPLE_CATEGORY_REMUNERATION = "remuneration"
+
+# People-related Key Developments, listed as events (coreiq_company_events):
+# category -> (event_category, event_subtypes). Moved from Key Devs 2026-10-15.
+# Dropped the same evening (user): shareholder votes and activist communications
+# (not needed); proxy filings (their pay is in Management Remuneration via
+# proxy_pay); director nominations (8-K Item 5.08 is a meeting-date notice that
+# names nobody — named director appointments are Management Changes, role Board).
+PEOPLE_EVENT_CATEGORIES = {
+    "layoffs_restructuring":  ("Layoffs & Restructuring",
+                               ["Headcount Reduction", "Restructuring", "Exit/Disposal Costs"]),
+}
+
 PEOPLE_CATEGORIES = {
     PEOPLE_CATEGORY_CHANGES:      "Management Changes",
     PEOPLE_CATEGORY_MOVES:        "Executive Changes / Movements",
     PEOPLE_CATEGORY_REMUNERATION: "Management Remuneration",
+    "layoffs_restructuring":      "Layoffs & Restructuring",
 }
+
+# Directors in Management Changes: management_changes tags board seats "Board",
+# a bucket the title-based PEOPLE_ROLES never produce.
+PEOPLE_ROLE_BOARD = "Board"
 
 # Default period per dated category (labels from KEYDEV_TIMEFRAMES). A week is
 # the everyday management-changes check; moves are rare (~90 in ten years), so
 # a week would almost always be empty.
 PEOPLE_DEFAULT_TIMEFRAME = {
-    PEOPLE_CATEGORY_CHANGES: "Last 7 Days",
-    PEOPLE_CATEGORY_MOVES:   "All History",
+    PEOPLE_CATEGORY_CHANGES:  "Last 7 Days",
+    PEOPLE_CATEGORY_MOVES:    "All History",
+    "layoffs_restructuring":  "Last 30 Days",
 }

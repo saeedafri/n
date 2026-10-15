@@ -133,6 +133,25 @@ def _get_filing_units_from_db(ticker: str, year: str, doc_type: str) -> Optional
         return None
 
 
+@st.cache_data(ttl=21600, show_spinner=False)
+def find_filing_by_accession(ticker: str, doc_type: str, accession: str) -> Optional[Tuple[int, str]]:
+    """(storage_year, filing_unit) of one filing, e.g. '0001193125-26-405350'.
+
+    Resolved when a link is opened: one ticker's range of the dropdown index
+    (~1s). Resolving every 8-K up front took 100-120s and timed out.
+    """
+    from core.database import db_manager
+    # Raising read: a timeout must not be cached as "not found".
+    rows = db_manager.execute_query_readonly_raising("""
+        SELECT storage_year, filing_unit
+        FROM coreiq_filing_metrics_v5
+        WHERE ticker = :ticker AND doc_type = :doc_type AND filing_accession = :accession
+          AND filing_unit IS NOT NULL AND filing_unit <> ''
+        LIMIT 1
+    """, {"ticker": ticker, "doc_type": doc_type, "accession": accession})
+    return (int(rows[0]["storage_year"]), rows[0]["filing_unit"]) if rows else None
+
+
 def get_filing_units(ticker: str, year: str, doc_type: str, use_cache: bool = True) -> List[str]:
     """
     Get available filing units for a ticker/year/doc_type combination.

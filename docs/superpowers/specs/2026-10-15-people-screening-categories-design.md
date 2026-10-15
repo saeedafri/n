@@ -311,3 +311,210 @@ News: 557 events were read; after folding repeats, 400 remain as their own rows 
 | All History | 7,590 | 438 | |
 
   All counts equal the independent pandas calculation. No page errors.
+
+## 8. Round 3 (2026-10-15 evening): STG failure, form changes, five Key Devs categories
+
+### 8.1 Root cause of "Management changes could not be loaded" (STG, 18:23–18:27)
+
+From the STG server log:
+
+- `management_changes_v5` was absent on `/home/mdp-cache`, so the first People run built it live.
+- The build ran `_filing_units_by_accession`, the one-shot (ticker, accession) → (storage_year, filing_unit) lookup over `coreiq_filing_metrics_v5`. It hit the 120 s read timeout twice (18:25:08, 18:27:08), and the Round 2 change made that raise.
+- So the user waited 4 minutes and got the error.
+
+Measured on STG:
+
+| Lookup | Time |
+|---|---|
+| Full lookup | 100–120 s |
+| 60-ticker chunks | 40–57 s each (≈7 min for all) |
+| One ticker + accession | ~1 s warm, 5.5 s cold |
+
+The bulk lookup cannot be made to fit, so it was removed.
+
+**Fix:** the frame no longer carries `filing_year` / `filing_unit` (now `management_changes_v6`).
+- An 8-K's Source Link is `/company_filings?ticker=T&doc_type=8-K&accession=A`.
+- `company_filings.py` resolves the accession with `utils/filing_units.find_filing_by_accession` when the link is opened. That is one ticker's range of `idx_v5_filings_dropdown`, cached 6 h, and uses a raising read so a timeout is never cached as "not found".
+- The events read in the build also raises now, instead of materializing an empty frame on a timeout.
+
+No index or DDL is needed any more. The index in §7 is withdrawn.
+
+### 8.2 Form
+
+- **Category:** a dropdown (`st.selectbox`), not a radio.
+- **Title contains / Name contains:** removed from every category. Old saved criteria that carry them are still honoured.
+- **Role / Title:** kept for Management Changes, Executive Changes / Movements and Management Remuneration. Not shown for event categories, which have no person.
+- **Management Remuneration:** "Compensation years" is two dropdowns, *Compensation year from* / *to*. "Earliest" / "Latest" mean open-ended. They are stored as the `years` list, so the pivot and filter are unchanged. The card reads "FY 2022–2024".
+
+### 8.3 Key Devs items moved into People (manager's list)
+
+`PEOPLE_EVENT_CATEGORIES` in `screening_config.py`:
+
+| Dropdown value | event_category / subtypes | Rows (STG) | Default period |
+|---|---|---|---|
+| Executive Compensation (Proxy Filings) | Proxy/Governance / Executive Compensation (DEF 14A) | 3,954 | Last 30 Days |
+| Shareholder Votes | Governance / Shareholder Vote | 3,808 | Last 30 Days |
+| Activist Communications | Investor Activism / Activist Communication | 201 | Last 90 Days |
+| Director Nominations | Governance / Director Nomination | 22 | All History |
+| Layoffs & Restructuring | Layoffs & Restructuring / Headcount Reduction, Restructuring, Exit/Disposal Costs | 2,617 | Last 30 Days |
+
+- Each category has its own frame, `people_events_<category>_v1` (`people_service.get_people_events`).
+  - The frame is materialized because the read is 5–35 s cold: it is row-bound, and `idx_cat_date` is used.
+  - Its signal is MAX(event_id) for that event_category.
+  - The boot warm-up builds all five.
+- The grid shows Company, Ticker, Date, Type, Headline, Source and Source Link. The Excel export has the same columns, minus the link.
+- Key Devs still offers these subtypes; removing them there is a separate decision.
+
+### 8.4 /logs page
+
+Causes and fixes:
+
+| Cause | Fix |
+|---|---|
+| `[PERSIST][…] rebuilt … changed=False` logged at WARNING: 44,048 of the day's lines | Logged only when changed or over 5 s (~560/day) |
+| `get_log_stats` counted lines by reading the whole live log (≤25 MB on the /home SMB share) on every render | Estimated from size |
+| `get_log_content` read the FIRST 500 KB, so the "recent" view showed the oldest lines | Now reads the tail |
+| Download built 80 MB of plain text, read every segment, then cut it | Reads newest-first up to the cap and is gzipped (`.log.gz`): 80 MB → 3 MB in 0.1 s |
+
+**Left:** `_ensure_segment_refresh_state_table` logs a "Duplicate column classifier_version" ERROR every 15 min. It is harmless, and in `screening_service.py`, which another session is editing.
+
+## 9. Round 4 (2026-10-15 night): four categories out, proxy pay in, directors in Management Changes
+
+The user's decisions on the round-3 categories:
+
+| Category | Decision | Done |
+|---|---|---|
+| Shareholder Votes | Not needed | Removed |
+| Activist Communications | Not needed | Removed |
+| Executive Compensation (Proxy Filings) | Its pay belongs in Management Remuneration | Removed as a category. The proxies' Summary Compensation Tables now feed Management Remuneration (below) |
+| Director Nominations | Treat as management changes, with names | Removed as a category (see below). Directors are a Role in Management Changes |
+| Layoffs & Restructuring | Keep | Kept, re-tested |
+
+The People dropdown is now: Management Changes, Executive Changes / Movements, Management Remuneration, Layoffs & Restructuring.
+
+### 9.1 Why proxy pay is not in XBRL
+
+The SEC requires XBRL tags on only one compensation table, Pay versus Performance (Reg S-K Item 402(v), in proxies since 2023). It tags the CEO's total and "compensation actually paid", and the AVERAGE of the other named executives, for five years.
+
+The Summary Compensation Table is plain HTML: salary, bonus, stock, options, non-equity incentive, pension, other and total, for each executive and year.
+
+edgartools 5.16 (pinned in requirements.txt) shows exactly this split:
+- `filing.obj()` on a DEF 14A returns a `ProxyStatement`. It has the headline figures only.
+- Example, WMT 2026: CEO Doug McMillon $29,240,930 total and $36,488,421 actually paid; other-executive average $25,904,488.
+- `has_individual_executive_data` is False, and `named_executives` is empty for WMT, PFGC and TEAM.
+
+So the free route to detail is the HTML table. edgartools' `to_dataframe()` mangles these tables: headers land in body rows, spanned columns are duplicated, and cells come back as tuples. `proxy_pay` uses edgartools' parsed cells (text, colspan, rowspan) and lays them out on a grid itself.
+
+### 9.2 `app/data/proxy_pay.py`
+
+**Proxy list**
+- Source: `coreiq_company_events` rows with subtype "Executive Compensation (DEF 14A)": 3,954 proxies for 411 tickers. `source_ref` is the sec.gov viewer URL.
+- The newest 3 proxies per company are read. That is up to 5 fiscal years, since each proxy restates three.
+- The order is round-robin: every company's newest proxy first, then the second, then the third.
+
+**Parse**
+- Candidate `<table>`s are cut out of the raw HTML by regex: text must contain salary, total, a 20xx year, and stock/option awards or bonus. Only those are parsed, not the whole 150–500-table proxy.
+- The first candidate that yields named executives wins.
+- Layouts handled:
+  - Name and title on separate rows (WMT).
+  - Name and title in one cell (PFGC).
+  - Name column not first (JCI, APH).
+  - A stray year row above the data (GOOGL).
+  - Three years stacked in one cell (MNST).
+  - Oldest-first tables.
+
+**Fetch**
+- Plain `requests` with an SEC User-Agent, 0.2 s between requests.
+- Not edgartools' downloader: it caches every /Archives document on disk forever (221 MB for 65 proxies, about 4 GB for the set).
+
+**Store**
+- `(rows, done_accessions)` in the materialize cache dir as `proxy_pay_v1`.
+- Progress is saved every 25 proxies.
+- A proxy with no readable table is recorded as done, so it is never refetched.
+- A network failure is not recorded, so it is retried on the next run.
+
+**Never on a request**
+- `read_proxy_pay()` returns the disk copy, or an empty frame.
+- `refresh_proxy_pay()` runs at the end of `_warm_people_screening` (the boot warm-up thread). On a warm cache it costs one events query plus any new proxies.
+
+**Merge** (`people_service.add_proxy_pay`, applied inside `get_people_universe`)
+- Proxy rows are added only for company-years that `coreiq_executives_compensation` lacks.
+- The data team's table stays the source where it has data.
+- The added rows go through the same restatement collapse (`_collapse_restatements`) and column types (`_finish_frame`).
+- After a refresh that read anything, the warm-up clears `get_people_universe`.
+
+**Accuracy** (two random samples of 30 proxies each, latest proxy)
+- Parsed: 28/30 and 27/30. The failures are MELI's two-table layout, LOW, VFC, LEVI, CTHR (a 2017 proxy) and LAD.
+- Totals against the data team's table where both have the person-year: 135/139 and 97/102 equal.
+- Every disagreement checked against the filing text was the data team's row that was wrong:
+  - ACI: Sankaran's 2024 total is $15,240,511 in the filing; the table has $7,882,248.
+  - DLTR: Richard McNeely's pay is filed under Jeffrey Davis.
+  - CFR: Jimmy Stead carries Coolidge Rhodes's numbers.
+- These are data-team items; the app still prefers their table where it has the company-year.
+
+### 9.3 Directors in Management Changes
+
+- "Director Nomination" is 8-K Item 5.08: it sets the deadline for shareholder director nominations. 22 events, and none names a person (SMCI, PRTS, PMNT, CTHR …). It is not a director change.
+- Named director changes are 8-K Item 5.02(d) (new director elected) and 5.02(b) (director retires, resigns or declines re-election). These are already extracted: `management_changes_v6` has 3,083 board events, every one with a person.
+  - 1,098 Appointment, 551 Director Election, 649 Resignation, 356 Not Standing for Re-election, 272 Retirement, …
+  - Examples: NKE, Alexandre Arnault, 2026-09-16; ACI, Margaret Whitman, 2026-09-09.
+- **Root cause of "directors missing":** the Role / Title multiselect offered only the title buckets (`PEOPLE_ROLES`). management_changes tags directors `role = "Board"`, a value no bucket produces, so picking any role dropped every director.
+- **Fix:** `PEOPLE_ROLE_BOARD = "Board"` is offered first, as "Director (Board)", for Management Changes and Executive Moves. Remuneration does not offer it: proxies list executives, not directors.
+
+### 9.4 Files
+
+- `app/data/proxy_pay.py` (new)
+- `app/data/test_proxy_pay.py` (new)
+- `app/data/people_service.py`: `_finish_frame`, `_proxy_records`, `add_proxy_pay`
+- `app/data/screening_config.py`: the categories, `PEOPLE_ROLE_BOARD`
+- `app/pages/screening.py`: role options
+- `app/utils/cache_manager.py`: refresh after warm
+
+### 9.5 Full run and two more fixes found in testing
+
+**Full extraction**
+- 1,221 proxies read. 1,070 of them yield a Summary Compensation Table.
+- 13,323 executive-year rows across 388 companies.
+- Cold run: about 6 minutes locally with 4 downloads in flight. Warm runs read new proxies only.
+- After the merge:
+  - SEC pay covers 400 companies, up from 103.
+  - The People pay universe covers 455 companies, up from 160.
+  - Management Remuneration for FY 2024–2026 over the default 540-company set: 2,871 executives across 441 companies, up from 747 across 104.
+
+**Parser fixes from the full run** (frame `proxy_pay_v2`). The full run surfaced 120 title-like "names". The causes:
+- "Name, Title" in one cell (SEZL).
+- A year cell shared by a name row and a title row (TPR).
+- A name cell spanning past its figures (PFGC, PLAY).
+- Executives listed by title only (MSS). These are dropped.
+- After the fixes: zero title-like names.
+- A parse error on one proxy is now recorded for that proxy and no longer stops the run.
+
+**Name spelling**
+- Proxy names are mapped to the spelling already on file for the same company and person. All-caps names are title-cased ("SCOTT E. MCPHERSON" → "Scott E. McPherson").
+- Without this, TPR listed "JOANNE CREVOISERAT" (2026) and "Joanne Crevoiserat" (2024–25) as two people.
+
+**Executive Moves bug (from round 2, frame `management_changes_v7`)**
+- The executive-news rows joined in round 2 had `moved_from` = NaN. The Moves filter `astype(str) != ""` read "nan" as a move, so 400 news appointments were listed as moves (round 3's "472").
+- The build now fills `moved_from` / `moved_from_title` with "".
+- Moves are now 89 for all roles (93 in the frame before de-duplication and scope), of which 40 are directors.
+
+**Verified in the UI** (Playwright, testing :8504 and STG checkout :8505, identical results). Every count equals an independent pandas recount using the app's period rule (`date >= today - N days`), and every Excel row count equals the screen.
+
+| Screen | Result |
+|---|---|
+| Category options | Exactly the 4 categories |
+| Management Changes, Director (Board), 90 days | 64 / 49 companies; every row role Board with a named person |
+| Management Changes, Director (Board) + CEO, 30 days | 22 / 18 |
+| Management Changes, any role, 7 days | 4 / 4 |
+| Executive Moves, Director (Board) | 40 |
+| Executive Moves, all roles | 89 |
+| Management Remuneration, FY 2024–2026 | 2,871 / 441 |
+| Layoffs & Restructuring, 30 days | 60 / 30 |
+| Layoffs & Restructuring, 365 days | 755 / 176 |
+
+No Title contains or Name contains field appears anywhere.
+
+**Data-team items** (their table is still preferred wherever it has the company-year):
+- ACI 2024: Sankaran and McCollam both carry $7,882,248. The filing says $15,240,511 for Sankaran.
+- DLTR: McNeely's pay is filed under Jeffrey Davis.
+- CFR: Stead carries Rhodes's numbers.

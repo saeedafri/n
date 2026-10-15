@@ -201,6 +201,64 @@ Open `/` first. Azure's health-check runs `main.py`.
   spinner. No layout shift on Show or Edit; a single card shift when the form closes
   after Add.
 
+## 5b. Round 3 (same day): fiscal year / year range for Store Count and Credit Rating
+
+**Request.** Store counts and credit ratings change every year, so Additional Data must
+offer a single year or a year range, like the financial statements do.
+
+**Data (STG).** `coreiq_filing_metrics_v5` already holds every year:
+- store counts 2016–2026 (146 companies, 761 rows; 50 companies have 7 years);
+- credit ratings 2019–2026 (42 companies, 443 rows; S&P, Moody's, Fitch).
+
+Until now the screener only read the newest year.
+
+**Which year a value belongs to.** It is the fiscal year of the value's own date
+(`period_instant`), using the rule the segment columns use
+(`SegmentDataRepository._fiscal_year_of`: a year ending Jan 1–7 is the year before).
+`report_fiscal_year` is the filing's label and is wrong for 100 of 761 store-count rows.
+For example, UAA's 2020-12-31 count is filed under 2021, so keying on it would put the
+count in the wrong column. A row with no date keeps `report_fiscal_year` (34 rows).
+
+**Choosing one value per (company, year).** The rules match what Latest already shows:
+- the newest date in the year wins;
+- on the same date, the larger store count wins, as in the Latest MAX;
+- for ratings, the first-filed rating wins (lowest id). This is exactly the rule behind
+  today's Latest value, checked for all 42 companies (0 differences).
+
+**Form.** Company Information → Additional Data:
+- Store Count: Step 3 Locations (optional), then Step 4 — Select Fiscal Year.
+- Credit Rating: Step 3 — Select Fiscal Year.
+- Choices are Single year (Latest, or a year) or Year range (From / To).
+- Only years that have data are offered.
+- Edit prefills the saved choice; the stale keys `scr_add_year_*` are cleared on Edit.
+
+**Results.**
+- Latest: unchanged, one column.
+- A year or a range: one column per year, `Store Count [FY 2024]` /
+  `Credit Rating [FY 2025]`.
+- With locations: one column per location per year, `Store Count — Canada [FY 2024]`.
+  The "As Of" column is dropped there, because the year is in the heading.
+- Only companies with a value in at least one chosen year (or location-year) are listed.
+  A year one of them did not report is blank, never N/A.
+- The card summary carries the years, e.g. "Additional Data: Store Count (FY 2022–FY 2025)
+  — Canada". The details list the Fiscal Year.
+
+**Speed.**
+- History: one query, ~1,200 rows (6 s cold / 0.8 s warm). It is materialized as
+  `screening_additional_history_v1` (signal `MAX(id)` over both sources) and warmed on
+  boot on the `warm-store-locations` thread. Applying a criterion is a dict lookup.
+- Store locations: the cache became `screening_store_locations_v2` (adds the per-year
+  counts). The first boot after deploy rebuilds it in ~5 min; until then Step 3 shows
+  its "being prepared" notice, and Store Count by year without locations still works.
+
+**Tests.** `tests/test_store_count_locations.py` has 7 new tests, 22 in total:
+- the year comes from the value's own date (UAA, early January, no date);
+- the within-year rules;
+- a range gives one column per year and lists only companies with data;
+- a single year;
+- Latest is unchanged;
+- locations by year.
+
 ## 6. Rollout
 - No DB writes, no DDL. The cache file lands in the materialize dir (`/home/mdp-cache` on
   App Service, persistent across deploys).

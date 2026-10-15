@@ -327,6 +327,7 @@ from data.screening_config import (
     PEOPLE_MONEY_COLUMNS,
     PEOPLE_MONEY_METRICS,
     PEOPLE_MONEY_SOURCE_HINT,
+    PEOPLE_ROLE_BOARD,
     PEOPLE_ROLE_OTHER,
     PEOPLE_ROLE_UNKNOWN,
     PEOPLE_ROLES,
@@ -336,13 +337,15 @@ from data.screening_config import (
     PEOPLE_CATEGORY_MOVES,
     PEOPLE_CATEGORY_REMUNERATION,
     PEOPLE_DEFAULT_TIMEFRAME,
+    PEOPLE_EVENT_CATEGORIES,
     get_metric_labels,
     get_metric_info,
 )
-from data.management_changes import compare_move_pay, get_management_changes
+from data.management_changes import accession_of, compare_move_pay, get_management_changes, source_label
 from data.people_service import (
     apply_people_criterion,
     build_people_summary,
+    get_people_events,
     get_people_universe,
     people_criteria_for,
     period_mask,
@@ -1048,7 +1051,8 @@ def _start_edit_criterion(idx: int):
         # Widget keys outlive a closed form; left in place they override the
         # prefill (an Additional Data edit reopened on Income Statement).
         for key in ("scr_fin_stmt_sel", "scr_fin_metric_sel", "scr_fin_segment_members",
-                    "scr_store_locations"):
+                    "scr_store_locations", "scr_add_year_mode", "scr_add_year_sel",
+                    "scr_add_year_from", "scr_add_year_to"):
             st.session_state.pop(key, None)
     except Exception as e:
         log_structured_error(e, page="screening", component="_start_edit_criterion", operation="edit_criterion")
@@ -1201,9 +1205,9 @@ def _company_display_name(row) -> str:
 def _format_screening_cell_value(val, unit: str = "") -> str:
     """Format a numeric screening result for HTML table display."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
-        # Store counts list only companies that report them; a location one of
-        # those companies does not report is left blank, not "N/A".
-        return "" if unit == "count" else "N/A"
+        # Additional Data lists only companies that report it; a location or a
+        # year one of those companies does not report is left blank, not "N/A".
+        return "" if unit in ("count", "rating") else "N/A"
     try:
         fv = float(val)
     except (TypeError, ValueError):
@@ -1223,10 +1227,12 @@ def _format_screening_cell_value(val, unit: str = "") -> str:
 
 def _criterion_unit(criteria: List[dict], display_col: str) -> str:
     for c in criteria:
-        # Store counts are whole stores, not $mm.
-        if c.get("data_type") == "store_counts" and (
-                display_col == c.get("display_col") or display_col in (c.get("location_cols") or [])):
-            return "count"
+        if c.get("type") == "additional" and (
+                display_col == c.get("display_col")
+                or display_col in (c.get("location_cols") or [])
+                or display_col in (c.get("year_cols") or [])):
+            # Store counts are whole stores, not $mm.
+            return "count" if c.get("data_type") == "store_counts" else "rating"
         if not c.get("metric_info"):
             continue
         if (c.get("display_col") == display_col
@@ -1394,7 +1400,10 @@ def _get_additional_cols(criteria: List[dict]) -> List[str]:
             # Store Count by location (or a saved by-Category screen) contributes
             # one column per location, the way a year range contributes one per year.
             if c.get("location_cols"):
-                own = c["location_cols"] + ["Store Count As Of"]
+                own = c["location_cols"] + ([] if c.get("year_range") or str(c.get("year", "")).isdigit()
+                                            else ["Store Count As Of"])
+            elif c.get("year_cols"):
+                own = c["year_cols"]
             else:
                 own = c.get("category_cols") or ([c["display_col"]] if c.get("display_col") else [])
             for col in own:
@@ -4465,7 +4474,9 @@ def _render_financial_form():
                 val1 = 0.0
                 val2 = 0.0
                 locations: List[str] = []
-                if ADDITIONAL_DATA_TYPES.get(metric_label) == "store_counts":
+                data_type = ADDITIONAL_DATA_TYPES.get(metric_label)
+                year_step = "Step 3"
+                if data_type == "store_counts":
                     st.markdown(
                         '<p class="form-section-label" style="margin-top:12px;">'
                         'Step 3 — Select Store Locations (optional)</p>',
@@ -4473,11 +4484,22 @@ def _render_financial_form():
                     )
                     locations = _render_store_locations_step(
                         list(prefill.get("locations") or []) if is_additional_edit else [])
-                st.caption(
-                    f"{metric_label} is shown only for companies that report it. "
-                    "Latest filed value; no value filter is applied."
+                    year_step = "Step 4"
+                st.markdown(
+                    f'<p class="form-section-label" style="margin-top:12px;">'
+                    f'{year_step} — Select Fiscal Year</p>',
+                    unsafe_allow_html=True,
                 )
-                _render_additional_stmt_submit(stmt, metric_label, locations)
+                add_year, add_year_range = _render_additional_year_step(
+                    data_type, prefill if is_additional_edit else {})
+                when = ("the latest filed value" if add_year == "Latest" and not add_year_range
+                        else _describe_additional_years({"year": add_year, "year_range": add_year_range}))
+                st.caption(
+                    f"{metric_label} is shown only for companies that report it, for "
+                    f"{when}. No value filter is applied."
+                )
+                _render_additional_stmt_submit(stmt, metric_label, locations,
+                                               add_year, add_year_range)
                 return
 
             if is_segment_stmt:
@@ -4800,8 +4822,50 @@ def _render_store_locations_step(default_locations: List[str]) -> List[str]:
     return shown if cascade_active else []
 
 
+def _describe_additional_years(criterion: dict) -> str:
+    """"FY 2021–FY 2025", "FY 2023" or "Latest" for an Additional Data criterion."""
+    years = criterion.get("year_range") or []
+    if years:
+        return f"FY {years[0]}–FY {years[-1]}" if len(years) > 1 else f"FY {years[0]}"
+    year = criterion.get("year")
+    return f"FY {year}" if str(year or "").isdigit() else "Latest"
+
+
+def _render_additional_year_step(data_type: str, prefill: dict):
+    """Latest, one fiscal year, or a range (one column per year) for Store Count /
+    Credit Rating. Only years that have data are offered. Returns (year, year_range)."""
+    from data.screening_service import additional_data_years
+
+    years = additional_data_years(data_type)
+    if not years:
+        return "Latest", None
+    saved_range = [int(y) for y in (prefill.get("year_range") or []) if int(y) in years]
+    mode = st.radio(
+        "Year selection", ["Single year", "Year range"], horizontal=True,
+        key="scr_add_year_mode", index=1 if saved_range else 0,
+        help="Year range shows the value for each fiscal year side by side.",
+    )
+    if mode == "Year range":
+        col_from, col_to = st.columns(2)
+        with col_from:
+            first = st.selectbox("From year", options=years, key="scr_add_year_from",
+                                 index=years.index(saved_range[0]) if saved_range
+                                 else min(4, len(years) - 1))
+        with col_to:
+            last = st.selectbox("To year", options=years, key="scr_add_year_to",
+                                index=years.index(saved_range[-1]) if saved_range else 0)
+        low, high = sorted([int(first), int(last)])
+        return "Latest", list(range(low, high + 1))
+    options = ["Latest"] + years
+    saved = prefill.get("year", "Latest")
+    year = st.selectbox("Year", options=options, key="scr_add_year_sel",
+                        index=options.index(saved) if saved in options else 0)
+    return year, None
+
+
 def _render_additional_stmt_submit(stmt: str, metric_label: str,
-                                   locations: Optional[List[str]] = None) -> None:
+                                   locations: Optional[List[str]] = None,
+                                   year="Latest", year_range: Optional[List[int]] = None) -> None:
     """Add / Cancel for the Additional Data statement type.
 
     Produces a plain `additional` criterion — the same shape the existing
@@ -4832,10 +4896,16 @@ def _render_additional_stmt_submit(stmt: str, metric_label: str,
             "display_col": metric_label,
             "summary":     f"{stmt}: {metric_label}",
         }
+        if year_range:
+            criterion["year_range"] = list(year_range)
+        elif year != "Latest":
+            criterion["year"] = int(year)
+        if year_range or year != "Latest":
+            criterion["summary"] += f" ({_describe_additional_years(criterion)})"
         if locations:
             criterion["locations"] = list(locations)
             shown = ", ".join(locations[:3]) + (f" +{len(locations) - 3} more" if len(locations) > 3 else "")
-            criterion["summary"] = f"{stmt}: {metric_label} — {shown}"
+            criterion["summary"] += f" — {shown}"
         _add_criterion(criterion)
         st.session_state.scr_prefill = None
         st.session_state.scr_prefill_idx = None
@@ -4925,11 +4995,9 @@ def _people_criterion_from_widgets(values: dict) -> dict:
     """
     category = values.get("category") or PEOPLE_CATEGORY_REMUNERATION
     criterion = {
-        "type":           "people",
-        "category":       category,
-        "roles":          list(values.get("roles") or []),
-        "title_contains": (values.get("title_contains") or "").strip(),
-        "name_contains":  (values.get("name_contains") or "").strip(),
+        "type":     "people",
+        "category": category,
+        "roles":    list(values.get("roles") or []),
     }
     if category == PEOPLE_CATEGORY_REMUNERATION:
         metrics = list(values.get("show_metrics") or [])
@@ -4952,7 +5020,7 @@ def _people_criterion_from_widgets(values: dict) -> dict:
 
 
 def _render_people_category(prefill: Optional[dict], key_prefix: str) -> str:
-    """Category radio (+ the period radio for dated categories).
+    """Category dropdown (+ the period radio for dated categories).
 
     Outside st.form on purpose: a widget inside a form reports only on submit,
     so switching category there would not swap the filters until Add was
@@ -4970,11 +5038,10 @@ def _render_people_category(prefill: Optional[dict], key_prefix: str) -> str:
                                          else PEOPLE_CATEGORY_CHANGES))
         st.session_state[seeded_key] = id(prefill)
 
-    category = st.radio(
+    category = st.selectbox(
         "Category",
         options=list(PEOPLE_CATEGORIES),
         format_func=PEOPLE_CATEGORIES.get,
-        horizontal=True,
         help="Pick what to screen first; only that category's filters are shown "
              "and only its data is loaded.",
         key=cat_key,
@@ -4993,29 +5060,29 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str, category: s
     """
     pf = prefill or {}
     same = (pf.get("category") or PEOPLE_CATEGORY_REMUNERATION) == category
+    values = {"category": category, "roles": []}
 
-    roles = st.multiselect(
+    if category in PEOPLE_EVENT_CATEGORIES:
+        # Company events: no person or title to filter on.
+        values["date_fields"] = _collect_keydevs_date_fields(
+            pf if same else None, f"{key_prefix}_{category}",
+            PEOPLE_DEFAULT_TIMEFRAME[category])
+        st.caption("Period is the event date.")
+        return values
+
+    # 8-K events also name directors; proxies and officer listings do not.
+    role_options = (PEOPLE_ROLES if category == PEOPLE_CATEGORY_REMUNERATION
+                    else [PEOPLE_ROLE_BOARD] + PEOPLE_ROLES)
+    values["roles"] = st.multiselect(
         "Role / Title",
-        options=PEOPLE_ROLES,
+        options=role_options,
         default=[PEOPLE_ROLE_OTHER if r == PEOPLE_ROLE_UNKNOWN else r
-                 for r in (pf.get("roles") or []) if r in PEOPLE_ROLES + [PEOPLE_ROLE_UNKNOWN]],
+                 for r in (pf.get("roles") or []) if r in role_options + [PEOPLE_ROLE_UNKNOWN]],
+        format_func=lambda r: "Director (Board)" if r == PEOPLE_ROLE_BOARD else r,
         placeholder="Any role",
         help="Grouped from the executive's title text. Leave empty for any role.",
         key=f"{key_prefix}_roles",
     )
-    tc1, tc2 = st.columns(2)
-    with tc1:
-        title_contains = st.text_input(
-            "Title contains", value=pf.get("title_contains", ""),
-            placeholder="e.g. merchandising",
-            help="Searches the full job title as filed, not the grouped role.",
-            key=f"{key_prefix}_title_contains")
-    with tc2:
-        name_contains = st.text_input(
-            "Name contains", value=pf.get("name_contains", ""),
-            placeholder="e.g. cook", key=f"{key_prefix}_name_contains")
-    values = {"category": category, "roles": roles,
-              "title_contains": title_contains, "name_contains": name_contains}
 
     if category != PEOPLE_CATEGORY_REMUNERATION:
         values["date_fields"] = _collect_keydevs_date_fields(
@@ -5065,14 +5132,22 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str, category: s
             "Max ($mm)", value=_pf_max, min_value=0.0, step=0.5, format="%.2f",
             placeholder="No maximum", key=f"{key_prefix}_money_max")
 
-    yc, ac1, ac2 = st.columns([2.4, 1.3, 1.3])
-    with yc:
-        years = st.multiselect(
-            "Compensation years (select one or more)",
-            options=PEOPLE_YEARS,
-            default=[y for y in (pf.get("years") or []) if y in PEOPLE_YEARS],
-            placeholder="All years — each selected year becomes a column",
-            key=f"{key_prefix}_years")
+    # Compensation years: a From / To range, the same shape as the event period.
+    _pf_years = sorted(int(y) for y in (pf.get("years") or []))
+    year_options = [None] + sorted(PEOPLE_YEARS)
+    yc1, yc2, ac1, ac2 = st.columns([1.2, 1.2, 1.3, 1.3])
+    with yc1:
+        year_from = st.selectbox(
+            "Compensation year from", options=year_options,
+            index=year_options.index(_pf_years[0]) if _pf_years and _pf_years[0] in year_options else 0,
+            format_func=lambda y: "Earliest" if y is None else f"FY {y}",
+            key=f"{key_prefix}_year_from")
+    with yc2:
+        year_to = st.selectbox(
+            "Compensation year to", options=year_options,
+            index=year_options.index(_pf_years[-1]) if _pf_years and _pf_years[-1] in year_options else 0,
+            format_func=lambda y: "Latest" if y is None else f"FY {y}",
+            key=f"{key_prefix}_year_to")
     with ac1:
         age_min = st.number_input(
             "Min age", value=pf.get("age_min"), min_value=18, max_value=100, step=1,
@@ -5082,7 +5157,12 @@ def _render_people_widgets(prefill: Optional[dict], key_prefix: str, category: s
             "Max age", value=pf.get("age_max"), min_value=18, max_value=100, step=1,
             placeholder="Any", key=f"{key_prefix}_age_max")
 
+    years = []
+    if year_from is not None or year_to is not None:
+        years = list(range(year_from or min(PEOPLE_YEARS), (year_to or max(PEOPLE_YEARS)) + 1))
     values.update({
+        "year_from": year_from,
+        "year_to": year_to,
         "years": years,
         "age_min": int(age_min) if age_min is not None else None,
         "age_max": int(age_max) if age_max is not None else None,
@@ -5099,6 +5179,9 @@ def _validate_people_values(values: dict) -> Optional[str]:
         return _apply_keydevs_date_fields({}, values["date_fields"])
     if not values.get("show_metrics"):
         return "Pick at least one compensation metric."
+    y_lo, y_hi = values.get("year_from"), values.get("year_to")
+    if y_lo is not None and y_hi is not None and y_lo > y_hi:
+        return "Compensation year from cannot be after year to."
     lo, hi = values.get("money_min"), values.get("money_max")
     if lo is not None and hi is not None and lo > hi:
         return "Min cannot be greater than Max."
@@ -5722,6 +5805,8 @@ def _build_criterion_details_html(criterion: dict) -> str:
             f"  <summary>View filter details</summary>\n"
             f"  <div class='criterion-details-body' style='flex-direction:column;gap:2px;'>"
             f"  <span class='criterion-detail-kv'><strong>Data Type:</strong> {dt_label}</span>"
+            f"  <span class='criterion-detail-kv'><strong>Fiscal Year:</strong> "
+            f"{_describe_additional_years(criterion)}</span>"
             + (f"  <span class='criterion-detail-kv'><strong>Locations:</strong> "
                f"{html.escape(', '.join(criterion['locations']))}</span>"
                if criterion.get("locations") else "")
@@ -6796,6 +6881,9 @@ def _build_people_excel(display_df: pd.DataFrame) -> bytes:
         import openpyxl
         from openpyxl.styles import PatternFill, Font, Alignment
 
+        # The workbook is built on click, after AgGrid has added its row-id
+        # column to this same frame.
+        display_df = display_df.drop(columns=["::auto_unique_id::"], errors="ignore")
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "People"
@@ -6896,10 +6984,12 @@ def _render_people_results():
         changes_criteria = people_criteria_for(people_criteria, PEOPLE_CATEGORY_CHANGES)
         moves_criteria = people_criteria_for(people_criteria, PEOPLE_CATEGORY_MOVES)
         pay_criteria = people_criteria_for(people_criteria, PEOPLE_CATEGORY_REMUNERATION)
-        if not (changes_criteria or moves_criteria or pay_criteria):
-            st.info("Add a People Attributes criterion and choose a category — "
-                    "Management Changes, Executive Changes / Movements or "
-                    "Management Remuneration — to see people results.")
+        event_criteria = {cat: people_criteria_for(people_criteria, cat)
+                          for cat in PEOPLE_EVENT_CATEGORIES}
+        event_criteria = {cat: crit for cat, crit in event_criteria.items() if crit}
+        if not (changes_criteria or moves_criteria or pay_criteria or event_criteria):
+            st.info("Add a People Attributes criterion and choose a category to see "
+                    "people results.")
             return
 
         if changes_criteria:
@@ -6908,6 +6998,8 @@ def _render_people_results():
             _render_executive_moves(tickers_in_scope, moves_criteria, company_meta)
         if pay_criteria:
             _render_people_grid(tickers_in_scope, pay_criteria, company_meta, t_people)
+        for category, crit in event_criteria.items():
+            _render_people_events(category, tickers_in_scope, crit, company_meta)
 
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_results",
@@ -7031,11 +7123,59 @@ def _filter_changes_for_people(df: pd.DataFrame, people_criteria: List[dict],
     return df
 
 
-def _filing_page_link(ticker, year, unit) -> str:
-    """Our own Company Filings page opened on the exact 8-K, never sec.gov."""
-    if not ticker or pd.isna(year) or not unit:
-        return ""
-    return f"/company_filings?ticker={ticker}&doc_type=8-K&year={int(year)}&filing_unit={unit}"
+def _source_link(ticker, source, source_ref) -> str:
+    """An 8-K opens on our own Company Filings page (resolved there from its
+    accession number); anything else links to where it came from."""
+    accession = accession_of(source_ref) if str(source).endswith("8-K") else ""
+    if ticker and accession:
+        return f"/company_filings?ticker={ticker}&doc_type=8-K&accession={accession}"
+    return source_ref or ""
+
+
+def _render_people_events(category: str, tickers_in_scope: set, people_criteria: List[dict],
+                          company_meta: pd.DataFrame) -> None:
+    """One People event category (shareholder votes, layoffs, ...) for the
+    companies in scope, filtered by each criterion's period."""
+    label = PEOPLE_CATEGORIES[category]
+    try:
+        events = get_people_events(category)
+        df = events[events["ticker"].isin(tickers_in_scope)]
+        for criterion in people_criteria:
+            df = df[period_mask(df["event_date"], criterion)]
+        if df.empty:
+            latest = events["event_date"].max()
+            st.info(f"{label}: none in this period for these companies."
+                    + (f" Latest on file: {latest:%Y-%m-%d}." if pd.notna(latest) else ""))
+            return
+        names = dict(zip(company_meta["ticker"].astype(str),
+                         company_meta.get("Company", company_meta["ticker"]).astype(str)))
+        display = pd.DataFrame({
+            "Company":     df["ticker"].astype(str).map(lambda t: names.get(t, t)),
+            "Ticker":      df["ticker"].astype(str),
+            "Date":        df["event_date"].dt.strftime("%Y-%m-%d").fillna(""),
+            "Type":        df["event_subtype"].astype(str),
+            "Headline":    df["headline"].fillna(""),
+            "Source":      df["source"].map(source_label),
+            "Source Link": [_source_link(t, src, ref) for t, src, ref in
+                            zip(df["ticker"], df["source"].map(source_label), df["source_ref"])],
+        })
+        _render_results_header(
+            f"<strong>{len(display)}</strong> events across "
+            f"<strong>{display['Ticker'].nunique()}</strong> companies",
+            display.drop(columns=["Source Link"]), label.replace(" ", "_").replace("&", "and"),
+            title=label)
+        _render_filterable_results_grid(
+            display,
+            key=f"people_events_{category}_grid",
+            empty_message=f"No {label.lower()} found.",
+            pinned_column="Company",
+            link_columns=["Source Link"],
+            filter_domains=_full_domains(display, ("Company", "Type", "Source")),
+        )
+    except Exception as e:
+        log_structured_error(e, page="screening", component="_render_people_events",
+                             operation="render_people_events", context=category)
+        st.error(f"{label} could not be loaded. Please try again shortly.")
 
 
 def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict],
@@ -7091,8 +7231,8 @@ def _render_management_changes(tickers_in_scope: set, people_criteria: List[dict
             "Source Text":      out["evidence"],
             # 8-K: our Company Filings page. 6-K and news are not on it, so the
             # filing on sec.gov or the article itself.
-            "Source Link":      [_filing_page_link(t, y, u) or (ref or "") for t, y, u, ref in
-                                 zip(out["ticker"], out["filing_year"], out["filing_unit"], out["source_ref"])],
+            "Source Link":      [_source_link(t, src, ref) for t, src, ref in
+                                 zip(out["ticker"], out["source"].astype(str), out["source_ref"])],
         })
         # Columns blank for every row of this result say nothing.
         display = display[[c for c in display.columns

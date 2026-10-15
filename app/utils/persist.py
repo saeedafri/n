@@ -336,8 +336,12 @@ def _rebuild(name, key, args, kwargs, check_only=False):
                 f["ram_clear"]()
             except Exception:
                 pass
-        slog_warning(f"[PERSIST][{name}] rebuilt in {time.perf_counter() - started:.1f}s "
-                     f"changed={changed} queued={_WORK.qsize()}")
+        elapsed = time.perf_counter() - started
+        # An unchanged quick rebuild is routine: 44,048 such lines on 2026-10-15
+        # were most of the log the /logs page reads and downloads.
+        if changed or elapsed > 5:
+            slog_warning(f"[PERSIST][{name}] rebuilt in {elapsed:.1f}s "
+                         f"changed={changed} queued={_WORK.qsize()}")
         with _LOCK:
             if (name, key) in _RECENT:
                 _RECENT[(name, key)] = (args, kwargs, tables)

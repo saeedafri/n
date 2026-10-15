@@ -1578,9 +1578,12 @@ def get_log_content(max_lines: int = 1000, max_bytes: int = 500000) -> str:
         return "No logs yet. Start using the app to generate logs."
 
     try:
-        # Read file
-        with open(SERVER_LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
-            content = f.read(max_bytes)
+        # The END of the file: read(max_bytes) from the start showed the oldest
+        # lines of a 25 MB log as "recent".
+        with open(SERVER_LOG_FILE, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - max_bytes))
+            content = f.read().decode('utf-8', errors='replace')
 
         # Get last N lines
         lines = content.split('\n')
@@ -1671,17 +1674,24 @@ def download_logs() -> bytes:
         return b"No logs available."
     cap = int(os.getenv("SERVER_LOG_DOWNLOAD_MAX_BYTES", str(80 * 1024 * 1024)))
     try:
-        chunks = []
-        for p in files:
+        # Newest segment first, stopping at the cap: older segments past it were
+        # read in full only to be cut off again.
+        chunks, size = [], 0
+        for p in reversed(files):
             try:
                 sep = f"\n===== {p.name} =====\n".encode("utf-8")
                 with open(p, 'rb') as f:
+                    f.seek(0, os.SEEK_END)
+                    f.seek(max(0, f.tell() - (cap - size)))
                     chunks.append(sep + f.read())
             except Exception:
                 continue
-        blob = b"".join(chunks)
-        if len(blob) > cap:
-            blob = b"...[older log lines truncated to newest %dMB]...\n" % (cap // (1024 * 1024)) + blob[-cap:]
+            size += len(chunks[-1])
+            if size >= cap:
+                break
+        blob = b"".join(reversed(chunks))
+        if size >= cap:
+            blob = b"...[older log lines truncated to newest %dMB]...\n" % (cap // (1024 * 1024)) + blob
         return blob if blob else b"No logs available."
     except Exception as e:
         return f"Error reading logs: {e}".encode('utf-8')
@@ -1762,8 +1772,9 @@ def get_log_stats() -> dict:
 
     try:
         stat = SERVER_LOG_FILE.stat()
-        with open(SERVER_LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
-            lines = sum(1 for _ in f)
+        # Counting lines read the whole live log (up to 25 MB on the /home SMB
+        # share) on every /logs render; bytes / ~250 per line is close enough.
+        lines = stat.st_size // 250
 
         return {
             'exists': True,

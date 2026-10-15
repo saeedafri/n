@@ -62,9 +62,9 @@ def test_every_location_survives_and_counts_are_never_summed():
     ]
     out = service.resolve_store_locations(rows)
     assert out["COST"] == {
-        "United States": {"count": 552, "as_of": "2020-08-30"},
-        "Canada": {"count": 101, "as_of": "2020-08-30"},
-        "France": {"count": 1, "as_of": "2020-08-30"},
+        "United States": {"count": 552, "as_of": "2020-08-30", "years": {2020: 552}},
+        "Canada": {"count": 101, "as_of": "2020-08-30", "years": {2020: 101}},
+        "France": {"count": 1, "as_of": "2020-08-30", "years": {2020: 1}},
     }
     # A country and one of its states are both kept, as reported.
     assert out["ULTA"]["United States"]["count"] == 1505
@@ -82,7 +82,17 @@ def test_newest_date_wins_per_location():
     rows = [fact("ULTA", "country:US", "United States", 1505, "2026-01-31"),
             fact("ULTA", "country:US", "United States", 1400, "2024-02-03")]
     assert service.resolve_store_locations(rows)["ULTA"]["United States"] == {
-        "count": 1505, "as_of": "2026-01-31"}
+        "count": 1505, "as_of": "2026-01-31", "years": {2026: 1505, 2024: 1400}}
+
+
+def test_a_comparative_count_lands_in_its_own_fiscal_year():
+    # A 10-K repeats last year's count; each date keeps its own year, and a
+    # year ending in the first week of January belongs to the year before.
+    rows = [fact("CRI", "country:CA", "Canada", 190, "2022-01-01"),
+            fact("CRI", "country:CA", "Canada", 185, "2022-12-31"),
+            fact("CRI", "country:CA", "Canada", 180, "2021-01-02")]
+    assert service.resolve_store_locations(rows)["CRI"]["Canada"]["years"] == {
+        2021: 190, 2022: 185, 2020: 180}
 
 
 def test_non_geographic_axes_are_ignored():
@@ -107,9 +117,13 @@ def test_locations_land_in_the_segment_hierarchy_groups():
 # ── filtering ────────────────────────────────────────────────────────────────
 
 LOCATIONS = {
-    "COST": {"United States": {"count": 552, "as_of": "2020-08-30"},
-             "France": {"count": 1, "as_of": "2020-08-30"}},
-    "ULTA": {"United States": {"count": 1505, "as_of": "2026-01-31"}},
+    "COST": {"United States": {"count": 552, "as_of": "2020-08-30", "years": {2019: 540, 2020: 552}},
+             "France": {"count": 1, "as_of": "2020-08-30", "years": {2020: 1}}},
+    "ULTA": {"United States": {"count": 1505, "as_of": "2026-01-31", "years": {2026: 1505}}},
+}
+HISTORY = {
+    "store_counts": {"COST": {2024: 890, 2025: 914}, "ULTA": {2023: 1355}},
+    "credit_ratings": {"KSS": {2025: "BBB-"}, "COST": {2025: "AA"}},
 }
 UNIVERSE = pd.DataFrame({"ticker": ["COST", "ULTA", "WMT"],
                          "company_name": ["Costco", "Ulta", "Walmart"]})
@@ -118,6 +132,7 @@ UNIVERSE = pd.DataFrame({"ticker": ["COST", "ULTA", "WMT"],
 @pytest.fixture
 def fake_data(monkeypatch):
     monkeypatch.setattr(service, "get_store_locations", lambda: LOCATIONS)
+    monkeypatch.setattr(service, "get_additional_history", lambda: HISTORY)
     monkeypatch.setattr(service, "get_base_company_universe", lambda: UNIVERSE.copy())
 
 
@@ -189,3 +204,82 @@ def test_additional_data_offers_only_store_count_and_credit_rating():
 
 def test_location_options_count_companies(fake_data):
     assert service.store_location_options() == [("United States", 2), ("France", 1)]
+
+
+# ── fiscal years ─────────────────────────────────────────────────────────────
+
+def history_row(id_, ticker, source, value, day, report_year=None):
+    from datetime import date
+    numeric = float(value) if source == "store_count" else 13.0
+    return {"id": id_, "ticker": ticker, "source": source, "value": str(value),
+            "numeric_value": numeric, "report_fiscal_year": report_year,
+            "period_instant": date.fromisoformat(day) if day else None}
+
+
+def test_history_years_come_from_the_values_own_date():
+    rows = [
+        # UAA files its 2020-12-31 count under report year 2021: it is FY 2020.
+        history_row(1, "UAA", "store_count", 439, "2020-12-31", 2021),
+        # A year ending in the first week of January is the year before.
+        history_row(2, "AAP", "store_count", 4806, "2021-01-02", 2021),
+        # No date: the filing's year stands.
+        history_row(3, "ZZ", "store_count", 12, None, 2019),
+    ]
+    out = service.resolve_additional_history(rows)["store_counts"]
+    assert out == {"UAA": {2020: 439}, "AAP": {2020: 4806}, "ZZ": {2019: 12}}
+
+
+def test_history_keeps_the_latest_value_rules_within_a_year():
+    rows = [
+        history_row(1, "AAP", "store_count", 5086, "2022-12-31"),
+        history_row(2, "AAP", "store_count", 5107, "2022-12-31"),   # same date: larger stands
+        history_row(3, "KSS", "credit_rating", "BBB-", "2025-03-20"),
+        history_row(4, "KSS", "credit_rating", "BB", "2025-03-20"),  # same filing: first-filed stands
+        history_row(5, "KSS", "credit_rating", "", "2024-03-21"),    # empty rating ignored
+    ]
+    out = service.resolve_additional_history(rows)
+    assert out["store_counts"] == {"AAP": {2022: 5107}}
+    assert out["credit_ratings"] == {"KSS": {2025: "BBB-"}}
+
+
+def test_store_count_year_range_is_one_column_per_year_and_data_only(fake_data):
+    crit = {"type": "additional", "data_type": "store_counts", "display_col": "Store Count",
+            "year_range": [2023, 2024, 2025]}
+    df, trace = service.recompute_working_set([crit])
+    assert crit["year_cols"] == ["Store Count [FY 2023]", "Store Count [FY 2024]",
+                                 "Store Count [FY 2025]"]
+    by = df.set_index("ticker")
+    assert sorted(by.index) == ["COST", "ULTA"]                # WMT: no data → not listed
+    assert by.loc["COST", "Store Count [FY 2025]"] == 914
+    assert pd.isna(by.loc["COST", "Store Count [FY 2023]"])    # shown blank, company stays
+    assert trace[0]["rows_out"] == 2
+
+
+def test_single_year_keeps_only_companies_with_that_year(fake_data):
+    crit = {"type": "additional", "data_type": "credit_ratings", "display_col": "Credit Rating",
+            "year": 2025}
+    df, _ = service.recompute_working_set([crit])
+    assert df.set_index("ticker")["Credit Rating [FY 2025]"].to_dict() == {"COST": "AA"}
+
+
+def test_latest_keeps_the_existing_single_column(monkeypatch, fake_data):
+    monkeypatch.setattr(service, "_fetch_additional_tickers", lambda tickers, src: {"COST"})
+    monkeypatch.setattr(service, "_fetch_additional_display_values",
+                        lambda tickers, dt: {"COST": "939"})
+    crit = {"type": "additional", "data_type": "store_counts", "display_col": "Store Count"}
+    df, _ = service.recompute_working_set([crit])
+    assert df.set_index("ticker")["Store Count"].to_dict() == {"COST": "939"}
+    assert "year_cols" not in crit
+
+
+def test_locations_by_year(fake_data):
+    crit = {"type": "additional", "data_type": "store_counts", "display_col": "Store Count",
+            "locations": ["United States", "France"], "year_range": [2019, 2020]}
+    out, _ = service.apply_additional_criterion(crit, UNIVERSE)
+    by = out.set_index("ticker")
+    assert crit["location_cols"] == [
+        "Store Count — United States [FY 2019]", "Store Count — United States [FY 2020]",
+        "Store Count — France [FY 2019]", "Store Count — France [FY 2020]"]
+    assert list(by.index) == ["COST"]                           # ULTA has no 2019-2020 count
+    assert by.loc["COST", "Store Count — United States [FY 2019]"] == 540
+    assert "Store Count As Of" not in out.columns               # the year is in the heading

@@ -44,6 +44,7 @@ from utils.ticker_utils import validate_and_get_ticker, DEFAULT_FALLBACK_TICKER
 from utils.media_url import serve_bytes, absolute_app_url, report_oversized_embed
 from utils.filing_units import (
     get_filing_units,
+    find_filing_by_accession,
     get_filing_unit_display_name,
     get_default_filing_unit,
     build_filing_blob_path,
@@ -3242,6 +3243,17 @@ def main():
     # e.g. "filing_106": one 8-K / 6-K inside the year (People Screening's
     # Management Changes links straight to the filing a change came from).
     _url_filing_unit = st.query_params.get("filing_unit", "")
+    # Or the SEC accession number, resolved to year + filing unit here.
+    _url_accession = st.query_params.get("accession", "")
+    if _url_accession and _url_ticker and _url_doc_type and not _url_filing_unit:
+        try:
+            _found = find_filing_by_accession(_url_ticker, _url_doc_type, _url_accession)
+        except Exception as _exc:
+            log_structured_error(_exc, page="company_filings", component="resolve_accession",
+                                 operation="find_filing_by_accession", context=_url_accession)
+            _found = None
+        if _found:
+            _url_year, _url_filing_unit = str(_found[0]), _found[1]
     _active_ticker = st.session_state.get("active_ticker", "")
 
 
