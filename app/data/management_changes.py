@@ -614,7 +614,7 @@ CHANGE_COLUMNS = [
     "ticker", "filing_date", "change", "event_type", "person", "title", "titles", "previous_title", "role",
     "is_board", "notice_date", "effective_date", "effective_note", "replaces", "replaced_by",
     "reason", "no_disagreement", "confidence", "age", "role_start", "role_end", "years_in_role",
-    "moved_from", "moved_from_title", "moved_from_date",
+    "moved_from", "moved_from_title", "moved_from_date", "offer_salary",
     "evidence", "source_ref", "event_id",
     "source", "also_reported",
 ]
@@ -696,6 +696,28 @@ def accession_of(source_ref: str) -> str:
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else ""
 
 
+_BASE_SALARY = re.compile(
+    r"base\s+salary\s+(?:of|at\s+an\s+annual\s+rate\s+of|will\s+be|is|equal\s+to)\s+"
+    r"(?:approximately\s+)?\$\s?(\d[\d,]*(?:\.\d+)?)(\s*million)?", re.I)
+
+
+def offer_salary(situation: str, person: str) -> float:
+    """The annual base salary an appointment 8-K states for this person ("will
+    receive an annual base salary of $850,000"), or NaN. The person's surname
+    must appear in the 600 characters before it — another executive's salary in
+    the same filing is not theirs."""
+    surname = re.escape((person or "").split()[-1].strip(".,")) if (person or "").split() else ""
+    if not surname:
+        return float("nan")
+    for m in _BASE_SALARY.finditer(situation or ""):
+        if re.search(rf"\b{surname}\b", situation[max(0, m.start() - 600):m.start()]):
+            value = float(m.group(1).replace(",", "")) * (1e6 if m.group(2) else 1)
+            # A figure outside $50k-$5m is a different number (a bonus pool, shares).
+            if 50_000 <= value <= 5_000_000:
+                return value
+    return float("nan")
+
+
 def is_company_not_person(person: str, company_word: str, situation: str) -> bool:
     """The filer's own name read as a person: "Lithia Motors", "Meta Platforms",
     "Honeywell Aerospace" (71 of 7,142 events, 2026-10-12). A real person in an
@@ -729,6 +751,8 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
             ticker = (r.get("ticker") or "").strip()
             e.update(ticker=ticker, filing_date=filed, source_ref=r.get("source_ref") or "",
                      event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
+            if e.get("change") == "Appointment":
+                e["offer_salary"] = offer_salary(r.get("situation") or "", e.get("person") or "")
             # The filing date is the announcement when the text gives none.
             e["notice_date"] = e.get("notice_date") or filed
             records.append(e)
@@ -802,11 +826,13 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
 # subject is the ticker's own company.
 
 def source_label(source: Optional[str]) -> str:
-    """'SEC EDGAR 8-K' -> 'SEC 8-K'; 'AV News — Business Wire' -> 'Business Wire'."""
+    """'SEC EDGAR 8-K' -> 'SEC 8-K'; 'AV News — Business Wire' -> 'AV News' (the
+    feed, not the outlet)."""
     text = (source or "").strip()
     if text.startswith("SEC EDGAR "):
         return "SEC " + text[len("SEC EDGAR "):]
-    return re.sub(r"^(?:AV|YF)\s+News\s*[—\-–]\s*", "", text) or text
+    feed = re.match(r"(AV|YF)\s+News\b", text)
+    return f"{feed.group(1)} News" if feed else text
 
 
 # Title Case headlines capitalise "To", "As", "Will": never part of a name.
@@ -1124,7 +1150,7 @@ def form3_changes(rows: pd.DataFrame) -> pd.DataFrame:
         "titles": title.map(lambda t: " | ".join(split_titles(t)) or t),
         "role": [_role_of(t, "") for t in title], "is_board": rows["is_director"] & ~rows["is_officer"],
         "notice_date": rows["became_insider"], "effective_date": rows["became_insider"],
-        "confidence": "High", "evidence": "Form 3: " + title, "source_ref": rows["url"].str.replace(".txt", "-index.htm"),
+        "confidence": "High", "evidence": "Form 3: " + title, "source_ref": rows["url"],
         "source": "SEC Form 3", "also_reported": "", "moved_from": "", "moved_from_title": "",
     }).reindex(columns=CHANGE_COLUMNS)
     return out
@@ -1169,6 +1195,8 @@ def _filings_and_news() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v10: news source is the feed ("AV News" / "YF News"), not the outlet;
+        #       offer_salary from the appointment 8-K (2026-10-16).
         # _v9: news titles from the article summary, departing executive the
         #      summary names added (Low confidence) (2026-10-16).
         # _v8: wider extraction (depart / leaving / ceased serving / re-election,
@@ -1181,7 +1209,7 @@ def _filings_and_news() -> pd.DataFrame:
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v9", _build_management_changes, sources,
+        "management_changes_v10", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

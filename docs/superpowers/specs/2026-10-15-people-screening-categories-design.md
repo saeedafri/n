@@ -786,3 +786,77 @@ On localhost:8504 (testing) and :8505 (STG copy):
 - Key Devs category search "Manage" returns nothing; "Govern" returns Governance and Proxy/Governance.
 - People 7 days: 51 changes / 41 companies, with no Sources caption.
 - No server tracebacks.
+
+## 14. Round 9 (2026-10-16): result-card cleanup, layoffs cleaned, names/titles, offer salary
+
+### 14.1 Management Changes card
+- Removed the Confidence, Also Reported By and Source Text columns.
+- Source for news is the feed: "AV News" / "YF News". `source_label` maps
+  "AV News — Business Wire" to "AV News"; the Layoffs card uses it too. Frame
+  bumped to `management_changes_v10`.
+- Form 3 Source Link opens the form itself, not the filing index:
+  `…/{accession}/xslF345{schemaVersion[:3]}/{first <FILENAME>}`, e.g.
+  `xslF345X06/wk-form3_1792013423.xml` (HTTP 200, text/html). Both pieces come
+  from the start of the submission .txt that is already read. Frame bumped to
+  `form3_appointments_v2`, so STG re-reads (~25 min, newest first, shown progressively).
+
+### 14.2 Executive Moves
+- Columns unchanged, plus **Offer Base Salary**: the annual base salary the
+  appointment 8-K states (`management_changes.offer_salary`). The person's
+  surname must appear in the 600 characters before it, and the value must be
+  between $50k and $5m.
+- Coverage on 97 moves: prior pay 51, new total pay 37 (the new company's proxy
+  lags a year: 1 of 13 for 2026 joiners); 18 of the 60 moves with no new pay state
+  a base salary in the 8-K.
+- No free source gives structured pay for non-NEO executives. Form 3/4 carry
+  holdings, not pay. edgartools' ProxyStatement XBRL has PEO total and
+  compensation actually paid and the NEO *average* only. The SEC proxy Summary
+  Compensation Table (`proxy_pay`) and 8-K offer terms are the free sources.
+
+### 14.3 Management Remuneration
+- **Year Born** column removed (Age stays).
+- **Company names:** 14 companies (BBXIB, GO, NGVC, MSS, FWDI, …) had a blank
+  Company because `name_coresight` is empty for them. The base universe now falls
+  back to `coreiq_companies.name` and the Key Devs SQL uses
+  `NULLIF(TRIM(c.name_coresight),'')`. Frames bumped to `screening_universe_v2` and
+  `screening_all_companies_universe_v2`; 0 blank names after the change.
+- **Titles:** 289 proxy rows had none. `fill_missing_titles` (on read) uses, in
+  order: the same person's title in another year at that company, then their
+  Form 3 officer title (or "Director"), else **"Named Executive Officer"** (a
+  proxy's pay table lists only NEOs). Result: 0 blank, 124 shown as NEO.
+- **Junk names:** proxy title lines read as names ("Famous Footwear", "Label and
+  Graphic", "and Accounting", "Jr.** Douglas", "Wholesale and Dist. Ops") are now
+  rejected by `is_person_name`. 25 rows dropped; `people_universe_v5`.
+
+### 14.4 Layoffs & Restructuring (`app/data/layoff_events.py`)
+Removed from Key Devs (`KEYDEV_CATEGORIES_ALL`); no saved screening used it.
+Last 30 days, same table Key Devs read: **209 rows / 124 companies → 34 events / 29 companies**.
+- Kept: every 8-K Item 2.05. News only when the headline reports a cut (jobs,
+  workforce, layoffs, plant/store/office closures, restructuring plan/charge) **and**
+  names the company it is filed under (distinctive name word, "P&G"-style
+  initials, an acronym of 3+ name words, or the ticker as a ticker).
+- Dropped:
+  - stories filed under the wrong company (Netflix under WBD/DIS/COIN, Kroger
+    under WMT/AMZN, Fair Isaac under CHRW);
+  - stock, analyst and debt-restructuring items;
+  - "avoid layoffs" stories;
+  - the same story under each listed line of one company (TFC, TFC-P-O).
+- Reports of one company's cut within 3 days fold into one row: the 8-K if there is
+  one, else the headline with numbers.
+- New columns: **Jobs**, **% of Workforce**, **Charges** (8-K text, e.g. Workday 2.5%,
+  $65M–$80M). An 8-K's headline is its first Item 2.05 sentence about the
+  action, skipping "Item 2.05 below/above" cross-references.
+- Frame `people_events_layoffs_restructuring_v2`.
+
+### 14.5 Verified
+On localhost:8504 (testing) and :8505 (STG copy):
+- Management Changes 30d: 285 / 201. Columns end with Source and Source Link;
+  sources are AV News and SEC Form 3 on the first page.
+- Moves: 93, with Offer Base Salary.
+- Remuneration: 3,918 executives / 455 companies; blank Company 0, blank Title 0;
+  no Year Born.
+- Layoffs 30d: 34 / 29, with Jobs / % of Workforce / Charges.
+- Key Devs category search "Layoff" and "Manage" return nothing.
+- No tracebacks.
+
+Tests: `tests/test_people_round9.py`. With the other People suites: 64 passed.

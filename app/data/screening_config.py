@@ -652,7 +652,7 @@ KEYDEV_CATEGORIES_ALL = {
     # ── Capital Returns ───────────────────────────────────────────────────────
     "Capital Returns":              "Capital Returns",
     # ── Distress / Restructuring ──────────────────────────────────────────────
-    "Layoffs & Restructuring":      "Layoffs & Restructuring",
+    # Layoffs & Restructuring moved to People -> Layoffs & Restructuring (2026-10-16).
     "Bankruptcy":                   "Bankruptcy",
     "Debt Default":                 "Debt Default",
     "Impairments":                  "Impairments",
@@ -818,7 +818,7 @@ PEOPLE_YEARS = list(range(_CURRENT_FY, 2012, -1))
 # published view does not say where a figure came from (manager, 2026-10-09).
 PEOPLE_DISPLAY_COLUMNS = [
     "Company", "Ticker", "Executive Name", "Title", "Role",
-    "Industry", "Country of Incorporation", "Age", "Year Born",
+    "Industry", "Country of Incorporation", "Age",
 ]
 
 # Metrics shown when a People criterion names none — the headline pay figure

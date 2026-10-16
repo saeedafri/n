@@ -265,7 +265,9 @@ def get_base_company_universe() -> pd.DataFrame:
         company_rows = CompanyRepository.get_companies_rows()
         rows = []
         for c in company_rows:
-            raw_name = c.get("name_coresight") or ""
+            # name_coresight is blank for 14 companies (BBXIB, GO, NGVC, ...;
+            # 2026-10-16): the SEC name then, never an empty Company cell.
+            raw_name = (c.get("name_coresight") or "").strip() or c.get("name") or ""
             rows.append({
                 "ticker":       c["ticker"],
                 "company_name": _format_company_name(raw_name),
@@ -298,7 +300,8 @@ def get_base_company_universe() -> pd.DataFrame:
         "signal": ("SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight, "
                    "country_of_incorporation, exchange, exchange_acronym, name_coresight)))"),
     }]
-    return materialized_or_build("screening_universe", _build_universe, _sources,
+    # _v2: blank name_coresight falls back to coreiq_companies.name (2026-10-16).
+    return materialized_or_build("screening_universe_v2", _build_universe, _sources,
                                  clear=lambda: get_all_companies_universe.clear())
 
 
@@ -455,7 +458,8 @@ def get_all_companies_universe() -> pd.DataFrame:
          "signal": "SUM(CRC32(CONCAT_WS('|', ticker, primary_industry_coresight)))"},
     ]
     try:
-        return materialized_or_build("screening_all_companies_universe", _build, _sources, clear=lambda: get_all_companies_universe.clear())
+        # _v2: built on screening_universe_v2 (company names never blank) (2026-10-16).
+        return materialized_or_build("screening_all_companies_universe_v2", _build, _sources, clear=lambda: get_all_companies_universe.clear())
     except Exception as exc:
         log_error(f"[SCREENING] get_all_companies_universe failed: {exc}")
         return get_base_company_universe()
@@ -4531,7 +4535,7 @@ _KEYDEV_COMPANY_JOINS = f"""
 # all-history: the three Coresight sources label 21,067 of 21,346 rows (98.7%),
 # and AV would recover only 84 of the 279 that stay blank.
 _KEYDEV_COMPANY_COLS = f"""
-            COALESCE(c.name_coresight, {_AV_COMPANY_NAME}, sc.name) AS company_name,
+            COALESCE(NULLIF(TRIM(c.name_coresight), ''), {_AV_COMPANY_NAME}, sc.name, c.name) AS company_name,
             COALESCE(c.exchange_acronym, av.exchange)               AS exchange_acronym,
             COALESCE(c.primary_industry_coresight,
                      sc.primary_industry_coresight,

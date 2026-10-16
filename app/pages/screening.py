@@ -6869,14 +6869,14 @@ def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
     """Label and format the year-column People grid (people_service.pivot_people_years)."""
     out = grid.rename(columns={
         "ticker": "Ticker", "executive_name": "Executive Name", "title": "Title",
-        "role": "Role", "age": "Age", "year_born": "Year Born",
+        "role": "Role", "age": "Age",
     })
     if "Role" in out.columns:
         out["Role"] = role_bucket(out["Role"])
     year_cols = [c for c in out.columns if str(c).isdigit()]
     for col in year_cols:
         out[col] = out[col].apply(lambda v: f"${v:,.0f}" if pd.notna(v) else "")
-    for col in ("Age", "Year Born"):
+    for col in ("Age",):
         if col in out.columns:
             out[col] = out[col].apply(lambda v: "" if pd.isna(v) else str(int(v)))
     for col in ("Company", "Ticker", "Executive Name", "Title", "Role", "Industry",
@@ -7180,10 +7180,16 @@ def _render_people_events(category: str, tickers_in_scope: Optional[set], people
             "Date":        df["event_date"].dt.strftime("%Y-%m-%d").fillna(""),
             "Type":        df["event_subtype"].astype(str),
             "Headline":    df["headline"].fillna(""),
+            # Stated in the filing or headline (data.layoff_events); blank otherwise.
+            "Jobs":        df.get("jobs", pd.Series("", index=df.index)).fillna(""),
+            "% of Workforce": df.get("workforce_pct", pd.Series("", index=df.index)).fillna(""),
+            "Charges":     df.get("charges", pd.Series("", index=df.index)).fillna(""),
             "Source":      df["source"].map(source_label),
             "Source Link": [_source_link(t, src, ref) for t, src, ref in
                             zip(df["ticker"], df["source"].map(source_label), df["source_ref"])],
         })
+        display = display[[c for c in display.columns
+                           if c not in ("Jobs", "% of Workforce", "Charges") or display[c].ne("").any()]]
         _render_results_header(
             f"<strong>{len(display)}</strong> events across "
             f"<strong>{display['Ticker'].nunique()}</strong> companies",
@@ -7205,9 +7211,8 @@ def _render_people_events(category: str, tickers_in_scope: Optional[set], people
 
 def _render_management_changes(tickers_in_scope: Optional[set], people_criteria: List[dict],
                                company_meta: pd.DataFrame) -> None:
-    """Appointments and departures read from 8-K Item 5.02 for the companies and
-    people in scope. Everything is shown: board seats, every confidence tier, the
-    source sentence, and a link to the filing on our Company Filings page.
+    """Appointments and departures (8-K Item 5.02, 6-K, Form 3, executive news)
+    for the companies and people in scope, with a link to each source.
     """
     try:
         t0 = time.perf_counter()
@@ -7254,12 +7259,9 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
                 out["role_end"].notna(),
                 out["role_start"].notna().map({True: "present", False: ""})),
             "Years in Role":    out["years_in_role"].map(lambda v: "" if pd.isna(v) else f"{v:.1f}"),
-            "Confidence":       out["confidence"].astype(str),
             "Source":           out["source"].fillna("").astype(str),
-            "Also Reported By": out["also_reported"].fillna("").astype(str),
-            "Source Text":      out["evidence"],
-            # 8-K: our Company Filings page. 6-K and news are not on it, so the
-            # filing on sec.gov or the article itself.
+            # 8-K: our Company Filings page. 6-K, Form 3 (its rendered page) and
+            # news are not on it, so the filing on sec.gov or the article itself.
             "Source Link":      [_source_link(t, src, ref) for t, src, ref in
                                  zip(out["ticker"], out["source"].astype(str), out["source_ref"])],
         })
@@ -7283,7 +7285,7 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             pinned_column="Executive Name",
             link_columns=["Source Link"] if "Source Link" in display.columns else None,
             filter_domains=_full_domains(display, ("Change", "Event", "Role", "Company",
-                                                   "Confidence", "Source")),
+                                                   "Source")),
         )
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_management_changes",
@@ -7337,6 +7339,9 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
             "Prior Pay Year":   moves["prior_pay_year"].map(year),
             "New Total Pay":    moves["new_pay"].map(money),
             "New Pay Year":     moves["new_pay_year"].map(year),
+            # The appointment 8-K's stated base salary: there a year before the
+            # new company's proxy shows total pay.
+            "Offer Base Salary": moves["offer_salary"].map(money) if "offer_salary" in moves else "",
             "Pay Change %":     moves["pay_change_pct"].map(lambda v: "" if pd.isna(v) else f"{v:+.1f}%"),
         }).sort_values("Joined", ascending=False)
         _render_results_header(f"<strong>{len(display)}</strong> executive moves",
@@ -7347,7 +7352,8 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
                                         filter_domains=_full_domains(display, ("Role",)))
         st.caption("Pay is total compensation for the latest year disclosed at the old "
                    "company and the first year disclosed at the new one; blank where "
-                   "that company's pay is not on file.")
+                   "that company's pay is not on file. Offer Base Salary is the salary the "
+                   "new company's appointment 8-K states.")
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_executive_moves",
                              operation="render_executive_moves")

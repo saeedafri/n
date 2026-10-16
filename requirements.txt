@@ -23,11 +23,12 @@ numpy>=2.4.0
 plotly>=6.5.0
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Database (REQUIRED)
+# Database & Analytical Engine (REQUIRED)
 # ───────────────────────────────────────────────────────────────────────────────
 sqlalchemy>=2.0.46
 pymysql>=1.1.0
 cryptography>=46.0.0  # Required for MySQL SSL connections
+duckdb>=1.1.0  # In-process columnar analytics for sub-15ms calculations
 
 # ───────────────────────────────────────────────────────────────────────────────
 # SEC Filing Processing (REQUIRED)

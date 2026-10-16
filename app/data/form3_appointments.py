@@ -39,7 +39,8 @@ except Exception:  # pragma: no cover
     def log_structured_error(exc, **kwargs): pass
     def log_timing(*a, **kw): pass
 
-FRAME_NAME = "form3_appointments_v1"
+# _v2: `url` is the rendered Form 3 page, not the .txt submission (2026-10-16).
+FRAME_NAME = "form3_appointments_v2"
 # ponytail: fixed start (~5.5k filings a year for our issuers, ~0.15 s each on
 # the first run, newest first); move it back if older appointments are wanted.
 FORM3_SINCE = "2025-01-01"
@@ -74,6 +75,18 @@ def clean_officer_title(title: str, remarks: str = "") -> str:
 
 def filing_url(cik, accession: str) -> str:
     return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/{accession}.txt"
+
+
+def form_url(submission_url: str, head: str) -> str:
+    """The Form 3 as SEC renders it ("…/xslF345X06/form3.xml"), from the
+    submission's first <FILENAME> and the XML's schemaVersion (X0607 -> X06);
+    the filing index page when either is missing."""
+    name = re.search(r"<FILENAME>\s*(\S+\.xml)", head, re.I)
+    schema = re.search(r"<schemaVersion>\s*(X\d\d)", head)
+    base = submission_url.rsplit("/", 1)[0]
+    if name and schema:
+        return f"{base}/xslF345{schema.group(1)}/{name.group(1)}"
+    return submission_url.replace(".txt", "-index.htm")
 
 
 def _flag(node, tag: str) -> bool:
@@ -191,7 +204,7 @@ def refresh_form3(limit: Optional[int] = None, save_every: int = 100, on_save=No
                     if b"</ownershipDocument>" in text:
                         break
             text = text.decode("utf-8", "replace")
-            return item, url, text[text.find("<ownershipDocument"):text.find("</ownershipDocument>") + 20]
+            return item, form_url(url, text), text[text.find("<ownershipDocument"):text.find("</ownershipDocument>") + 20]
         except Exception as exc:
             return item, url, exc
 

@@ -637,8 +637,8 @@ if os.getenv("WARM_ON_BOOT", "1").strip().lower() in ("1", "true", "yes", "on") 
         def _warm_screening_universes() -> None:
             import data.screening_service as _svc
             for _name, _fn in (
-                ("screening_universe", "get_base_company_universe"),
-                ("screening_all_companies_universe", "get_all_companies_universe"),
+                ("screening_universe_v2", "get_base_company_universe"),
+                ("screening_all_companies_universe_v2", "get_all_companies_universe"),
             ):
                 try:
                     _t = perf_counter()

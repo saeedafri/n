@@ -720,13 +720,18 @@ def parse_transcript(transcript_text: str, cache_version: int = 3) -> List[Dict]
         return []
 
 
-def _highlight_keyword(text: str, keyword: str) -> str:
-    """Wrap keyword matches with <mark> tags — highlights each word individually for multi-word queries."""
+def _highlight_keyword(text: str, keyword: str, expanded_terms: Optional[List[str]] = None) -> str:
+    """Wrap keyword matches with <mark> tags — highlights each word individually for multi-word queries and domain synonyms."""
     try:
         if not keyword or not keyword.strip():
             return text
         # Split into individual words and highlight each
         words = keyword.strip().split()
+        if expanded_terms:
+            for term in expanded_terms:
+                if term and len(term) >= 3:
+                    words.append(term)
+        words = list(dict.fromkeys(words))
         result = text
         for word in words:
             if word.strip():
@@ -1565,6 +1570,13 @@ def _get_cross_search_results(
     kw_lower = keyword.lower()
     parsed_count = 0
 
+    from core.smart_search import SmartQueryExpander
+    expander = SmartQueryExpander()
+    exp_res = expander.expand_query(keyword)
+    candidate_terms = [kw_lower] + [t.lower() for t in exp_res.get("expanded_terms", [])]
+    candidate_terms.extend([c.lower() for c in exp_res.get("fuzzy_corrections", {}).values()])
+    candidate_terms = list(dict.fromkeys(t for t in candidate_terms if len(t) >= 3))
+
     for row in raw_rows:
         transcript_text = row.get('transcript_text', '') or ''
         if not transcript_text:
@@ -1574,10 +1586,17 @@ def _get_cross_search_results(
         parsed_count += 1
 
         for i, seg in enumerate(segments):
-            if kw_lower in seg['text'].lower():
-                idx = seg['text'].lower().find(kw_lower)
+            text_lower = seg['text'].lower()
+            matched_term = None
+            for term in candidate_terms:
+                if term in text_lower:
+                    matched_term = term
+                    break
+
+            if matched_term:
+                idx = text_lower.find(matched_term)
                 start = max(0, idx - 40)
-                end = min(len(seg['text']), idx + len(keyword) + 40)
+                end = min(len(seg['text']), idx + len(matched_term) + 40)
                 snippet = seg['text'][start:end]
                 if start > 0:
                     snippet = '...' + snippet
@@ -2552,8 +2571,10 @@ def render_earnings_calls(active_ticker: str = None):
                         )
                         # Excel export button/download is rendered BELOW this box
                         # (see "EXCEL EXPORT — below the box" block after the container).
+                        from core.smart_search import expand_synonyms
+                        _cs_syns = expand_synonyms(active_keyword)
                         for r in cross_results:
-                            highlighted_snippet = _highlight_keyword(r['snippet'], active_keyword)
+                            highlighted_snippet = _highlight_keyword(r['snippet'], active_keyword, expanded_terms=_cs_syns)
                             view_url = (
                                 f"/earnings_calls?ticker={r['ticker']}"
                                 f"&year={r['year']}&quarter={r['quarter']}"
@@ -2647,34 +2668,30 @@ def render_earnings_calls(active_ticker: str = None):
                     )
 
             elif active_keyword and segments:
-                # ── SINGLE-TRANSCRIPT SEARCH MODE ──
+                # ── SINGLE-TRANSCRIPT SEARCH MODE WITH SMART SEARCH (SYNONYMS + FUZZY) ──
+                from core.search_engine import TranscriptSearchEngine
+                engine = TranscriptSearchEngine(segments)
+                search_results = engine.search(active_keyword, top_k=50)
                 matches = []
-                for i, seg in enumerate(segments):
-                    if active_keyword.lower() in seg['text'].lower():
-                        idx = seg['text'].lower().find(active_keyword.lower())
-                        start = max(0, idx - 40)
-                        end = min(len(seg['text']), idx + len(active_keyword) + 40)
-                        snippet = seg['text'][start:end]
-                        if start > 0:
-                            snippet = '...' + snippet
-                        if end < len(seg['text']):
-                            snippet = snippet + '...'
-                        matches.append({
-                            'ticker': company,
-                            'year': str(year),
-                            'quarter': quarter,
-                            'speaker': seg['speaker'],
-                            'snippet': snippet,
-                            'paragraph': seg['text'],
-                            'index': i,
-                        })
+                for res in search_results:
+                    matches.append({
+                        'ticker': company,
+                        'year': str(year),
+                        'quarter': quarter,
+                        'speaker': res.speaker,
+                        'snippet': res.snippet,
+                        'paragraph': res.text,
+                        'index': res.index,
+                    })
 
                 if matches:
                     _single_matches = matches
                     st.markdown(f'<div class="transcript-search-count">Found {len(matches)} match{"es" if len(matches) != 1 else ""} for "<b>{active_keyword}</b>"</div>', unsafe_allow_html=True)
                     # Excel export is rendered BELOW this box (after the container).
+                    _expansion = engine.expander.expand_query(active_keyword) if engine.expander else None
+                    _exp_terms = _expansion.get("expanded_terms", []) if _expansion else []
                     for m in matches[:30]:
-                        highlighted_snippet = _highlight_keyword(m['snippet'], active_keyword)
+                        highlighted_snippet = _highlight_keyword(m['snippet'], active_keyword, expanded_terms=_exp_terms)
                         card_html = f'''
                         <div class="transcript-search-result-card">
                             <div class="transcript-search-speaker">{m['speaker']}</div>

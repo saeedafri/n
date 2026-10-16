@@ -124,14 +124,20 @@ def clean_person_name(name):
 
 # Business-unit labels the proxy extractor read as a name ("Consumer Brands",
 # "Anthropologie Group", "Abercrombie & Fitch/ abercrombie kids").
+# "Famous Footwear", "Label and Graphic", "Wholesale and Dist. Ops", "and
+# Accounting", "Jr.** Douglas" (proxy title lines, 2026-10-16).
 _NOT_PERSON_WORDS = {"brands", "group", "systems", "kids", "stores", "division", "segment",
-                     "consumer", "international", "retail", "corporate"}
+                     "consumer", "international", "retail", "corporate", "markets", "services",
+                     "coatings", "projects", "footwear", "graphic", "wholesale", "ops", "dist",
+                     "accounting", "materials", "operations", "solutions", "products", "and"}
+_NAME_SUFFIX_FIRST = re.compile(r"^(?:jr|sr|ii|iii|iv)\b", re.I)
 
 
 def is_person_name(name: str) -> bool:
     """False for a cleaned "name" that is a business unit, not a person."""
     tokens = (name or "").split()
-    return (len(tokens) >= 2 and "&" not in name and "/" not in name
+    return (len(tokens) >= 2 and not any(c in name for c in "&/*")
+            and not _NAME_SUFFIX_FIRST.match(name)
             and not any(t.lower().strip(".,") in _NOT_PERSON_WORDS for t in tokens))
 
 
@@ -734,6 +740,38 @@ def _proxy_records(proxy: pd.DataFrame) -> List[dict]:
     return out
 
 
+NAMED_EXECUTIVE = "Named Executive Officer"
+
+
+def fill_missing_titles(df: pd.DataFrame, form3: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """A blank title (289 proxy rows, 2026-10-16) takes, in order: the same
+    person's title in another year at that company; their Form 3 officer title
+    (or "Director"); else "Named Executive Officer" — a proxy's pay table lists
+    only named executive officers, so that much is always true."""
+    blank = df["title"].fillna("").str.strip().eq("")
+    if not blank.any():
+        return df
+    if form3 is None:
+        from data.form3_appointments import read_form3
+        form3 = read_form3()
+    keys = list(zip(df["ticker"].astype(str), df["executive_name"].map(person_key)))
+    known = {}
+    for k, t in sorted(zip(keys, df["title"].fillna("")), key=lambda kt: kt[1] == ""):
+        if t.strip():
+            known.setdefault(k, t)
+    if form3 is not None and len(form3):
+        for t, p, title in zip(form3["ticker"].astype(str), form3["person"].map(person_key),
+                               form3["title"].where(form3["title"].astype(bool), "Director")):
+            known.setdefault((t, p), title)
+    df = df.copy()
+    filled = [known.get(k, NAMED_EXECUTIVE) for k, b in zip(keys, blank) if b]
+    df.loc[blank, "title"] = filled
+    roles = df["role"].astype(object)
+    roles.loc[blank] = [classify_role(t) for t in filled]
+    df["role"] = roles.astype("category")
+    return df
+
+
 def add_proxy_pay(universe: pd.DataFrame) -> pd.DataFrame:
     """Add the proxy_pay rows for company-years coreiq_executives_compensation lacks.
 
@@ -859,12 +897,13 @@ def get_people_universe() -> pd.DataFrame:
         # is keyed on the source tables only, so without a new name a deploy
         # would keep serving the old snapshot.
         # _v4: business-unit "names" dropped, footnote-before-title fix (2026-10-12).
-        "people_universe_v4", _build_people_universe, sources,
+        # _v5: more title lines read as names dropped ("Famous Footwear") (2026-10-16).
+        "people_universe_v5", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
     # Merged on read, not stored: proxy_pay grows in the background and clears
     # this cache when it does (cache_manager._warm_people_screening).
-    return add_proxy_pay(universe)
+    return fill_missing_titles(add_proxy_pay(universe))
 
 
 # =============================================================================
@@ -1042,15 +1081,23 @@ def _build_people_events(category: str) -> pd.DataFrame:
     event_category, subtypes = PEOPLE_EVENT_CATEGORIES[category]
     names = ", ".join(f":s{i}" for i in range(len(subtypes)))
     # Raises: a timeout read as "no events" would be materialized and served.
+    # The item text only for filings (~270 rows): news `situation` is a summary
+    # nothing here reads.
     rows = db_manager.execute_query_readonly_raising(f"""
-        SELECT ticker, event_date, event_subtype, headline, source, source_ref
+        SELECT ticker, event_date, event_subtype, headline, source, source_ref,
+               CASE WHEN source LIKE 'SEC%%' THEN situation END AS situation
         FROM coreiq_company_events
         WHERE is_active = 1 AND event_category = :category AND event_subtype IN ({names})
     """, {"category": event_category, **{f"s{i}": v for i, v in enumerate(subtypes)}})
     df = pd.DataFrame(rows, columns=["ticker", "event_date", "event_subtype", "headline",
-                                     "source", "source_ref"])
+                                     "source", "source_ref", "situation"])
     df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce")
-    return df.sort_values("event_date", ascending=False, ignore_index=True)
+    if category == "layoffs_restructuring":
+        from data.layoff_events import clean_layoff_events
+        from data.screening_service import get_all_companies_universe
+        wide = get_all_companies_universe()
+        df = clean_layoff_events(df, dict(zip(wide["ticker"].astype(str), wide["company_name"].astype(str))))
+    return df.drop(columns="situation").sort_values("event_date", ascending=False, ignore_index=True)
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
@@ -1062,7 +1109,8 @@ def get_people_events(category: str) -> pd.DataFrame:
     event_category, _ = PEOPLE_EVENT_CATEGORIES[category]
     sources = [{"table": "coreiq_company_events", "signal": "MAX(event_id)",
                 "where": f"event_category = '{event_category}'"}]
-    return materialized_or_build(f"people_events_{category}_v1",
+    # _v2: layoffs filtered, attributed and folded (data.layoff_events) (2026-10-16).
+    return materialized_or_build(f"people_events_{category}_v2",
                                  lambda: _build_people_events(category), sources,
                                  clear=lambda: get_people_events.clear())
 
