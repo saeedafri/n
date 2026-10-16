@@ -1086,7 +1086,9 @@ def period_mask(dates: pd.Series, criterion: dict, today=None) -> pd.Series:
     days = criterion.get("days")
     if days is None:
         return pd.Series(True, index=dates.index)
-    today = pd.Timestamp(today or pd.Timestamp.now().date())
+    # UTC, as the database's CURDATE() that Key Devs filters with: the local
+    # (IST) date runs ahead and dropped a day that Key Devs still shows.
+    today = pd.Timestamp(today or pd.Timestamp.now(tz="UTC").date())
     return (dates >= today - pd.Timedelta(days=int(days))).fillna(False).astype(bool)
 
 

@@ -320,6 +320,22 @@ def test_news_filed_under_the_former_employer():
     df = build_news_changes(rows, names)
     assert list(zip(df["ticker"], df["person"])) == [("FIVE", "Scott Settersten")]
 
+
+def test_news_summary_gives_title_and_who_is_leaving():
+    """HSY 2026-10-01: the headline says "president", the summary says who left."""
+    from data.management_changes import enrich_from_summary
+    found = [{"person": "Amanda Almond", "change": "Appointment", "title": "president",
+              "confidence": "Medium", "event_type": "Appointment", "evidence": "h"}]
+    out = enrich_from_summary(found, "The Hershey Co. has appointed Amanda Almond as its new "
+                              "international president, effective October 12. She succeeds Rohit "
+                              "Grover, who is departing after 27 years with the company. Sentiment: Neutral")
+    assert out[0]["replaces"] == "Rohit Grover"
+    assert ("Rohit Grover", "Departure", "Low") in [(e["person"], e["change"], e["confidence"]) for e in out]
+    tdy = [{"person": "Mary Grace DeForest", "change": "Appointment", "confidence": "Medium",
+            "title": "VP of Investor Relations and M&A as Jason VanWees Plans Retirement",
+            "event_type": "Appointment", "evidence": "h"}]
+    assert enrich_from_summary(tdy, "")[0]["title"] == "VP of Investor Relations and M&A"
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

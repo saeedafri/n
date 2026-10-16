@@ -635,3 +635,43 @@ including Management Changes All History (8,002 rows).
 `app/data/screening_service.py`, `app/pages/screening.py`, `app/utils/cache_manager.py`, tests in
 `app/data/test_management_changes.py`, `app/data/test_people_service.py`,
 `tests/test_screening_keydevs_columns.py`.
+
+## 11. Round 6 (2026-10-16): the 14 Key Devs events, news formatting, edgartools
+
+Key Devs "Management Changes / Last 7 Days" = 14 stored events (window from the DB's
+CURDATE(), UTC). Each one:
+
+| Event | People |
+|---|---|
+| ADSK — Autodesk names Diana Colella EVP of AEC business (news) | Listed; succeeds Amy Bunszel |
+| AVY — Helen Sheirbon, president Solutions Group (news) | Listed |
+| HRL — Holly LaVallie, VP marketing (news) | Listed |
+| ADM ×2 — "RPM International appoints Jeffrey Rowe to board" | Listed under RPM (the appointing company) |
+| AAPL ×3 — Steve Smith new M&A chief | One row (3 outlets); succeeds Adrian Perica; plus Jennifer Bailey retiring (Low) |
+| QCOM — Lumenci (private) appoints former Qualcomm president to advisory board | Not a Qualcomm change |
+| CLX — "Clorox Announces November 2 Webcast of First-Quarter … Results" | Not a people change (feed mis-tag) |
+| DPZ — earnings preview | Not a people change |
+| PG — "Insider trades: P&G, Marvell, TSMC" | Insider sale, not a change |
+| TSLA — FSD renamed in Europe | Not a people change |
+| NONOF — Novo Nordisk 6-K | Stored text is the cover page only |
+
+Fixes this round:
+* People's period used the local (IST) date, Key Devs the DB's UTC CURDATE(); after
+  ~18:30 UTC People's 7-day window dropped a day (Apple, Oct 8). `period_mask` now uses UTC.
+* News rows never set `titles`, which the grid shows, so the Title(s) column was blank
+  (and dropped) for every news change.
+* `enrich_from_summary`: the article summary supplies a fuller title when it says at
+  least as much ("EVP and CFO" → spelled out; never "EVP of AEC Business" → "EVP"),
+  "succeeding/replacing X" fills Succeeds (same sentence only), and a departing person
+  the summary names is added at Low confidence (125 across 2,854 news items; ~12/14
+  correct on a sample). Titles cut at "… as X Plans Retirement" / "to succeed X".
+  Folding keeps a successor named by any outlet. Frame `management_changes_v9`.
+* Criterion card printed a raw `<details …>` tag (multi-line HTML + empty count line =
+  Markdown code block); the card HTML is now collapsed to one line.
+
+edgartools (5.16, pinned, free): `filing.obj()` on an 8-K gives `items` and the item
+text (`report["Item 5.02"]`) and press releases — text, not structured people. Form 3
+(`company.get_filings(form="3")`) is structured: the insider's name, and position
+("EVP, Chief Financial Officer", "Director") for every new Section 16 officer and
+director. Autodesk's Diana Colella has no 8-K 5.02 and no Form 3 (not a Section 16
+officer), so news is her only source. Form 3 is the candidate next source (not built).

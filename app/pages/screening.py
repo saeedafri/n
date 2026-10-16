@@ -5906,6 +5906,9 @@ def _render_active_criteria():
                 </div>
                 """
             ).strip()
+            # ONE line: an indented line after a blank one (e.g. empty count_html)
+            # is a Markdown code block, which printed the raw <details> tag.
+            card_html = re.sub(r"\n\s*", "", card_html)
             with st.container():
                 st.markdown(card_html, unsafe_allow_html=True)
 

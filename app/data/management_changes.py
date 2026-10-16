@@ -148,6 +148,7 @@ management finance inventory operations marketing sales merchandising strategy t
 chain place stores brands foods retail products services partners capital digital commercial
 banking segment division business americas asia pacific emerging markets consumer global
 news release immediate about industry leader veteran insider exec tech yes no takes temporary medical leave companies
+strategic projects
 """.split())
 _NAME_WORD = r"[A-ZÀ-ÖØ-Þ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+"
 _NAME = re.compile(
@@ -942,6 +943,57 @@ def parse_news(headline: str, summary: str, company: str) -> List[dict]:
     return []
 
 
+_SUMMARY_TAIL = re.compile(r"\s*(?:Sentiment|Publisher|YF Topic):.*$", re.S)
+# "VP of Investor Relations and M&A as Jason VanWees Plans Retirement"
+_TITLE_AS_CLAUSE = re.compile(r"\s+as\s+(?:[A-Z][\w.’'\-]+\s+){1,3}(?:Plans|Retires|Steps|Departs|Exits|Leaves)\b.*$"
+                              r"|\s+(?:to\s+)?succeed\w*\b.*$", re.I)
+
+
+def enrich_from_summary(found: List[dict], summary: str, company: str = "") -> List[dict]:
+    """The headline gives who and what; the article summary is a full sentence.
+    Take the summary's title for the same person when it reads one, and add the
+    person it says is leaving ("succeeds Rohit Grover, who is departing")."""
+    events = extract_events(_SUMMARY_TAIL.sub("", summary or ""))
+    keys = {person_key(e["person"]) for e in found}
+    for e in found:
+        named = re.search(r"\bsucceed\w*\s+([A-Z][\w’'\-]+\s+[A-Z][\w’'\-]+)", e.get("title") or "")
+        if named and _is_name(named.group(1)):
+            e["replaces"] = named.group(1)          # "CEO to succeed Ynon Kreiz"
+        e["title"] = _TITLE_AS_CLAUSE.sub("", e.get("title") or "")
+        same = next((x for x in events if person_key(x["person"]) == person_key(e["person"])
+                     and x["change"] == e["change"] and x.get("title")), None)
+        fuller = re.sub(r",?\s+and\s+[A-Z][a-z]+\s+[A-Z][a-z]+$", "",   # "…, and Ann Reed"
+                        same["title"]) if same else ""
+        # The summary's title wins only when it says at least as much: "EVP and
+        # CFO" -> spelled out, but never "EVP of AEC Business" -> "EVP".
+        if fuller and _N_ROLE.search(fuller) and len(fuller.split()) >= len(e["title"].split()):
+            e["title"] = fuller
+        # Only in a sentence that names this person: "succeeding Amy Bunszel".
+        surname = re.escape(e["person"].split()[-1])
+        said = next((x for x in split_sentences(_SUMMARY_TAIL.sub("", summary or ""))
+                     if re.search(rf"\b{surname}\b", x)), "")
+        succeeds = re.search(r"\b(?:succeed(?:s|ing)?|replac(?:es|ing))\s+(?:(?:Mr|Ms|Dr)\.?\s+)?([A-Z][\w’'\-]+(?:\s+[A-Z]\.)?\s+[A-Z][\w’'\-]+)",
+                             said)
+        if e["change"] == "Appointment" and succeeds and _is_name(succeeds.group(1)) \
+                and person_key(succeeds.group(1)) != person_key(e["person"]):
+            e["replaces"] = succeeds.group(1)
+    # "Apple Pay" is not a person: no word of the company's own name.
+    own = {w.lower().strip("'’s") for w in short_name(company).split()}
+    leaving = [x for x in events if x["change"] == "Departure" and x.get("person")
+               and _is_name(x["person"]) and person_key(x["person"]) not in keys
+               and not own & {w.lower().strip("'’s") for w in x["person"].split()}]
+    for x in leaving:
+        for e in found:
+            if e["change"] == "Appointment" and re.search(
+                    rf"\b(?:succe\w+|replac\w+)\s+(?:\w+\s+){{0,3}}{re.escape(x['person'].split()[-1])}\b",
+                    x.get("evidence") or "", re.I):
+                e["replaces"] = x["person"]
+        found.append({"person": x["person"], "change": "Departure", "title": x.get("title") or "",
+                      "confidence": "Low", "event_type": x.get("event_type") or "Departure",
+                      "evidence": x.get("evidence") or ""})
+    return found
+
+
 def build_news_changes(rows: List[dict], names: Dict[str, str]) -> pd.DataFrame:
     """One row per change a news item reports; several outlets reporting the
     same change within 30 days collapse into the first, the rest listed."""
@@ -956,7 +1008,11 @@ def build_news_changes(rows: List[dict], names: Dict[str, str]) -> pd.DataFrame:
             if other and other != ticker:
                 ticker = other
                 found = parse_news(r.get("headline") or "", r.get("situation") or "", names[other])
+        if found:
+            found = enrich_from_summary(found, r.get("situation") or "", names.get(ticker, ""))
         for e in found:
+            # The grid shows `titles`; news rows only ever set `title`.
+            e["titles"] = " | ".join(split_titles(e["title"])) or e["title"]
             e.update(ticker=ticker, filing_date=when, notice_date=when, role=_role_of(e["title"], e["evidence"]),
                      is_board=_is_board(e["title"], e["evidence"]), source_ref=r.get("source_ref") or "",
                      event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
@@ -990,6 +1046,10 @@ def _fold_repeats(df: pd.DataFrame, primary: Optional[pd.DataFrame] = None, days
             keep_rows.append(i)
         else:
             extra.setdefault(match, []).append(row["source"])
+            # Another outlet may name who was replaced when the kept one did not.
+            have, other = home.at[match, "replaces"], row["replaces"]
+            if (pd.isna(have) or not str(have).strip()) and pd.notna(other) and str(other).strip():
+                home.at[match, "replaces"] = other
     for j, sources in extra.items():
         home = primary if primary is not None else df
         prior = [s for s in str(home.at[j, "also_reported"] or "").split(", ") if s]
@@ -1058,6 +1118,8 @@ def get_management_changes() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v9: news titles from the article summary, departing executive the
+        #      summary names added (Low confidence) (2026-10-16).
         # _v8: wider extraction (depart / leaving / ceased serving / re-election,
         #      accented names), news for every ticker, appointments re-filed
         #      under the appointing company (2026-10-16).
@@ -1068,7 +1130,7 @@ def get_management_changes() -> pd.DataFrame:
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v8", _build_management_changes, sources,
+        "management_changes_v9", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 
