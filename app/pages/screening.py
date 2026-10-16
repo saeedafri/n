@@ -619,9 +619,9 @@ hide_sidebar()
 _SCREEN_FOR_OPTIONS = [
     "Companies",
     "Key Devs",
+    "People",
     "Equities",
     "Fixed Income",
-    "People",
     "Transactions",
     "Projects/Portfolios",
 ]
@@ -7285,16 +7285,6 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             filter_domains=_full_domains(display, ("Change", "Event", "Role", "Company",
                                                    "Confidence", "Source")),
         )
-        st.caption("Sources: SEC 8-K (Item 5.02), SEC 6-K, SEC Form 3 (new officers and "
-                   "directors, since 2025) and executive news. A change "
-                   "reported by several sources is listed once, from the filing when there is "
-                   "one; the others are under Also Reported By. Disclosed = filing or article date "
-                   "(the date the period filters on); Announced = date the filing gives for the "
-                   "change; Effective = date it takes effect, as "
-                   "stated. Years in Role runs from the stated appointment to the stated "
-                   "departure (or today); roles that began before 2016 are blank. Confidence: "
-                   "High = title and timing read from a filing; Medium = from a filing without "
-                   "timing, or a news headline; Low = person read from a news summary.")
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_management_changes",
                              operation="render_management_changes")

@@ -746,3 +746,43 @@ Test files are never copied to STG.
 ### 12.6 Tests
 `tests/test_form3_appointments.py` (title cleanup, XML parse, listing-batch skip,
 fold into the 8-K). pytest on the four People test files: 56 passed.
+
+## 13. Round 8 (2026-10-16): Form 3 keeps itself current; Screen For order; Key Devs without Management Changes
+
+### 13.1 Form 3 refresh
+- **Every 6 hours**, not only at boot: the `warm-people` thread loops
+  `refresh_form3()` → sleep `REFRESH_SECONDS` (6 h). Before this, new filings
+  arrived only on a deploy or restart.
+- **Incremental:** the frame keeps every accession it has read (including ones
+  with no officer or director), so a run fetches only filings it has not read.
+  Steady state is the index read (~70–80 s, cached by edgartools for 30 min) plus
+  ~0.15 s per new filing (~20 a day).
+- **New companies:** issuer CIKs come from `coreiq_companies.cik` first, then
+  edgartools' bundled ticker list (a release-time snapshot that misses new
+  listings): 2,657 → 2,694 CIKs. A company added today is picked up on the next
+  run: its 2025+ Form 3s (a handful) take seconds.
+- **Shown as it lands:** `refresh_form3(on_save=get_management_changes.clear)`
+  clears the reader cache after every 100 filings, so the first ~25-minute fill on
+  STG shows up progressively, not only when it finishes.
+- **Survives deploys:** the frame lives in `/home/mdp-cache` (the persistent share),
+  and a restarted run resumes from the last save.
+
+### 13.2 Screen For order
+`Companies, Key Devs, People, Equities, Fixed Income, Transactions, Projects/Portfolios`.
+
+### 13.3 People caption
+The "Sources: SEC 8-K (Item 5.02), …" caption under Management Changes was removed.
+
+### 13.4 Key Devs without Management Changes
+`"Management Changes"` was removed from `KEYDEV_CATEGORIES_ALL`. It drives every Key
+Devs category picker and the no-criterion "all categories" query, so it is gone from
+Key Devs screening; People → Management Changes is now the place for these changes.
+Governance and Proxy/Governance stay. No saved screening (`coreiq_saved_criteria`)
+used the category (read-only probe: 0 rows).
+
+### 13.5 Verified
+On localhost:8504 (testing) and :8505 (STG copy):
+- Screen For order as above.
+- Key Devs category search "Manage" returns nothing; "Govern" returns Governance and Proxy/Governance.
+- People 7 days: 51 changes / 41 companies, with no Sources caption.
+- No server tracebacks.

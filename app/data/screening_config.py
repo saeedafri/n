@@ -645,7 +645,7 @@ KEYDEV_CATEGORIES_ALL = {
     "M&A Activity":                 "M&A Activity",
     "Capital Raising":              "Capital Raising",
     # ── Management / Governance ───────────────────────────────────────────────
-    "Management Changes":           "Management Changes",
+    # Management Changes moved to People -> Management Changes (2026-10-16).
     "Governance":                   "Governance",
     "Proxy/Governance":             "Proxy/Governance",
     "Auditor Changes":              "Auditor Changes",

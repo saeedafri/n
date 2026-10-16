@@ -462,15 +462,18 @@ def _warm_people_screening() -> None:
         log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
                              operation="refresh_proxy_pay")
     # Form 3 appointments: only filings not read before (~5k a year for our
-    # issuers, ~0.15 s each on an empty cache dir (~25 min), newest first, saved every 100;
-    # then ~20 a day).
-    from data.form3_appointments import refresh_form3
-    try:
-        if refresh_form3():
-            get_management_changes.clear()
-    except Exception as exc:
-        log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
-                             operation="refresh_form3")
+    # issuers, ~0.15 s each on an empty cache dir (~25 min), newest first, saved
+    # every 100 and shown as it lands). Then again every 6 h, so new filings and
+    # newly added companies arrive without a deploy (~70 s of index reading plus
+    # ~0.15 s per new filing).
+    from data.form3_appointments import REFRESH_SECONDS, refresh_form3
+    while True:
+        try:
+            refresh_form3(on_save=get_management_changes.clear)
+        except Exception as exc:
+            log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
+                                 operation="refresh_form3")
+        time.sleep(REFRESH_SECONDS)
 
 
 def _background_warmup_thread():

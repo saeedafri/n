@@ -30,6 +30,7 @@ from typing import List, Optional
 
 import pandas as pd
 
+from core.database import db_manager
 from data.proxy_pay import SEC_USER_AGENT
 
 try:
@@ -42,6 +43,12 @@ FRAME_NAME = "form3_appointments_v1"
 # ponytail: fixed start (~5.5k filings a year for our issuers, ~0.15 s each on
 # the first run, newest first); move it back if older appointments are wanted.
 FORM3_SINCE = "2025-01-01"
+REFRESH_SECONDS = 6 * 3600
+
+_CIK_QUERY = """
+    SELECT ticker, cik FROM coreiq_companies
+    WHERE cik IS NOT NULL AND cik <> '' AND ticker IS NOT NULL AND ticker <> ''
+"""
 
 ROW_COLUMNS = ["ticker", "person", "title", "is_officer", "is_director",
                "became_insider", "filing_date", "accession", "url"]
@@ -135,7 +142,13 @@ def _wanted_form3():
     set_identity(SEC_USER_AGENT)
     ours = set(get_all_companies_universe()["ticker"].astype(str))
     ciks = get_cik_tickers()
-    ciks = ciks[ciks["ticker"].isin(ours)]
+    ciks = ciks[ciks["ticker"].isin(ours)][["ticker", "cik"]]
+    # coreiq_companies' own CIKs first: a company added today is there before it
+    # reaches edgartools' bundled ticker list (a snapshot from its release).
+    own = pd.DataFrame(db_manager.execute_query_readonly(_CIK_QUERY) or [], columns=["ticker", "cik"])
+    ciks = pd.concat([own, ciks], ignore_index=True)
+    ciks["cik"] = pd.to_numeric(ciks["cik"], errors="coerce")
+    ciks = ciks.dropna(subset=["cik"])
     tickers_of = ciks.groupby(ciks["cik"].astype(int))["ticker"].agg(set).to_dict()
     index = get_filings(form="3", filing_date=f"{FORM3_SINCE}:", amendments=False).to_pandas()
     # The index lists a filing once per filer (issuer and each owner); the XML
@@ -144,10 +157,11 @@ def _wanted_form3():
     return index.sort_values("filing_date", ascending=False), tickers_of
 
 
-def refresh_form3(limit: Optional[int] = None, save_every: int = 100) -> int:
+def refresh_form3(limit: Optional[int] = None, save_every: int = 100, on_save=None) -> int:
     """Read Form 3 filings not yet on disk; return how many were read.
 
     A filing with no officer or director is remembered too, so it is not fetched again.
+    `on_save` runs after each save (the reader's cache clear), so rows show as they land.
     """
     import requests
     from utils.materialize import _disk_copy, write_materialized
@@ -203,10 +217,14 @@ def refresh_form3(limit: Optional[int] = None, save_every: int = 100) -> int:
                 done = pd.concat([done, pd.DataFrame({"accession": new_done})], ignore_index=True)
                 new_rows, new_done = [], []
                 write_materialized(FRAME_NAME, (rows, done), [])
+                if on_save:
+                    on_save()
     if new_done:
         rows = pd.concat([rows, pd.DataFrame(new_rows, columns=ROW_COLUMNS)], ignore_index=True)
         done = pd.concat([done, pd.DataFrame({"accession": new_done})], ignore_index=True)
         write_materialized(FRAME_NAME, (rows, done), [])
+        if on_save:
+            on_save()
     log_timing("FORM3_REFRESH", (time.perf_counter() - t0) * 1000,
                details=f"read={read} rows={len(rows)} filings={len(done)}", level="WARNING")
     return read
