@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Self-check for people_service role classification and criterion filtering.
 
-Run:  .venv/bin/python app/data/test_people_service.py
+Run:  .venv/bin/python tests/test_people_service.py
 No framework, no fixtures — asserts only. Every title string below is a real
 value taken from coreiq_executives_compensation or a YF companyOfficers payload.
 """
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app"))
 
 import pandas as pd
 

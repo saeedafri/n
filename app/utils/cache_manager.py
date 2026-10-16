@@ -461,6 +461,16 @@ def _warm_people_screening() -> None:
     except Exception as exc:
         log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
                              operation="refresh_proxy_pay")
+    # Form 3 appointments: only filings not read before (~5k a year for our
+    # issuers, ~0.15 s each on an empty cache dir (~25 min), newest first, saved every 100;
+    # then ~20 a day).
+    from data.form3_appointments import refresh_form3
+    try:
+        if refresh_form3():
+            get_management_changes.clear()
+    except Exception as exc:
+        log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
+                             operation="refresh_form3")
 
 
 def _background_warmup_thread():

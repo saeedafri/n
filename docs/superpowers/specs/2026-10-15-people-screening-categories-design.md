@@ -675,3 +675,74 @@ text (`report["Item 5.02"]`) and press releases — text, not structured people.
 ("EVP, Chief Financial Officer", "Director") for every new Section 16 officer and
 director. Autodesk's Diana Colella has no 8-K 5.02 and no Form 3 (not a Section 16
 officer), so news is her only source. Form 3 is the candidate next source (not built).
+
+## 12. Round 7 (2026-10-16): Form 3 as a fourth source; test files out of STG
+
+### 12.1 Why Form 3
+An 8-K Item 5.02(c) is required only for a new CEO, President, CFO, CAO or COO.
+Every other designated officer (General Counsel, CHRO, division presidents,
+Chief Digital Officer, ...) and every new director must instead file **SEC Form 3**
+("Initial Statement of Beneficial Ownership") within 10 days of becoming a
+Section 16 insider. Its XML carries the person, `isOfficer` / `isDirector`,
+`officerTitle` and `periodOfReport` (the day they became an insider), so no
+regex reading is needed.
+
+How it was found: edgartools' `ownership` package (`edgar/ownership/docs/Form3.md`,
+`Company(t).get_filings(form="3")`, `filing.obj()` -> `Form3`). Autodesk's
+Janesh Moorjani "EVP, Chief Financial Officer" was the first check.
+Limit: people who are not Section 16 officers (Autodesk's Diana Colella)
+never file one; news remains their only source.
+
+### 12.2 Data flow (`app/data/form3_appointments.py`)
+1. `get_filings(form="3", filing_date="2025-01-01:", amendments=False)` (edgartools,
+   SEC quarterly form index; ~70 s, one request per quarter).
+2. Issuer CIK -> our tickers: edgartools `get_cik_tickers()` limited to the
+   4,775 all-companies universe (2,657 CIKs). ~1,270 Form 3s a quarter match.
+3. Each filing's `.txt` is streamed only to `</ownershipDocument>` (exhibits can
+   run to 700 KB) and parsed with `xml.etree`. Not `Form3.parse_xml`: it calls
+   `Entity(cik)` for every owner — one more data.sec.gov request each, cached under
+   `~/.edgar` — only to tell people from companies. 600 filings: 334 s with it,
+   79 s without. Names go through edgartools' offline `reverse_name`
+   ("Freeze Shannon Rebecca" -> "Shannon Rebecca Freeze").
+4. Kept: owners with `isOfficer` or `isDirector`; 10%-only holders dropped.
+   Officer titles lose pasted exhibit lists ("... \nExhibit 24.1 - Power of
+   Attorney"); "See Remarks" reads the remarks.
+5. Frame `form3_appointments_v1` = (rows, done accessions) in the materialize cache
+   dir, refreshed by `refresh_form3()` on the `warm-people` thread after proxy pay:
+   newest first, 4 in flight, saved every 100, failed downloads retried next boot.
+   First run on STG ~25 min; later boots read only new filings.
+
+### 12.3 Joining Management Changes (`management_changes.add_form3`)
+`get_management_changes()` = materialized 8-K/6-K/news frame (`management_changes_v9`,
+unchanged) + Form 3 rows added on read, so a Form 3 refresh never forces the 8-K
+rebuild. `form3_changes`:
+- one Appointment per person, Confidence High, Source "SEC Form 3", link to the
+  filing index; Announced = Effective = became-insider date; Disclosed = filing date;
+- director-only -> Title "Director", Role Board;
+- an issuer filing 8 or more Form 3s for one day is a listing (IPO / SPAC / spin-off:
+  VACI 13, WKEY 16 on 2026-10-01) and is skipped; Corteva's 6 stay;
+- a person already reported by an 8-K or news item within 183 days (the 8-K
+  announces, the Form 3 follows the start date) is folded: "SEC Form 3" is added
+  to Also Reported By instead of a second row.
+
+### 12.4 Results (both servers, same data, 2026-10-16)
+| People -> Management Changes | before | after |
+|---|---|---|
+| Last 7 days | 6 changes / 5 companies | 52 / 42 |
+| Last 30 days | 48 / 36 | 324 / 224 |
+On the 600 newest filings: 456 new appointments, 31 folded into existing rows
+(e.g. RPM Jeffrey Rowe, NKE Alexandre Arnault, MNST Matthew Burroughs). People
+now lists more than Key Devs, which has no Form 3 data.
+
+### 12.5 Test files
+`test_management_changes.py`, `test_people_service.py` and `test_proxy_pay.py` sat
+in `app/data/` next to their modules. The standing "copy every change to STG"
+step copied them, and STG's `.gitignore` covers only `tests/*`, so they were committed
+there. Fixed: in testing they moved to `tests/` (sys.path now points at `app/`).
+In STG they were deleted, along with the untracked, gitignored `tests/` copies
+(all nine were byte-identical to testing). `test_*.py` was added to STG's `.gitignore`.
+Test files are never copied to STG.
+
+### 12.6 Tests
+`tests/test_form3_appointments.py` (title cleanup, XML parse, listing-batch skip,
+fold into the 8-K). pytest on the four People test files: 56 passed.

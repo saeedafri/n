@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Self-check for the 8-K Item 5.02 management-change extractor.
 
-Run:  .venv/bin/python app/data/test_management_changes.py
+Run:  .venv/bin/python tests/test_management_changes.py
 No framework, no fixtures — asserts only. Every text below is real 5.02 prose
 from coreiq_company_events (STG), including the traps the extractor once fell into.
 """
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app"))
 
 import pandas as pd
 

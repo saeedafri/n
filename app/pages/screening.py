@@ -7285,7 +7285,8 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             filter_domains=_full_domains(display, ("Change", "Event", "Role", "Company",
                                                    "Confidence", "Source")),
         )
-        st.caption("Sources: SEC 8-K (Item 5.02), SEC 6-K and executive news. A change "
+        st.caption("Sources: SEC 8-K (Item 5.02), SEC 6-K, SEC Form 3 (new officers and "
+                   "directors, since 2025) and executive news. A change "
                    "reported by several sources is listed once, from the filing when there is "
                    "one; the others are under Also Reported By. Disclosed = filing or article date "
                    "(the date the period filters on); Announced = date the filing gives for the "

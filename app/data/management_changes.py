@@ -1107,9 +1107,60 @@ def _build_management_changes() -> pd.DataFrame:
     return df
 
 
+def form3_changes(rows: pd.DataFrame) -> pd.DataFrame:
+    """Form 3 rows (data.form3_appointments) as appointments: the person became
+    an officer or director on `became_insider`."""
+    if rows is None or rows.empty:
+        return pd.DataFrame(columns=CHANGE_COLUMNS)
+    # An IPO, SPAC merger or spin-off files a Form 3 for every insider on one day
+    # (13 for VACI, 16 for WKEY on 2026-10-01): a new listing, not a change.
+    # ponytail: size cut-off; Corteva's 6 on the same day are real appointments.
+    batch = rows.groupby(["ticker", "became_insider"], dropna=False)["person"].transform("size")
+    rows = rows[batch < 8]
+    title = rows["title"].where(rows["title"].astype(bool), "Director")
+    out = pd.DataFrame({
+        "ticker": rows["ticker"], "filing_date": rows["filing_date"], "change": "Appointment",
+        "event_type": "Appointment", "person": rows["person"], "title": title,
+        "titles": title.map(lambda t: " | ".join(split_titles(t)) or t),
+        "role": [_role_of(t, "") for t in title], "is_board": rows["is_director"] & ~rows["is_officer"],
+        "notice_date": rows["became_insider"], "effective_date": rows["became_insider"],
+        "confidence": "High", "evidence": "Form 3: " + title, "source_ref": rows["url"].str.replace(".txt", "-index.htm"),
+        "source": "SEC Form 3", "also_reported": "", "moved_from": "", "moved_from_title": "",
+    }).reindex(columns=CHANGE_COLUMNS)
+    return out
+
+
+def add_form3(df: pd.DataFrame) -> pd.DataFrame:
+    """Form 3 appointments not already reported by an 8-K or news item; the ones
+    that are become "SEC Form 3" under Also Reported By. The 8-K announces, the
+    Form 3 follows the start date, so a change is matched across 183 days."""
+    from data.form3_appointments import read_form3
+    form3 = form3_changes(read_form3())
+    if form3.empty:
+        return df
+    categorical = ("ticker", "change", "event_type", "role", "confidence")
+    df = df.astype({c: str for c in categorical})
+    # A joint filing or a re-filed Form 3 names the same person twice.
+    form3 = _fold_repeats(form3.astype({c: str for c in categorical}))
+    df, rest = _fold_repeats(form3, primary=df, days=183)
+    df = pd.concat([df, rest], ignore_index=True)
+    for col in ("filing_date", "notice_date", "effective_date"):
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+    for col in categorical:
+        df[col] = df[col].fillna("").astype("category")
+    return df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
+
+
 @st.cache_data(ttl=21600, show_spinner=False)
 def get_management_changes() -> pd.DataFrame:
-    """Every executive change from 8-K Item 5.02, 6-K and executive news, materialized to disk."""
+    """Every executive change from 8-K Item 5.02, 6-K, executive news and Form 3.
+
+    The first three are materialized to disk; Form 3 rows are added on read, from
+    their own background-refreshed frame."""
+    return add_form3(_filings_and_news())
+
+
+def _filings_and_news() -> pd.DataFrame:
     from utils.materialize import materialized_or_build
     sources = [{
         "table": "coreiq_company_events",
