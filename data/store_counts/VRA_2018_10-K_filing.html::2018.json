@@ -1,0 +1,14 @@
+{
+ "ticker": "VRA",
+ "fiscal_year": 2018,
+ "value": 160,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores open at end of year | | 160 | | | 159 | | | 150 | | | 125 | | | 99 |",
+ "fye_date": "2018-02-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VRA/2018/10-K/filing.html::2018",
+ "extractor_version": 5
+}

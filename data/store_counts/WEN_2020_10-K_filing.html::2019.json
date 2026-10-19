@@ -1,0 +1,14 @@
+{
+ "ticker": "WEN",
+ "fiscal_year": 2019,
+ "value": 6828,
+ "confidence": "medium",
+ "basis": "L1_xbrl",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (47 facts)",
+ "fye_date": "2019-12-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WEN/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "WBA",
+ "fiscal_year": 2019,
+ "value": 9285,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of locations at period end | | 9,285 | | | 9,569 | | | 8,109 |",
+ "fye_date": "2019-08-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WBA/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

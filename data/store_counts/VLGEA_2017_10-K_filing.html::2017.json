@@ -1,0 +1,14 @@
+{
+ "ticker": "VLGEA",
+ "fiscal_year": 2017,
+ "value": 29,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores | 29 | | | 29 | | | 29 | | | 29 | | | 29 | |",
+ "fye_date": "2017-07-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VLGEA/2017/10-K/filing.html::2017",
+ "extractor_version": 5
+}

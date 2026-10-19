@@ -1,0 +1,14 @@
+{
+ "ticker": "ZUMZ",
+ "fiscal_year": 2023,
+ "value": 758,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": ". We operate ecommerce websites at zumiez.com, zumiez.ca, blue-tomato.com and fasttimes.com.au. At January 28, 2023, we operated 758 stores; 608 in the United States (“U.S.”), 51 in Canada, 78 in Eur",
+ "fye_date": "2023-01-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ZUMZ/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

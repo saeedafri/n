@@ -1,0 +1,13 @@
+{
+ "ticker": "WW",
+ "fiscal_year": 2016,
+ "value": null,
+ "confidence": "none",
+ "basis": "no store count found in this filing",
+ "fye_date": "2016-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WW/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "VSCO",
+ "fiscal_year": 2022,
+ "value": 1181,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 1,222 | | | 25 | | | (66) | | | 1,181 |",
+ "fye_date": "2022-01-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VSCO/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

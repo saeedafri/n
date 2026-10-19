@@ -1,0 +1,14 @@
+{
+ "ticker": "YUMC",
+ "fiscal_year": 2022,
+ "value": 8168,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | | | 8,168 | | | | 1,229 | | | | — | | | | (303 | ) | | | — | | | | 9,094 |",
+ "fye_date": "2022-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YUMC/2023/10-K/filing.html::2022",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "VNCE",
+ "fiscal_year": 2024,
+ "value": 63,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "Total Vince Stores (63)",
+ "fye_date": "2024-02-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VNCE/2024/10-K/filing.html::2024",
+ "extractor_version": 5
+}

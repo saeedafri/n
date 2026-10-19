@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2026,
+ "value": 512,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "gross leased store space as of February 1, 2026 totaled approximately 5,762,000 square feet for 506 stores compared to approximately 5,833,000 square feet for 512 stores as of February 2, 2025. Leased Properties The following table",
+ "fye_date": "2026-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WSM/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "VLGEA",
+ "fiscal_year": 2022,
+ "value": 38,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores | 38 | | | 37 | | | 38 | | | 33 | | | 30 | |",
+ "fye_date": "2022-07-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VLGEA/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

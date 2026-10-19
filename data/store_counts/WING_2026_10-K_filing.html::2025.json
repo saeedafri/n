@@ -1,0 +1,14 @@
+{
+ "ticker": "WING",
+ "fiscal_year": 2025,
+ "value": 3056,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of system-wide restaurants at period end | 3,056 | | | 2,563 |",
+ "fye_date": "2025-12-27",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WING/2026/10-K/filing.html::2025",
+ "extractor_version": 5
+}

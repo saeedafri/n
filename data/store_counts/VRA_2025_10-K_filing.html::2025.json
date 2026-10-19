@@ -1,0 +1,14 @@
+{
+ "ticker": "VRA",
+ "fiscal_year": 2025,
+ "value": 126,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores open at end of period | | 126 | | | 124 | | | 130 |",
+ "fye_date": "2025-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VRA/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

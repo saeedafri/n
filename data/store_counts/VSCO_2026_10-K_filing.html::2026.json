@@ -1,0 +1,14 @@
+{
+ "ticker": "VSCO",
+ "fiscal_year": 2026,
+ "value": 975,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 975 | | | 977 |",
+ "fye_date": "2026-01-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VSCO/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

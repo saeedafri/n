@@ -1,0 +1,14 @@
+{
+ "ticker": "WWW",
+ "fiscal_year": 2017,
+ "value": 81,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "ompany relies on a network of third-party distributors, licensees and joint ventures. At December 30, 2017, the Company operated 81 retail stores in the U.S. and Canada and 29 consumer-direct websites. 201",
+ "fye_date": "2017-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WWW/2018/10-K/filing.html::2017",
+ "extractor_version": 5
+}

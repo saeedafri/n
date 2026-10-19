@@ -1,0 +1,14 @@
+{
+ "ticker": "VRSN",
+ "fiscal_year": 2021,
+ "value": 904,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 904 | | | 909 | | | 872 |",
+ "fye_date": "2021-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VRSN/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

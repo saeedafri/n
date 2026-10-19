@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2019,
+ "value": 625,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores at year-end | | | 625 | | | | 631 | | | | 629 | | | | 618 | | | | 601 |",
+ "fye_date": "2019-02-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WSM/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

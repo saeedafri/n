@@ -1,0 +1,14 @@
+{
+ "ticker": "ZUMZ",
+ "fiscal_year": 2016,
+ "value": 658,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores open at end of period | | | 658 | | | | 603 | | | | 551 | | | | 498 | | | | 444 |",
+ "fye_date": "2016-01-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ZUMZ/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

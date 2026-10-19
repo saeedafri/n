@@ -1,0 +1,14 @@
+{
+ "ticker": "WING",
+ "fiscal_year": 2016,
+ "value": 998,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of system-wide restaurants at period end | 998 | | | 845 | | | 712 |",
+ "fye_date": "2016-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WING/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

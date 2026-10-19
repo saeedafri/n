@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2020,
+ "value": 614,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores at year-end | | | 614 | | | | 625 | | | | 631 | | | | 629 | | | | 618 |",
+ "fye_date": "2020-02-02",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WSM/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

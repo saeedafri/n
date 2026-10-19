@@ -1,0 +1,14 @@
+{
+ "ticker": "VRSN",
+ "fiscal_year": 2015,
+ "value": 1019,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 1,019 | | | 1,061 | | | 1,079 |",
+ "fye_date": "2015-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VRSN/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

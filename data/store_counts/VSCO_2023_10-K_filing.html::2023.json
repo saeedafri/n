@@ -1,0 +1,14 @@
+{
+ "ticker": "VSCO",
+ "fiscal_year": 2023,
+ "value": 443,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 443 | | | 463 |",
+ "fye_date": "2023-01-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VSCO/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

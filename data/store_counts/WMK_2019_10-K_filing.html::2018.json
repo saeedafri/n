@@ -1,0 +1,14 @@
+{
+ "ticker": "WMK",
+ "fiscal_year": 2018,
+ "value": 107,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "resolved staff comments. 5 WEIS MARKETS, INC. Table of Contents Item 2. Properties: ﻿ As of December 29, 2018, the Company owned and operated 95 of its retail food stores and leased and operated 107 stores under operating leases that expire at v",
+ "fye_date": "2018-12-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WMK/2019/10-K/filing.html::2018",
+ "extractor_version": 5
+}

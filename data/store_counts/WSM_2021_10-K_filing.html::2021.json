@@ -1,0 +1,14 @@
+{
+ "ticker": "WSM",
+ "fiscal_year": 2021,
+ "value": 581,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores at year-end | | | 581 | | | | 614 | | | | 625 | | | | 631 | | | | 629 |",
+ "fye_date": "2021-01-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WSM/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "WEN",
+ "fiscal_year": 2016,
+ "value": 6537,
+ "confidence": "medium",
+ "basis": "L1_xbrl",
+ "evidence": "XBRL us-gaap:NumberOfRestaurants (9 facts)",
+ "fye_date": "2016-01-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WEN/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

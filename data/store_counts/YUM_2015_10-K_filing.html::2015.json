@@ -1,0 +1,14 @@
+{
+ "ticker": "YUM",
+ "fiscal_year": 2015,
+ "value": 42000,
+ "confidence": "medium",
+ "basis": "L1_xbrl",
+ "evidence": "XBRL us-gaap:NumberOfStores (1 facts)",
+ "fye_date": "2015-12-26",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "YUM/2015/10-K/filing.html::2015",
+ "extractor_version": 5
+}
