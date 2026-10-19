@@ -720,24 +720,40 @@ def parse_transcript(transcript_text: str, cache_version: int = 3) -> List[Dict]
         return []
 
 
+_HIGHLIGHT_REGEX_CACHE: Dict[Tuple[str, Tuple[str, ...]], re.Pattern] = {}
+
+
+def _highlight_regex(keyword: str, expanded_terms: Tuple[str, ...]) -> Optional[re.Pattern]:
+    """One alternation for every word to highlight, compiled once per query.
+
+    Longest word first so "supply chain" wins over "supply": a single pass also means a
+    later word can no longer match inside an earlier <mark> wrapper and nest the tags.
+    """
+    cache_key = (keyword, expanded_terms)
+    pattern = _HIGHLIGHT_REGEX_CACHE.get(cache_key)
+    if pattern is not None:
+        return pattern
+    words = [w for w in (x.strip() for x in keyword.split()) if w]
+    words += [t.strip() for t in expanded_terms if t.strip() and len(t.strip()) >= 3]
+    words = sorted(dict.fromkeys(words), key=len, reverse=True)
+    if not words:
+        return None
+    pattern = re.compile("(" + "|".join(re.escape(w) for w in words) + ")", re.IGNORECASE)
+    if len(_HIGHLIGHT_REGEX_CACHE) > 500:
+        _HIGHLIGHT_REGEX_CACHE.clear()
+    _HIGHLIGHT_REGEX_CACHE[cache_key] = pattern
+    return pattern
+
+
 def _highlight_keyword(text: str, keyword: str, expanded_terms: Optional[List[str]] = None) -> str:
-    """Wrap keyword matches with <mark> tags — highlights each word individually for multi-word queries and domain synonyms."""
+    """Wrap keyword matches with <mark> tags — one cached regex pass over the text."""
     try:
-        if not keyword or not keyword.strip():
+        if not text or not keyword or not keyword.strip():
             return text
-        # Split into individual words and highlight each
-        words = keyword.strip().split()
-        if expanded_terms:
-            for term in expanded_terms:
-                if term and len(term) >= 3:
-                    words.append(term)
-        words = list(dict.fromkeys(words))
-        result = text
-        for word in words:
-            if word.strip():
-                pattern = re.compile(re.escape(word.strip()), re.IGNORECASE)
-                result = pattern.sub(lambda m: f'<mark>{m.group()}</mark>', result)
-        return result
+        pattern = _highlight_regex(keyword.strip(), tuple(expanded_terms or ()))
+        if pattern is None:
+            return text
+        return pattern.sub(r'<mark>\1</mark>', text)
     except Exception as e:
         log_structured_error(e, page="earnings_calls", component="_highlight_keyword", operation="highlighting keyword in text")
         return text

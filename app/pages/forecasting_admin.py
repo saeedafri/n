@@ -155,8 +155,8 @@ def main() -> None:
 
     inject_red_spinner_css()
 
-    # require_auth(redirect_to="login", page="forecasting_admin")  # TEMP: Commented for testing
-    user_email = get_current_user() or "mohdsaeedafri@coresight.com"  # TEMP: Use test user
+    require_auth(redirect_to="login", page="forecasting_admin")
+    user_email = get_current_user() or "mohdsaeedafri@coresight.com"
     _t = _tick("get_current_user", _t)
 
     with st.spinner("Loading…"):

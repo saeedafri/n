@@ -1,0 +1,14 @@
+{
+ "ticker": "V",
+ "fiscal_year": 2025,
+ "value": 175,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "he network infrastructure that enables connections to approximately 12 billion cards, bank accounts and digital wallets with more than 175 million merchant locations across more than 200 countries and territories. Our service",
+ "fye_date": "2025-09-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "V/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

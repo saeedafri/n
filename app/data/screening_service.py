@@ -2372,15 +2372,22 @@ def _ensure_segment_refresh_state_table() -> None:
         """
     )
     # Added 2026-10-06 with the classifier gate below; the table predates it.
-    # MySQL 8 has no ADD COLUMN IF NOT EXISTS, and a duplicate-column error here
-    # is the normal case on every call after the first.
-    try:
-        db_manager.execute_insert(
-            f"ALTER TABLE {SEGMENT_REFRESH_STATE_TABLE} "
-            f"ADD COLUMN classifier_version VARCHAR(16) NOT NULL DEFAULT ''"
-        )
-    except Exception:
-        pass
+    # MySQL 8 has no ADD COLUMN IF NOT EXISTS; firing the ALTER on every call logged a
+    # "Duplicate column" ERROR each time, so look the column up first.
+    has_column = db_manager.fetch_one(
+        "SELECT 1 AS present FROM information_schema.columns "
+        "WHERE table_schema = DATABASE() AND table_name = :table_name "
+        "AND column_name = 'classifier_version'",
+        {"table_name": SEGMENT_REFRESH_STATE_TABLE},
+    )
+    if not has_column:
+        try:
+            db_manager.execute_insert(
+                f"ALTER TABLE {SEGMENT_REFRESH_STATE_TABLE} "
+                f"ADD COLUMN classifier_version VARCHAR(16) NOT NULL DEFAULT ''"
+            )
+        except Exception:
+            pass
     db_manager.execute_insert(
         f"INSERT IGNORE INTO {SEGMENT_REFRESH_STATE_TABLE} (id, last_built_max_id) VALUES (1, 0)"
     )
@@ -6920,6 +6927,45 @@ def _apply_operator(
     return False
 
 
+class _MetricCache:
+    """ticker -> value maps, one per (table, metric, period) key.
+
+    Re-running a screen re-asks for the same metric over the same tickers; each miss is a
+    multi-second scan. Bounded and short-lived on purpose: the maps are process-global, so
+    without a cap and an expiry a data refresh would be invisible until restart and every
+    new metric would stay in RAM forever. Callers hold _METRIC_CACHE_LOCK.
+    """
+
+    def __init__(self, max_keys: int = 64, ttl_seconds: float = 1800.0):
+        self._entries: Dict[Tuple, Tuple[float, Dict[str, Optional[float]]]] = {}
+        self._max_keys = max_keys
+        self._ttl_seconds = ttl_seconds
+
+    def get(self, key: Tuple) -> Optional[Dict[str, Optional[float]]]:
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        if time.monotonic() - entry[0] > self._ttl_seconds:
+            del self._entries[key]
+            return None
+        return entry[1]
+
+    def merge(self, key: Tuple, values: Dict[str, Optional[float]]) -> Dict[str, Optional[float]]:
+        current = self.get(key)
+        if current is None:
+            if len(self._entries) >= self._max_keys:
+                del self._entries[min(self._entries, key=lambda k: self._entries[k][0])]
+            self._entries[key] = (time.monotonic(), {})
+            current = self._entries[key][1]
+        current.update(values)
+        return current
+
+
+_SEC_METRIC_CACHE = _MetricCache()
+_YF_METRIC_CACHE = _MetricCache()
+_METRIC_CACHE_LOCK = _threading.Lock()
+
+
 def _query_sec_latest(
     tickers: List[str],
     cfg: Dict,
@@ -6939,8 +6985,21 @@ def _query_sec_latest(
     if not tickers:
         return {}
 
-    t_sec_start = time.perf_counter()
     table      = cfg["sec_table"]
+    cache_key  = (table, col, period_value, year, quarter_num)
+
+    with _METRIC_CACHE_LOCK:
+        cached_map = _SEC_METRIC_CACHE.get(cache_key)
+        if cached_map is not None and not [t for t in tickers if t not in cached_map]:
+            try:
+                log_timing("[PERF] SCREENING_METRIC_CACHE", 0.0,
+                           f"source=sec hit=1 col={col} period={period_value} "
+                           f"year={year} tickers={len(tickers)}")
+            except Exception:
+                pass
+            return {t: cached_map.get(t) for t in tickers}
+
+    t_sec_start = time.perf_counter()
     date_col   = cfg["sec_date_col"]
     period_col = cfg["sec_period_col"]
     ticker_sql = _build_ticker_in_list(tickers)
@@ -7019,7 +7078,16 @@ def _query_sec_latest(
             except (TypeError, ValueError):
                 pass
 
-    return result
+    with _METRIC_CACHE_LOCK:
+        merged = _SEC_METRIC_CACHE.merge(cache_key, {t: result.get(t) for t in tickers})
+        answer = {t: merged.get(t) for t in tickers}
+    try:
+        log_timing("[PERF] SCREENING_METRIC_CACHE", (time.perf_counter() - t_sec_start) * 1000,
+                   f"source=sec hit=0 col={col} period={period_value} "
+                   f"year={year} tickers={len(tickers)}")
+    except Exception:
+        pass
+    return answer
 
 
 def _query_yf_latest(
@@ -7042,8 +7110,21 @@ def _query_yf_latest(
     if not tickers:
         return {}
 
-    t_yf_start = time.perf_counter()
     table      = cfg["yf_table"]
+    cache_key  = (table, line_item, period_value, year, quarter_num)
+
+    with _METRIC_CACHE_LOCK:
+        cached_map = _YF_METRIC_CACHE.get(cache_key)
+        if cached_map is not None and not [t for t in tickers if t not in cached_map]:
+            try:
+                log_timing("[PERF] SCREENING_METRIC_CACHE", 0.0,
+                           f"source=yf hit=1 item={line_item} period={period_value} "
+                           f"year={year} tickers={len(tickers)}")
+            except Exception:
+                pass
+            return {t: cached_map.get(t) for t in tickers}
+
+    t_yf_start = time.perf_counter()
     date_col   = cfg["yf_date_col"]
     period_col = cfg["yf_period_col"]
     ticker_sql = _build_ticker_in_list(tickers)
@@ -7125,7 +7206,16 @@ def _query_yf_latest(
             except (TypeError, ValueError):
                 pass
 
-    return result
+    with _METRIC_CACHE_LOCK:
+        merged = _YF_METRIC_CACHE.merge(cache_key, {t: result.get(t) for t in tickers})
+        answer = {t: merged.get(t) for t in tickers}
+    try:
+        log_timing("[PERF] SCREENING_METRIC_CACHE", (time.perf_counter() - t_yf_start) * 1000,
+                   f"source=yf hit=0 item={line_item} period={period_value} "
+                   f"year={year} tickers={len(tickers)}")
+    except Exception:
+        pass
+    return answer
 
 
 def _query_sec_quarterly_with_dates(

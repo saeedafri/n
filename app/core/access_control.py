@@ -182,6 +182,18 @@ class AccessControlManager:
         }
         return descriptions.get(permission, "Unknown permission")
 
+    # Role checks live on UserRolesManager, but audit.py/reports.py reach for them
+    # through an AccessControlManager instance (access_mgr.is_admin(...)), which
+    # raised AttributeError and took the whole audit page down. Delegate instead of
+    # editing every call site.
+    @staticmethod
+    def is_admin(user_email: str) -> bool:
+        return UserRolesManager.is_admin(user_email)
+
+    @staticmethod
+    def is_admin_or_super_user(user_email: str) -> bool:
+        return UserRolesManager.is_admin_or_super_user(user_email)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # UserRolesManager  —  system-level role management (coreiq_user_roles table)

@@ -15,7 +15,7 @@ import streamlit as st
 from components.navigation import render_header, render_coresight_footer
 from components.styles import hide_sidebar, render_styles, set_page_layout
 from core.auth_manager import get_current_user, require_auth
-from core.access_control import AccessControlManager
+from core.access_control import AccessControlManager, UserRolesManager
 from core.database import db_manager
 from utils.server_logger import log_structured_error, log_error, error_boundary
 
@@ -409,12 +409,11 @@ def main() -> None:
     _setup_page()
     _audit_css()
 
-    # require_auth(redirect_to="login", page="audit")
+    require_auth(redirect_to="login", page="audit")
     user_email = get_current_user() or ""
 
     # Check admin access
-    access_mgr = AccessControlManager()
-    if not access_mgr.is_admin(user_email):
+    if not UserRolesManager.is_admin(user_email):
         st.error("Access denied. Admin privileges required.")
         return
 
@@ -574,5 +573,4 @@ def main() -> None:
     render_coresight_footer()
 
 
-if __name__ == "__main__":
-    main()
+main()

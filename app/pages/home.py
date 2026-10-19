@@ -44,6 +44,11 @@ try:
 except Exception as _exc:
     log_structured_error(_exc, page="home", component="module_init", operation="LOAD_COMPANIES")
     COMPANIES = []
+
+# Built once at import. format_func runs per option on every render, and the old
+# lambda did a linear scan of COMPANIES inside it.
+_COMPANY_OPTIONS = [c[0] for c in COMPANIES]
+_COMPANY_NAME_MAP = {c[0]: c[1] for c in COMPANIES}
 SECTORS = ["Apparel & Footwear", "Department Stores", "Discount Stores", "Luxury Goods"]
 
 def main():
@@ -157,8 +162,8 @@ def main():
     with col1:
         st.markdown('<p style="font-family: Roboto, sans-serif; font-weight: 600; font-size: 18px; color: #2D2A29; text-align: center; margin: 0 0 8px 0;">View by Company</p>', unsafe_allow_html=True)
 
-        company = st.selectbox("Company", options=[c[0] for c in COMPANIES],
-            format_func=lambda x: next((c[1] for c in COMPANIES if c[0] == x), x),
+        company = st.selectbox("Company", options=_COMPANY_OPTIONS,
+            format_func=lambda x: _COMPANY_NAME_MAP.get(x, x),
             index=None,
             placeholder="Select a Company",
             key="company_select", label_visibility="collapsed")

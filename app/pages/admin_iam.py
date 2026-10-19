@@ -220,8 +220,7 @@ def _get_permission_color(perm: str) -> str:
 
 def main():
     _setup_page()
-    # require_auth()
-
+    require_auth()
     user_email = get_current_user()
     if not user_email:
         st.error("Unable to identify user")

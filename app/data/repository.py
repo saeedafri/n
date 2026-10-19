@@ -9670,7 +9670,7 @@ class EarningsCalendarRepository:
         """
         if not ticker or not fye_month:
             return None
-        trs = db_manager.execute_query_readonly(
+        trs = _news_run(
             """
             SELECT year, q
             FROM coreiq_av_earnings_call_transcripts
@@ -9678,6 +9678,7 @@ class EarningsCalendarRepository:
             ORDER BY year DESC, q DESC
             """,
             {"ticker": ticker},
+            "tx",
         ) or []
         if not trs:
             return None

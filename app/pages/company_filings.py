@@ -514,6 +514,24 @@ def _ensure_local_blob_optimized(blob_name: str, use_temp: bool = False) -> Opti
         local_path = os.path.join(tempfile.gettempdir(), f"capiq_filing_{_safe}.pdf")
     else:
         local_path = _local_cache_path_for_blob(blob_name)
+        # Serve a recently cached file without asking Azure anything: the freshness
+        # check below costs a get_blob_properties round trip (250-400 ms from
+        # centralus) on every view of an already-downloaded filing. The day-old bound
+        # keeps a re-filed blob from being pinned forever; the write below is atomic
+        # (temp -> rename), so anything at local_path is a complete download.
+        try:
+            _cache_age = _perf_time.time() - os.path.getmtime(local_path)
+            if _cache_age < 86400:
+                try:
+                    log_timing(
+                        "[PERF] FILINGS_BLOB_CACHE_HIT", 0.0,
+                        f"blob={blob_name} age_s={_cache_age:.0f} skipped=get_blob_properties",
+                    )
+                except Exception:
+                    pass
+                return local_path
+        except OSError:
+            pass
 
     try:
         # Use optimized client
@@ -2014,34 +2032,60 @@ def _prefetch_ticker_filter_data(ticker: str):
     try:
         from core.database import db_manager
 
+        # COALESCE in GROUP BY/ORDER BY is not sargable, so MySQL sorted every row of
+        # the ticker on a computed value: 4-27 s per ticker on STG. Grouping on the raw
+        # columns uses the index (~0.5-3 s); the same COALESCE priority, the re-merge and
+        # the ordering then happen here over a few dozen rows, so what the page sees is
+        # identical to the SQL version (verified row-for-row on 12 tickers: LULU WMT TGT
+        # NVDA CMG STZ COTY M AMZN GOOGL PVH ZUMZ — 0 differences).
         _query_start = _perf_time.time()
-        rows = db_manager.execute_query_readonly("""
+        raw_rows = db_manager.execute_query_readonly("""
             SELECT
                 doc_type,
-                bucket_year,
-                display_year,
+                storage_year,
+                report_fiscal_year,
+                fiscal_year,
                 fiscal_quarter,
                 COUNT(*) AS row_count
-            FROM (
-                SELECT
-                    doc_type,
-                    COALESCE(storage_year, report_fiscal_year, fiscal_year) AS bucket_year,
-                    COALESCE(fiscal_year, storage_year, report_fiscal_year) AS display_year,
-                    fiscal_quarter
-                FROM coreiq_filing_metrics_v5
-                WHERE ticker = :ticker
-            ) filing_periods
-            WHERE bucket_year IS NOT NULL
-            GROUP BY doc_type, bucket_year, display_year, fiscal_quarter
-            ORDER BY doc_type, bucket_year DESC, row_count DESC
+            FROM coreiq_filing_metrics_v5
+            WHERE ticker = :ticker
+            GROUP BY doc_type, storage_year, report_fiscal_year, fiscal_year, fiscal_quarter
         """, {"ticker": ticker})
         _query_elapsed = _perf_time.time() - _query_start
 
+        merged = {}
+        for r in (raw_rows or []):
+            bucket_year = r.get("storage_year") or r.get("report_fiscal_year") or r.get("fiscal_year")
+            if bucket_year in (None, ""):
+                continue
+            display_year = r.get("fiscal_year") or r.get("storage_year") or r.get("report_fiscal_year")
+            group = (r.get("doc_type"), bucket_year, display_year, r.get("fiscal_quarter"))
+            merged[group] = merged.get(group, 0) + (r.get("row_count") or 0)
+
+        def _year_sort_key(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return -1
+
+        rows = [
+            {"doc_type": dt, "bucket_year": by, "display_year": dy,
+             "fiscal_quarter": fq, "row_count": count}
+            for (dt, by, dy, fq), count in sorted(
+                merged.items(),
+                key=lambda kv: (str(kv[0][0] or ""), -_year_sort_key(kv[0][1]), -kv[1]),
+            )
+        ]
+
         try:
+            # log_info promotes any [TIMING] message to WARNING, so this reaches the STG
+            # log at APP_LOG_LEVEL=WARNING. Was 4000-27000 ms with the COALESCE
+            # subquery; grep "[PERF] FILINGS_PREFETCH" to compare.
             log_timing(
-                "FILINGS_PREFETCH",
+                "[PERF] FILINGS_PREFETCH",
                 _query_elapsed * 1000,
-                f"ticker={ticker} table=coreiq_filing_metrics_v5 rows={len(rows)}",
+                f"ticker={ticker} table=coreiq_filing_metrics_v5 "
+                f"db_rows={len(raw_rows or [])} rows={len(rows)} plan=raw_group_by",
             )
         except Exception:
             pass
@@ -3134,9 +3178,39 @@ def render_sec_html_viewer(html_path: str, highlight_fact_id: Optional[str] = No
         # the full multi-MB filing HTML on every interaction (blank-flash flicker +
         # wasted bandwidth). Keyed on identity, an unchanged view is byte-identical →
         # Streamlit skips the re-mount.
-        nonce = f"<!-- fallback_nonce:{hash((html_path, highlight_fact_id))} -->"
-        components.html(nonce + clean_html, height=800, scrolling=True)
+        # Serve the filing over /media and let the frame fetch it, the way the PDF
+        # viewer already does: passing clean_html to components.html pushes the whole
+        # document through the websocket and keeps a copy in the session (~3 MB per
+        # load for one 10-Q). /media returns HTML as application/octet-stream, so the
+        # frame cannot just point at the URL — a small loader fetches it and writes it
+        # into itself. If registration fails, fall back to the inline document.
+        _html_bytes = clean_html.encode("utf-8")
+        _html_url = serve_bytes(
+            _html_bytes, "text/html; charset=utf-8", "filing.html",
+            page="company_filings", for_download=False,   # streamed viewer, re-registered every run
+        )
+        if _html_url:
+            _html_url = absolute_app_url(_html_url)
+            components.html(
+                '<!doctype html><html><body style="margin:0"><script>'
+                f'fetch({json.dumps(_html_url)}).then(function(r){{return r.text();}})'
+                '.then(function(t){document.open();document.write(t);document.close();})'
+                '.catch(function(e){document.body.textContent="Could not load the filing: "+e;});'
+                '</script></body></html>',
+                height=800, scrolling=True,
+            )
+        else:
+            nonce = f"<!-- fallback_nonce:{hash((html_path, highlight_fact_id))} -->"
+            components.html(nonce + clean_html, height=800, scrolling=True)
         _st_html_elapsed = _perf_time.time() - _st_html_start
+        try:
+            log_timing(
+                "[PERF] FILINGS_VIEWER", _st_html_elapsed * 1000,
+                f"doc_mb={len(_html_bytes) / (1024 * 1024):.2f} "
+                f"transport={'media_http' if _html_url else 'websocket_fallback'}",
+            )
+        except Exception:
+            pass
 
     except Exception as e:
         log_error(f"[RENDER HTML] components.html error: {e}")
