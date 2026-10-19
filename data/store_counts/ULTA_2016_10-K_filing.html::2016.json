@@ -1,0 +1,14 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2016,
+ "value": 449,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores end of period | | | 449 | | | | 550 | | | | 675 | | | | 774 | | | | 874 |",
+ "fye_date": "2016-01-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ULTA/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

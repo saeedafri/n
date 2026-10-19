@@ -1,0 +1,14 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2020,
+ "value": 1254,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores end of period | | 1,254 | | 1,174 | | 1,074",
+ "fye_date": "2020-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ULTA/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

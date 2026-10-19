@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2025,
+ "value": 84,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "des that lease transactions which provide for more than a nominal purchase price at the end of the agreed rental period are not credit sales under the statute. As of December 31, 2025, we operated 84 lease-to-own stores and 22 Acima staffed locations in North",
+ "fye_date": "2025-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UPBD/2026/10-K/filing.html::2025",
+ "extractor_version": 5
+}

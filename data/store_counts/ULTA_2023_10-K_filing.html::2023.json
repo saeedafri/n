@@ -1,0 +1,14 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2023,
+ "value": 1355,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores end of period | | 1,355 | | 1,308 | | 1,264",
+ "fye_date": "2023-01-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ULTA/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2019,
+ "value": 3466,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total locations(1) | 3,466 | | | 3,667 | | | 3,843 |",
+ "fye_date": "2019-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UPBD/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

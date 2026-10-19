@@ -1,0 +1,14 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2025,
+ "value": 1445,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores end of period | | 1,445 | | 1,385 | | 1,355",
+ "fye_date": "2025-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ULTA/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

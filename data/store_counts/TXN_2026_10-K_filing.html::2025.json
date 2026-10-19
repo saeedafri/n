@@ -1,0 +1,14 @@
+{
+ "ticker": "TXN",
+ "fiscal_year": 2025,
+ "value": 2841,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 2,841 | | | 1,656 | | | 11 | | | 2,457 | | | 4,380 | | | 11 |",
+ "fye_date": "2025-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TXN/2026/10-K/filing.html::2025",
+ "extractor_version": 5
+}

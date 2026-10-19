@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2015,
+ "value": 5018,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total locations | | 5,018 | | | 4,594 | | | 4,665 |",
+ "fye_date": "2015-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UPBD/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

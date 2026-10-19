@@ -1,0 +1,13 @@
+{
+ "ticker": "UI",
+ "fiscal_year": 2020,
+ "value": null,
+ "confidence": "none",
+ "basis": "no store count found in this filing",
+ "fye_date": "2020-06-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UI/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

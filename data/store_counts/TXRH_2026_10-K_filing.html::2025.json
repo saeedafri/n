@@ -1,0 +1,14 @@
+{
+ "ticker": "TXRH",
+ "fiscal_year": 2025,
+ "value": 816,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total system-wide restaurants | | 714 | | 102 | | 816 8",
+ "fye_date": "2025-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TXRH/2026/10-K/filing.html::2025",
+ "extractor_version": 5
+}

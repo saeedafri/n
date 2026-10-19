@@ -1,0 +1,14 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2022,
+ "value": 1308,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total stores end of period | | 1,308 | | 1,264 | | 1,254",
+ "fye_date": "2022-01-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ULTA/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

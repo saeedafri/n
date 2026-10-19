@@ -1,0 +1,14 @@
+{
+ "ticker": "UPBD",
+ "fiscal_year": 2021,
+ "value": 2435,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total locations(1) | 2,435 | | | 2,428 | | | 2,468 |",
+ "fye_date": "2021-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UPBD/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

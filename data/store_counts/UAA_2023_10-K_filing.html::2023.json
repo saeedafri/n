@@ -1,0 +1,14 @@
+{
+ "ticker": "UAA",
+ "fiscal_year": 2023,
+ "value": 176,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "generated through our Brand and Factory House stores and e-commerce website. As of March 31, 2023, in North America, we had 176 Factory House stores primarily located in outlet centers and 18 Brand House stor",
+ "fye_date": "2023-03-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "UAA/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

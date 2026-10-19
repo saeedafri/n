@@ -1,0 +1,14 @@
+{
+ "ticker": "ULTA",
+ "fiscal_year": 2019,
+ "value": 1174,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "ull-service salon. Our store design, fixtures, and open layout provide the flexibility to respond to consumer trends and changes in our merchandising strategy. As of February 2, 2019, we operated 1,174 retail stores across 50 states, as well as an e-comme",
+ "fye_date": "2019-02-02",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "ULTA/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

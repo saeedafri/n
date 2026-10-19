@@ -1,0 +1,14 @@
+{
+ "ticker": "URBN",
+ "fiscal_year": 2025,
+ "value": 733,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total Company-Owned Stores | | | 255 | | | | 239 | | | | 167 | | | | 63 | | | | 9 | | | | 733 |",
+ "fye_date": "2025-01-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "URBN/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

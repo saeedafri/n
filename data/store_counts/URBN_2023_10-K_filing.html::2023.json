@@ -1,0 +1,14 @@
+{
+ "ticker": "URBN",
+ "fiscal_year": 2023,
+ "value": 700,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total Company-Owned Stores | | | 263 | | | | 238 | | | | 188 | | | | 11 | | | | 700 |",
+ "fye_date": "2023-01-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "URBN/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}
