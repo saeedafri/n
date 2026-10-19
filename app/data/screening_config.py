@@ -638,7 +638,9 @@ KEYDEV_CATEGORIES = {
 # UI Label -> Exact DB event_category value (for exact match queries)
 KEYDEV_CATEGORIES_ALL = {
     # ── Earnings / Guidance ───────────────────────────────────────────────────
-    "Earnings & Guidance":          "Earnings & Guidance",
+    # One DB category, two selectable halves — see KEYDEV_EARNINGS_GUIDANCE below.
+    "Earnings":                     "Earnings",
+    "Guidance":                     "Guidance",
     "Press Release":                "Press Release",
     "Restatements":                 "Restatements",
     # ── M&A / Corporate Actions ───────────────────────────────────────────────
@@ -672,6 +674,65 @@ KEYDEV_CATEGORIES_ALL = {
     "General News":                 "General News",
     "Other Events":                 "Other Events",
 }
+
+# ── Earnings vs Guidance ──────────────────────────────────────────────────────
+#
+# coreiq_company_events stores ONE category, 'Earnings & Guidance', for both an
+# earnings result and a change of forward guidance — the business team asked for
+# them apart. The split is ours to make on read: the DB already distinguishes the
+# two in `event_subtype`, so "Earnings" and "Guidance" are two selectable halves
+# of the same stored category. Selecting both is exactly the old behaviour.
+#
+# Checked against edgartools 5.16 first (2026-10-19): an 8-K's SEC item codes do
+# separate the two at source (2.02 = Results of Operations, 7.01 = Reg FD, where
+# guidance lives), but `EarningsRelease.guidance` — the library's parsed forward
+# guidance table — returned None on all 108 Item 2.02 filings sampled across 18
+# tickers, because consumer/retail issuers state guidance in prose, not a table.
+# So the separable signal we have today is the subtype, not a new EDGAR feed.
+# See docs/superpowers/specs/2026-10-19-screening-earnings-vs-guidance-design.md.
+KEYDEV_EARNINGS_GUIDANCE = "Earnings & Guidance"   # the stored DB category
+KEYDEV_GUIDANCE = "Guidance"                       # UI token: the guidance half
+KEYDEV_EARNINGS = "Earnings"                       # UI token: everything else
+
+# A subtype belongs to the guidance half when its own name says so. Kept as a
+# substring test, not a fixed list, so a new subtype the ETL invents
+# ('Earnings Release - Guidance Narrowed' was the most recent) lands on the right
+# side without a code change.
+KEYDEV_GUIDANCE_SUBTYPE_WORDS = ("guidance", "outlook")
+
+# 'Guidance Update' is the one guidance subtype derived from news articles rather
+# than from a filing, and its label is not trustworthy: of the 569 rows on STG,
+# 405 (71%) were labelled from wording that appears only in the article BODY, so
+# the bucket carries layoff stories, analyst price targets and law-firm notices
+# whose headline has nothing to do with guidance (the Kroger "cut 3,000 corporate
+# roles" row the business team reported). Requiring the HEADLINE to be about
+# guidance keeps 236 real ones and moves 333 to the Earnings half — nothing is
+# hidden, since selecting both halves still returns every row.
+KEYDEV_NEWS_GUIDANCE_SUBTYPE = "Guidance Update"
+KEYDEV_GUIDANCE_HEADLINE_WORDS = ("guidance", "outlook", "forecast")
+
+
+def keydev_is_guidance_subtype(subtype) -> bool:
+    """True when the subtype's own name marks it as a guidance event."""
+    text = str(subtype or "").lower()
+    return any(word in text for word in KEYDEV_GUIDANCE_SUBTYPE_WORDS)
+
+
+def keydev_is_guidance_row(subtype, headline) -> bool:
+    """True when one event row belongs to the Guidance half.
+
+    The single definition of the split. The SQL builder in screening_service
+    mirrors it as a WHERE fragment and the event index mirrors it as a column;
+    tests/test_screening_earnings_vs_guidance.py asserts all three agree on live
+    rows, so the rule can only ever be changed here.
+    """
+    if not keydev_is_guidance_subtype(subtype):
+        return False
+    if str(subtype or "").strip() != KEYDEV_NEWS_GUIDANCE_SUBTYPE:
+        return True
+    text = str(headline or "").lower()
+    return any(word in text for word in KEYDEV_GUIDANCE_HEADLINE_WORDS)
+
 
 # Backward-compat: old DB/session-state keys → canonical new keys.
 # Used during the transition period before DB category values are migrated.

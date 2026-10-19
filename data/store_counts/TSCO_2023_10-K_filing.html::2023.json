@@ -1,0 +1,14 @@
+{
+ "ticker": "TSCO",
+ "fiscal_year": 2023,
+ "value": 2414,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "training materials on security topics through the Company’s training management system. | | | | | | | | | | | | 25 Table of Contents Item 2. Properties As of December 30, 2023, the Company operated 2,414 stores in 49 states (2,216 Tractor Supply reta",
+ "fye_date": "2023-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TSCO/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

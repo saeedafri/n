@@ -81,6 +81,12 @@ FIRST_COPY_BATCH = 5000  # per round trip while the parallel first copy runs
 BLOCK = 10000          # ids per reconciliation block (a 10k block checks in ~0.4 s)
 HOT_BLOCKS = int(os.getenv("NEWS_MIRROR_HOT_BLOCKS", "2"))   # newest blocks checked on every write (~13 days of AV)
 RESTORE_HOT_BLOCKS = 5                                          # …and once after a restore
+# A restored/first copy is held back ("verify") until its newest blocks are checked
+# against MySQL. That check talks to MySQL, and on a loaded server it can keep dying
+# with "Lost connection during query" — which left the copy unserved for days and sent
+# every transcript search to a 35 s LIKE scan. After this long, serve the copy anyway:
+# the background sweep still reconciles it, and a stale row beats a 35 s page.
+VERIFY_GRACE_S = float(os.getenv("NEWS_MIRROR_VERIFY_GRACE_S", "600"))
 # Full checksum sweep: a whole-table scan on MySQL, so rare and throttled — recent
 # edits are caught every cycle by the hot-block check / changed_col instead.
 RECONCILE_EVERY_S = float(os.getenv("NEWS_MIRROR_RECONCILE_S", "21600"))
@@ -188,8 +194,10 @@ def _restore_snapshot():
     _schema(c)
     for key in TABLES:
         _set_state(c, f"{key}:verify", "1")
+        _set_state(c, f"{key}:verify_at", time.time())
     c.commit()
     _VOCAB["terms"] = None
+    _LIKE_IDS.clear()
     slog_warning(f"[NEWS_MIRROR] restored snapshot in {time.perf_counter() - started:.0f}s; verifying")
     return True
 
@@ -314,8 +322,20 @@ def ready(key):
         if not p or not os.path.exists(p):
             return False     # connecting would create an empty file and block the restore
         c = _conn()
-        ok = (_get_state(c, f"{key}:complete") == "1" and _get_state(c, "companies:complete") == "1"
-              and _get_state(c, f"{key}:verify") != "1")
+        copied = (_get_state(c, f"{key}:complete") == "1"
+                  and _get_state(c, "companies:complete") == "1")
+        held = _get_state(c, f"{key}:verify") == "1"
+        if copied and held:
+            # Held back until the copy is checked against MySQL. That check runs inside
+            # a sync pass, and when it kept failing the hold outlived every pass — the
+            # table was never served again and each search fell back to a 35 s scan.
+            # Release it here once the grace has passed, and until then do NOT cache the
+            # False: a cached False is what made the old state permanent.
+            if _release_verify(c, key, "grace", grace=True):
+                held = False
+            else:
+                return False
+        ok = copied and not held
     except Exception:
         ok = False
     with _STATE_LOCK:
@@ -483,6 +503,7 @@ def _copy_table(key):
     # Rows copied early may have been edited while the rest copied: check the newest
     # blocks before serving (verify) and sweep the rest in the background.
     _set_state(c, f"{key}:verify", "1")
+    _set_state(c, f"{key}:verify_at", time.time())
     _set_state(c, f"{key}:reconciled_at", 0)
     c.commit()
     with _STATE_LOCK:
@@ -691,6 +712,33 @@ def sync(changed_tables=None, reconcile=False):
                 return
 
 
+def _release_verify(c, key, why, grace=False):
+    """Clear the `verify` hold so `key` is served again.
+
+    `grace=True` is the failure path: the check against MySQL did not get to run, so
+    only release once VERIFY_GRACE_S has passed since the hold was set. Until then the
+    table stays held and the next pass retries. Returns True when released."""
+    if grace:
+        try:
+            held_since = float(_get_state(c, f"{key}:verify_at", 0) or 0)
+        except (TypeError, ValueError):
+            held_since = 0.0
+        waited = time.time() - held_since
+        if held_since and waited < VERIFY_GRACE_S:
+            return False
+        slog_warning(f"[NEWS_MIRROR][{key}] verify could not reach MySQL for "
+                     f"{waited:.0f}s — serving the copy; the sweep reconciles it")
+    _set_state(c, f"{key}:verify", "0")
+    _set_state(c, f"{key}:reconciled_at", 0)
+    c.commit()
+    with _STATE_LOCK:
+        _READY.pop(key, None)
+    _VOCAB["terms"] = None
+    _LIKE_IDS.clear()
+    slog_warning(f"[NEWS_MIRROR][{key}] now serving the local copy ({why})")
+    return True
+
+
 def _sync_pass(changed_tables, reconcile):
     changed = set()
     try:
@@ -720,23 +768,28 @@ def _sync_pass(changed_tables, reconcile):
                 continue
             moved = changed_tables is None or t["source"] in changed_tables
             verify = _get_state(c, f"{key}:verify") == "1"
-            if moved or verify:
-                if _tail(c, key):
-                    changed.add(key)
-                if _pull_changed(c, key):
-                    changed.add(key)
-                hi = int(_get_state(c, f"{key}:max_id", 0) or 0)
-                blocks = RESTORE_HOT_BLOCKS if verify else HOT_BLOCKS
-                if _reconcile(c, key, from_id=max(1, hi - blocks * _block(key))):
-                    changed.add(key)
-            if verify:
-                # Restored snapshot: new rows, re-fetched rows and the recent blocks
-                # are now exact — serve it; older edits are left to the sweep below.
-                _set_state(c, f"{key}:verify", "0")
-                _set_state(c, f"{key}:reconciled_at", 0)
-                c.commit()
-                with _STATE_LOCK:
-                    _READY.pop(key, None)
+            # Per table: a MySQL hiccup on one of these steps used to abort the whole
+            # pass, so `verify` was never cleared and the table stayed unserved until
+            # the next restart — permanently, because the next restore set it again.
+            try:
+                if moved or verify:
+                    if _tail(c, key):
+                        changed.add(key)
+                    if _pull_changed(c, key):
+                        changed.add(key)
+                    hi = int(_get_state(c, f"{key}:max_id", 0) or 0)
+                    blocks = RESTORE_HOT_BLOCKS if verify else HOT_BLOCKS
+                    if _reconcile(c, key, from_id=max(1, hi - blocks * _block(key))):
+                        changed.add(key)
+                if verify:
+                    # Restored snapshot: new rows, re-fetched rows and the recent blocks
+                    # are now exact — serve it; older edits are left to the sweep below.
+                    _release_verify(c, key, "checked")
+            except Exception as exc:
+                slog_warning(f"[NEWS_MIRROR][{key}] sync step failed: "
+                             f"{type(exc).__name__}: {str(exc)[:160]}")
+                if verify:
+                    _release_verify(c, key, "grace", grace=True)
             last = float(_get_state(c, f"{key}:reconciled_at", 0) or 0)
             if reconcile or time.time() - last >= RECONCILE_EVERY_S:
                 _start_sweep(key)
@@ -944,6 +997,7 @@ def _changed(keys):
     then clear the in-memory caches."""
     if "tx" in keys:
         _VOCAB["terms"] = None          # new or changed transcripts may add words
+        _LIKE_IDS.clear()
     keys = {k for k in keys if k == "companies" or ready(k)}
     if not keys:
         return
@@ -970,6 +1024,10 @@ def _changed(keys):
 
 
 _VOCAB = {"terms": None}
+# keyword -> ids. The vocabulary scan below is a substring test over every distinct word
+# in the corpus, so paging ("load more") would repeat it per click. Cleared whenever the
+# copy changes, next to _VOCAB.
+_LIKE_IDS = {}
 _FOLD = {}                  # non-ASCII char -> its one-char case/accent fold, or None
 
 
@@ -1033,6 +1091,9 @@ def transcript_like_ids(keyword):
     kw = normalize((keyword or "").strip())
     if not kw or not kw.isalnum() or not ready("tx"):
         return None
+    cached = _LIKE_IDS.get(kw)
+    if cached is not None:
+        return cached
     try:
         c = _conn()
         if _get_state(c, "tx:words") != "1":
@@ -1042,12 +1103,17 @@ def transcript_like_ids(keyword):
             terms = _VOCAB["terms"] = [r[0] for r in c.execute("SELECT term FROM tx_vocab")]
         hits = [t for t in terms if kw in t]
         if not hits:
+            _LIKE_IDS[kw] = []
             return []
         match = " OR ".join('"' + t.replace('"', '""') + '"' for t in hits)
         src = TABLES["tx"]["source"]
-        return [r[0] for r in c.execute(
+        ids = [r[0] for r in c.execute(
             f"SELECT t.id FROM tx_words w JOIN {src} t ON t.id = w.rowid "
             f"WHERE tx_words MATCH ? AND t.has_transcript = 1", (match,))]
+        if len(_LIKE_IDS) > 512:
+            _LIKE_IDS.clear()
+        _LIKE_IDS[kw] = ids
+        return ids
     except Exception as exc:
         slog_warning(f"[NEWS_MIRROR][tx] word index lookup failed, using MySQL: {type(exc).__name__}: {str(exc)[:120]}")
         return None

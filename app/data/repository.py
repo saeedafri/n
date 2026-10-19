@@ -895,6 +895,14 @@ class IncomeStatementRepository:
                 return row['reported_currency']
         return "USD"
 
+# Hard cap for the un-indexable LIKE '%kw%' transcript scan (see
+# search_transcripts_fulltext). Only reached when the local word index is unavailable.
+_LIKE_FALLBACK_MS = int(os.getenv("TRANSCRIPT_LIKE_FALLBACK_MS", "4000"))
+# Answer the cross-transcript search from the local word index instead of MySQL's
+# FULLTEXT. Set TRANSCRIPT_LOCAL_SEARCH=0 to go back to MySQL without a deploy.
+_LOCAL_TRANSCRIPT_SEARCH = os.getenv("TRANSCRIPT_LOCAL_SEARCH", "1").strip() == "1"
+
+
 def _news_run(sql, params, key):
     """News SQL served from the local copy when complete (data/news_mirror.py)."""
     from data import news_mirror
@@ -3033,16 +3041,27 @@ class EarningsCallRepository:
         _year_f = (int(year) if isinstance(year, str) else year) if year and str(year) != 'ALL' else None
         _q_f = EarningsCallRepository._parse_quarter_param(quarter) if quarter and quarter != 'ALL' else None
 
-        # Execute main query
+        # Execute main query. The local word index answers the same page in under a
+        # millisecond; MySQL's FULLTEXT costs 2-30 s on STG because the match itself is
+        # fast but the server is busy. Two differences, both visible to the user, which
+        # is why TRANSCRIPT_LOCAL_SEARCH=0 turns it off without a deploy:
+        #   * it matches substrings ("tarif" finds "tariffs"), a superset of FULLTEXT's
+        #     whole-word match — the same semantics the LIKE fallback below already has;
+        #   * candidates are the NEWEST 500, not the 500 most "relevant" then re-sorted
+        #     by date, so a recent match can no longer be pushed out by an older one.
         query_start = time.perf_counter()
         results = None
-        if len(keyword) < 3 and not single_ticker:
+        served_by = "mysql_fulltext"
+        if _LOCAL_TRANSCRIPT_SEARCH or (len(keyword) < 3 and not single_ticker):
             results = EarningsCallRepository._like_page_from_word_index(
                 keyword, scoped_tickers, _year_f, _q_f, limit, offset)
+            if results is not None:
+                served_by = "local_word_index"
         if results is None:
             results = db_manager.execute_query_readonly(base_query, params)
         query_ms = (time.perf_counter() - query_start) * 1000
         log_db_timing("search_transcripts_fulltext.main_query", "coreiq_av_earnings_call_transcripts", query_ms, rows=len(results), ticker=str(ticker or ''))
+        log_db_timing("[PERF] TRANSCRIPT_SEARCH", served_by, query_ms, rows=len(results), ticker=str(ticker or ''))
 
         # FULLTEXT stopword fallback: if no results and keyword >= 3 chars, try LIKE
         if not results and len(keyword) >= 3 and not single_ticker:
@@ -3074,8 +3093,14 @@ class EarningsCallRepository:
                 if q_int:
                     fallback += " AND q = :quarter_q"
                     fb_params['quarter_q'] = q_int
+            # LIKE '%kw%' cannot use an index, so for a word FULLTEXT does not match
+            # this reads every transcript: 35 s on STG, and the page just hangs. The
+            # local word index above answers it in milliseconds; this is only reached
+            # when that copy is unavailable, so cap it and show what it found rather
+            # than holding the user. MAX_EXECUTION_TIME is MySQL 8's per-SELECT abort.
             fallback = (
-                "SELECT id, ticker, year, quarter, q FROM (" + fallback
+                f"SELECT /*+ MAX_EXECUTION_TIME({_LIKE_FALLBACK_MS}) */ "
+                "id, ticker, year, quarter, q FROM (" + fallback
                 + " LIMIT :cand_cap) s ORDER BY year DESC, q DESC, id DESC "
                   "LIMIT :limit OFFSET :offset"
             )
@@ -3086,9 +3111,24 @@ class EarningsCallRepository:
             fb_start = time.perf_counter()
             results = EarningsCallRepository._like_page_from_word_index(
                 keyword, scoped_tickers, _year_f, _q_f, limit, offset)
+            served_by = "word_index"
             if results is None:
-                results = db_manager.execute_query_readonly(fallback, fb_params)
+                served_by = "mysql_like_scan"
+                try:
+                    results = db_manager.execute_query_readonly(fallback, fb_params)
+                except Exception as exc:
+                    # ER_QUERY_TIMEOUT (3024) when the cap above fires; anything else is
+                    # a real failure. Either way an empty page beats a hung one.
+                    served_by = "mysql_like_timeout"
+                    log_structured_error(
+                        exc, page="earnings_calls", component="EarningsCallRepository",
+                        operation="search_transcripts_fulltext_like_fallback",
+                        context=f"keyword={keyword!r} cap_ms={_LIKE_FALLBACK_MS}",
+                    )
+                    results = []
             fb_ms = (time.perf_counter() - fb_start) * 1000
+            log_db_timing("search_transcripts_fulltext.LIKE_served_by",
+                          served_by, fb_ms, rows=len(results), ticker=str(ticker or ''))
             log_db_timing("search_transcripts_fulltext.LIKE_fallback", "coreiq_av_earnings_call_transcripts", fb_ms, rows=len(results), ticker=str(ticker or ''))
 
         rows = [dict(r) for r in results]

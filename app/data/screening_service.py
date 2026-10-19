@@ -43,6 +43,14 @@ from data.screening_config import (
     KEYDEV_CATEGORIES,
     KEYDEV_CATEGORY_ALIASES,
     KEYDEV_CATEGORY_REVERSE_ALIASES,
+    KEYDEV_EARNINGS,
+    KEYDEV_EARNINGS_GUIDANCE,
+    KEYDEV_GUIDANCE,
+    KEYDEV_GUIDANCE_HEADLINE_WORDS,
+    KEYDEV_GUIDANCE_SUBTYPE_WORDS,
+    KEYDEV_NEWS_GUIDANCE_SUBTYPE,
+    keydev_is_guidance_row,
+    keydev_is_guidance_subtype,
     TABULAR_MARKET_DATA_STMTS,
     SEGMENT_STATEMENT_TYPES,
     TRAILING_QUARTERS_DEFAULT,
@@ -4562,7 +4570,88 @@ _KEYDEV_MA_COLS = """,
 
 def _keydev_ma_select(categories) -> str:
     """Extra SELECT list for M&A screens, empty string otherwise."""
-    return _KEYDEV_MA_COLS if MA_KEYDEV_CATEGORY in (categories or ()) else ""
+    return _KEYDEV_MA_COLS if MA_KEYDEV_CATEGORY in keydev_db_categories(categories) else ""
+
+
+# ── Earnings vs Guidance: one stored category, two selectable halves ─────────
+#
+# The UI hands us tokens, not DB categories: every other token IS its category,
+# but 'Earnings' and 'Guidance' are the two halves of the stored
+# 'Earnings & Guidance' (see keydev_is_guidance_row in screening_config, which
+# owns the rule). Everything that turns a token tuple into SQL goes through
+# keydev_category_clause so the halves can never drift between the five queries
+# that read this table; everything that needs real DB category values (the M&A
+# column add-on, the subtype filter domain) goes through keydev_db_categories.
+
+# No LOWER() on the column: all three columns are utf8mb4_0900_ai_ci, so LIKE is
+# already case-insensitive, and wrapping them cost 138s instead of 5.6s on the
+# all-history count (measured on STG 2026-10-19) — past the 120s read timeout,
+# which execute_query_readonly turns into a silent empty result.
+_GUIDANCE_SUBTYPE_SQL = " OR ".join(
+    f"{{alias}}.event_subtype LIKE '%{word}%'"
+    for word in KEYDEV_GUIDANCE_SUBTYPE_WORDS)
+_GUIDANCE_HEADLINE_SQL = " OR ".join(
+    f"{{alias}}.headline LIKE '%{word}%'"
+    for word in KEYDEV_GUIDANCE_HEADLINE_WORDS)
+
+
+def _guidance_sql(alias: str) -> str:
+    """SQL mirror of keydev_is_guidance_row for one row of the events table."""
+    subtype = _GUIDANCE_SUBTYPE_SQL.format(alias=alias)
+    headline = _GUIDANCE_HEADLINE_SQL.format(alias=alias)
+    return (f"(({subtype}) AND ("
+            f"{alias}.event_subtype <> '{KEYDEV_NEWS_GUIDANCE_SUBTYPE}' "
+            f"OR ({headline})))")
+
+
+def keydev_db_categories(categories) -> tuple:
+    """The real event_category values behind a tuple of UI tokens."""
+    out = []
+    for token in (categories or ()):
+        token = str(token)
+        resolved = (KEYDEV_EARNINGS_GUIDANCE
+                    if token in (KEYDEV_EARNINGS, KEYDEV_GUIDANCE) else token)
+        if resolved not in out:
+            out.append(resolved)
+    return tuple(out)
+
+
+def keydev_category_clause(categories, alias: str = "e") -> str:
+    """The `WHERE` fragment matching a tuple of UI category tokens.
+
+    Returns a single parenthesised boolean, never a bare IN list, because the
+    Earnings/Guidance halves need the subtype (and, for news rows, the headline)
+    alongside the category. Picking both halves reproduces the plain
+    `event_category = 'Earnings & Guidance'` set exactly.
+    """
+    plain, wants_earnings, wants_guidance = [], False, False
+    for token in (categories or ()):
+        token = str(token)
+        if token == KEYDEV_EARNINGS:
+            wants_earnings = True
+        elif token == KEYDEV_GUIDANCE:
+            wants_guidance = True
+        elif token == KEYDEV_EARNINGS_GUIDANCE:
+            # Saved screens from before the split asked for the whole category.
+            wants_earnings = wants_guidance = True
+        else:
+            plain.append(token)
+
+    terms = []
+    if plain:
+        cat_sql = ", ".join("'" + c.replace("'", "''") + "'" for c in plain)
+        terms.append(f"{alias}.event_category IN ({cat_sql})")
+    if wants_earnings or wants_guidance:
+        category = f"{alias}.event_category = '{KEYDEV_EARNINGS_GUIDANCE}'"
+        if wants_earnings and wants_guidance:
+            terms.append(category)
+        elif wants_guidance:
+            terms.append(f"({category} AND {_guidance_sql(alias)})")
+        else:
+            terms.append(f"({category} AND NOT {_guidance_sql(alias)})")
+    if not terms:
+        return "1 = 0"
+    return "(" + " OR ".join(terms) + ")"
 
 
 def apply_keydevs_criterion(
@@ -4586,10 +4675,7 @@ def apply_keydevs_criterion(
     """
     rows_in = len(working_df)
 
-    categories = criterion.get("categories", [])    # list of exact DB event_category values
-
-    # Simple exact match - categories are already exact DB values from KEYDEV_CATEGORIES_5MAIN
-    query_cats = categories
+    categories = criterion.get("categories", [])    # UI tokens (see keydev_category_clause)
 
     if not categories:
         return working_df.copy(), {
@@ -4604,7 +4690,8 @@ def apply_keydevs_criterion(
         }
 
     ticker_clause = _keydev_ticker_clause(ALL_TICKERS if all_tickers else tuple(tickers))
-    cat_sql = ", ".join(f"'{c}'" for c in query_cats)
+    # No alias inside the ROW_NUMBER() subquery below — it reads the table directly.
+    cat_clause = keydev_category_clause(categories, "coreiq_company_events")
 
     date_clause = _build_keydev_date_clause(criterion)
 
@@ -4642,7 +4729,7 @@ def apply_keydevs_criterion(
                            ORDER BY event_date DESC, event_id DESC
                        ) AS rn
                 FROM coreiq_company_events
-                WHERE event_category IN ({cat_sql})
+                WHERE {cat_clause}
                   {ticker_clause}
                   {date_clause}
             ) ranked
@@ -4860,7 +4947,19 @@ def keydev_subtype_domain(categories) -> List[str]:
     by_cat = get_keydev_subtypes_by_category()
     if not by_cat:
         return []
-    values = {s for c in (categories or []) for s in by_cat.get(c, [])}
+    tokens = {str(c) for c in (categories or [])}
+    values = set()
+    for category in keydev_db_categories(categories):
+        subtypes = by_cat.get(category, [])
+        if category == KEYDEV_EARNINGS_GUIDANCE and KEYDEV_EARNINGS_GUIDANCE not in tokens:
+            # Only the half (or halves) the user picked — a Guidance screen must not
+            # offer 'Earnings Release' in its Type filter, or the Excel export built
+            # from that filter would promise rows the query never returned.
+            if KEYDEV_GUIDANCE not in tokens:
+                subtypes = [s for s in subtypes if not keydev_is_guidance_subtype(s)]
+            elif KEYDEV_EARNINGS not in tokens:
+                subtypes = [s for s in subtypes if keydev_is_guidance_subtype(s)]
+        values.update(subtypes)
     return sorted(values)
 
 
@@ -4911,7 +5010,7 @@ def get_keydevs_events_count(
     if not tickers or not categories:
         return 0
     ticker_clause = _keydev_ticker_clause(tickers, "e")
-    cat_sql = ", ".join(f"'{c}'" for c in categories)
+    cat_clause = keydev_category_clause(categories, "e")
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
         "start_date": start_date,
@@ -4921,7 +5020,7 @@ def get_keydevs_events_count(
     query = f"""
         SELECT COUNT(*) AS c
         FROM coreiq_company_events e
-        WHERE e.event_category IN ({cat_sql})
+        WHERE {cat_clause}
           {ticker_clause}
           {date_clause}
     """
@@ -4959,11 +5058,8 @@ def get_keydevs_events_for_tickers(
     if not tickers or not categories:
         return pd.DataFrame(), None
 
-    # Simple exact match - categories are exact DB event_category values
-    query_cats = list(categories)
-
     ticker_clause = _keydev_ticker_clause(tickers, "e")
-    cat_sql = ", ".join(f"'{c}'" for c in query_cats)
+    cat_clause = keydev_category_clause(categories, "e")
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
         "start_date": start_date,
@@ -4981,7 +5077,7 @@ def get_keydevs_events_for_tickers(
             f"OR (e.event_date = '{before_date}' AND e.event_id < {int(before_id)}))"
         )
     _lim = max(1, int(limit))
-    with_ma = MA_KEYDEV_CATEGORY in (categories or ())
+    with_ma = MA_KEYDEV_CATEGORY in keydev_db_categories(categories)
     query = f"""
         SELECT
             e.event_id,
@@ -4997,7 +5093,7 @@ def get_keydevs_events_for_tickers(
             {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
         FROM coreiq_company_events e
         {_KEYDEV_COMPANY_JOINS}
-        WHERE e.event_category IN ({cat_sql})
+        WHERE {cat_clause}
           {ticker_clause}
           {date_clause}
           {keyset_clause}
@@ -5031,21 +5127,33 @@ def get_keydevs_events_for_tickers(
 KEYDEV_PER_INDUSTRY = 8
 
 
-KEYDEV_EVENT_INDEX = "keydev_event_index_v1"
+# v2 carries is_guidance — the Earnings/Guidance half of each row, decided once
+# at build time by keydev_is_guidance_row. The subtype and headline it is derived
+# from are NOT kept: the flag is one bool per row, the headline would be ~200k
+# rows of TEXT on disk. Renamed from v1 so the frame change forces a rebuild
+# rather than unpickling a frame without the column.
+KEYDEV_EVENT_INDEX = "keydev_event_index_v2"
 KEYDEV_INDEX_SOURCES = [{"table": "coreiq_company_events", "signal": "MAX(event_id)"}]
 _keydev_index_started = False
 
 
 def build_keydev_event_index() -> pd.DataFrame:
     rows = db_manager.execute_query_readonly_raising(
-        "SELECT event_id, event_date, ticker, event_category FROM coreiq_company_events")
-    df = pd.DataFrame(rows, columns=["event_id", "event_date", "ticker", "event_category"])
+        "SELECT event_id, event_date, ticker, event_category, event_subtype, headline "
+        "FROM coreiq_company_events")
+    df = pd.DataFrame(rows, columns=["event_id", "event_date", "ticker",
+                                     "event_category", "event_subtype", "headline"])
     df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce")
+    df["is_guidance"] = [
+        keydev_is_guidance_row(s, h)
+        for s, h in zip(df["event_subtype"], df["headline"])
+    ]
+    df = df.drop(columns=["event_subtype", "headline"])
     return df.astype({"ticker": "category", "event_category": "category"})
 
 
 def keydev_event_index() -> Optional[pd.DataFrame]:
-    """(event_id, event_date, ticker, event_category) for every event, from disk.
+    """(event_id, event_date, ticker, event_category, is_guidance) per event, from disk.
 
     None until the first build lands — that build (~217k rows, 10-20 s) runs in
     the background, never on a click; callers fall back to SQL meanwhile.
@@ -5076,11 +5184,28 @@ def keydev_event_index() -> Optional[pd.DataFrame]:
     return build()
 
 
+def _keydev_index_half_mask(rows: pd.DataFrame, categories) -> pd.Series:
+    """Pandas mirror of keydev_category_clause's Earnings/Guidance half.
+
+    Only rows of the stored 'Earnings & Guidance' category are ever excluded;
+    every other category passes untouched.
+    """
+    tokens = {str(c) for c in (categories or ())}
+    both = KEYDEV_EARNINGS_GUIDANCE in tokens or (
+        KEYDEV_EARNINGS in tokens and KEYDEV_GUIDANCE in tokens)
+    if both or not (tokens & {KEYDEV_EARNINGS, KEYDEV_GUIDANCE}):
+        return pd.Series(True, index=rows.index)
+    split = rows["event_category"].astype(str) == KEYDEV_EARNINGS_GUIDANCE
+    wanted = rows["is_guidance"] if KEYDEV_GUIDANCE in tokens else ~rows["is_guidance"]
+    return ~split | wanted
+
+
 def pick_per_industry(index: pd.DataFrame, industries: pd.Series, categories, start, end,
                       lo: int, hi: int) -> pd.DataFrame:
     """Rows lo+1..hi of each industry's events, newest first — the same pick as the
     ROW_NUMBER() OVER (PARTITION BY industry) query, done in memory."""
-    rows = index[index["event_category"].isin(list(categories))]
+    rows = index[index["event_category"].isin(list(keydev_db_categories(categories)))]
+    rows = rows[_keydev_index_half_mask(rows, categories)]
     if start is not None:
         rows = rows[rows["event_date"] >= start]
     if end is not None:
@@ -5091,9 +5216,10 @@ def pick_per_industry(index: pd.DataFrame, industries: pd.Series, categories, st
     return rows[(rank >= lo) & (rank < hi)]
 
 
-def _keydev_industry_window_query(categories, cat_sql: str, date_clause: str,
+def _keydev_industry_window_query(categories, date_clause: str,
                                   lo: int, hi: int) -> str:
     """The SQL pick, used until the event index is on disk."""
+    cat_clause = keydev_category_clause(categories, "e2")
     return f"""
         SELECT
             e.event_id,
@@ -5120,7 +5246,7 @@ def _keydev_industry_window_query(categories, cat_sql: str, date_clause: str,
                 LEFT JOIN coreiq_companies c2          ON c2.ticker  = e2.ticker
                 LEFT JOIN coreiq_sec_companies_all sc2 ON sc2.ticker = e2.ticker
                 LEFT JOIN ({_NON_SEC_INDUSTRY_SUBQUERY}) nsc2 ON nsc2.ticker = e2.ticker
-                WHERE e2.event_category IN ({cat_sql})
+                WHERE {cat_clause}
                   {date_clause}
             ) t
             WHERE t.rn > {lo} AND t.rn <= {hi}
@@ -5165,7 +5291,6 @@ def get_keydevs_events_by_industry(
     if not categories:
         return pd.DataFrame(), False
 
-    cat_sql = ", ".join("'" + str(c).replace("'", "''") + "'" for c in categories)
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
         "start_date": start_date,
@@ -5175,7 +5300,7 @@ def get_keydevs_events_by_industry(
     lo = max(0, int(rn_from))
     hi = lo + max(1, int(per_industry))
 
-    with_ma = MA_KEYDEV_CATEGORY in (categories or ())
+    with_ma = MA_KEYDEV_CATEGORY in keydev_db_categories(categories)
     index = keydev_event_index()
     if index is not None:
         # Pick in memory and fetch only the picked rows by primary key: the
@@ -5207,7 +5332,7 @@ def get_keydevs_events_by_industry(
             ORDER BY e.event_date DESC, e.event_id DESC
         """
     else:
-        query = _keydev_industry_window_query(categories, cat_sql, date_clause, lo, hi)
+        query = _keydev_industry_window_query(categories, date_clause, lo, hi)
     try:
         rows = db_manager.execute_query_readonly(query)
     except Exception as exc:
@@ -5368,14 +5493,14 @@ def fetch_all_keydevs_events(
     if not tickers or not categories:
         return pd.DataFrame()
     ticker_clause = _keydev_ticker_clause(tickers, "e")
-    cat_sql = ", ".join(f"'{c}'" for c in categories)
+    cat_clause = keydev_category_clause(categories, "e")
     date_clause = _build_keydev_date_clause({
         "date_filter_mode": "date_range" if (start_date or end_date) else "timeframe",
         "start_date": start_date,
         "end_date": end_date,
         "days": days,
     })
-    with_ma = MA_KEYDEV_CATEGORY in (categories or ())
+    with_ma = MA_KEYDEV_CATEGORY in keydev_db_categories(categories)
     query = f"""
         SELECT
             e.event_id, e.event_date, e.event_subtype, e.event_category, e.ticker,
@@ -5383,7 +5508,7 @@ def fetch_all_keydevs_events(
             {_KEYDEV_COMPANY_COLS}{_keydev_ma_select(categories)}
         FROM coreiq_company_events e
         {_KEYDEV_COMPANY_JOINS}
-        WHERE e.event_category IN ({cat_sql})
+        WHERE {cat_clause}
           {ticker_clause}
           {date_clause}
         ORDER BY e.event_date DESC, e.event_id DESC
