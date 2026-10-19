@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2025,
+ "value": 5085,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "'total stores' repeated per table: 84 + 576 + 730 + 3,695 = 5,085, a figure stated in the filing",
+ "fye_date": "2025-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TJX/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

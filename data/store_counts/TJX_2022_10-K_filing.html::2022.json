@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2022,
+ "value": 4689,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "'total stores' repeated per table: 68 + 546 + 695 + 3,380 = 4,689, a figure stated in the filing",
+ "fye_date": "2022-01-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TJX/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

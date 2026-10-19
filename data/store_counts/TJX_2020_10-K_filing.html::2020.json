@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2020,
+ "value": 4529,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "'total stores' repeated per table: 54 + 513 + 672 + 3,290 = 4,529, a figure stated in the filing",
+ "fye_date": "2020-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TJX/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

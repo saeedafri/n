@@ -1,0 +1,14 @@
+{
+ "ticker": "TJX",
+ "fiscal_year": 2016,
+ "value": 1156,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total Stores | | | 1,156 | | | | 1,007 | | | | 526 |",
+ "fye_date": "2016-01-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TJX/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "TMUS",
+ "fiscal_year": 2016,
+ "value": 52000,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "We had approximately 52,000 total points of distribution, including approximately 13,000 T-Mobile and MetroPCS branded locations and 39,000 third-party and national retailer locations, as well as distribution through our websites, as of December 31, 2016.",
+ "fye_date": "2016-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TMUS/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "TMHC",
+ "fiscal_year": 2021,
+ "value": 11339,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 9,114 | | | 197 | | | 2,028 | | | 11,339 | | | 8,403 | | | 768 | | | 1,013 | | | 10,184 |",
+ "fye_date": "2021-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TMHC/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

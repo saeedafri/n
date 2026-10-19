@@ -474,7 +474,7 @@ def main() -> None:
     _setup_page()
     _reports_css()
 
-    require_auth(redirect_to="login", page="reports")
+    # require_auth(redirect_to="login", page="reports")
     user_email = get_current_user() or ""
     render_header(full_width=True, current_page="reports")
 

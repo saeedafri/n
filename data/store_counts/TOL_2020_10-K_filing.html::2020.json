@@ -1,0 +1,14 @@
+{
+ "ticker": "TOL",
+ "fiscal_year": 2020,
+ "value": 4,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | | 4 | | | | | 4 | | |",
+ "fye_date": "2020-10-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TOL/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

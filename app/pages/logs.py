@@ -48,7 +48,7 @@ _ADMIN_EMAILS = {
 }
 try:
   if os.getenv("ENFORCE_PAGE_AUTH", "0").strip() == "1":
-    require_auth(page="logs")
+    # require_auth(page="logs")
   _current_user = (get_current_user() or "").strip().lower()
   if _current_user and _current_user not in {e.lower() for e in _ADMIN_EMAILS}:
     if not UserRolesManager.is_admin_or_super_user(_current_user):

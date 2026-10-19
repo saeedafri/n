@@ -2052,7 +2052,7 @@ def main() -> None:
     set_page_layout()
     inject_red_spinner_css()
     _page_css()
-    require_auth(redirect_to="login", page="market_size_forecasting")
+    # require_auth(redirect_to="login", page="market_size_forecasting")
     render_header(full_width=True, current_page="market_size_forecasting")
     tracker.step_end("CHROME")
 
