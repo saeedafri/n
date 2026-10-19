@@ -1,0 +1,14 @@
+{
+ "ticker": "SHOO",
+ "fiscal_year": 2020,
+ "value": 218,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores | | 218 | | | | 227 | | | | 229 | | |",
+ "fye_date": "2020-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHOO/2021/10-K/filing.html::2020",
+ "extractor_version": 5
+}

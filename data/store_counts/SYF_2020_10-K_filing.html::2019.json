@@ -1,0 +1,14 @@
+{
+ "ticker": "SYF",
+ "fiscal_year": 2019,
+ "value": 10000,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "approximately 10,000 retail locations",
+ "fye_date": "2019-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SYF/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

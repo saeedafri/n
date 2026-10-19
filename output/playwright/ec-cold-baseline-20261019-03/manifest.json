@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "keyword": "exchange",
+      "status": "failed",
+      "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-03/01-exchange",
+      "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-d4ccpmu8",
+      "port": 8513,
+      "cache_scope": "application result caches bypassed; shared database/OS buffers not flushed",
+      "errors": [
+        "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"option\", name=\"All Companies\", exact=True)\n"
+      ],
+      "pid": 78435,
+      "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-03/01-exchange/videos/e2bfb47035da534be749b58a1f34f2f4.webm",
+      "sql_queries": 15,
+      "sql_violations": [],
+      "timeline_analysis": {
+        "samples": 486,
+        "interval_ms": 100,
+        "blank_busy_without_loader": [],
+        "loader_visible_samples": 100
+      },
+      "video_analysis": {
+        "decoded_frames": 1263,
+        "fps": 25.0,
+        "duration_s": 50.52,
+        "near_blank_ratio": 0.3404592240696754,
+        "low_contrast_fade_ratio": 0.3428345209817894,
+        "method": "Every decoded frame scaled to360x250; visual metrics are heuristic, paired with100ms DOM evidence",
+        "contact_sheets": [
+          "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-03/01-exchange/contact-sheet-00.jpg"
+        ]
+      }
+    }
+  ],
+  "passed": false
+}

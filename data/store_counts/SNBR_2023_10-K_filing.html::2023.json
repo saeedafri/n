@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2023,
+ "value": 672,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "n retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of Sleep Number’s 672 retail stores as of December 30, 2023: | | | | | | | | | | | | | | | | | | |",
+ "fye_date": "2023-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SNBR/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

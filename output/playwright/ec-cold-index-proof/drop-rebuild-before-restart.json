@@ -1,0 +1,250 @@
+{
+  "server": "8.0.44",
+  "table": "existing_on",
+  "steps": [
+    {
+      "step": "before_drop",
+      "fts_config": {
+        "optimize_checkpoint_limit": "180",
+        "synced_doc_id": "17",
+        "stopword_table_name": "",
+        "use_stopword": "1"
+      },
+      "indexes": [
+        "ft_original",
+        "ft_ngram"
+      ],
+      "queries": [
+        {
+          "index": "ft_original",
+          "term": "AI",
+          "ids": []
+        },
+        {
+          "index": "ft_original",
+          "term": "in",
+          "ids": []
+        },
+        {
+          "index": "ft_original",
+          "term": "aaa",
+          "ids": [
+            4,
+            100,
+            101
+          ]
+        },
+        {
+          "index": "ft_original",
+          "term": "the",
+          "ids": []
+        },
+        {
+          "index": "ft_original",
+          "term": "print",
+          "ids": []
+        },
+        {
+          "index": "ft_ngram",
+          "term": "AI",
+          "ids": []
+        },
+        {
+          "index": "ft_ngram",
+          "term": "in",
+          "ids": []
+        },
+        {
+          "index": "ft_ngram",
+          "term": "aaa",
+          "ids": []
+        },
+        {
+          "index": "ft_ngram",
+          "term": "the",
+          "ids": [
+            3
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "print",
+          "ids": [
+            3,
+            100,
+            101
+          ]
+        }
+      ]
+    },
+    {
+      "step": "after_drop_all_fulltext",
+      "indexes": []
+    },
+    {
+      "step": "ngram_recreated_first_session_OFF",
+      "fts_config": {
+        "optimize_checkpoint_limit": "180",
+        "synced_doc_id": "17",
+        "stopword_table_name": "",
+        "use_stopword": "0"
+      },
+      "indexes": [
+        "ft_ngram"
+      ],
+      "queries": [
+        {
+          "index": "ft_ngram",
+          "term": "AI",
+          "ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "in",
+          "ids": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "aaa",
+          "ids": [
+            4,
+            100,
+            101
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "the",
+          "ids": [
+            3
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "print",
+          "ids": [
+            3,
+            100,
+            101
+          ]
+        }
+      ]
+    },
+    {
+      "step": "standard_recreated_session_ON_and_insert",
+      "fts_config": {
+        "optimize_checkpoint_limit": "180",
+        "synced_doc_id": "17",
+        "stopword_table_name": "",
+        "use_stopword": "0"
+      },
+      "indexes": [
+        "ft_ngram",
+        "ft_original"
+      ],
+      "queries": [
+        {
+          "index": "ft_ngram",
+          "term": "AI",
+          "ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101,
+            102
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "in",
+          "ids": [
+            2,
+            3,
+            4,
+            100,
+            101,
+            102
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "aaa",
+          "ids": [
+            4,
+            100,
+            101,
+            102
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "the",
+          "ids": [
+            3,
+            102
+          ]
+        },
+        {
+          "index": "ft_ngram",
+          "term": "print",
+          "ids": [
+            3,
+            100,
+            101,
+            102
+          ]
+        },
+        {
+          "index": "ft_original",
+          "term": "AI",
+          "ids": []
+        },
+        {
+          "index": "ft_original",
+          "term": "in",
+          "ids": []
+        },
+        {
+          "index": "ft_original",
+          "term": "aaa",
+          "ids": [
+            4,
+            100,
+            101,
+            102
+          ]
+        },
+        {
+          "index": "ft_original",
+          "term": "the",
+          "ids": [
+            3,
+            102
+          ]
+        },
+        {
+          "index": "ft_original",
+          "term": "print",
+          "ids": [
+            102
+          ]
+        }
+      ]
+    }
+  ]
+}

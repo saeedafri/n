@@ -1,0 +1,14 @@
+{
+ "ticker": "SHW",
+ "fiscal_year": 2025,
+ "value": 95,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 11 | | 84 | | 95 | | 28 | | 40 | | 68",
+ "fye_date": "2025-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHW/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

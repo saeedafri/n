@@ -1,0 +1,14 @@
+{
+ "ticker": "SHAK",
+ "fiscal_year": 2020,
+ "value": 311,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "tution, garnering significant media attention, critical acclaim and a passionately-devoted following. Since its inception, Shake Shack has grown rapidly — with 311 system-wide Shacks as of December 30, 2020, in 15 countries and 30 states, as well",
+ "fye_date": "2020-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHAK/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

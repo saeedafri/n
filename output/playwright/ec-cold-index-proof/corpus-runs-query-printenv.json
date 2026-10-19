@@ -1,0 +1,43 @@
+{
+  "term": "printenv",
+  "method": "native_ngram_helper",
+  "first_page_seconds": 2.2844993339967914,
+  "returned_body_bytes": 0,
+  "page_ids": [],
+  "expected_page_ids": [],
+  "total_literal_matches": 0,
+  "full_oracle_seconds_after_timing": 5.065073917008704,
+  "indexed_exact_all_count": 0,
+  "indexed_exact_all_equals_oracle": true,
+  "first_page_equals_oracle": true,
+  "timed_queries": [
+    {
+      "seconds": 2.284349958994426,
+      "rows": 0,
+      "body_bytes": 0,
+      "sql": "SELECT /*+ MAX_EXECUTION_TIME(5000) */ id FROM coreiq_av_earnings_call_transcripts FORCE INDEX (idx_transcript_ngram_search) WHERE MATCH(transcript_text) AGAINST(:ngram_query IN BOOLEAN MODE)",
+      "parameter_keys": [
+        "ngram_query"
+      ]
+    }
+  ],
+  "server": {
+    "version": "8.0.44",
+    "buffer_pool_bytes": 134217728,
+    "buffer_pool_load_at_startup": 0,
+    "buffer_pool_dump_at_shutdown": 0
+  },
+  "coldness": "fresh mysqld buffer pool; OS file cache uncontrolled",
+  "source_scope": "eligible rows of existing local SQLite snapshot; not current live STG",
+  "helper_sha256": "1ed04531e6dc2f19b94ae4c9227cae522d8bd4129f6ce13b775c396f58df5074",
+  "oracle_predicate": "LOCATE(CAST(LOWER(:keyword) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0",
+  "candidate_override": "quoted_alnum_runs",
+  "quoted_run_comparison_after_timing": {
+    "anchor": "+\"printenv\"",
+    "candidate_count": 0,
+    "candidate_query_seconds_after_timing": 0.7381395830016118,
+    "missing_literal_oracle_ids": [],
+    "loose_gram_candidate_count": 21434,
+    "timed_helper_candidate_count": 0
+  }
+}

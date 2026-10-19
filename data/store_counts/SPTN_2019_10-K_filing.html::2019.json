@@ -1,0 +1,14 @@
+{
+ "ticker": "SPTN",
+ "fiscal_year": 2019,
+ "value": 156,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "de the Company’s manufacturer customers with a web-based, interactive means of accessing critical order, inventory and delivery information. Retail Segment As of December 28, 2019, the Company operates 156 corporate owned retail stores in eight states, predominantly in the M",
+ "fye_date": "2019-12-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SPTN/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

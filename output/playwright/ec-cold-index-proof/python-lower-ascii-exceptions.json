@@ -1,0 +1,22 @@
+{
+  "python": "3.14.3",
+  "unicode": "16.0.0",
+  "examined_non_ascii_codepoints": 1113984,
+  "exceptions": [
+    {
+      "codepoint": "U+0130",
+      "name": "LATIN CAPITAL LETTER I WITH DOT ABOVE",
+      "lower_codepoints": [
+        "U+0069",
+        "U+0307"
+      ]
+    },
+    {
+      "codepoint": "U+212A",
+      "name": "KELVIN SIGN",
+      "lower_codepoints": [
+        "U+006B"
+      ]
+    }
+  ]
+}

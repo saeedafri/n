@@ -1,0 +1,14 @@
+{
+ "ticker": "TDY",
+ "fiscal_year": 2017,
+ "value": 17,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "al results are not consistent with management’s estimates and assumptions, goodwill may be overstated and a charge would need to be taken against net earnings. As of January 1, 2017, the Company had 17 reporting units for goodwill impairment testing. The ca",
+ "fye_date": "2017-01-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TDY/2017/10-K/filing.html::2017",
+ "extractor_version": 5
+}

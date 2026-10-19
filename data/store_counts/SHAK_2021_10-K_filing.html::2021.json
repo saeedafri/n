@@ -1,0 +1,14 @@
+{
+ "ticker": "SHAK",
+ "fiscal_year": 2021,
+ "value": 218,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "ack count from the prior fiscal year. In the first quarter of 2021, we announced that our Penn Station Shack closed as the landlord is remodeling the terminal. As of December 29, 2021, we had 218 domestic Company-operated Shacks. We believe we have a versatile real es",
+ "fye_date": "2021-12-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHAK/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}

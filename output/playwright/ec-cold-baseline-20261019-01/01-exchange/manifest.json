@@ -1,0 +1,32 @@
+{
+  "keyword": "exchange",
+  "status": "failed",
+  "directory": "output/playwright/ec-cold-baseline-20261019-01/01-exchange",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-1x1bu7me",
+  "port": 8513,
+  "cache_scope": "application result caches bypassed; shared database/OS buffers not flushed",
+  "errors": [
+    "AssertionError: Visible application error: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).\nCopy\nAsk Google\nAsk ChatGPT"
+  ],
+  "pid": 78109,
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-01/01-exchange/videos/0442ee64f6e7d77e77ae4e53a5e9b91c.webm",
+  "sql_queries": 0,
+  "sql_violations": [],
+  "timeline_analysis": {
+    "samples": 6,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "loader_visible_samples": 0
+  },
+  "video_analysis": {
+    "decoded_frames": 41,
+    "fps": 25.0,
+    "duration_s": 1.64,
+    "near_blank_ratio": 1.0,
+    "low_contrast_fade_ratio": 1.0,
+    "method": "Every decoded frame scaled to360x250; visual metrics are heuristic, paired with100ms DOM evidence",
+    "contact_sheets": [
+      "output/playwright/ec-cold-baseline-20261019-01/01-exchange/contact-sheet-00.jpg"
+    ]
+  }
+}

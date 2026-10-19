@@ -1,0 +1,14 @@
+{
+ "ticker": "SHOO",
+ "fiscal_year": 2017,
+ "value": 206,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores | | 206 | | | | | 189 | | | | | | 169 | | | |",
+ "fye_date": "2017-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHOO/2018/10-K/filing.html::2017",
+ "extractor_version": 5
+}

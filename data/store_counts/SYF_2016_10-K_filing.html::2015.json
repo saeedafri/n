@@ -1,0 +1,14 @@
+{
+ "ticker": "SYF",
+ "fiscal_year": 2015,
+ "value": 115000,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "At December 31, 2015, our Payment Solutions partners had approximately 115,000 retail locations.",
+ "fye_date": "2015-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SYF/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

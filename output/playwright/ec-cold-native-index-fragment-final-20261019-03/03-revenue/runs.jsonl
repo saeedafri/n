@@ -1,0 +1,4 @@
+{"at": 1792403286.441524, "monotonic": 260883.781250875, "event": "start", "rerun": 1, "watchlist_entries": 0}
+{"at": 1792403286.960143, "monotonic": 260884.299860041, "event": "start", "rerun": 2, "watchlist_entries": 0}
+{"at": 1792403287.616925, "monotonic": 260884.956629208, "event": "exit", "rerun": 2, "sql_count": 0, "violations": 0}
+{"at": 1792403292.734046, "monotonic": 260890.073668583, "event": "exit", "rerun": 2, "sql_count": 5, "violations": 0}

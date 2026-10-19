@@ -28,7 +28,9 @@ from data.screening_config import (  # noqa: E402
     KEYDEV_EARNINGS,
     KEYDEV_EARNINGS_GUIDANCE,
     KEYDEV_GUIDANCE,
+    KEYDEV_NEWS_EARNINGS_SUBTYPE,
     KEYDEV_NEWS_GUIDANCE_SUBTYPE,
+    keydev_display_subtype,
     keydev_is_guidance_row,
 )
 from data.screening_service import (  # noqa: E402
@@ -42,9 +44,19 @@ def rows(sql):
     return db_manager.execute_query_readonly_raising(sql)
 
 
-def count_where(clause):
+def count_where(clause, since=None):
+    """COUNT over the events table. `since` bounds it to one date partition range.
+
+    The additivity check below ORs two categories together with the headline test
+    and, unbounded, scans ~66k rows across all 34 date partitions — it measured
+    right on the 120s DB_READ_TIMEOUT and timed out twice. The property it tests
+    (mixed == plain + guidance) holds on any window, and the app never issues this
+    query unbounded anyway: the page always carries a ticker clause and usually a
+    date window. So the arithmetic is checked on a year, not on all history.
+    """
+    where = f"{clause}" + (f" AND e.event_date >= '{since}'" if since else "")
     return int(rows(f"SELECT COUNT(*) AS c FROM coreiq_company_events e "
-                    f"WHERE {clause}")[0]["c"])
+                    f"WHERE {where}")[0]["c"])
 
 
 # ── Pure, no DB ──────────────────────────────────────────────────────────────
@@ -82,6 +94,36 @@ def test_the_predicate_reads_the_headline_only_for_the_news_subtype():
     # Earnings subtypes are never guidance.
     assert not keydev_is_guidance_row("Earnings Release", "Raises guidance for 2026")
     assert not keydev_is_guidance_row(None, None)
+
+
+def test_a_news_row_is_labelled_by_the_half_it_screens_into():
+    """The Type column must not contradict the screen the row appears in."""
+    # Not guidance by headline -> screened as Earnings -> labelled as Earnings.
+    assert keydev_display_subtype(
+        KEYDEV_NEWS_GUIDANCE_SUBTYPE,
+        "Kroger to cut 3,000 corporate roles as AI use expands",
+    ) == KEYDEV_NEWS_EARNINGS_SUBTYPE
+    # Guidance by headline -> keeps its stored label.
+    assert keydev_display_subtype(
+        KEYDEV_NEWS_GUIDANCE_SUBTYPE,
+        "Lamb Weston Lifts Full-Year Guidance",
+    ) == KEYDEV_NEWS_GUIDANCE_SUBTYPE
+    # Every other subtype is passed through untouched.
+    for subtype in ("Earnings Release", "Annual Guidance (10-K MD&A)",
+                    "Earnings Release - Guidance Raised", "Market News"):
+        assert keydev_display_subtype(subtype, "anything at all") == subtype
+    assert keydev_display_subtype(None, None) == ""
+
+
+def test_the_displayed_label_is_always_in_that_screens_filter_domain():
+    """A Type the column filter cannot offer would silently drop rows from Excel."""
+    from data.screening_service import keydev_subtype_domain
+    domain = keydev_subtype_domain((KEYDEV_EARNINGS,))
+    if not domain:
+        pytest.skip("subtype taxonomy not materialized here")
+    assert KEYDEV_NEWS_GUIDANCE_SUBTYPE not in domain
+    assert KEYDEV_NEWS_EARNINGS_SUBTYPE in domain
+    assert KEYDEV_NEWS_GUIDANCE_SUBTYPE in keydev_subtype_domain((KEYDEV_GUIDANCE,))
 
 
 # ── Against STG (VPN) ────────────────────────────────────────────────────────
@@ -149,8 +191,12 @@ def test_guidance_half_carries_no_plain_earnings_subtype():
 
 
 def test_other_categories_are_untouched_by_the_split():
-    plain = count_where("e.event_category IN ('M&A Activity')")
-    assert count_where(keydev_category_clause(("M&A Activity",))) == plain
-    mixed = count_where(keydev_category_clause(("M&A Activity", KEYDEV_GUIDANCE)))
-    guidance = count_where(keydev_category_clause((KEYDEV_GUIDANCE,)))
+    """A sibling category passes through, and a mixed pick is exactly additive."""
+    since = "2026-01-01"
+    plain = count_where("e.event_category IN ('M&A Activity')", since)
+    assert plain, "no M&A events in the window — widen it"
+    assert count_where(keydev_category_clause(("M&A Activity",)), since) == plain
+    mixed = count_where(keydev_category_clause(("M&A Activity", KEYDEV_GUIDANCE)), since)
+    guidance = count_where(keydev_category_clause((KEYDEV_GUIDANCE,)), since)
+    assert guidance
     assert mixed == plain + guidance

@@ -20,6 +20,7 @@ ticker selection or by sector/country filter.
 
 import threading
 import time as _wl_time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional
 
 from sqlalchemy import text
@@ -47,6 +48,11 @@ _WL_CACHE_TTL = 120  # seconds
 # the rows carry that user's is_owner / can_edit flags. Every write clears all of it —
 # all watchlists are visible to all users — and so does a write from outside the app.
 _WL_PROCESS_CACHE = {}
+_WL_CACHE_LOCK = threading.RLock()
+_WL_CACHE_VERSION = 0
+_WL_REFRESHING = {}
+_WL_REFRESH_EXECUTOR = None
+_WL_REFRESH_MAX_PENDING = 8
 _WL_TABLES = {"coreiq_watchlists", "coreiq_watchlist_access", "coreiq_watchlist_companies"}
 
 
@@ -179,7 +185,10 @@ def create_watchlist(
 def _invalidate_watchlist_cache(user_email: str = "") -> None:
     """Clear the TTL cache after any write operation (every user's entry: a write
     to a shared watchlist changes what all of them see)."""
-    _WL_PROCESS_CACHE.clear()
+    global _WL_CACHE_VERSION
+    with _WL_CACHE_LOCK:
+        _WL_CACHE_VERSION += 1
+        _WL_PROCESS_CACHE.clear()
     if not _HAS_STREAMLIT:
         return
     try:
@@ -192,26 +201,7 @@ def _invalidate_watchlist_cache(user_email: str = "") -> None:
         pass
 
 
-def get_user_watchlists(user_email: str) -> List[Dict]:
-    """Return all active watchlists visible to every logged-in user.
-
-    All watchlists are visible to all users. Permission flags
-    (is_owner, can_edit, can_delete) control who can modify/delete.
-
-    Each row includes:
-      id, name, description, created_by, created_at, updated_at,
-      is_owner, can_edit, can_delete, company_count
-
-    Uses a 120s session-state TTL cache to avoid hitting the DB on every
-    Streamlit rerun. Invalidated automatically after any write operation.
-    """
-    key = (user_email or "").strip().lower()
-
-    # TTL cache check
-    entry = _WL_PROCESS_CACHE.get(key)
-    if entry is not None and _wl_time.time() - entry[0] < _WL_CACHE_TTL:
-        return [dict(r) for r in entry[1]]
-
+def _select_user_watchlists(user_email: str, *, raising: bool = False) -> List[Dict]:
     _require_tables()
     sql = """
         SELECT
@@ -239,10 +229,68 @@ def get_user_watchlists(user_email: str) -> List[Dict]:
         WHERE wl.is_active = 1
         ORDER BY wl.updated_at DESC
     """
+    execute = (db_manager.execute_query_readonly_raising if raising
+               else db_manager.execute_query_readonly)
+    return [dict(r) for r in execute(sql, {"email": user_email})]
+
+
+def _refresh_user_watchlists(user_email: str, key: str, version: int, entry) -> None:
     try:
-        result = [dict(r) for r in db_manager.execute_query_readonly(sql, {"email": user_email})]
-        _WL_PROCESS_CACHE[key] = (_wl_time.time(), [dict(r) for r in result])
-        if _HAS_STREAMLIT:
+        result = _select_user_watchlists(user_email, raising=True)
+        with _WL_CACHE_LOCK:
+            if version == _WL_CACHE_VERSION and _WL_PROCESS_CACHE.get(key) is entry:
+                _WL_PROCESS_CACHE[key] = (_wl_time.time(), result)
+    except Exception as exc:
+        log_structured_error(exc, page="watchlist_service",
+                             component="get_user_watchlists", operation="background_refresh")
+    finally:
+        with _WL_CACHE_LOCK:
+            _WL_REFRESHING.pop(key, None)
+
+
+def _queue_watchlist_refresh(user_email: str, key: str, version: int, entry) -> None:
+    global _WL_REFRESH_EXECUTOR
+    with _WL_CACHE_LOCK:
+        if key in _WL_REFRESHING or len(_WL_REFRESHING) >= _WL_REFRESH_MAX_PENDING:
+            return
+        if version != _WL_CACHE_VERSION or _WL_PROCESS_CACHE.get(key) is not entry:
+            return
+        _WL_REFRESHING[key] = version
+        try:
+            if _WL_REFRESH_EXECUTOR is None:
+                _WL_REFRESH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="watchlist-refresh")
+            _WL_REFRESH_EXECUTOR.submit(_refresh_user_watchlists, user_email, key, version, entry)
+        except Exception as exc:
+            _WL_REFRESHING.pop(key, None)
+            log_structured_error(exc, page="watchlist_service",
+                                 component="get_user_watchlists", operation="queue_background_refresh")
+
+
+def get_user_watchlists(user_email: str, *, background_refresh: bool = False) -> List[Dict]:
+    """Return active watchlists and per-user ownership/edit/delete flags.
+
+    Results have a 120s process cache, invalidated after writes. Callers may opt
+    into returning expired dropdown metadata while one background refresh runs.
+    A cache miss and callers using the default still fetch synchronously.
+    """
+    key = (user_email or "").strip().lower()
+    with _WL_CACHE_LOCK:
+        entry = _WL_PROCESS_CACHE.get(key)
+        version = _WL_CACHE_VERSION
+    if entry is not None:
+        if _wl_time.time() - entry[0] < _WL_CACHE_TTL:
+            return [dict(r) for r in entry[1]]
+        if background_refresh:
+            _queue_watchlist_refresh(user_email, key, version, entry)
+            return [dict(r) for r in entry[1]]
+
+    try:
+        result = _select_user_watchlists(user_email)
+        with _WL_CACHE_LOCK:
+            current = version == _WL_CACHE_VERSION
+            if current:
+                _WL_PROCESS_CACHE[key] = (_wl_time.time(), [dict(r) for r in result])
+        if current and _HAS_STREAMLIT:
             try:
                 cache = _st.session_state.get(_WL_CACHE_KEY, {})
                 cache[key] = (_wl_time.time(), result)

@@ -1,0 +1,12 @@
+{"at": 1792399717.156514, "monotonic": 257314.507232083, "function": "data.repository.EarningsCallRepository.get_companies_with_earnings", "count": 1, "cache": "BYPASS"}
+{"at": 1792399717.156929, "monotonic": 257314.507647541, "function": "data.repository.EarningsCallRepository.get_non_sec_transcript_companies", "count": 1, "cache": "BYPASS"}
+{"at": 1792399721.933772, "monotonic": 257319.284479, "function": "data.repository.CompanyRepository.get_companies_map", "count": 1, "cache": "BYPASS"}
+{"at": 1792399721.9338639, "monotonic": 257319.284570958, "function": "data.repository.CompanyRepository.get_companies_rows", "count": 1, "cache": "BYPASS"}
+{"at": 1792399722.754536, "monotonic": 257320.105240708, "function": "data.repository.EarningsCallRepository.get_all_available_years", "count": 1, "cache": "BYPASS"}
+{"at": 1792399724.7074518, "monotonic": 257322.058152708, "function": "data.repository.EarningsCallRepository.get_companies_with_earnings", "count": 2, "cache": "BYPASS"}
+{"at": 1792399724.707819, "monotonic": 257322.058519375, "function": "data.repository.EarningsCallRepository.get_non_sec_transcript_companies", "count": 2, "cache": "BYPASS"}
+{"at": 1792399725.173585, "monotonic": 257322.524284583, "function": "data.repository.CompanyRepository.get_companies_map", "count": 2, "cache": "BYPASS"}
+{"at": 1792399725.173697, "monotonic": 257322.524395708, "function": "data.repository.CompanyRepository.get_companies_rows", "count": 2, "cache": "BYPASS"}
+{"at": 1792399726.0068061, "monotonic": 257323.357503, "function": "data.repository.EarningsCallRepository.get_all_available_years", "count": 2, "cache": "BYPASS"}
+{"at": 1792399726.598743, "monotonic": 257323.949439083, "function": "__main__._get_cross_search_results", "count": 1, "cache": "BYPASS"}
+{"at": 1792399726.5991948, "monotonic": 257323.949891166, "function": "data.repository.EarningsCallRepository.search_transcripts_fulltext", "count": 1, "cache": "BYPASS"}

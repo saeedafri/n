@@ -17,7 +17,7 @@ from core.auth_manager import require_auth, get_current_user
 hide_sidebar()
 
 from components.navigation import render_header, render_coresight_footer
-from data.repository import EarningsCallRepository, EarningsCalendarRepository
+from data.repository import EarningsCallRepository, EarningsCalendarRepository, TranscriptSearchError
 from data.watchlist_service import get_user_watchlists, get_watchlist_companies
 from core.database import init_database
 from utils.local_storage_manager import load_earnings_calls_state, save_earnings_calls_state
@@ -1558,12 +1558,12 @@ def _get_cross_search_results(
     allowed_tickers: Optional[Tuple[str, ...]] = None,
     limit: int = 50,
     offset: int = 0,
-) -> Tuple[List[Dict], int]:
+    after: Optional[Tuple[int, int, int]] = None,
+) -> Tuple[List[Dict], int, Optional[Tuple[int, int, int]]]:
     """
-    Cross-transcript search: FULLTEXT DB lookup (~15ms) + cached segment extraction.
+    Cross-transcript search with bounded pages and transcript segment extraction.
 
-    Returns (results, raw_count): one best-matching segment per transcript, plus the
-    number of transcripts the DB returned (used to decide whether "Load more" applies).
+    Returns results, raw row count, and the final raw row's continuation cursor.
     Only the first `limit` matching transcripts are parsed — pagination keeps the
     initial render fast (parse a page, not the whole result set). Per-transcript parses
     are cached, so loading more only parses the new transcripts.
@@ -1578,6 +1578,7 @@ def _get_cross_search_results(
         limit=limit,
         offset=offset,
         allowed_tickers=allowed_tickers if watchlist_id is not None else None,
+        after=after,
     )
 
     # Step 2: Parse transcripts and extract matching segments
@@ -1589,9 +1590,9 @@ def _get_cross_search_results(
     from core.smart_search import SmartQueryExpander
     expander = SmartQueryExpander()
     exp_res = expander.expand_query(keyword)
-    candidate_terms = [kw_lower] + [t.lower() for t in exp_res.get("expanded_terms", [])]
-    candidate_terms.extend([c.lower() for c in exp_res.get("fuzzy_corrections", {}).values()])
-    candidate_terms = list(dict.fromkeys(t for t in candidate_terms if len(t) >= 3))
+    expanded_terms = [t.lower() for t in exp_res.get("expanded_terms", [])]
+    expanded_terms.extend(c.lower() for c in exp_res.get("fuzzy_corrections", {}).values())
+    candidate_terms = list(dict.fromkeys([kw_lower] + [t for t in expanded_terms if len(t) >= 3]))
 
     for row in raw_rows:
         transcript_text = row.get('transcript_text', '') or ''
@@ -1632,7 +1633,45 @@ def _get_cross_search_results(
                 })
                 break  # first match per transcript only
 
-    return results, len(raw_rows)
+    last = raw_rows[-1] if raw_rows else None
+    next_cursor = (int(last['year']), int(last['q']), int(last['id'])) if last else None
+    return results, len(raw_rows), next_cursor
+
+
+def _preserve_ec_control_state_for_app_rerun():
+    """Keep controls across cleanup when a fragment exits before rendering them."""
+    state = st.session_state
+    company = state.get("ec_company", "ALL")
+    year = state.get("ec_year", "ALL")
+    quarter = state.get("ec_quarter", "ALL")
+    state["ec_company_select"] = company
+    state["ec_search_input"] = state.get("ec_search_input", state.get("ec_search", ""))
+    state[f"ec_year_select_{company}"] = year
+    state[f"ec_quarter_select_{company}_{year}"] = quarter
+
+
+def _request_more_cross_results():
+    st.session_state.ec_cross_load_requested = True
+
+
+def _update_cross_search_state(signature, allowed_tickers, page_size):
+    state = st.session_state
+    requested = state.pop("ec_cross_load_requested", False)
+    same_search = state.get("ec_cross_sig") == signature
+    if same_search and not (requested and state.get("ec_cross_has_more", False)):
+        return
+    offset = int(state.get("ec_cross_offset", page_size)) if same_search else 0
+    after = state.get("ec_cross_next_cursor") if same_search else None
+    keyword, company, year, quarter, watchlist_id = signature
+    page, raw_count, next_cursor = _get_cross_search_results(
+        keyword, company, year, quarter, watchlist_id, allowed_tickers, page_size,
+        0 if after is not None else offset, after,
+    )
+    state.ec_cross_sig = signature
+    state.ec_cross_acc = (list(state.get("ec_cross_acc", [])) if same_search else []) + page
+    state.ec_cross_offset = offset + page_size
+    state.ec_cross_has_more = raw_count == page_size
+    state.ec_cross_next_cursor = next_cursor
 
 
 @st.cache_resource
@@ -1847,6 +1886,7 @@ def render_cross_search_panel(company: str, year: str, quarter: str) -> str:
 
 def render_earnings_calls(active_ticker: str = None):
     """Render earnings calls content (for unified entry point)."""
+    st.session_state.pop("_ec_filters_dirty", None)
 
     # =============================================================================
     # EMERGENCY CACHE CLEAR - Check for URL parameter
@@ -1867,11 +1907,6 @@ def render_earnings_calls(active_ticker: str = None):
     # ── Performance tracking ──
     new_rerun_id('earnings_calls')
     _tracker = PageLoadTracker('earnings_calls') if PageLoadTracker else None
-
-    # Show loading placeholder immediately so the user sees feedback
-    # before any blocking DB calls (companies, years, transcript fetch).
-    from components.loading import render_page_loader
-    _ec_loading_hint = render_page_loader("Loading Earnings Calls")
 
     # Inject custom CSS
     st.markdown(get_earnings_css(), unsafe_allow_html=True)
@@ -1966,8 +2001,10 @@ def render_earnings_calls(active_ticker: str = None):
     _qp_pdf_page = int(st.query_params.get("pdf_page", 0) or 0)
     # keyword: preserved in URL by View → links so the search input survives navigation
     _qp_keyword = st.query_params.get("keyword", "")
-    if _qp_keyword and not st.session_state.get("ec_search"):
+    _keyword_nav = (_qp_ticker, _qp_year, _qp_quarter, _qp_keyword)
+    if _qp_keyword and st.session_state.get("_ec_keyword_nav") != _keyword_nav:
         st.session_state.ec_search = _qp_keyword
+        st.session_state._ec_keyword_nav = _keyword_nav
     _nav_id = f"nav_{_qp_ticker}_{_qp_year}_{_qp_quarter}_{_qp_highlight}_{_qp_from}"
 
     # Calendar redirect: consume ticker + year + quarter directly (no highlight needed)
@@ -2090,7 +2127,8 @@ def render_earnings_calls(active_ticker: str = None):
         # (newest first), so year_options = ['ALL', <newest>, ..., <oldest>] and
         # the newest real year is index 1 — NOT [-1], which is the OLDEST and
         # made Macy's (M) land on 2007 instead of 2026 on fresh load (STG 03-Jul).
-        st.session_state.ec_year = year_options[1] if len(year_options) > 1 else year_options[0]
+        st.session_state.ec_year = ('ALL' if _ec_company_is_all else
+                                   year_options[1] if len(year_options) > 1 else year_options[0])
         if _fresh_ticker:
             st.session_state._ec_last_url_ticker = st.query_params.get("ticker")
 
@@ -2116,7 +2154,8 @@ def render_earnings_calls(active_ticker: str = None):
     # If we've landed with a fresh URL ticker, reset quarter to latest
     if "ec_quarter" not in st.session_state or st.session_state.ec_quarter not in quarter_options or _fresh_ticker:
         # Default to LATEST quarter (last item in sorted list)
-        st.session_state.ec_quarter = quarter_options[-1] if len(quarter_options) > 1 else quarter_options[0]
+        st.session_state.ec_quarter = ('ALL' if _ec_company_is_all else
+                                      quarter_options[-1] if len(quarter_options) > 1 else quarter_options[0])
     elif not _ec_company_is_all:
         # Even if ec_quarter exists, default to latest on fresh page load
         # (user can still override via dropdown).
@@ -2136,49 +2175,11 @@ def render_earnings_calls(active_ticker: str = None):
     _year_widget_key = f"ec_year_select_{st.session_state.ec_company}"
     _quarter_widget_key = f"ec_quarter_select_{st.session_state.ec_company}_{st.session_state.ec_year}"
 
-    # ── PREFETCH: transcript + earnings event (report date + quarter-end) ────
-    # After years/quarters returns, we know the default company/year/quarter.
-    # Start transcript fetch and `get_earnings_event_dates` in parallel (~100–200ms overlap).
-    _pf_company = st.session_state.ec_company
-    _pf_year = st.session_state.ec_year
-    _pf_quarter = st.session_state.ec_quarter
-    _pf_is_cross = (_pf_company == 'ALL' or str(_pf_year) == 'ALL' or _pf_quarter == 'ALL')
-    _pf_is_non_sec = (_pf_company in _non_sec_only_tickers)
-
-    # Analytics: company/year/quarter/keyword are session-state (not URL), so the auto
-    # page_view misses them. Capture the full earnings-calls filter state.
-    try:
-        from utils.server_logger import log_filters_if_changed
-        log_filters_if_changed(
-            "earnings_calls",
-            company=_pf_company,
-            year=str(_pf_year),
-            quarter=str(_pf_quarter),
-            keyword=st.session_state.get('ec_search') or None,
-        )
-    except Exception:
-        pass
-    _transcript_future = None
-    _edate_future = None
-    if not _pf_is_cross and not _pf_is_non_sec:
-        _ec_prefetch_exec = ThreadPoolExecutor(max_workers=2)
-        _transcript_future = _ec_prefetch_exec.submit(
-            EarningsCallRepository.get_earnings_calls,
-            ticker=_pf_company,
-            year=_pf_year,
-            quarter=_pf_quarter,
-        )
-        _pq_int = int(str(_pf_quarter).replace("Q", "")) if _pf_quarter and str(_pf_quarter) not in ("ALL", "") else None
-        _pyr_int = int(_pf_year) if _pf_year and str(_pf_year) not in ("ALL", "") else None
-        if _pq_int and _pyr_int:
-            _edate_future = _ec_prefetch_exec.submit(
-                EarningsCalendarRepository.get_earnings_event_dates, _pf_company, _pq_int, _pyr_int
-            )
-
     # =======================================================================
     # HEADER WITH TITLE AND FILTERS
     # =======================================================================
     def on_company_change():
+        st.session_state._ec_filters_dirty = True
         ticker = st.session_state.ec_company_select
         # Update shared session state only — do NOT write st.query_params here.
         # Writing to query_params triggers Streamlit's navigation rerun path (a
@@ -2230,6 +2231,7 @@ def render_earnings_calls(active_ticker: str = None):
         # State is saved at the end of render_earnings_calls() instead.
 
     def on_year_change():
+        st.session_state._ec_filters_dirty = True
         ticker = st.session_state.get('ec_company_select', st.session_state.get('ec_company', 'ALL'))
         # Read from the dynamic key captured in the closure
         year = st.session_state.get(_year_widget_key, st.session_state.get('ec_year', 'ALL'))
@@ -2254,6 +2256,7 @@ def render_earnings_calls(active_ticker: str = None):
         # NOTE: Do NOT call save_earnings_calls_state() here — see on_company_change comment.
 
     def on_quarter_change():
+        st.session_state._ec_filters_dirty = True
         # Read from the dynamic key captured in the closure
         quarter = st.session_state.get(_quarter_widget_key)
         if quarter is not None:
@@ -2274,7 +2277,7 @@ def render_earnings_calls(active_ticker: str = None):
         # permission flags, not ownership), so load unconditionally. This also makes
         # the dropdown populate when auth is bypassed locally (empty email still
         # returns the full list) — fixes the "No watchlists found" case.
-        _ec_calls_watchlists = get_user_watchlists(_ec_calls_user_email)
+        _ec_calls_watchlists = get_user_watchlists(_ec_calls_user_email, background_refresh=True)
     except Exception as _ec_wl_exc:
         log_structured_error(_ec_wl_exc, page="earnings_calls", component="render_earnings_calls",
                              operation="load_watchlists", context=f"user={_ec_calls_user_email}")
@@ -2346,627 +2349,700 @@ def render_earnings_calls(active_ticker: str = None):
             st.selectbox(
                 "Watchlist",
                 options=_ec_calls_wl_options,
-                index=_ec_calls_wl_default_idx,
+                index=0 if "ec_calls_watchlist_filter" in st.session_state else _ec_calls_wl_default_idx,
                 key="ec_calls_watchlist_filter",
                 on_change=_on_ec_calls_watchlist_change
             )
 
-    # =======================================================================
-    # FILTER ROW — Search | Company | Year | Quarter
-    # =======================================================================
-    search_col, company_col, year_col, quarter_col = st.columns([3, 5, 1, 1], gap="small")
+    _initial_tracker = _tracker
+    _initial_page_start = _t0_page_start
+    _content_first_run = True
+    _content_auth = (get_current_user() or "", (st.session_state.get("auth_data") or {}).get("session_id"))
 
-    with search_col:
-        search_term = st.text_input(
-            "Search",
-            placeholder="eg., revenue, AWS, guidance...",
-            value=st.session_state.get('ec_search', ''),
-            key="ec_search_input",
-            help="Enter a keyword to search across all matching transcripts",
-        )
-        st.session_state.ec_search = search_term
+    @st.fragment
+    def _render_ec_content():
+        nonlocal _content_first_run
+        if st.session_state.pop("_ec_filters_dirty", False):
+            _preserve_ec_control_state_for_app_rerun()
+            st.rerun(scope="app")
+        _current_auth = (get_current_user() or "", (st.session_state.get("auth_data") or {}).get("session_id"))
+        if st.session_state.get("_auth_invalidated") or _current_auth != _content_auth:
+            _preserve_ec_control_state_for_app_rerun()
+            st.rerun(scope="app")
 
-    with company_col:
-        company = st.selectbox(
-            "Company",
-            options=tickers,
-            format_func=lambda x: next((opt[1] for opt in company_options if opt[0] == x), x),
-            index=tickers.index(st.session_state.ec_company),
-            key="ec_company_select",
-            on_change=on_company_change,
-        )
-
-    with year_col:
-        year = st.selectbox(
-            "Year",
-            options=year_options,
-            index=year_options.index(st.session_state.ec_year),
-            key=_year_widget_key,
-            on_change=on_year_change,
-        )
-
-    with quarter_col:
-        quarter = st.selectbox(
-            "Quarter",
-            options=quarter_options,
-            index=quarter_options.index(st.session_state.ec_quarter),
-            key=_quarter_widget_key,
-            on_change=on_quarter_change,
-        )
-
-    _watchlist_scope_enabled = (
-        company == 'ALL'
-        and str(year) == 'ALL'
-        and quarter == 'ALL'
-    )
-
-    _active_watchlist_id = st.session_state.ec_calls_active_watchlist_id
-    _active_watchlist_name = st.session_state.ec_calls_active_watchlist_name
-    _active_watchlist_tickers: Optional[Tuple[str, ...]] = None
-    _active_watchlist_company_count = 0
-    _applied_watchlist_id = _active_watchlist_id if _watchlist_scope_enabled else None
-    if _applied_watchlist_id is not None:
+        _first_run = _content_first_run
+        _content_first_run = False
+        _t0_page_start = _initial_page_start if _first_run else _time.perf_counter()
+        if not _first_run:
+            new_rerun_id("earnings_calls")
+        _tracker = _initial_tracker if _first_run else (PageLoadTracker("earnings_calls") if PageLoadTracker else None)
+        _content_loader = None
+        _ec_prefetch_exec = None
         try:
-            _active_watchlist_rows = get_watchlist_companies(_applied_watchlist_id)
-        except Exception as _ec_wl_comp_exc:
-            log_structured_error(_ec_wl_comp_exc, page="earnings_calls", component="render_earnings_calls",
-                                 operation="get_watchlist_companies",
-                                 context=f"watchlist_id={_applied_watchlist_id}")
-            _active_watchlist_rows = []
-        _active_watchlist_tickers = _watchlist_rows_to_tickers(_active_watchlist_rows)
-        _active_watchlist_company_count = len(_active_watchlist_tickers)
+            if not _first_run:
+                from components.loading import render_page_loader
+                _content_loader = render_page_loader("Loading Earnings Calls", auto_hide=False)
+            # =======================================================================
+            # FILTER ROW — Search | Company | Year | Quarter
+            # =======================================================================
+            search_col, company_col, year_col, quarter_col = st.columns([3, 5, 1, 1], gap="small")
 
-    # =======================================================================
-    # DETECT MODE: cross-transcript search vs single-transcript view
-    # =======================================================================
-    is_cross_search = (company == 'ALL' or str(year) == 'ALL' or quarter == 'ALL')
-    _is_viewing_non_sec = (company in _non_sec_only_tickers and not is_cross_search)
-
-    # =======================================================================
-    # FETCH TRANSCRIPT DATA (single-transcript mode only)
-    # =======================================================================
-    earnings_calls = []
-    _non_sec_pdf_path = None  # local path for NON-SEC transcript PDF
-    _ns_blob_name = None  # blob name for NON-SEC transcript PDF (resolved lazily)
-    if _tracker: _tracker.step_start("FETCH_TRANSCRIPT")
-    if _is_viewing_non_sec:
-        from utils.azure_blob import local_cache_path_for_blob as _local_cache_path_for_blob, ensure_local_blob_for_transcript as _ensure_local_blob_optimized
-        # NON-SEC: Build blob path, check local cache immediately (sub-ms).
-        # Azure download (if needed) is deferred to right-column rendering so
-        # the left column's search panel renders without blocking.
-        _ns_blob_name = f"{company}/{year}/transcript-{quarter}/transcript.pdf"
-        _ns_local = _local_cache_path_for_blob(_ns_blob_name)
-        if _ns_local and os.path.exists(_ns_local):
-            _non_sec_pdf_path = _ns_local
-        # else: _non_sec_pdf_path stays None → resolved inside right_col below
-    elif not is_cross_search:
-        # Use prefetched result if params match; fall back to serial otherwise
-        if (_transcript_future is not None
-            and company == _pf_company
-            and str(year) == str(_pf_year)
-            and quarter == _pf_quarter):
-            try:
-                earnings_calls = _transcript_future.result(timeout=30)
-            except Exception as _pf_err:
-                log_error(f"[EC] Prefetch future failed for {company} {year} {quarter}: {_pf_err}")
-                earnings_calls = EarningsCallRepository.get_earnings_calls(
-                    ticker=company, year=year, quarter=quarter
+            with search_col:
+                search_term = st.text_input(
+                    "Search",
+                    placeholder="eg., revenue, AWS, guidance...",
+                    value="" if "ec_search_input" in st.session_state else st.session_state.get('ec_search', ''),
+                    key="ec_search_input",
+                    help="Enter a keyword to search across all matching transcripts",
                 )
-        else:
-            if _transcript_future is not None:
+                st.session_state.ec_search = search_term
+
+            with company_col:
+                company = st.selectbox(
+                    "Company",
+                    options=tickers,
+                    format_func=lambda x: next((opt[1] for opt in company_options if opt[0] == x), x),
+                    index=0 if "ec_company_select" in st.session_state else tickers.index(st.session_state.ec_company),
+                    key="ec_company_select",
+                    on_change=on_company_change,
+                )
+
+            with year_col:
+                year = st.selectbox(
+                    "Year",
+                    options=year_options,
+                    index=0 if _year_widget_key in st.session_state else year_options.index(st.session_state.ec_year),
+                    key=_year_widget_key,
+                    on_change=on_year_change,
+                )
+
+            with quarter_col:
+                quarter = st.selectbox(
+                    "Quarter",
+                    options=quarter_options,
+                    index=0 if _quarter_widget_key in st.session_state else quarter_options.index(st.session_state.ec_quarter),
+                    key=_quarter_widget_key,
+                    on_change=on_quarter_change,
+                )
+
+            _watchlist_scope_enabled = (
+                company == 'ALL'
+                and str(year) == 'ALL'
+                and quarter == 'ALL'
+            )
+
+            _active_watchlist_id = st.session_state.ec_calls_active_watchlist_id
+            _active_watchlist_name = st.session_state.ec_calls_active_watchlist_name
+            _active_watchlist_tickers: Optional[Tuple[str, ...]] = None
+            _active_watchlist_company_count = 0
+            _applied_watchlist_id = _active_watchlist_id if _watchlist_scope_enabled else None
+            if _applied_watchlist_id is not None:
+                try:
+                    _active_watchlist_rows = get_watchlist_companies(_applied_watchlist_id)
+                except Exception as _ec_wl_comp_exc:
+                    log_structured_error(_ec_wl_comp_exc, page="earnings_calls", component="render_earnings_calls",
+                                         operation="get_watchlist_companies",
+                                         context=f"watchlist_id={_applied_watchlist_id}")
+                    _active_watchlist_rows = []
+                _active_watchlist_tickers = _watchlist_rows_to_tickers(_active_watchlist_rows)
+                _active_watchlist_company_count = len(_active_watchlist_tickers)
+
+            # =======================================================================
+            # DETECT MODE: cross-transcript search vs single-transcript view
+            # =======================================================================
+            is_cross_search = (company == 'ALL' or str(year) == 'ALL' or quarter == 'ALL')
+            _is_viewing_non_sec = (company in _non_sec_only_tickers and not is_cross_search)
+
+            # ── PREFETCH: transcript + earnings event (report date + quarter-end) ────
+            # After years/quarters returns, we know the default company/year/quarter.
+            # Start transcript fetch and `get_earnings_event_dates` in parallel (~100–200ms overlap).
+            _pf_company = st.session_state.ec_company
+            _pf_year = st.session_state.ec_year
+            _pf_quarter = st.session_state.ec_quarter
+            _pf_is_cross = (_pf_company == 'ALL' or str(_pf_year) == 'ALL' or _pf_quarter == 'ALL')
+            _pf_is_non_sec = (_pf_company in _non_sec_only_tickers)
+
+            # Analytics: company/year/quarter/keyword are session-state (not URL), so the auto
+            # page_view misses them. Capture the full earnings-calls filter state.
+            try:
+                from utils.server_logger import log_filters_if_changed
+                log_filters_if_changed(
+                    "earnings_calls",
+                    company=_pf_company,
+                    year=str(_pf_year),
+                    quarter=str(_pf_quarter),
+                    keyword=st.session_state.get('ec_search') or None,
+                )
+            except Exception:
+                pass
+            _transcript_future = None
+            _edate_future = None
+            if not _pf_is_cross and not _pf_is_non_sec:
+                _ec_prefetch_exec = ThreadPoolExecutor(max_workers=2)
+                _transcript_future = _ec_prefetch_exec.submit(
+                    EarningsCallRepository.get_earnings_calls,
+                    ticker=_pf_company,
+                    year=_pf_year,
+                    quarter=_pf_quarter,
+                )
+                _pq_int = int(str(_pf_quarter).replace("Q", "")) if _pf_quarter and str(_pf_quarter) not in ("ALL", "") else None
+                _pyr_int = int(_pf_year) if _pf_year and str(_pf_year) not in ("ALL", "") else None
+                if _pq_int and _pyr_int:
+                    _edate_future = _ec_prefetch_exec.submit(
+                        EarningsCalendarRepository.get_earnings_event_dates, _pf_company, _pq_int, _pyr_int
+                    )
+
+            # =======================================================================
+            # FETCH TRANSCRIPT DATA (single-transcript mode only)
+            # =======================================================================
+            earnings_calls = []
+            _non_sec_pdf_path = None  # local path for NON-SEC transcript PDF
+            _ns_blob_name = None  # blob name for NON-SEC transcript PDF (resolved lazily)
+            if _tracker: _tracker.step_start("FETCH_TRANSCRIPT")
+            if _is_viewing_non_sec:
+                from utils.azure_blob import local_cache_path_for_blob as _local_cache_path_for_blob, ensure_local_blob_for_transcript as _ensure_local_blob_optimized
+                # NON-SEC: Build blob path, check local cache immediately (sub-ms).
+                # Azure download (if needed) is deferred to right-column rendering so
+                # the left column's search panel renders without blocking.
+                _ns_blob_name = f"{company}/{year}/transcript-{quarter}/transcript.pdf"
+                _ns_local = _local_cache_path_for_blob(_ns_blob_name)
+                if _ns_local and os.path.exists(_ns_local):
+                    _non_sec_pdf_path = _ns_local
+                # else: _non_sec_pdf_path stays None → resolved inside right_col below
+            elif not is_cross_search:
+                # Use prefetched result if params match; fall back to serial otherwise
+                if (_transcript_future is not None
+                    and company == _pf_company
+                    and str(year) == str(_pf_year)
+                    and quarter == _pf_quarter):
+                    try:
+                        earnings_calls = _transcript_future.result(timeout=30)
+                    except Exception as _pf_err:
+                        log_error(f"[EC] Prefetch future failed for {company} {year} {quarter}: {_pf_err}")
+                        earnings_calls = EarningsCallRepository.get_earnings_calls(
+                            ticker=company, year=year, quarter=quarter
+                        )
+                else:
+                    if _transcript_future is not None:
+                        _transcript_future.cancel()
+                    earnings_calls = EarningsCallRepository.get_earnings_calls(
+                        ticker=company,
+                        year=year,
+                        quarter=quarter
+                    )
+            elif _transcript_future is not None:
                 _transcript_future.cancel()
-            earnings_calls = EarningsCallRepository.get_earnings_calls(
-                ticker=company,
-                year=year,
-                quarter=quarter
-            )
-    elif _transcript_future is not None:
-        _transcript_future.cancel()
-        if _edate_future is not None:
-            _edate_future.cancel()
+                if _edate_future is not None:
+                    _edate_future.cancel()
 
-    # Get company display name
-    if _tracker: _tracker.step_end("FETCH_TRANSCRIPT")
-    company_display = next((opt[1] for opt in company_options if opt[0] == company), company)
-    company_name = company_display.split('(')[0].strip() if '(' in company_display else company_display
+            # Get company display name
+            if _tracker: _tracker.step_end("FETCH_TRANSCRIPT")
+            company_display = next((opt[1] for opt in company_options if opt[0] == company), company)
+            company_name = company_display.split('(')[0].strip() if '(' in company_display else company_display
 
 
-    # =======================================================================
-    # TWO-COLUMN LAYOUT: Search (Left) + Transcript (Right)
-    # =======================================================================
-    if _tracker: _tracker.step_start("RENDER_CONTENT")
-    left_col, right_col = st.columns([0.3, 0.7])
+            # =======================================================================
+            # TWO-COLUMN LAYOUT: Search (Left) + Transcript (Right)
+            # =======================================================================
+            if _tracker: _tracker.step_start("RENDER_CONTENT")
+            left_col, right_col = st.columns([0.3, 0.7])
 
-    # ── Parse transcript for single-transcript search ──
-    transcript_text = None
-    segments = []
-    earnings_event = None
-    report_date = None
-    fiscal_period_end_date = None
-    fiscal_period_label = ""
-    if not is_cross_search and earnings_calls and len(earnings_calls) > 0:
-        transcript = earnings_calls[0]
-        transcript_text = transcript.transcript_text
-        if transcript_text:
-            segments = parse_transcript(transcript_text)
-        # Announcement + period-end from AV earnings history when possible; else NASDAQ/YF calendar (SEC tickers).
-        if company not in _non_sec_only_tickers:
-            try:
-                _q_int = int(str(quarter).replace("Q", "")) if quarter and str(quarter) not in ("ALL", "") else None
-                _yr_int = int(year) if year and str(year) not in ("ALL", "") else None
-                if _q_int and _yr_int:
-                    if (_edate_future is not None
-                        and company == _pf_company
-                        and str(year) == str(_pf_year)
-                        and quarter == _pf_quarter):
-                        try:
-                            earnings_event = _edate_future.result(timeout=10)
-                        except Exception as _ef_err:
-                            log_error(f"[EC] Earnings event future failed for {company}: {_ef_err}")
-                            earnings_event = EarningsCalendarRepository.get_earnings_event_dates(
-                                company, _q_int, _yr_int
-                            )
-                    else:
-                        earnings_event = EarningsCalendarRepository.get_earnings_event_dates(
-                            company, _q_int, _yr_int
-                        )
-                    if earnings_event:
-                        report_date = earnings_event.get("report_date")
-                        fiscal_period_end_date = earnings_event.get("fiscal_period_end_date")
-                    if report_date:
-                        _display_period = EarningsCalendarRepository.get_earnings_display_period(
-                            company,
-                            report_date,
-                            source_q=_q_int,
-                            source_year=_yr_int,
-                        )
-                        if _display_period and _display_period.get("fiscal_q") and _display_period.get("report_fiscal_year"):
-                            fiscal_period_label = (
-                                f"Q{_display_period['fiscal_q']} "
-                                f"FY{_display_period['report_fiscal_year']}"
-                            )
-            except Exception as _edate_err:
-                log_error(f"[EC] Earnings date lookup failed for {company} {year} {quarter}: {_edate_err}")
-
-    # active_keyword comes from the search input in the filter row above
-    active_keyword = search_term.strip() if search_term and search_term.strip() else None
-
-    # ── LEFT COLUMN: Search Results Panel ──
-    with left_col:
-        search_label = "Search All Transcripts" if is_cross_search else "Search Transcript"
-        search_icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D62E2F" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
-
-        # Cross-transcript pagination — a subtle "Show more" text link sits at the
-        # BOTTOM of the results list, inside this box, so it only appears once the
-        # user scrolls past the loaded items. Offset pagination fetches only the
-        # NEXT page each time and appends it, so no match is ever skipped and
-        # already-loaded transcripts are never re-fetched.
-        _CROSS_PAGE = 15
-
-        # Captured inside the box, consumed by the Excel export rendered BELOW it.
-        cross_results = []
-        _single_matches = []
-
-        with st.container(border=True, height=520):
-            st.markdown(f'<div class="transcript-search-header">{search_icon}<span class="transcript-search-title">{search_label}</span></div>', unsafe_allow_html=True)
-
-            if is_cross_search:
-                # ── CROSS-TRANSCRIPT SEARCH MODE ──
-                if active_keyword:
-                    # Reset accumulator on a new search (keyword/filters/watchlist);
-                    # load the first page. Results are kept newest-first (the DB
-                    # orders year DESC, quarter DESC, id DESC).
-                    _cross_sig = (active_keyword, company, str(year), quarter, _applied_watchlist_id)
-                    if st.session_state.get("ec_cross_sig") != _cross_sig:
-                        _page, _raw = _get_cross_search_results(
-                            active_keyword, company, str(year), quarter,
-                            _applied_watchlist_id, _active_watchlist_tickers, _CROSS_PAGE, 0,
-                        )
-                        st.session_state.ec_cross_sig = _cross_sig
-                        st.session_state.ec_cross_acc = _page
-                        st.session_state.ec_cross_offset = _CROSS_PAGE
-                        st.session_state.ec_cross_has_more = (_raw == _CROSS_PAGE)
-                    cross_results = list(st.session_state.get("ec_cross_acc", []))
-                    _cross_has_more = bool(st.session_state.get("ec_cross_has_more", False))
-                    if _applied_watchlist_id is not None:
-                        st.caption(
-                            f"Filtering by watchlist: **{_active_watchlist_name}** — "
-                            f"{_active_watchlist_company_count} compan"
-                            f"{'y' if _active_watchlist_company_count == 1 else 'ies'}"
-                        )
-                    if cross_results:
-                        _cross_count_html = (
-                            f'Showing <b>{len(cross_results)}</b> results for "<b>{active_keyword}</b>" — newest first'
-                            if _cross_has_more else
-                            f'Found <b>{len(cross_results)}</b> match'
-                            f'{"es" if len(cross_results) != 1 else ""} for "<b>{active_keyword}</b>" — newest first'
-                        )
-                        st.markdown(
-                            f'<div class="transcript-search-count">{_cross_count_html}</div>',
-                            unsafe_allow_html=True
-                        )
-                        # Excel export button/download is rendered BELOW this box
-                        # (see "EXCEL EXPORT — below the box" block after the container).
-                        from core.smart_search import expand_synonyms
-                        _cs_syns = expand_synonyms(active_keyword)
-                        for r in cross_results:
-                            highlighted_snippet = _highlight_keyword(r['snippet'], active_keyword, expanded_terms=_cs_syns)
-                            view_url = (
-                                f"/earnings_calls?ticker={r['ticker']}"
-                                f"&year={r['year']}&quarter={r['quarter']}"
-                                f"&highlight={active_keyword}"
-                            )
-                            card_html = f'''
-                            <div class="transcript-search-result-card">
-                                <div class="transcript-search-speaker">{r['speaker']}</div>
-                                <div class="transcript-search-snippet">{highlighted_snippet}</div>
-                                <div class="transcript-result-footer">
-                                    <span class="transcript-result-meta">{ticker_display.get(r['ticker'], r['ticker'])} &bull; {r['year']} &bull; {r['quarter']}</span>
-                                    <a href="{view_url}" target="_self" class="transcript-view-btn">View &#8594;</a>
-                                </div>
-                            </div>
-                            '''
-                            st.markdown(card_html, unsafe_allow_html=True)
-                        if _cross_has_more:
-                            _sm_l, _sm_c, _sm_r = st.columns([1, 2, 1])
-                            with _sm_c:
-                                if st.button("Show more ↓", key="ec_cross_load_more",
-                                             type="tertiary", width="stretch"):
-                                    _off = int(st.session_state.get("ec_cross_offset", _CROSS_PAGE))
-                                    _page, _raw = _get_cross_search_results(
-                                        active_keyword, company, str(year), quarter,
-                                        _applied_watchlist_id, _active_watchlist_tickers,
-                                        _CROSS_PAGE, _off,
+            # ── Parse transcript for single-transcript search ──
+            transcript_text = None
+            segments = []
+            earnings_event = None
+            report_date = None
+            fiscal_period_end_date = None
+            fiscal_period_label = ""
+            if not is_cross_search and earnings_calls and len(earnings_calls) > 0:
+                transcript = earnings_calls[0]
+                transcript_text = transcript.transcript_text
+                if transcript_text:
+                    segments = parse_transcript(transcript_text)
+                # Announcement + period-end from AV earnings history when possible; else NASDAQ/YF calendar (SEC tickers).
+                if company not in _non_sec_only_tickers:
+                    try:
+                        _q_int = int(str(quarter).replace("Q", "")) if quarter and str(quarter) not in ("ALL", "") else None
+                        _yr_int = int(year) if year and str(year) not in ("ALL", "") else None
+                        if _q_int and _yr_int:
+                            if (_edate_future is not None
+                                and company == _pf_company
+                                and str(year) == str(_pf_year)
+                                and quarter == _pf_quarter):
+                                try:
+                                    earnings_event = _edate_future.result(timeout=10)
+                                except Exception as _ef_err:
+                                    log_error(f"[EC] Earnings event future failed for {company}: {_ef_err}")
+                                    earnings_event = EarningsCalendarRepository.get_earnings_event_dates(
+                                        company, _q_int, _yr_int
                                     )
-                                    st.session_state.ec_cross_acc = (
-                                        list(st.session_state.get("ec_cross_acc", [])) + _page
+                            else:
+                                earnings_event = EarningsCalendarRepository.get_earnings_event_dates(
+                                    company, _q_int, _yr_int
+                                )
+                            if earnings_event:
+                                report_date = earnings_event.get("report_date")
+                                fiscal_period_end_date = earnings_event.get("fiscal_period_end_date")
+                            if report_date:
+                                _display_period = EarningsCalendarRepository.get_earnings_display_period(
+                                    company,
+                                    report_date,
+                                    source_q=_q_int,
+                                    source_year=_yr_int,
+                                )
+                                if _display_period and _display_period.get("fiscal_q") and _display_period.get("report_fiscal_year"):
+                                    fiscal_period_label = (
+                                        f"Q{_display_period['fiscal_q']} "
+                                        f"FY{_display_period['report_fiscal_year']}"
                                     )
-                                    st.session_state.ec_cross_offset = _off + _CROSS_PAGE
-                                    st.session_state.ec_cross_has_more = (_raw == _CROSS_PAGE)
-                                    st.rerun()
-                    else:
-                        st.markdown(
-                            f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>',
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.markdown(
-                        '<div class="transcript-search-placeholder">Enter a keyword to search across all matching transcripts</div>',
-                        unsafe_allow_html=True
-                    )
+                    except Exception as _edate_err:
+                        log_error(f"[EC] Earnings date lookup failed for {company} {year} {quarter}: {_edate_err}")
 
-            elif _is_viewing_non_sec:
-                # ── NON-SEC TRANSCRIPT PDF MODE ──
-                if active_keyword and _non_sec_pdf_path and os.path.exists(_non_sec_pdf_path):
-                    _pdf_pages = _extract_pdf_text_by_page(_non_sec_pdf_path)
-                    _pdf_matches = _search_pdf_pages(_pdf_pages, active_keyword)
-                    if _pdf_matches:
-                        st.markdown(
-                            f'<div class="transcript-search-count">Found <b>{len(_pdf_matches)}</b> '
-                            f'page{"s" if len(_pdf_matches) != 1 else ""} with "<b>{active_keyword}</b>"</div>',
-                            unsafe_allow_html=True,
-                        )
-                        _cards_html = []
-                        for _pm in _pdf_matches[:30]:
-                            _hs = _highlight_keyword(_pm['snippet'], active_keyword)
-                            _view_url = (
-                                f"/earnings_calls?ticker={company}&year={year}"
-                                f"&quarter={quarter}&pdf_page={_pm['page']}"
-                                f"&keyword={active_keyword}"
+            # active_keyword comes from the search input in the filter row above
+            active_keyword = search_term.strip() if search_term and search_term.strip() else None
+
+            # ── LEFT COLUMN: Search Results Panel ──
+            with left_col:
+                search_label = "Search All Transcripts" if is_cross_search else "Search Transcript"
+                search_icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D62E2F" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+
+                # Cross-transcript pagination — a subtle "Show more" text link sits at the
+                # BOTTOM of the results list, inside this box, so it only appears once the
+                # user scrolls past the loaded items. Offset pagination fetches only the
+                # NEXT page each time and appends it, so no match is ever skipped and
+                # already-loaded transcripts are never re-fetched.
+                _CROSS_PAGE = 15
+
+                # Captured inside the box, consumed by the Excel export rendered BELOW it.
+                cross_results = []
+                _single_matches = []
+
+                with st.container(border=True, height=520):
+                    st.markdown(f'<div class="transcript-search-header">{search_icon}<span class="transcript-search-title">{search_label}</span></div>', unsafe_allow_html=True)
+
+                    if is_cross_search:
+                        # ── CROSS-TRANSCRIPT SEARCH MODE ──
+                        if active_keyword:
+                            # Reset accumulator on a new search (keyword/filters/watchlist);
+                            # load the first page. Results are kept newest-first (the DB
+                            # orders year DESC, quarter DESC, id DESC).
+                            _cross_sig = (active_keyword, company, str(year), quarter, _applied_watchlist_id)
+                            _search_failed = False
+                            try:
+                                _update_cross_search_state(_cross_sig, _active_watchlist_tickers, _CROSS_PAGE)
+                            except TranscriptSearchError as _exc:
+                                log_structured_error(_exc, page="earnings_calls", component="_render_ec_content",
+                                                     operation="TRANSCRIPT_SEARCH")
+                                _search_failed = True
+                            _same_search = st.session_state.get("ec_cross_sig") == _cross_sig
+                            cross_results = list(st.session_state.get("ec_cross_acc", [])) if _same_search else []
+                            _cross_has_more = bool(st.session_state.get("ec_cross_has_more", False)) if _same_search else False
+                            if _search_failed:
+                                st.error("Transcript search could not finish. Please retry, or narrow the company/year filters.")
+                                st.button("Retry search", key="ec_retry_search", on_click=_request_more_cross_results)
+                            if _applied_watchlist_id is not None:
+                                st.caption(
+                                    f"Filtering by watchlist: **{_active_watchlist_name}** — "
+                                    f"{_active_watchlist_company_count} compan"
+                                    f"{'y' if _active_watchlist_company_count == 1 else 'ies'}"
+                                )
+                            if cross_results:
+                                _cross_count_html = (
+                                    f'Showing <b>{len(cross_results)}</b> results for "<b>{active_keyword}</b>" — newest first'
+                                    if _cross_has_more else
+                                    f'Found <b>{len(cross_results)}</b> match'
+                                    f'{"es" if len(cross_results) != 1 else ""} for "<b>{active_keyword}</b>" — newest first'
+                                )
+                                st.markdown(
+                                    f'<div class="transcript-search-count">{_cross_count_html}</div>',
+                                    unsafe_allow_html=True
+                                )
+                                # Excel export button/download is rendered BELOW this box
+                                # (see "EXCEL EXPORT — below the box" block after the container).
+                                from core.smart_search import expand_synonyms
+                                _cs_syns = expand_synonyms(active_keyword)
+                                for r in cross_results:
+                                    highlighted_snippet = _highlight_keyword(r['snippet'], active_keyword, expanded_terms=_cs_syns)
+                                    view_url = (
+                                        f"/earnings_calls?ticker={r['ticker']}"
+                                        f"&year={r['year']}&quarter={r['quarter']}"
+                                        f"&highlight={active_keyword}"
+                                    )
+                                    card_html = f'''
+                                    <div class="transcript-search-result-card">
+                                        <div class="transcript-search-speaker">{r['speaker']}</div>
+                                        <div class="transcript-search-snippet">{highlighted_snippet}</div>
+                                        <div class="transcript-result-footer">
+                                            <span class="transcript-result-meta">{ticker_display.get(r['ticker'], r['ticker'])} &bull; {r['year']} &bull; {r['quarter']}</span>
+                                            <a href="{view_url}" target="_self" class="transcript-view-btn">View &#8594;</a>
+                                        </div>
+                                    </div>
+                                    '''
+                                    st.markdown(card_html, unsafe_allow_html=True)
+                            elif not _search_failed:
+                                st.markdown(
+                                    '<div class="transcript-search-placeholder">No excerpts on this page. Show more to continue searching.</div>'
+                                    if _cross_has_more else
+                                    f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>',
+                                    unsafe_allow_html=True
+                                )
+                            if _cross_has_more and not _search_failed:
+                                _sm_l, _sm_c, _sm_r = st.columns([1, 2, 1])
+                                with _sm_c:
+                                    st.button("Show more ↓", key="ec_cross_load_more",
+                                              type="tertiary", width="stretch",
+                                              on_click=_request_more_cross_results)
+                        else:
+                            st.markdown(
+                                '<div class="transcript-search-placeholder">Enter a keyword to search across all matching transcripts</div>',
+                                unsafe_allow_html=True
                             )
-                            _cards_html.append(f'''
-                            <div class="transcript-search-result-card">
-                                <div class="transcript-search-speaker">Page {_pm['page']}</div>
-                                <div class="transcript-search-snippet">{_hs}</div>
-                                <div class="transcript-result-footer">
-                                    <span class="transcript-result-meta">{ticker_display.get(company, company)} &bull; {year} &bull; {quarter}</span>
-                                    <a href="{_view_url}" target="_self" class="transcript-view-btn">View &#8594;</a>
+
+                    elif _is_viewing_non_sec:
+                        # ── NON-SEC TRANSCRIPT PDF MODE ──
+                        if active_keyword and _non_sec_pdf_path and os.path.exists(_non_sec_pdf_path):
+                            _pdf_pages = _extract_pdf_text_by_page(_non_sec_pdf_path)
+                            _pdf_matches = _search_pdf_pages(_pdf_pages, active_keyword)
+                            if _pdf_matches:
+                                st.markdown(
+                                    f'<div class="transcript-search-count">Found <b>{len(_pdf_matches)}</b> '
+                                    f'page{"s" if len(_pdf_matches) != 1 else ""} with "<b>{active_keyword}</b>"</div>',
+                                    unsafe_allow_html=True,
+                                )
+                                _cards_html = []
+                                for _pm in _pdf_matches[:30]:
+                                    _hs = _highlight_keyword(_pm['snippet'], active_keyword)
+                                    _view_url = (
+                                        f"/earnings_calls?ticker={company}&year={year}"
+                                        f"&quarter={quarter}&pdf_page={_pm['page']}"
+                                        f"&keyword={active_keyword}"
+                                    )
+                                    _cards_html.append(f'''
+                                    <div class="transcript-search-result-card">
+                                        <div class="transcript-search-speaker">Page {_pm['page']}</div>
+                                        <div class="transcript-search-snippet">{_hs}</div>
+                                        <div class="transcript-result-footer">
+                                            <span class="transcript-result-meta">{ticker_display.get(company, company)} &bull; {year} &bull; {quarter}</span>
+                                            <a href="{_view_url}" target="_self" class="transcript-view-btn">View &#8594;</a>
+                                        </div>
+                                    </div>
+                                    ''')
+                                st.markdown(''.join(_cards_html), unsafe_allow_html=True)
+                            else:
+                                st.markdown(
+                                    f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>',
+                                    unsafe_allow_html=True,
+                                )
+                        elif active_keyword and not (_non_sec_pdf_path and os.path.exists(_non_sec_pdf_path)):
+                            st.markdown(
+                                '<div class="transcript-search-placeholder">PDF not yet loaded — results will appear once the document downloads.</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                '<div class="transcript-search-placeholder">'
+                                'Type a keyword above to search within the PDF transcript'
+                                '</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    elif active_keyword and segments:
+                        # ── SINGLE-TRANSCRIPT SEARCH MODE WITH SMART SEARCH (SYNONYMS + FUZZY) ──
+                        from core.search_engine import TranscriptSearchEngine
+                        engine = TranscriptSearchEngine(segments)
+                        search_results = engine.search(active_keyword, top_k=50)
+                        matches = []
+                        for res in search_results:
+                            matches.append({
+                                'ticker': company,
+                                'year': str(year),
+                                'quarter': quarter,
+                                'speaker': res.speaker,
+                                'snippet': res.snippet,
+                                'paragraph': res.text,
+                                'index': res.index,
+                            })
+
+                        if matches:
+                            _single_matches = matches
+                            st.markdown(f'<div class="transcript-search-count">Found {len(matches)} match{"es" if len(matches) != 1 else ""} for "<b>{active_keyword}</b>"</div>', unsafe_allow_html=True)
+                            # Excel export is rendered BELOW this box (after the container).
+                            _expansion = engine.expander.expand_query(active_keyword) if engine.expander else None
+                            _exp_terms = _expansion.get("expanded_terms", []) if _expansion else []
+                            for m in matches[:30]:
+                                highlighted_snippet = _highlight_keyword(m['snippet'], active_keyword, expanded_terms=_exp_terms)
+                                card_html = f'''
+                                <div class="transcript-search-result-card">
+                                    <div class="transcript-search-speaker">{m['speaker']}</div>
+                                    <div class="transcript-search-snippet">{highlighted_snippet}</div>
+                                    <div class="transcript-result-footer">
+                                        <span class="transcript-result-meta">{ticker_display.get(company, company)} &bull; {year} &bull; {quarter}</span>
+                                        <a href="#seg-{m['index']}" class="transcript-view-btn">View &#8594;</a>
+                                    </div>
                                 </div>
-                            </div>
-                            ''')
-                        st.markdown(''.join(_cards_html), unsafe_allow_html=True)
+                                '''
+                                st.markdown(card_html, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>', unsafe_allow_html=True)
+                    elif active_keyword and not segments:
+                        st.markdown('<div class="transcript-search-placeholder">No transcript loaded to search</div>', unsafe_allow_html=True)
                     else:
-                        st.markdown(
-                            f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>',
-                            unsafe_allow_html=True,
-                        )
-                elif active_keyword and not (_non_sec_pdf_path and os.path.exists(_non_sec_pdf_path)):
-                    st.markdown(
-                        '<div class="transcript-search-placeholder">PDF not yet loaded — results will appear once the document downloads.</div>',
-                        unsafe_allow_html=True,
+                        st.markdown('<div class="transcript-search-placeholder">Type a keyword above to search within the transcript</div>', unsafe_allow_html=True)
+
+                # ===================================================================
+                # CSV EXPORT — rendered BELOW the results box (not inside it).
+                # Cross-transcript export is heavy (DB windows for every match), so it
+                # runs in a BACKGROUND thread: clicking "CSV" submits the build to the
+                # pool and the page stays interactive; when it finishes, a Download
+                # button appears here. (SIP-style CSV replaced the styled Excel build,
+                # which took minutes for 10k rows and whose auto-download iframe was
+                # wiped by the 1.2s poller before it could fire — the "never
+                # completes" bug seen on STG 03-Jul.)
+                # ===================================================================
+                if is_cross_search and active_keyword and cross_results:
+                    _xl_sig_key = repr((active_keyword, company, str(year), quarter, _applied_watchlist_id))
+                    _xl_filename = (
+                        f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}"
+                        "_Keyword_Results.csv"
                     )
-                else:
-                    st.markdown(
-                        '<div class="transcript-search-placeholder">'
-                        'Type a keyword above to search within the PDF transcript'
-                        '</div>',
-                        unsafe_allow_html=True,
-                    )
 
-            elif active_keyword and segments:
-                # ── SINGLE-TRANSCRIPT SEARCH MODE WITH SMART SEARCH (SYNONYMS + FUZZY) ──
-                from core.search_engine import TranscriptSearchEngine
-                engine = TranscriptSearchEngine(segments)
-                search_results = engine.search(active_keyword, top_k=50)
-                matches = []
-                for res in search_results:
-                    matches.append({
-                        'ticker': company,
-                        'year': str(year),
-                        'quarter': quarter,
-                        'speaker': res.speaker,
-                        'snippet': res.snippet,
-                        'paragraph': res.text,
-                        'index': res.index,
-                    })
-
-                if matches:
-                    _single_matches = matches
-                    st.markdown(f'<div class="transcript-search-count">Found {len(matches)} match{"es" if len(matches) != 1 else ""} for "<b>{active_keyword}</b>"</div>', unsafe_allow_html=True)
-                    # Excel export is rendered BELOW this box (after the container).
-                    _expansion = engine.expander.expand_query(active_keyword) if engine.expander else None
-                    _exp_terms = _expansion.get("expanded_terms", []) if _expansion else []
-                    for m in matches[:30]:
-                        highlighted_snippet = _highlight_keyword(m['snippet'], active_keyword, expanded_terms=_exp_terms)
-                        card_html = f'''
-                        <div class="transcript-search-result-card">
-                            <div class="transcript-search-speaker">{m['speaker']}</div>
-                            <div class="transcript-search-snippet">{highlighted_snippet}</div>
-                            <div class="transcript-result-footer">
-                                <span class="transcript-result-meta">{ticker_display.get(company, company)} &bull; {year} &bull; {quarter}</span>
-                                <a href="#seg-{m['index']}" class="transcript-view-btn">View &#8594;</a>
-                            </div>
-                        </div>
-                        '''
-                        st.markdown(card_html, unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="transcript-search-placeholder">No matches found for "<b>{active_keyword}</b>"</div>', unsafe_allow_html=True)
-            elif active_keyword and not segments:
-                st.markdown('<div class="transcript-search-placeholder">No transcript loaded to search</div>', unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="transcript-search-placeholder">Type a keyword above to search within the transcript</div>', unsafe_allow_html=True)
-
-        # ===================================================================
-        # CSV EXPORT — rendered BELOW the results box (not inside it).
-        # Cross-transcript export is heavy (DB windows for every match), so it
-        # runs in a BACKGROUND thread: clicking "CSV" submits the build to the
-        # pool and the page stays interactive; when it finishes, a Download
-        # button appears here. (SIP-style CSV replaced the styled Excel build,
-        # which took minutes for 10k rows and whose auto-download iframe was
-        # wiped by the 1.2s poller before it could fire — the "never
-        # completes" bug seen on STG 03-Jul.)
-        # ===================================================================
-        if is_cross_search and active_keyword and cross_results:
-            _xl_sig_key = repr((active_keyword, company, str(year), quarter, _applied_watchlist_id))
-            _xl_filename = (
-                f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}"
-                "_Keyword_Results.csv"
-            )
-
-            _dl_l, _dl_r = st.columns([1, 1])
-            with _dl_r:
-                _job = _ec_excel_job_get(_xl_sig_key)
-                log_timing(
-                    "EC_EXPORT_STATE", 0,
-                    f"sig={_xl_sig_key} job=" + (
-                        "none" if _job is None else
-                        ("ready" if _job.get("bytes") else ("error" if _job.get("error") else "building"))
-                    ),
-                    level="WARNING",
-                )
-                if _job is None:
-                    # ONE click → start the background build + toast. No full-page
-                    # rerun loop: the poller fragment below does isolated polling,
-                    # so the rest of the page stays fully interactive.
-                    if st.button(
-                        "▦  CSV",
-                        key=f"ec_cross_excel_{hash(_xl_sig_key)}",
-                        width="stretch",
-                        help="Build a CSV of ALL matching results — runs in the background; a download button appears when it's ready.",
-                    ):
-                        _kw, _co, _yr, _qt = active_keyword, company, str(year), quarter
-                        _wl, _wt, _td = _applied_watchlist_id, _active_watchlist_tickers, dict(ticker_display)
-                        _ec_excel_job_start(
-                            _xl_sig_key, _xl_filename,
-                            lambda: _get_ec_excel_executor().submit(
-                                _build_cross_excel_job, _kw, _co, _yr, _qt, _wl, _wt, _td,
+                    _dl_l, _dl_r = st.columns([1, 1])
+                    with _dl_r:
+                        _job = _ec_excel_job_get(_xl_sig_key)
+                        log_timing(
+                            "EC_EXPORT_STATE", 0,
+                            f"sig={_xl_sig_key} job=" + (
+                                "none" if _job is None else
+                                ("ready" if _job.get("bytes") else ("error" if _job.get("error") else "building"))
                             ),
+                            level="WARNING",
                         )
-                        st.toast("Preparing CSV in the background — a download button appears when it's ready.", icon="⏳")
-                        # No st.rerun(): the button click already triggers one rerun,
-                        # and the poller fragment below picks up the new job. Calling
-                        # st.rerun() here would cancel the toast before it shows.
-                elif _job.get("bytes"):
-                    # Ready — served by Streamlit's media manager over plain HTTP
-                    # (no giant base64 iframe, no fonts.googleapis dependency) and
-                    # fetched into a Blob, never via an st.download_button anchor.
-                    lazy_download_button(
-                        label="⬇  Download CSV",
-                        filename=_job.get("filename") or _xl_filename,
-                        build_fn=(lambda b=_job["bytes"]: b),
-                        mimetype="text/csv",
-                        key=f"ec_cross_csv_dl_{hash(_xl_sig_key)}",
-                        page="earnings_calls",
-                        width="stretch",
-                        button_type="primary",
-                    )
-                elif _job.get("error"):
-                    st.markdown(
-                        '<div class="transcript-search-count" style="color:#D62E2F;">'
-                        'Could not build the CSV file — please try again.</div>',
-                        unsafe_allow_html=True,
-                    )
+                        if _job is None:
+                            # ONE click → start the background build + toast. No full-page
+                            # rerun loop: the poller fragment below does isolated polling,
+                            # so the rest of the page stays fully interactive.
+                            if st.button(
+                                "▦  CSV",
+                                key=f"ec_cross_excel_{hash(_xl_sig_key)}",
+                                width="stretch",
+                                help="Build a CSV of ALL matching results — runs in the background; a download button appears when it's ready.",
+                            ):
+                                _kw, _co, _yr, _qt = active_keyword, company, str(year), quarter
+                                _wl, _wt, _td = _applied_watchlist_id, _active_watchlist_tickers, dict(ticker_display)
+                                _ec_excel_job_start(
+                                    _xl_sig_key, _xl_filename,
+                                    lambda: _get_ec_excel_executor().submit(
+                                        _build_cross_excel_job, _kw, _co, _yr, _qt, _wl, _wt, _td,
+                                    ),
+                                )
+                                st.toast("Preparing CSV in the background — a download button appears when it's ready.", icon="⏳")
+                                # No st.rerun(): the button click already triggers one rerun,
+                                # and the poller fragment below picks up the new job. Calling
+                                # st.rerun() here would cancel the toast before it shows.
+                        elif _job.get("bytes"):
+                            # Ready — served by Streamlit's media manager over plain HTTP
+                            # (no giant base64 iframe, no fonts.googleapis dependency) and
+                            # fetched into a Blob, never via an st.download_button anchor.
+                            lazy_download_button(
+                                label="⬇  Download CSV",
+                                filename=_job.get("filename") or _xl_filename,
+                                build_fn=(lambda b=_job["bytes"]: b),
+                                mimetype="text/csv",
+                                key=f"ec_cross_csv_dl_{hash(_xl_sig_key)}",
+                                page="earnings_calls",
+                                width="stretch",
+                                button_type="primary",
+                            )
+                        elif _job.get("error"):
+                            st.markdown(
+                                '<div class="transcript-search-count" style="color:#D62E2F;">'
+                                'Could not build the CSV file — please try again.</div>',
+                                unsafe_allow_html=True,
+                            )
 
-            # Poller fragment: reruns ONLY itself every ~1.2s (page stays
-            # responsive — no full-page rerun while building). When a build
-            # finishes it marks the job done and triggers ONE full rerun so the
-            # static "Download CSV" button above replaces the spinner. No JS
-            # auto-click: the old iframe was destroyed by the next fragment
-            # rerun before its load event fired, losing the download.
-            if any(not j.get("downloaded") for _, j in _ec_excel_jobs_snapshot()):
-                @st.fragment(run_every="1.2s")
-                def _ec_excel_poller():
-                    _ec_excel_jobs_collect()
-                    # status line for the CURRENT search's job
-                    cur = _ec_excel_job_get(_xl_sig_key)
-                    if cur and cur.get("bytes") is None and not cur.get("error"):
+                    # Poller fragment: reruns ONLY itself every ~1.2s (page stays
+                    # responsive — no full-page rerun while building). When a build
+                    # finishes it marks the job done and triggers ONE full rerun so the
+                    # static "Download CSV" button above replaces the spinner. No JS
+                    # auto-click: the old iframe was destroyed by the next fragment
+                    # rerun before its load event fired, losing the download.
+                    if any(not j.get("downloaded") for _, j in _ec_excel_jobs_snapshot()):
+                        @st.fragment(run_every="1.2s")
+                        def _ec_excel_poller():
+                            _ec_excel_jobs_collect()
+                            # status line for the CURRENT search's job
+                            cur = _ec_excel_job_get(_xl_sig_key)
+                            if cur and cur.get("bytes") is None and not cur.get("error"):
+                                st.markdown(
+                                    '<div class="transcript-search-count">'
+                                    '<span style="display:inline-flex;align-items:center;gap:8px;">'
+                                    '<span style="width:14px;height:14px;border:2px solid #eee;'
+                                    'border-top:2px solid #d62e2f;border-radius:50%;'
+                                    'display:inline-block;animation:ec-spin 0.8s linear infinite;"></span>'
+                                    'Preparing CSV in the background — keep working; a '
+                                    'download button appears here when it\'s ready.</span></div>'
+                                    '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
+                                    unsafe_allow_html=True,
+                                )
+                            # mark ANY finished job delivered, then one full rerun to
+                            # swap the spinner for the persistent download button
+                            _any_ready = False
+                            for k, j in _ec_excel_jobs_snapshot():
+                                if (j.get("bytes") or j.get("error")) and not j.get("downloaded"):
+                                    _any_ready = True
+                                    with _EC_EXCEL_JOBS_LOCK:
+                                        if k in _EC_EXCEL_JOBS:
+                                            _EC_EXCEL_JOBS[k]["downloaded"] = True
+                            if _any_ready:
+                                st.rerun(scope="app")
+                        _ec_excel_poller()
+
+                elif (not is_cross_search) and active_keyword and _single_matches:
+                    # Single-transcript export is small/fast — build inline (cached by sig).
+                    _xl_sig = (active_keyword, company, str(year), quarter, len(_single_matches))
+                    if st.session_state.get("ec_single_excel_sig") != _xl_sig:
+                        st.session_state.ec_single_excel_sig = _xl_sig
+                        st.session_state.ec_single_excel_bytes = _build_keyword_results_csv(
+                            _single_matches, ticker_display,
+                        )
+                    _xl_bytes = st.session_state.get("ec_single_excel_bytes")
+                    if _xl_bytes:
+                        _dl_l, _dl_r = st.columns([1, 1])
+                        with _dl_r:
+                            lazy_download_button(
+                                label="▦  CSV",
+                                filename=f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.csv",
+                                build_fn=(lambda b=_xl_bytes: b),
+                                mimetype="text/csv",
+                                key=f"ec_single_csv_dl_{hash(_xl_sig)}",
+                                page="earnings_calls",
+                                width="stretch",
+                            )
+
+
+            # ── RIGHT COLUMN: Transcript Content ──
+            with right_col:
+                if is_cross_search:
+                    card_html = render_cross_search_panel(company, str(year), quarter)
+                    st.markdown(card_html, unsafe_allow_html=True)
+                elif _is_viewing_non_sec:
+                    # Lazy-resolve Azure download here (inside right_col) so left_col
+                    # renders without blocking when the PDF isn't cached yet.
+                    if _non_sec_pdf_path is None and _ns_blob_name:
+                        _non_sec_pdf_path = _ensure_local_blob_optimized(_ns_blob_name)
+
+                    if _non_sec_pdf_path:
+                        # NON-SEC Transcript PDF — render header + PDF.js viewer
+                        hdr_left, hdr_right = st.columns([5.5, 1.5])
+                        with hdr_left:
+                            st.markdown(_render_transcript_header_html(
+                                company_name=company_name,
+                                ticker=company,
+                                year=year,
+                                quarter=quarter,
+                            ), unsafe_allow_html=True)
+                        with hdr_right:
+                            try:
+                                with open(_non_sec_pdf_path, "rb") as _pf:
+                                    _ns_pdf_bytes = _pf.read()
+                                _render_js_download_button(
+                                    _ns_pdf_bytes,
+                                    f"{company}_{year}_{quarter}_Transcript.pdf",
+                                )
+                            except Exception as _exc:
+                                log_structured_error(_exc, page="earnings_calls", component="render_earnings_calls", operation="FORMAT_DATE")
+                        _render_ec_pdf_viewer(
+                            _non_sec_pdf_path,
+                            highlight_keyword=active_keyword or "",
+                            target_page=_qp_pdf_page,
+                        )
+                    else:
+                        # NON-SEC but PDF not found
                         st.markdown(
-                            '<div class="transcript-search-count">'
-                            '<span style="display:inline-flex;align-items:center;gap:8px;">'
-                            '<span style="width:14px;height:14px;border:2px solid #eee;'
-                            'border-top:2px solid #d62e2f;border-radius:50%;'
-                            'display:inline-block;animation:ec-spin 0.8s linear infinite;"></span>'
-                            'Preparing CSV in the background — keep working; a '
-                            'download button appears here when it\'s ready.</span></div>'
-                            '<style>@keyframes ec-spin{to{transform:rotate(360deg)}}</style>',
+                            '<div class="empty-state">'
+                            '<div class="empty-state-title">Transcript PDF Not Available</div>'
+                            '<div class="empty-state-text">No transcript PDF found for this company, year, and quarter.</div>'
+                            '</div>',
                             unsafe_allow_html=True,
                         )
-                    # mark ANY finished job delivered, then one full rerun to
-                    # swap the spinner for the persistent download button
-                    _any_ready = False
-                    for k, j in _ec_excel_jobs_snapshot():
-                        if (j.get("bytes") or j.get("error")) and not j.get("downloaded"):
-                            _any_ready = True
-                            with _EC_EXCEL_JOBS_LOCK:
-                                if k in _EC_EXCEL_JOBS:
-                                    _EC_EXCEL_JOBS[k]["downloaded"] = True
-                    if _any_ready:
-                        st.rerun(scope="app")
-                _ec_excel_poller()
+                elif transcript_text:
+                    # Generate PDF for download button
+                    _pdf_bytes = None
+                    _pdf_filename = f"{company}_{year}_{quarter}_Earnings_Transcript.pdf"
+                    try:
+                        _pdf_meta_parts: List[str] = []
+                        if report_date:
+                            _pdf_meta_parts.append(f"Report {_format_ec_display_date(report_date)}")
+                        if fiscal_period_end_date and not _ec_date_equals(fiscal_period_end_date, report_date):
+                            _pdf_meta_parts.append(f"QE {_format_ec_display_date(fiscal_period_end_date)}")
+                        _pdf_date_line = " · ".join(_pdf_meta_parts) if _pdf_meta_parts else ""
+                        _pdf_bytes = _cached_transcript_pdf(
+                            company_name, company, str(year), str(quarter),
+                            _pdf_date_line or None, segments,
+                        )
+                    except Exception as _pdf_err:
+                        log_error(f"[EC] PDF generation failed for {company} {year} {quarter}: {_pdf_err}")
+                        _pdf_bytes = None
 
-        elif (not is_cross_search) and active_keyword and _single_matches:
-            # Single-transcript export is small/fast — build inline (cached by sig).
-            _xl_sig = (active_keyword, company, str(year), quarter, len(_single_matches))
-            if st.session_state.get("ec_single_excel_sig") != _xl_sig:
-                st.session_state.ec_single_excel_sig = _xl_sig
-                st.session_state.ec_single_excel_bytes = _build_keyword_results_csv(
-                    _single_matches, ticker_display,
-                )
-            _xl_bytes = st.session_state.get("ec_single_excel_bytes")
-            if _xl_bytes:
-                _dl_l, _dl_r = st.columns([1, 1])
-                with _dl_r:
-                    lazy_download_button(
-                        label="▦  CSV",
-                        filename=f"Earnings_Calls_{_safe_excel_filename_keyword(active_keyword)}_Keyword_Results.csv",
-                        build_fn=(lambda b=_xl_bytes: b),
-                        mimetype="text/csv",
-                        key=f"ec_single_csv_dl_{hash(_xl_sig)}",
-                        page="earnings_calls",
-                        width="stretch",
-                    )
+                    # Split card: header row (columns) + body HTML
+                    hdr_left, hdr_right = st.columns([5.5, 1.5])
+                    with hdr_left:
+                        st.markdown(_render_transcript_header_html(
+                            company_name=company_name,
+                            ticker=company,
+                            year=year,
+                            quarter=quarter,
+                            report_date=report_date,
+                            fiscal_period_end_date=fiscal_period_end_date,
+                            fiscal_period_label=fiscal_period_label,
+                        ), unsafe_allow_html=True)
+                    with hdr_right:
+                        if _pdf_bytes:
+                            _render_js_download_button(_pdf_bytes, _pdf_filename)
 
-
-    # ── RIGHT COLUMN: Transcript Content ──
-    with right_col:
-        if is_cross_search:
-            card_html = render_cross_search_panel(company, str(year), quarter)
-            st.markdown(card_html, unsafe_allow_html=True)
-        elif _is_viewing_non_sec:
-            # Lazy-resolve Azure download here (inside right_col) so left_col
-            # renders without blocking when the PDF isn't cached yet.
-            if _non_sec_pdf_path is None and _ns_blob_name:
-                _non_sec_pdf_path = _ensure_local_blob_optimized(_ns_blob_name)
-
-            if _non_sec_pdf_path:
-                # NON-SEC Transcript PDF — render header + PDF.js viewer
-                hdr_left, hdr_right = st.columns([5.5, 1.5])
-                with hdr_left:
-                    st.markdown(_render_transcript_header_html(
+                    card_html = render_transcript_card(
                         company_name=company_name,
                         ticker=company,
                         year=year,
                         quarter=quarter,
-                    ), unsafe_allow_html=True)
-                with hdr_right:
-                    try:
-                        with open(_non_sec_pdf_path, "rb") as _pf:
-                            _ns_pdf_bytes = _pf.read()
-                        _render_js_download_button(
-                            _ns_pdf_bytes,
-                            f"{company}_{year}_{quarter}_Transcript.pdf",
-                        )
-                    except Exception as _exc:
-                        log_structured_error(_exc, page="earnings_calls", component="render_earnings_calls", operation="FORMAT_DATE")
-                _render_ec_pdf_viewer(
-                    _non_sec_pdf_path,
-                    highlight_keyword=active_keyword or "",
-                    target_page=_qp_pdf_page,
-                )
-            else:
-                # NON-SEC but PDF not found
-                st.markdown(
-                    '<div class="empty-state">'
-                    '<div class="empty-state-title">Transcript PDF Not Available</div>'
-                    '<div class="empty-state-text">No transcript PDF found for this company, year, and quarter.</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-        elif transcript_text:
-            # Generate PDF for download button
-            _pdf_bytes = None
-            _pdf_filename = f"{company}_{year}_{quarter}_Earnings_Transcript.pdf"
-            try:
-                _pdf_meta_parts: List[str] = []
-                if report_date:
-                    _pdf_meta_parts.append(f"Report {_format_ec_display_date(report_date)}")
-                if fiscal_period_end_date and not _ec_date_equals(fiscal_period_end_date, report_date):
-                    _pdf_meta_parts.append(f"QE {_format_ec_display_date(fiscal_period_end_date)}")
-                _pdf_date_line = " · ".join(_pdf_meta_parts) if _pdf_meta_parts else ""
-                _pdf_bytes = _cached_transcript_pdf(
-                    company_name, company, str(year), str(quarter),
-                    _pdf_date_line or None, segments,
-                )
-            except Exception as _pdf_err:
-                log_error(f"[EC] PDF generation failed for {company} {year} {quarter}: {_pdf_err}")
-                _pdf_bytes = None
+                        transcript_text=transcript_text,
+                        keyword=active_keyword,
+                        earnings_date=report_date,
+                    )
+                    st.markdown(card_html, unsafe_allow_html=True)
+                else:
+                    st.markdown(render_empty_state(), unsafe_allow_html=True)
 
-            # Split card: header row (columns) + body HTML
-            hdr_left, hdr_right = st.columns([5.5, 1.5])
-            with hdr_left:
-                st.markdown(_render_transcript_header_html(
-                    company_name=company_name,
-                    ticker=company,
-                    year=year,
-                    quarter=quarter,
-                    report_date=report_date,
-                    fiscal_period_end_date=fiscal_period_end_date,
-                    fiscal_period_label=fiscal_period_label,
-                ), unsafe_allow_html=True)
-            with hdr_right:
-                if _pdf_bytes:
-                    _render_js_download_button(_pdf_bytes, _pdf_filename)
+            # (no wrapper divs to close — using newsroom's flat layout pattern)
 
-            card_html = render_transcript_card(
-                company_name=company_name,
-                ticker=company,
-                year=year,
-                quarter=quarter,
-                transcript_text=transcript_text,
-                keyword=active_keyword,
-                earnings_date=report_date,
-            )
-            st.markdown(card_html, unsafe_allow_html=True)
-        else:
-            st.markdown(render_empty_state(), unsafe_allow_html=True)
+            # Save state AFTER all widgets are rendered so that save_to_local_storage_js()
+            # (which calls components.html()) places its stCustomComponentV1 iframe at the
+            # BOTTOM of the DOM, not at position [0] where it would push the header down.
+            save_earnings_calls_state()
 
-    # (no wrapper divs to close — using newsroom's flat layout pattern)
+            # Log total page render time
+            if _tracker: _tracker.step_end("RENDER_CONTENT")
+            _t1_page_end = _time.perf_counter()
+            _total_page_time = (_t1_page_end - _t0_page_start) * 1000
+            if _tracker: _tracker.finish()
+            log_info(f"[TIMING] EC_PAGE_TOTAL | {_total_page_time:.1f}ms | company={company} year={year} quarter={quarter}")
+            log_render_complete("earnings_calls", _t1_page_end - _t0_page_start)
+        except TranscriptSearchError as _exc:
+            log_structured_error(_exc, page="earnings_calls", component="_render_ec_content", operation="TRANSCRIPT_SEARCH")
+            st.error("Transcript search could not finish. Please retry, or narrow the company/year filters.")
+            st.button("Retry search", key="ec_retry_search", on_click=_request_more_cross_results)
+            st.stop()
+        except Exception as _exc:
+            log_structured_error(_exc, page="earnings_calls", component="_render_ec_content", operation="PAGE_RENDER")
+            st.error("An unexpected error occurred. Please refresh the page.")
+            st.stop()
+        finally:
+            if _content_loader is not None:
+                _content_loader.empty()
+            if _ec_prefetch_exec is not None:
+                _ec_prefetch_exec.shutdown(wait=False, cancel_futures=True)
 
-    # Clear the early loading placeholder now that content is rendered
-    _ec_loading_hint.empty()
-
-    # Save state AFTER all widgets are rendered so that save_to_local_storage_js()
-    # (which calls components.html()) places its stCustomComponentV1 iframe at the
-    # BOTTOM of the DOM, not at position [0] where it would push the header down.
-    save_earnings_calls_state()
-
-    # Log total page render time
-    if _tracker: _tracker.step_end("RENDER_CONTENT")
-    _t1_page_end = _time.perf_counter()
-    _total_page_time = (_t1_page_end - _t0_page_start) * 1000
-    if _tracker: _tracker.finish()
-    log_info(f"[TIMING] EC_PAGE_TOTAL | {_total_page_time:.1f}ms | company={company} year={year} quarter={quarter}")
-    log_render_complete("earnings_calls", _t1_page_end - _t0_page_start)
+    _render_ec_content()
 
 
 def main():
@@ -2986,8 +3062,11 @@ def main():
         # Render Header — resolve active_ticker for nav links
         # Check the widget key first (Streamlit updates widget session_state BEFORE rerun)
         _widget_company = st.session_state.get("ec_company_select", None)
-        if _widget_company and _widget_company != "All":
+        if _widget_company:
             active_ticker = _widget_company
+            st.session_state.active_ticker = active_ticker
+        elif str(st.query_params.get("ticker", "")).upper() == "ALL":
+            active_ticker = "ALL"
             st.session_state.active_ticker = active_ticker
         else:
             # Get ticker from URL or session, with DB validation and fallback
@@ -3006,10 +3085,22 @@ def main():
         render_header(full_width=True, current_page="earnings_calls", ticker=active_ticker)
 
         # Render content
-        render_earnings_calls(active_ticker)
+        from components.loading import render_page_loader
+        _ec_loading_hint = render_page_loader("Loading Earnings Calls", auto_hide=False)
+        try:
+            render_earnings_calls(active_ticker)
+        finally:
+            if _ec_loading_hint is not None:
+                _ec_loading_hint.empty()
 
         # Render Footer
         render_coresight_footer(full_width=True, stick_to_bottom=True)
+    except TranscriptSearchError as _exc:
+        log_structured_error(_exc, page="earnings_calls", component="main", operation="TRANSCRIPT_SEARCH")
+        st.error("Transcript search could not finish. Please retry, or narrow the company/year filters.")
+        st.button("Retry search", key="ec_retry_search",
+                  on_click=lambda: st.session_state.pop("ec_cross_sig", None))
+        st.stop()
     except Exception as _exc:
         log_structured_error(_exc, page="earnings_calls", component="main", operation="PAGE_RENDER")
         st.error("An unexpected error occurred. Please refresh the page.")

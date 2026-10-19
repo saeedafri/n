@@ -1,0 +1,18 @@
+{"at": 1792399629.6656199, "monotonic": 257227.016546916, "event": "start", "rerun": 1, "watchlist_entries": 0}
+{"at": 1792399630.172441, "monotonic": 257227.523367041, "event": "start", "rerun": 2, "watchlist_entries": 0}
+{"at": 1792399630.792099, "monotonic": 257228.143022583, "event": "exit", "rerun": 2, "sql_count": 0, "violations": 0}
+{"at": 1792399637.330123, "monotonic": 257234.681031208, "event": "exit", "rerun": 2, "sql_count": 5, "violations": 0}
+{"at": 1792399638.615757, "monotonic": 257235.966662333, "event": "start", "rerun": 3, "watchlist_entries": 0}
+{"at": 1792399644.170648, "monotonic": 257241.521540041, "event": "exit", "rerun": 3, "sql_count": 12, "violations": 0}
+{"at": 1792399645.559938, "monotonic": 257242.910826416, "event": "start", "rerun": 4, "watchlist_entries": 0}
+{"at": 1792399652.088856, "monotonic": 257249.439728958, "event": "exit", "rerun": 4, "sql_count": 19, "violations": 0}
+{"at": 1792399653.448593, "monotonic": 257250.799463291, "event": "start", "rerun": 5, "watchlist_entries": 0}
+{"at": 1792399659.094646, "monotonic": 257256.445502666, "event": "exit", "rerun": 5, "sql_count": 26, "violations": 0}
+{"at": 1792399660.662236, "monotonic": 257258.013089083, "event": "start", "rerun": 6, "watchlist_entries": 0}
+{"at": 1792399660.768522, "monotonic": 257258.119374375, "event": "start", "rerun": 7, "watchlist_entries": 0}
+{"at": 1792399661.5556622, "monotonic": 257258.906512583, "event": "exit", "rerun": 7, "sql_count": 29, "violations": 0}
+{"at": 1792399670.0593011, "monotonic": 257267.410131083, "event": "exit", "rerun": 7, "sql_count": 42, "violations": 0}
+{"at": 1792399671.5850701, "monotonic": 257268.935896583, "event": "start", "rerun": 8, "watchlist_entries": 0}
+{"at": 1792399671.689752, "monotonic": 257269.040578125, "event": "start", "rerun": 9, "watchlist_entries": 0}
+{"at": 1792399672.83097, "monotonic": 257270.18179425, "event": "exit", "rerun": 9, "sql_count": 47, "violations": 0}
+{"at": 1792399680.1802711, "monotonic": 257277.531078166, "event": "exit", "rerun": 9, "sql_count": 52, "violations": 0}

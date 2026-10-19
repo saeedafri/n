@@ -38,6 +38,10 @@ logs/
 test-artifacts/
 data/azure_downloads/*
 scripts/*
+!scripts/ec_transcript_index_migration.py
+!scripts/ec_cold_app.py
+!scripts/ec_cold_e2e.py
+!scripts/ec_ngram_corpus_probe.py
 docs/*
 *.png
 # EDGAR store-totals disk cache (rebuilt on demand, 24h TTL)

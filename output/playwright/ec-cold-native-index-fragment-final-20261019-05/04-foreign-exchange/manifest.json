@@ -1,0 +1,642 @@
+{
+  "keyword": "foreign exchange",
+  "status": "passed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/04-foreign-exchange",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-r2p_fl2n",
+  "port": 8513,
+  "mode": "isolated_native_snapshot",
+  "cache_scope": "application result caches bypassed; private MySQL buffer pool reset before this keyword; live STG/OS buffers uncontrolled",
+  "errors": [],
+  "case_audit_initial_state": {
+    "watermark": 0,
+    "requires_search_query": false,
+    "path": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/04-foreign-exchange/sql.jsonl"
+  },
+  "action_timings": [
+    {
+      "action": "initial_load",
+      "started_at": 1792404296.002528,
+      "elapsed_ms": 7705.095707991859,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 2,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "search",
+      "started_at": 1792404305.800666,
+      "elapsed_ms": 4231.94358299952,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          6,
+          7,
+          8
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_1",
+      "started_at": 1792404312.117007,
+      "elapsed_ms": 2883.197375020245,
+      "cards": 30,
+      "sql": {
+        "counters": [
+          9,
+          10,
+          11
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_2",
+      "started_at": 1792404317.110545,
+      "elapsed_ms": 2693.6574160063174,
+      "cards": 45,
+      "sql": {
+        "counters": [
+          12,
+          13,
+          14
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "view_first",
+      "started_at": 1792404321.944253,
+      "elapsed_ms": 9945.284790999722,
+      "sql": {
+        "counters": [
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "SELECTs": 17,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 12,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 12,
+        "catalogue_queries": 4,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "review_dwell_ms": 2000,
+  "filter_flow_requested": false,
+  "fragment_query_verification": true,
+  "expected_empty": false,
+  "private_server_restart": {
+    "started_at": 1792404293.192814,
+    "elapsed_ms": 1420.8848476409912,
+    "report": {
+      "action": "restart",
+      "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+      "running_pid": 94982,
+      "pool_bytes": 134217728,
+      "buffer_pool_load_at_startup": false,
+      "buffer_pool_dump_at_shutdown": false,
+      "corpus_queries_performed": 0,
+      "OS_file_cache": "uncontrolled"
+    }
+  },
+  "isolated_native": {
+    "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+    "database": "ec_ngram_corpus_probe",
+    "origin": "private native MySQL eligible-transcript corpus snapshot, NOT live STG",
+    "support_metadata_origin": "live STG, read-only",
+    "index_flag": "TRANSCRIPT_NATIVE_NGRAM_SEARCH=1",
+    "connections": "NullPool private connections; fresh browser/application process for each keyword",
+    "readiness_manifest": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/corpus-readiness.json",
+    "readiness_manifest_sha256": "3219143c85fd890af728d67a69e4284a0c1378b17f7055f1731ae9904485f7ea"
+  },
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "pid": 94984,
+  "video_recording_started_at_estimate": 1792404295.935541,
+  "video_recording_ready_at": 1792404296.0024629,
+  "pages": [
+    {
+      "cards": 15,
+      "keys": [
+        "fc32e2bb8bdf1c803c80162f992860ea4cf51d8398d701fed5b52411474b2c18",
+        "b4dae126e66a754715868c1ac721a6071e2498b87ff805198a393ba9a94d23a4",
+        "1805e9953f45e1bb0fa4c67caea42934d01e9b857bdf0caf6c43049cfab46fdc",
+        "3b9ad2581db1b806eac429a00102af1fb6a483816831ad6e3b0a804817f0ddc9",
+        "c78cc6a4ae8d1336c7e4532f92d0d8d86d478e2158819231c05155ca586e8a9f",
+        "65cf4a84baabf47b2abff157a08cf524bac938542e1547a76d7a83d0c28cd34d",
+        "781bf7ccd279c144e87d8b15629b8905df174f94b961a921bf97bfc232baa95c",
+        "bab569c8ec06a849c991a2b4059e1c21794644459debb15e8e8de45493e7ee48",
+        "66634e1501d39c5427980d055610f8727463d3733868ddd99e6ef95afe61caf8",
+        "d2bb328773f09577cb99f72004e73e430ead4f74d473ca42fb9fcecf2e439944",
+        "3a8300553869fa45dc817547014abf96ff347df95168adaa215f31c1fda79f1e",
+        "7127a0186be2f261817fbd1fc12e7112fe8c9893a468d55873367673a842b8f0",
+        "2e65cb258e8bd7099e3ccce4eb01ffc3ee68f7dbf4c243bffef065b13854f5d8",
+        "644ce656063611f66609da3c307a02503598578653df7a7b4d69115cb7b36e74",
+        "89653dc214e068844d80e0b9ddb7301144409e65eb66d62a7fba5553f5ee52f8"
+      ]
+    },
+    {
+      "cards": 30,
+      "keys": [
+        "fc32e2bb8bdf1c803c80162f992860ea4cf51d8398d701fed5b52411474b2c18",
+        "b4dae126e66a754715868c1ac721a6071e2498b87ff805198a393ba9a94d23a4",
+        "1805e9953f45e1bb0fa4c67caea42934d01e9b857bdf0caf6c43049cfab46fdc",
+        "3b9ad2581db1b806eac429a00102af1fb6a483816831ad6e3b0a804817f0ddc9",
+        "c78cc6a4ae8d1336c7e4532f92d0d8d86d478e2158819231c05155ca586e8a9f",
+        "65cf4a84baabf47b2abff157a08cf524bac938542e1547a76d7a83d0c28cd34d",
+        "781bf7ccd279c144e87d8b15629b8905df174f94b961a921bf97bfc232baa95c",
+        "bab569c8ec06a849c991a2b4059e1c21794644459debb15e8e8de45493e7ee48",
+        "66634e1501d39c5427980d055610f8727463d3733868ddd99e6ef95afe61caf8",
+        "d2bb328773f09577cb99f72004e73e430ead4f74d473ca42fb9fcecf2e439944",
+        "3a8300553869fa45dc817547014abf96ff347df95168adaa215f31c1fda79f1e",
+        "7127a0186be2f261817fbd1fc12e7112fe8c9893a468d55873367673a842b8f0",
+        "2e65cb258e8bd7099e3ccce4eb01ffc3ee68f7dbf4c243bffef065b13854f5d8",
+        "644ce656063611f66609da3c307a02503598578653df7a7b4d69115cb7b36e74",
+        "89653dc214e068844d80e0b9ddb7301144409e65eb66d62a7fba5553f5ee52f8",
+        "caaf8cb73f5eb8869aa8dccb64d8d39999d3d8f694183cb9c9bb30b88077ff11",
+        "9f89066f207a4454e8ac9df99487fda9d52b8f9301f5be7de374e5a4efc6499b",
+        "cd5cd2c04b5fcb3526515e4e5d1f8bc95d72e1e4dfbf433a5455f12462782776",
+        "8e71120be4979bc40ef3413880c46584738089ab87757e5e449aac649e61e90d",
+        "30a79813befec2412770803ea23df05f3aa60b3bb57c1da9411aec7a08c73cae",
+        "eaf970122c2c297a0438de2ca2ae7068973cd7a48744f777ad3f60f3ffb8f742",
+        "918353e79fe73d7cfec7865fa8dafc7e4aa8dd5354cac372c59e9214119020e6",
+        "99aedaac681416546b4c4528f4b95bd30507eca65fb868c0d0a5246af7cb6620",
+        "553e0eed23b82affbcde5fabe01141b4a11d3e9fcc5de7688e93c5d36f1f653a",
+        "0589007675174705dc67fb3c0151e3c7b9457734502f9fe6fa1bdeba1b65317b",
+        "89fffc65815c16f8b317c384c8ad11215801412933d20630464fdc08d7bd4c23",
+        "8853cfc48b0290247a4d2adb05f8a89ac320a360a5f8abf6b51edcc4a806597f",
+        "40d5fbaf5f67995b42b8956be21d027b9e33c7d6b31b540b5090dc9af92c96d9",
+        "6a56c120e5787fecc94a47e7622254e9b395e06409c6a2b0d6af66821046bb28",
+        "9b4fa4169c79eb440162294d91f8a7307fb0665b029507350253c86a4d84c626"
+      ]
+    },
+    {
+      "cards": 45,
+      "keys": [
+        "fc32e2bb8bdf1c803c80162f992860ea4cf51d8398d701fed5b52411474b2c18",
+        "b4dae126e66a754715868c1ac721a6071e2498b87ff805198a393ba9a94d23a4",
+        "1805e9953f45e1bb0fa4c67caea42934d01e9b857bdf0caf6c43049cfab46fdc",
+        "3b9ad2581db1b806eac429a00102af1fb6a483816831ad6e3b0a804817f0ddc9",
+        "c78cc6a4ae8d1336c7e4532f92d0d8d86d478e2158819231c05155ca586e8a9f",
+        "65cf4a84baabf47b2abff157a08cf524bac938542e1547a76d7a83d0c28cd34d",
+        "781bf7ccd279c144e87d8b15629b8905df174f94b961a921bf97bfc232baa95c",
+        "bab569c8ec06a849c991a2b4059e1c21794644459debb15e8e8de45493e7ee48",
+        "66634e1501d39c5427980d055610f8727463d3733868ddd99e6ef95afe61caf8",
+        "d2bb328773f09577cb99f72004e73e430ead4f74d473ca42fb9fcecf2e439944",
+        "3a8300553869fa45dc817547014abf96ff347df95168adaa215f31c1fda79f1e",
+        "7127a0186be2f261817fbd1fc12e7112fe8c9893a468d55873367673a842b8f0",
+        "2e65cb258e8bd7099e3ccce4eb01ffc3ee68f7dbf4c243bffef065b13854f5d8",
+        "644ce656063611f66609da3c307a02503598578653df7a7b4d69115cb7b36e74",
+        "89653dc214e068844d80e0b9ddb7301144409e65eb66d62a7fba5553f5ee52f8",
+        "caaf8cb73f5eb8869aa8dccb64d8d39999d3d8f694183cb9c9bb30b88077ff11",
+        "9f89066f207a4454e8ac9df99487fda9d52b8f9301f5be7de374e5a4efc6499b",
+        "cd5cd2c04b5fcb3526515e4e5d1f8bc95d72e1e4dfbf433a5455f12462782776",
+        "8e71120be4979bc40ef3413880c46584738089ab87757e5e449aac649e61e90d",
+        "30a79813befec2412770803ea23df05f3aa60b3bb57c1da9411aec7a08c73cae",
+        "eaf970122c2c297a0438de2ca2ae7068973cd7a48744f777ad3f60f3ffb8f742",
+        "918353e79fe73d7cfec7865fa8dafc7e4aa8dd5354cac372c59e9214119020e6",
+        "99aedaac681416546b4c4528f4b95bd30507eca65fb868c0d0a5246af7cb6620",
+        "553e0eed23b82affbcde5fabe01141b4a11d3e9fcc5de7688e93c5d36f1f653a",
+        "0589007675174705dc67fb3c0151e3c7b9457734502f9fe6fa1bdeba1b65317b",
+        "89fffc65815c16f8b317c384c8ad11215801412933d20630464fdc08d7bd4c23",
+        "8853cfc48b0290247a4d2adb05f8a89ac320a360a5f8abf6b51edcc4a806597f",
+        "40d5fbaf5f67995b42b8956be21d027b9e33c7d6b31b540b5090dc9af92c96d9",
+        "6a56c120e5787fecc94a47e7622254e9b395e06409c6a2b0d6af66821046bb28",
+        "9b4fa4169c79eb440162294d91f8a7307fb0665b029507350253c86a4d84c626",
+        "0d2af24f4d52cd3bdc02065a5ea5beab4faa75f492cf03adb29eebbdd327f264",
+        "7fe336fc233e2418a5307a9b3188dd40c2242e0acc57a6387c0faf3ed9565289",
+        "9d5595a33c74fbaf7ecc2a69e7f25f181cd08304a02001b557a1164abdca28a1",
+        "4180fc923e701d4d3398a7424333af63daf4953711b10c5215fc8b530b3f3e66",
+        "e21b448318885a8ccf2e5f7d9206cde321dacfe64903e7db66f1859af913dc96",
+        "a9d5001d872d1c3189e034fe52e8b28bc5ee90217e6857c3af36b1dcbf4afc48",
+        "b837ff2e6f1b42e05171496a686cd3557c7dee997eb5c7caf547a11a9e367aac",
+        "501f306abfd5cf7bf2c1957e142d6c5ed4be2da76123cfca1a8db5d9019fac20",
+        "a4ffa871f5bf33004e629a2c544fc14fbd159cbf98838cc5617b462f3039a9f2",
+        "5814bec9f4c37884eeb9e3e4e67890698896a3db18d74259478393afe1403eb9",
+        "0fb8b3378dfaecaf0453fc37d406b4de4716d8ae0e23233b17090c70871efc71",
+        "7d0eacac90e65517385b43543873efb3c6249e71bf2cd4c6b224bd3c5d538123",
+        "14506d2e14cc0803d0b56fef48108836b4864e58ea2bc0bd7cb671a85aa77355",
+        "ff5c8dbb90dd60eb0846d6efb1ef0193d2d9fde93e03e309e6afdd928ce73f62",
+        "828ce3ffc128974f24528ac8c31076b5b45add2dc7453d2ac720471f01aa9007"
+      ]
+    }
+  ],
+  "final_cards": [
+    {
+      "text": "Melissa Stone\n...ower product costs as well as favorable foreign exchange. Importantly, we saw significant sequen...\nPVH Corp. (PVH) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PVH&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "PVH Corp. (PVH) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Roger Sachs\n...AAP basis, which excludes the impact of foreign exchange and any inorganic activity. We will als...\nDXC Technology Company (DXC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DXC&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "DXC Technology Company (DXC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Brian Campbell\n...d other filings with the Securities and Exchange Commission for a discussion of importan...\nAutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AZO&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "AutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Gary Millerchip\n...cts from changes in gasoline prices and foreign exchange, are intended as supplemental informati...\nCostco Wholesale Corporation (COST) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=COST&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "Costco Wholesale Corporation (COST) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Debra McConnell\n...om. We have also detailed the impact of foreign exchange on our consolidated results and our int...\nThe TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TJX&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "The TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Andre Schulten\n...r more versus prior year. We expect the foreign exchange headwind of approximately $50 million a...\nThe Procter & Gamble Company (PG) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PG&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "The Procter & Gamble Company (PG) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Matthew Friend\n...le digits with no expected benefit from foreign exchange and currency-neutral revenue growth con...\nNIKE, Inc. (NKE) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NKE&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "NIKE, Inc. (NKE) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Erinn Kohler\n...ncertainties and other factors, such as foreign exchange rate fluctuation and changes to trade p...\nDeckers Outdoor Corporation (DECK) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DECK&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "Deckers Outdoor Corporation (DECK) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Matthew M. Bilunas\n...arily driven by the favorable impact of foreign exchange rates, which was partially offset by a ...\nBest Buy (BBY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=BBY&year=2026&quarter=Q4&highlight=foreign exchange",
+      "meta": "Best Buy (BBY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Christopher Work\n...eriod in the prior year, and changes in foreign exchange positively increased total sales growth...\nZumiez Inc. (ZUMZ) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=ZUMZ&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Zumiez Inc. (ZUMZ) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Reed Anderson\n...r other filings with the Securities and Exchange Commission could cause actual results t...\nJ&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=JJSF&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "J&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Sharon Yeshaya\n...ly compared to the prior year, aided by foreign exchange. Micro results declined year-over-year,...\nMORGAN STANLEY (MS) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=MS&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "MORGAN STANLEY (MS) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Joseph J. Wolk\n...k reflects what we know today regarding foreign exchange rates, the broader macroeconomic enviro...\nJOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=JNJ&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "JOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Alastair Borthwick\n...h management and brokerage clearing and exchange costs in equities, respectively. We als...\nBANK OF AMERICA Corp. (BAC) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=BAC&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "BANK OF AMERICA Corp. (BAC) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Gualberto Hernandez\n...ny entered into non-deliverable forward foreign exchange contracts to mitigate foreign currency ...\nPriceSmart, Inc. (PSMT) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=PSMT&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "PriceSmart, Inc. (PSMT) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Bernadette Madarieta\n... billion, including an approximate 1.8% foreign exchange benefit, or about $95 million year to d...\nLamb Weston Holdings, Inc. (LW) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=LW&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Lamb Weston Holdings, Inc. (LW) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Roger Sachs\n...GAAP basis, which exclude the impact of foreign exchange and any inorganic activity. We will als...\nDXC Technology Company (DXC) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=DXC&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "DXC Technology Company (DXC) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Tim Cook\n...spite supply constraints and sequential foreign exchange headwinds. We continue to see enormous ...\nApple Inc. (AAPL) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=AAPL&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Apple Inc. (AAPL) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Ivica Krolo\n...stock-to-sales ratio is attributable to foreign exchange and capitalized tariffs, which we discu...\nBirkenstock Holdings (BIRK) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=BIRK&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Birkenstock Holdings (BIRK) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Operator\n...d other filings with the Securities and Exchange Commission for a discussion of importan...\nAutoZone, Inc. (AZO) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=AZO&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "AutoZone, Inc. (AZO) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Taylor Luebke\n... transformation project and unfavorable foreign exchange rates. For Joybird, reported in Corpora...\nLa-Z-Boy (LZB) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=LZB&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "La-Z-Boy (LZB) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Robin Washington\n...t currency, inclusive of a $200 million foreign exchange tailwind. This better than expected per...\nSalesforce (CRM) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=CRM&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Salesforce (CRM) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Deb McConnell\n...om. We have also detailed the impact of foreign exchange on our consolidated results and our int...\nThe TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=TJX&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "The TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Andre Schulten\n....09 per share. This guidance includes a foreign exchange tailwind of approximately $200 million ...\nThe Procter & Gamble Company (PG) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=PG&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "The Procter & Gamble Company (PG) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Matthew Friend\n... We anticipate a two-point benefit from foreign exchange. We expect sequential improvement in gr...\nNIKE, Inc. (NKE) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=NKE&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "NIKE, Inc. (NKE) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Harmit Singh\n...ower product costs, partially offset by foreign exchange. Adjusted SG&A as a percentage of net r...\nLevi Strauss & Co. (LEVI) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=LEVI&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Levi Strauss & Co. (LEVI) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Gary Millerchip\n...cts from changes in gasoline prices and foreign exchange are intended as supplemental informatio...\nCostco Wholesale Corporation (COST) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=COST&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Costco Wholesale Corporation (COST) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Matthew Bilunas\n...ally offset by the negative impact from foreign exchange rates. From a category standpoint, the ...\nBest Buy (BBY) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=BBY&year=2026&quarter=Q3&highlight=foreign exchange",
+      "meta": "Best Buy (BBY) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Reed Anderson\n...r other filings with the Securities and Exchange Commission could cause actual results t...\nJ&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=JJSF&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "J&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Florence Lip\n...s discussed today exclude the impact of foreign currency, unless we mention otherwise. ...\nYum China Holdings, Inc. (YUMC) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=YUMC&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Yum China Holdings, Inc. (YUMC) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Sharon Yeshaya\n... Resilience in rates offset declines in foreign exchange, where volatility traded near historic ...\nMORGAN STANLEY (MS) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=MS&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "MORGAN STANLEY (MS) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Caroline Litchfield\n...ase of 5% or 4% excluding the impact of foreign exchange. The following revenue comments will be...\nMerck & Co., Inc. (MRK) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=MRK&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Merck & Co., Inc. (MRK) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Sachin Mehra\n...pproximately 0.5 percentage points from foreign exchange given the recent trajectory of the U.S....\nMastercard Inc. (MA) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=MA&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Mastercard Inc. (MA) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Joe Wolk\n...k reflects what we know today regarding foreign exchange rates, tariffs, the broader macroeconom...\nJOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=JNJ&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "JOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Philip Boudreau\n...dance range and the consensus estimate. Foreign exchange had a favorable year-over-year impact o...\nABBOTT LABORATORIES (ABT) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=ABT&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "ABBOTT LABORATORIES (ABT) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Scott T. Reents\n... including a 0.7% favorable impact from foreign exchange. Adjusted gross margin was 84.7% of sal...\nAbbVie Inc. (ABBV) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=ABBV&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "AbbVie Inc. (ABBV) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Sarah Glickman\n..., including a $1 million year-over-year foreign exchange headwind. Overall, client retention rem...\nCriteo S.A. (CRTO) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=CRTO&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Criteo S.A. (CRTO) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Ryan Gilligan\n...m 20-F as filed with the Securities and Exchange Commission on February 26, 2026. During...\nNICE Ltd. (NICE) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=NICE&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "NICE Ltd. (NICE) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Michelle Chang\n...question, we talked about the impact of foreign exchange and the easier comparable. We also have...\nZoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=ZM&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Zoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Jason Peterson\n...ll now be in the range of 3.2% to 4.2%. Foreign exchange is expected to have a positive impact o...\nEPAM Systems, Inc. (EPAM) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=EPAM&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "EPAM Systems, Inc. (EPAM) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Craig Safian\n...ends. The update includes the effect of foreign exchange rates, reflecting a stronger U.S. dolla...\nGartner, Inc. (IT) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=IT&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Gartner, Inc. (IT) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Mark Erceg\n...le core sales increased 2.3%. Favorable foreign exchange generally accounted for the difference ...\nNewell Brands Inc. (NWL) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=NWL&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Newell Brands Inc. (NWL) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Jason Payant\n...y Argo-related manufacturing issues and foreign exchange and macroeconomic headwinds in Mexico, ...\nIngredion Incorporated (INGR) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=INGR&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Ingredion Incorporated (INGR) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Tucker Marshall\n... on a comparable basis divestitures and foreign exchange, and it's aligning to about 5.5% compar...\nThe J. M. Smucker Company (SJM) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=SJM&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "The J. M. Smucker Company (SJM) \u2022 2026 \u2022 Q2"
+    },
+    {
+      "text": "Monish Patolawala\n...the prior year quarter and inclusive of foreign exchange gains. Human Nutrition revenue decrease...\nArcher-Daniels-Midland Company (ADM) \u2022 2026 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=ADM&year=2026&quarter=Q2&highlight=foreign exchange",
+      "meta": "Archer-Daniels-Midland Company (ADM) \u2022 2026 \u2022 Q2"
+    }
+  ],
+  "results_url": "http://127.0.0.1:8513/earnings_calls?ticker=ALL",
+  "view_url": "http://127.0.0.1:8513/earnings_calls?ticker=PVH&year=2026&quarter=Q4&highlight=foreign%20exchange",
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/04-foreign-exchange/videos/098d0d559eb41e04e3bbe8e912d5f18b.webm",
+  "sql_queries": 31,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 16,
+    "native_search_log_lines": 0,
+    "local_search_log_lines": 0,
+    "private_snapshot_transcript_queries": 16,
+    "private_snapshot_ngram_queries": 3,
+    "live_stg_support_queries": 15
+  },
+  "timeline_analysis": {
+    "samples": 377,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "framework_widget_binding_warnings": [],
+    "completed_error_samples_excluded": 0,
+    "loader_visible_samples": 183
+  },
+  "video_analysis": {
+    "decoded_frames": 971,
+    "fps": 25.0,
+    "duration_s": 38.84,
+    "near_blank_ratio": 0.0,
+    "low_contrast_fade_ratio": 0.5499485066941298,
+    "main_content_roi": {
+      "scaled_frame_rect_xyxy": [
+        118,
+        80,
+        348,
+        233
+      ],
+      "scaled_frame_size": [
+        360,
+        250
+      ],
+      "near_blank_ratio": 0.0020597322348094747,
+      "low_contrast_fade_ratio": 0.5602471678681772,
+      "interpretation": "Raw measurements excluding header/sidebar; the normal cross-search placeholder can be quiet/bright. These flags alone never imply a defect; compare DOM loader, empty/error state and transcript validation."
+    },
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_transition_alignment": "Approximate video frame targets from wall-clock page-creation bounds; exact action wall clocks and100ms DOM states remain in manifest/timeline.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/04-foreign-exchange/contact-sheet-00.jpg",
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/04-foreign-exchange/contact-sheet-01.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": true,
+  "requested_actions": [
+    "initial_load",
+    "search",
+    "show_more_1",
+    "show_more_2",
+    "view_first"
+  ],
+  "functional_passed": true,
+  "performance_budget_ms": 5000,
+  "performance_passed": false,
+  "search_pagination_max_latency_ms": 4231.94358299952,
+  "search_pagination_performance_passed": true,
+  "case_audit_final_state": {
+    "watermark": 14,
+    "requires_search_query": false
+  }
+}

@@ -1,0 +1,6 @@
+2026-10-19T08:29:45.785853Z 0 [System] [MY-013169] [Server] /Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql-8.0.44-macos15-arm64/bin/mysqld (mysqld 8.0.44) initializing of server in progress as process 79292
+2026-10-19T08:29:45.787054Z 0 [Warning] [MY-010159] [Server] Setting lower_case_table_names=2 because file system for /Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/data/ is case insensitive
+2026-10-19T08:29:45.789230Z 1 [System] [MY-013576] [InnoDB] InnoDB initialization has started.
+2026-10-19T08:29:45.842089Z 1 [System] [MY-013577] [InnoDB] InnoDB initialization has ended.
+2026-10-19T08:29:46.277855Z 5 [Warning] [MY-010453] [Server] root@localhost is created with an empty password ! Please consider switching off the --initialize-insecure option.
+2026-10-19T08:29:46.472428Z 0 [System] [MY-013172] [Server] Received SHUTDOWN from user <via user signal>. Shutting down mysqld (Version: 8.0.44).

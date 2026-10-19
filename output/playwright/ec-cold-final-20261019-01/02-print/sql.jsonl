@@ -1,0 +1,6 @@
+{"at": 1792398994.627954, "monotonic": 256591.980503666, "event": "start", "counter": 1, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "kind": "supporting_metadata", "blocked": false}
+{"at": 1792398994.875856, "monotonic": 256592.228404916, "event": "end", "counter": 1, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "elapsed_ms": 247.88995800190605, "rowcount": 12}
+{"at": 1792398995.201866, "monotonic": 256592.554415041, "event": "start", "counter": 2, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "kind": "transcript_metadata", "blocked": false}
+{"at": 1792398995.870364, "monotonic": 256593.22291125, "event": "end", "counter": 2, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 668.7010000168812, "rowcount": 414}
+{"at": 1792398995.875475, "monotonic": 256593.228021375, "event": "start", "counter": 3, "operation": "SELECT", "tables": ["coreiq_companies"], "kind": "supporting_metadata", "blocked": false}
+{"at": 1792398996.611789, "monotonic": 256593.964334666, "event": "end", "counter": 3, "operation": "SELECT", "tables": ["coreiq_companies"], "elapsed_ms": 736.3008339889348, "rowcount": 558}

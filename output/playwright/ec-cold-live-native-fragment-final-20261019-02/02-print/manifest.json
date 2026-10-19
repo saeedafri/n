@@ -1,0 +1,655 @@
+{
+  "keyword": "print",
+  "status": "passed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-fragment-final-20261019-02/02-print",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-a13b17xr",
+  "port": 8513,
+  "mode": "mysql_origin",
+  "cache_scope": "application result caches bypassed; native MySQL/SQLite/OS buffers not flushed",
+  "errors": [],
+  "case_audit_initial_state": {
+    "watermark": 0,
+    "requires_search_query": false,
+    "path": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-fragment-final-20261019-02/02-print/sql.jsonl"
+  },
+  "action_timings": [
+    {
+      "action": "initial_load",
+      "started_at": 1792405138.078233,
+      "elapsed_ms": 8112.64308297541,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 5,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "search",
+      "started_at": 1792405148.286502,
+      "elapsed_ms": 6579.051707987674,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          6,
+          7,
+          8
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 1,
+        "transcript_text_queries": 2,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_1",
+      "started_at": 1792405156.972115,
+      "elapsed_ms": 9774.327124992851,
+      "cards": 30,
+      "sql": {
+        "counters": [
+          9,
+          10,
+          11,
+          12
+        ],
+        "SELECTs": 4,
+        "transcript_metadata_queries": 1,
+        "transcript_text_queries": 3,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 4,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 4
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_2",
+      "started_at": 1792405168.88348,
+      "elapsed_ms": 7157.1878750110045,
+      "cards": 45,
+      "sql": {
+        "counters": [
+          13,
+          14,
+          15
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 1,
+        "transcript_text_queries": 2,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "view_first",
+      "started_at": 1792405178.2081358,
+      "elapsed_ms": 7748.377125011757,
+      "sql": {
+        "counters": [
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "SELECTs": 16,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 12,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 16,
+        "catalogue_queries": 3,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "return_to_results",
+      "started_at": 1792405188.067347,
+      "elapsed_ms": 14287.938125024084,
+      "sql": {
+        "counters": [
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42
+        ],
+        "SELECTs": 11,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 2,
+        "supporting_metadata_queries": 5,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 11,
+        "catalogue_queries": 3,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "review_dwell_ms": 2000,
+  "filter_flow_requested": false,
+  "fragment_query_verification": true,
+  "expected_empty": false,
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "15aa254098bb5bad9924fa79717fa55f5d1886c4ca4fdd5d0a987174586c27e6",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "bbeefd968f80e9a35461b12812ad51337bd5115e39b4cfb3f4693008db539536",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "pid": 96358,
+  "video_recording_started_at_estimate": 1792405138.038048,
+  "video_recording_ready_at": 1792405138.078145,
+  "pages": [
+    {
+      "cards": 15,
+      "keys": [
+        "3c12c89f33ac7e30d4f8865d40439a796fee8da9fd3f8fd1bfdd3c5ec227bf1d",
+        "6c9a4e8e493bb4f1c0acfb95dc8538beb8c2ccea81f5b1c2fd32ff146952862c",
+        "799596480228ac5a5fbc7c06c01565df64c13b250213fca84da459a9fe23be55",
+        "25d688436139e7eb01acae3b278211d5b1718a17522083037bdb1d0fceeaaf47",
+        "73fbbdc3d1bb349e7c0377eb5c68c4c428e52e32981d615e8a5945db837e6b90",
+        "84c057685897ffcf660c7613b44fdf004d3591cac6aaf888cb59d44819fa1015",
+        "1deb29dde0c118619124f115b35852f67d162e8863756943bd46325e58e19c04",
+        "038515c8f97d1c18f4cc679c52cbf5d299a862256aff1305a568ba3101ba58e4",
+        "6f32b13c7c757b28b8f2528fd239d56322dbf86500e350dba1d23e84117bce74",
+        "b7437f1aa42fa8217d682556d020f03fb2424a35024dabbf226c383fecc553cb",
+        "880700bb5f0341c460b6c9ff0d46ee066cd451a6104d79878be3b2bded11c496",
+        "731ace76c55bb880a80acd07a00ff55a590b52708c49bdd08c355f7de4576a7e",
+        "d7f7b452cd30f3b65484cf479b9ed036b79c35aa8d0e6360358d6d15d2dc81b4",
+        "99701da8520ce95769a990ee60316120c7c591b970379e2945574043fb310c24",
+        "57e8a36b03933eec3303c813e30f4bc7ccfc1d76a4c093609b2eed04b63177a8"
+      ]
+    },
+    {
+      "cards": 30,
+      "keys": [
+        "3c12c89f33ac7e30d4f8865d40439a796fee8da9fd3f8fd1bfdd3c5ec227bf1d",
+        "6c9a4e8e493bb4f1c0acfb95dc8538beb8c2ccea81f5b1c2fd32ff146952862c",
+        "799596480228ac5a5fbc7c06c01565df64c13b250213fca84da459a9fe23be55",
+        "25d688436139e7eb01acae3b278211d5b1718a17522083037bdb1d0fceeaaf47",
+        "73fbbdc3d1bb349e7c0377eb5c68c4c428e52e32981d615e8a5945db837e6b90",
+        "84c057685897ffcf660c7613b44fdf004d3591cac6aaf888cb59d44819fa1015",
+        "1deb29dde0c118619124f115b35852f67d162e8863756943bd46325e58e19c04",
+        "038515c8f97d1c18f4cc679c52cbf5d299a862256aff1305a568ba3101ba58e4",
+        "6f32b13c7c757b28b8f2528fd239d56322dbf86500e350dba1d23e84117bce74",
+        "b7437f1aa42fa8217d682556d020f03fb2424a35024dabbf226c383fecc553cb",
+        "880700bb5f0341c460b6c9ff0d46ee066cd451a6104d79878be3b2bded11c496",
+        "731ace76c55bb880a80acd07a00ff55a590b52708c49bdd08c355f7de4576a7e",
+        "d7f7b452cd30f3b65484cf479b9ed036b79c35aa8d0e6360358d6d15d2dc81b4",
+        "99701da8520ce95769a990ee60316120c7c591b970379e2945574043fb310c24",
+        "57e8a36b03933eec3303c813e30f4bc7ccfc1d76a4c093609b2eed04b63177a8",
+        "c74fed2fe5ca0fd96583f6ef70243472d2168940a501b49856cfd3c4ac58a2a5",
+        "3fe4492f4cdd4e840edafbf59c76bfd5d93153fc3da288de4e43a12615827e5a",
+        "725bc598bad18e261c09a3fe9b88b4cef71304c3f19b427dc2dfecb5f1d3b24a",
+        "ec87a999210f00810742884b0c79fb2bfe077fd5fbee1dcba66e79136b764b17",
+        "d2747eb987acd5f53b8c0dec6ade32a8f2ea03b39eaded889e957dc421d94c45",
+        "e6794a9bb0e91ba666e5bef87487a01f71278c38888b71e94f8eed407cecb0fe",
+        "88889396f458870b814b5ab6b4ed10658cf5ef625a964428b2e2f61ec8a9cb83",
+        "12c83f222af6ef5c5d94864285f386ecec7e5cc4897efaccb79923a02d519681",
+        "254dd20477bd6fbad3ff4da598d027262de63da1c615c9a89fe94ad85f4d6d59",
+        "e8d3f9ef2e2d0705e5ea43ccdddf96b64dbcfd2de347baaf8231430cb35c8770",
+        "a303f782a8092ce44624bc703d3f491e9074fc8f0c60d158f15a7d35e28cf396",
+        "f13a53306fb45095b1b12fab506e7e2c32273f7ef6b1c232acb3bf9f8c5cc75f",
+        "0e741d416069e5a90740efa87c43217747844dfa0547aa121057bc7ce32d3429",
+        "db4385dcec481b563a4b81e9dfaabbb282caae6220bec949321a55216c6736fe",
+        "4b42f70a7185606d4a0f0c4093d08c55ac71f6d542b0283d5544f5c02b9c1048"
+      ]
+    },
+    {
+      "cards": 45,
+      "keys": [
+        "3c12c89f33ac7e30d4f8865d40439a796fee8da9fd3f8fd1bfdd3c5ec227bf1d",
+        "6c9a4e8e493bb4f1c0acfb95dc8538beb8c2ccea81f5b1c2fd32ff146952862c",
+        "799596480228ac5a5fbc7c06c01565df64c13b250213fca84da459a9fe23be55",
+        "25d688436139e7eb01acae3b278211d5b1718a17522083037bdb1d0fceeaaf47",
+        "73fbbdc3d1bb349e7c0377eb5c68c4c428e52e32981d615e8a5945db837e6b90",
+        "84c057685897ffcf660c7613b44fdf004d3591cac6aaf888cb59d44819fa1015",
+        "1deb29dde0c118619124f115b35852f67d162e8863756943bd46325e58e19c04",
+        "038515c8f97d1c18f4cc679c52cbf5d299a862256aff1305a568ba3101ba58e4",
+        "6f32b13c7c757b28b8f2528fd239d56322dbf86500e350dba1d23e84117bce74",
+        "b7437f1aa42fa8217d682556d020f03fb2424a35024dabbf226c383fecc553cb",
+        "880700bb5f0341c460b6c9ff0d46ee066cd451a6104d79878be3b2bded11c496",
+        "731ace76c55bb880a80acd07a00ff55a590b52708c49bdd08c355f7de4576a7e",
+        "d7f7b452cd30f3b65484cf479b9ed036b79c35aa8d0e6360358d6d15d2dc81b4",
+        "99701da8520ce95769a990ee60316120c7c591b970379e2945574043fb310c24",
+        "57e8a36b03933eec3303c813e30f4bc7ccfc1d76a4c093609b2eed04b63177a8",
+        "c74fed2fe5ca0fd96583f6ef70243472d2168940a501b49856cfd3c4ac58a2a5",
+        "3fe4492f4cdd4e840edafbf59c76bfd5d93153fc3da288de4e43a12615827e5a",
+        "725bc598bad18e261c09a3fe9b88b4cef71304c3f19b427dc2dfecb5f1d3b24a",
+        "ec87a999210f00810742884b0c79fb2bfe077fd5fbee1dcba66e79136b764b17",
+        "d2747eb987acd5f53b8c0dec6ade32a8f2ea03b39eaded889e957dc421d94c45",
+        "e6794a9bb0e91ba666e5bef87487a01f71278c38888b71e94f8eed407cecb0fe",
+        "88889396f458870b814b5ab6b4ed10658cf5ef625a964428b2e2f61ec8a9cb83",
+        "12c83f222af6ef5c5d94864285f386ecec7e5cc4897efaccb79923a02d519681",
+        "254dd20477bd6fbad3ff4da598d027262de63da1c615c9a89fe94ad85f4d6d59",
+        "e8d3f9ef2e2d0705e5ea43ccdddf96b64dbcfd2de347baaf8231430cb35c8770",
+        "a303f782a8092ce44624bc703d3f491e9074fc8f0c60d158f15a7d35e28cf396",
+        "f13a53306fb45095b1b12fab506e7e2c32273f7ef6b1c232acb3bf9f8c5cc75f",
+        "0e741d416069e5a90740efa87c43217747844dfa0547aa121057bc7ce32d3429",
+        "db4385dcec481b563a4b81e9dfaabbb282caae6220bec949321a55216c6736fe",
+        "4b42f70a7185606d4a0f0c4093d08c55ac71f6d542b0283d5544f5c02b9c1048",
+        "d2d042a59f2412c719b337dc4f500400a23e3c70f1b27407f711c8f2dea7c8c8",
+        "41505a8f509c13343480fdd51e996663de12590daa50167e5872058fc9341743",
+        "2419caf691419749c8ef290e06f3f4d22f60191897af038daa162fded05992ac",
+        "d265b7e2b786175e0518bd81a97912e7f92aa520c01d1f9602d05c92b5ff0588",
+        "3c3f379a5117faeb586ecafeb250000ad4a10c40c4833bf93e6ed96bc95a7c80",
+        "3553dbcdf9a27fe2d967c1c28b38f865b7939636d6f17bff167c8427f182a5a2",
+        "d684bb00474c97f2821193d2a21021c9155fba065ab8a2c2c1b0a8b6b2c8d3a6",
+        "8107c610cb4b78579d505069d14ff496ac990a02dbc0702826d97a322ce821c7",
+        "0c650bf2e92dbf449ac9f4e65e2a23845637104e82101d74cb8881bda54dfa84",
+        "e6d11cc74fddab574d694cdcd3bda6be9a3400fac15600dea34f3850805fd029",
+        "d243a6fa88f7d731e828cfbce8df86391855e3a14784b4f1764de637ac8ca20d",
+        "6d1f0e5b7ca54e32fceb221dc8d6fa51d180f5634d43e487fa21e30c1a31af8d",
+        "a4ae54c70be6c7f9b7f2edbc1ccfe58753c99bcee18e1129fea45d546d321991",
+        "b1ff1339f616420a584fef075d40842dea45b35500a730e2a8874107ca62f206",
+        "fb3ca90899668bb64bdccd001da50412cc2ea26414f760dfb2345103469a781d"
+      ]
+    }
+  ],
+  "final_cards": [
+    {
+      "text": "Jensen Huang\n...reason for that is because NVIDIA's footprint around the world is the highest, and ou...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=print",
+      "meta": "NVIDIA (NVDA) \u2022 2027 \u2022 Q2"
+    },
+    {
+      "text": "John Rainey\n... year-over-year inflation number that's printed.\nWalmart Inc. (WMT) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=WMT&year=2027&quarter=Q1&highlight=print",
+      "meta": "Walmart Inc. (WMT) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Andrew Anagnost\n...rm drive convergence and extend our footprint further into the larger growth segment....\nAutodesk, Inc. (ADSK) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=ADSK&year=2027&quarter=Q1&highlight=print",
+      "meta": "Autodesk, Inc. (ADSK) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Mark Webb\n...e excited to continue to expand our footprint at a disciplined pace. With respect to ...\nJ.Jill, Inc. (JILL) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=JILL&year=2026&quarter=Q4&highlight=print",
+      "meta": "J.Jill, Inc. (JILL) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Shawn Nelson\n...er, at the high end and even bigger footprint than Sactionals. And we think that this...\nThe Lovesac Company (LOVE) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LOVE&year=2026&quarter=Q4&highlight=print",
+      "meta": "The Lovesac Company (LOVE) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Sherman Miller\n...-end, we increased our distribution footprint by acquiring additional Eggland's Best ...\nCal-Maine Foods, Inc. (CALM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CALM&year=2026&quarter=Q4&highlight=print",
+      "meta": "Cal-Maine Foods, Inc. (CALM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Max Levchin\n...oducts that are working and growing and printing profits. Some of the crazier ideas f...\nAffirm Holdings, Inc. (AFRM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AFRM&year=2026&quarter=Q4&highlight=print",
+      "meta": "Affirm Holdings, Inc. (AFRM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Darin Harper\n...'re not prepared to predict how Q1 will print or exactly when the inflection occurs. ...\nDave & Buster's Entertainment, Inc. (PLAY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PLAY&year=2026&quarter=Q4&highlight=print",
+      "meta": "Dave & Buster's Entertainment, Inc. (PLAY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Rene Haas\n...d by the amount of area that a mask can print. So it's not like you're going to get m...\nARM HOLDINGS PLC /UK (ARM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ARM&year=2026&quarter=Q4&highlight=print",
+      "meta": "ARM HOLDINGS PLC /UK (ARM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "CJ Desai\n...th engine, deepening our enterprise footprint and ensuring a seamless world-class exp...\nMongoDB Inc. (MDB) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MDB&year=2026&quarter=Q4&highlight=print",
+      "meta": "MongoDB Inc. (MDB) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Ashutosh Kulkarni\n...n customers' existing log analytics footprints, which should be the fastest route to ...\nElastic N.V. (ESTC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ESTC&year=2026&quarter=Q4&highlight=print",
+      "meta": "Elastic N.V. (ESTC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Eric Yuan\n...ally, we significantly expanded our footprint with a leading global bank, adding near...\nZoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ZM&year=2026&quarter=Q4&highlight=print",
+      "meta": "Zoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "James Chuong\n...he strength that we saw in the quarter, printing ARR growth\u2014subscription ARR growth\u2014o...\nAtlassian Corporation (TEAM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TEAM&year=2026&quarter=Q4&highlight=print",
+      "meta": "Atlassian Corporation (TEAM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "James Robert Anderson\n...le, and significant U.S. production footprint are increasingly differentiating Cohere...\nCoherent Corp. (COHR) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=COHR&year=2026&quarter=Q4&highlight=print",
+      "meta": "Coherent Corp. (COHR) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Jan Eli Craps\n...ptionality across our international footprints. And third, Lamb Weston has a seasoned...\nLamb Weston Holdings, Inc. (LW) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LW&year=2026&quarter=Q4&highlight=print",
+      "meta": "Lamb Weston Holdings, Inc. (LW) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "George Kurian\n...ture for AI, and you saw that in our Q4 print which did not benefit from pull-forward...\nNetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NTAP&year=2026&quarter=Q4&highlight=print",
+      "meta": "NetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Andrew Anagnost\n...end to deploy capital to extend our footprint deeper into operations, applying the sa...\nAutodesk, Inc. (ADSK) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ADSK&year=2026&quarter=Q4&highlight=print",
+      "meta": "Autodesk, Inc. (ADSK) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Matteo Tarditi\n...ic store actions as we optimize our footprint and strengthen the foundation of the bu...\nUnited Natural Foods, Inc. (UNFI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=UNFI&year=2026&quarter=Q4&highlight=print",
+      "meta": "United Natural Foods, Inc. (UNFI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Kevin Hourican\n...ontinued strength of Sysco's global footprint, a unique competitive advantage. Our in...\nSysco Corporation (SYY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SYY&year=2026&quarter=Q4&highlight=print",
+      "meta": "Sysco Corporation (SYY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "William Newlands\n...ore specifics about the operational footprint. I think it's important to recognize we...\nConstellation Brands, Inc. (STZ) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=STZ&year=2026&quarter=Q4&highlight=print",
+      "meta": "Constellation Brands, Inc. (STZ) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Charles Liang\n... we continue to expand our physical footprint. In Silicon Valley, we recently announc...\nSuper Micro Computer, Inc. (SMCI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SMCI&year=2026&quarter=Q4&highlight=print",
+      "meta": "Super Micro Computer, Inc. (SMCI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Mark T. Smucker\n...ell. We completed our manufacturing footprint consolidation and, although we did have...\nThe J. M. Smucker Company (SJM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SJM&year=2026&quarter=Q4&highlight=print",
+      "meta": "The J. M. Smucker Company (SJM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Nikesh Arora\n...ring their next-generation firewall footprint while displacing legacy proxy providers...\nPalo Alto Networks, Inc. (PANW) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PANW&year=2026&quarter=Q4&highlight=print",
+      "meta": "Palo Alto Networks, Inc. (PANW) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Martin Schroeter\n...we need. Our focus on expanding our footprint in our customer base as well as signing...\nKyndryl Holdings, Inc. (KD) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=KD&year=2026&quarter=Q4&highlight=print",
+      "meta": "Kyndryl Holdings, Inc. (KD) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Andy Priestley\n... end customers, we're expanding our footprint across the United States in places like...\nJabil Inc. (JBL) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=JBL&year=2026&quarter=Q4&highlight=print",
+      "meta": "Jabil Inc. (JBL) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Raul Fernandez\n...ed not as a one-off event, but as a blueprint we could test, learn from and scale. Mo...\nDXC Technology Company (DXC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DXC&year=2026&quarter=Q4&highlight=print",
+      "meta": "DXC Technology Company (DXC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Doug Campbell\n...e started optimizing our dealership footprint, consolidating select locations into hi...\nAmerica's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CRMT&year=2026&quarter=Q4&highlight=print",
+      "meta": "America's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Phil Daniele\n...ress that this is a marathon and not a sprint. As we remain focused on delivering fla...\nAutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AZO&year=2026&quarter=Q4&highlight=print",
+      "meta": "AutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Darren Rebelez\n...ducational organizations across our footprint received 100 grants totaling $1.3 milli...\nCasey\u2019s General Stores (CASY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CASY&year=2026&quarter=Q4&highlight=print",
+      "meta": "Casey\u2019s General Stores (CASY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Al Carey\n...encies throughout our manufacturing footprint, and optimized the portfolio to remove ...\nUnifi, Inc. (UFI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=UFI&year=2026&quarter=Q4&highlight=print",
+      "meta": "Unifi, Inc. (UFI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Peter Fitzsimmons\n...inter weather across our geographic footprint forced temporary store closures and sig...\nMonro, Inc. (MNRO) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MNRO&year=2026&quarter=Q4&highlight=print",
+      "meta": "Monro, Inc. (MNRO) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Mimi Eckel Vaughn\n...urneys store teams across the store footprint who did an absolutely amazing job and d...\nGenesco Inc. (GCO) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=GCO&year=2026&quarter=Q4&highlight=print",
+      "meta": "Genesco Inc. (GCO) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Peter Stern\n...ear with a highly capital-efficient footprint of ten micro stores, which consistently...\nPeloton Interactive, Inc. (PTON) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PTON&year=2026&quarter=Q4&highlight=print",
+      "meta": "Peloton Interactive, Inc. (PTON) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Morris Goldfarb\n...es in North America, optimizing the footprint to improve productivity and profitabili...\nG-III Apparel Group, Ltd. (GIII) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=GIII&year=2026&quarter=Q4&highlight=print",
+      "meta": "G-III Apparel Group, Ltd. (GIII) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Keith Barr\n...ombination of an unmatched physical footprint and strong digital infrastructure and a...\nCarMax, Inc. (KMX) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=KMX&year=2026&quarter=Q4&highlight=print",
+      "meta": "CarMax, Inc. (KMX) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Ian Bickley\n...g the original 100 bag, iconic heritage prints and select IP including Snoopy and Lil...\nVera Bradley, Inc. (VRA) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=VRA&year=2026&quarter=Q4&highlight=print",
+      "meta": "Vera Bradley, Inc. (VRA) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Tarang Amin\n...n within the U.S., both in terms of footprint and replenishment. Continue to fuel tha...\ne.l.f. Beauty, Inc. (ELF) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ELF&year=2026&quarter=Q4&highlight=print",
+      "meta": "e.l.f. Beauty, Inc. (ELF) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "John Hazen\n...way I've done it in the past from a footprint and resource standpoint.\nBoot Barn Holdings, Inc. (BOOT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=BOOT&year=2026&quarter=Q4&highlight=print",
+      "meta": "Boot Barn Holdings, Inc. (BOOT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Melinda Whittington\n...-owned locations. The company-owned footprint now represents 61% of our total network...\nLa-Z-Boy (LZB) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LZB&year=2026&quarter=Q4&highlight=print",
+      "meta": "La-Z-Boy (LZB) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Colette Kress\n...-language-action models, simulation blueprints and data sets, enabling vehicles that ...\nNVIDIA (NVDA) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2026&quarter=Q4&highlight=print",
+      "meta": "NVIDIA (NVDA) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Satya Nadella\n...al to 88 this year as we expand our footprint in response to accelerating demand. We ...\nMicrosoft Corporation (MSFT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MSFT&year=2026&quarter=Q4&highlight=print",
+      "meta": "Microsoft Corporation (MSFT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Dave Gagina\n...h of 27% is leveraging our physical footprint. This is an interconnected system. We'r...\nWalmart Inc. (WMT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=WMT&year=2026&quarter=Q4&highlight=print",
+      "meta": "Walmart Inc. (WMT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Bracken Darrell\n...now, are expanding our distribution footprint with 11 full-price stores now open and ...\nVF Corporation (VFC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=VFC&year=2026&quarter=Q4&highlight=print",
+      "meta": "VF Corporation (VFC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Ernie Herrman\n...and are excited to further grow our footprint across this country. At TJX Internation...\nThe TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TJX&year=2026&quarter=Q4&highlight=print",
+      "meta": "The TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Ronald Sargent\n...ofitability; accelerating our store footprint; taking meaningful action on our noncor...\nThe Kroger Co. (KR) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=KR&year=2026&quarter=Q4&highlight=print",
+      "meta": "The Kroger Co. (KR) \u2022 2026 \u2022 Q4"
+    }
+  ],
+  "results_url": "http://127.0.0.1:8513/earnings_calls?ticker=ALL",
+  "view_url": "http://127.0.0.1:8513/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=print",
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-fragment-final-20261019-02/02-print/videos/50742a4364e50e78b20bf7bf094c9657.webm",
+  "sql_queries": 42,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 22,
+    "native_search_log_lines": 17,
+    "local_search_log_lines": 0,
+    "private_snapshot_transcript_queries": 0,
+    "private_snapshot_ngram_queries": 0,
+    "live_stg_support_queries": 42
+  },
+  "timeline_analysis": {
+    "samples": 660,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "framework_widget_binding_warnings": [],
+    "completed_error_samples_excluded": 0,
+    "loader_visible_samples": 432
+  },
+  "video_analysis": {
+    "decoded_frames": 1681,
+    "fps": 25.0,
+    "duration_s": 67.24,
+    "near_blank_ratio": 0.0,
+    "low_contrast_fade_ratio": 0.6930398572278406,
+    "main_content_roi": {
+      "scaled_frame_rect_xyxy": [
+        118,
+        80,
+        348,
+        233
+      ],
+      "scaled_frame_size": [
+        360,
+        250
+      ],
+      "near_blank_ratio": 0.000594883997620464,
+      "low_contrast_fade_ratio": 0.7001784651992862,
+      "interpretation": "Raw measurements excluding header/sidebar; the normal cross-search placeholder can be quiet/bright. These flags alone never imply a defect; compare DOM loader, empty/error state and transcript validation."
+    },
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_transition_alignment": "Approximate video frame targets from wall-clock page-creation bounds; exact action wall clocks and100ms DOM states remain in manifest/timeline.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-fragment-final-20261019-02/02-print/contact-sheet-00.jpg",
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-fragment-final-20261019-02/02-print/contact-sheet-01.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "15aa254098bb5bad9924fa79717fa55f5d1886c4ca4fdd5d0a987174586c27e6",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "bbeefd968f80e9a35461b12812ad51337bd5115e39b4cfb3f4693008db539536",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": true,
+  "requested_actions": [
+    "initial_load",
+    "return_to_results",
+    "search",
+    "show_more_1",
+    "show_more_2",
+    "view_first"
+  ],
+  "functional_passed": true,
+  "performance_budget_ms": 5000,
+  "performance_passed": false,
+  "search_pagination_max_latency_ms": 9774.327124992851,
+  "search_pagination_performance_passed": false,
+  "case_audit_final_state": {
+    "watermark": 31,
+    "requires_search_query": false
+  }
+}

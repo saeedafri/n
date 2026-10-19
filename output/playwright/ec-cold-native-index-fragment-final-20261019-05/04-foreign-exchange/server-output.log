@@ -1,0 +1,60 @@
+
+  You can now view your Streamlit app in your browser.
+
+  URL: http://127.0.0.1:8513
+
+2026-10-19 15:34:56.418 Thread 'mdp_heartbeat': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:34:56.419 Thread 'mdp_heartbeat': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:34:57.831 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:34:57.831 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:34:57.832 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:34:57.832 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.034 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.034 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.034 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.034 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.051 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.051 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.051 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.051 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.051 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.051 Thread 'ThreadPoolExecutor-2_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.226 Thread 'ThreadPoolExecutor-2_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.226 Thread 'ThreadPoolExecutor-2_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.227 Thread 'ThreadPoolExecutor-2_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.227 Thread 'ThreadPoolExecutor-2_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.227 Thread 'ThreadPoolExecutor-2_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:02.227 Thread 'ThreadPoolExecutor-2_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.090 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.090 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.093 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.094 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.314 Thread 'ThreadPoolExecutor-3_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.314 Thread 'ThreadPoolExecutor-3_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.315 Thread 'ThreadPoolExecutor-3_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.315 Thread 'ThreadPoolExecutor-3_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.395 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.395 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.395 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.396 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.396 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.396 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.396 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.396 Thread 'ThreadPoolExecutor-3_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.774 Thread 'ThreadPoolExecutor-4_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.774 Thread 'ThreadPoolExecutor-4_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.774 Thread 'ThreadPoolExecutor-4_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.774 Thread 'ThreadPoolExecutor-4_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.774 Thread 'ThreadPoolExecutor-4_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:23.774 Thread 'ThreadPoolExecutor-4_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:25.054 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:25.054 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:26.897 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:26.897 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:26.897 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:26.897 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:27.916 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:27.916 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:27.916 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-19 15:35:27.916 Thread 'ThreadPoolExecutor-4_1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+  Stopping...

@@ -1,0 +1,14 @@
+{
+ "ticker": "SIG",
+ "fiscal_year": 2019,
+ "value": 2857,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 1,214 | | | 658 | | | 123 | | | 256 | | | 574 | | | 32 | | | 2,857 | | | 288 | | | 189 | | | 477 | | | 3,334 |",
+ "fye_date": "2019-02-02",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SIG/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

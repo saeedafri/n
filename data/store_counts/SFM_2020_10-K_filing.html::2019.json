@@ -1,0 +1,14 @@
+{
+ "ticker": "SFM",
+ "fiscal_year": 2019,
+ "value": 340,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "urrently dated certifications of our chief executive officer and interim chief financial officer. 2 PART I | Item 2. | Properties As of December 29, 2019, we had 340 stores located in twenty-two states, as shown",
+ "fye_date": "2019-12-29",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SFM/2020/10-K/filing.html::2019",
+ "extractor_version": 5
+}

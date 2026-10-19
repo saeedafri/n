@@ -1,0 +1,14 @@
+{
+ "ticker": "SIG",
+ "fiscal_year": 2025,
+ "value": 2642,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total Signet store activity | 2,808 | | | 33 | | | (143) | | | 2,698 | | | 20 | | | (76) | | | 2,642 |",
+ "fye_date": "2025-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SIG/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

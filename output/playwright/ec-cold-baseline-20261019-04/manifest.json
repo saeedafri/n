@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "keyword": "exchange",
+      "status": "failed",
+      "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-04/01-exchange",
+      "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-37gsuhz1",
+      "port": 8513,
+      "cache_scope": "application result caches bypassed; shared database/OS buffers not flushed",
+      "errors": [
+        "TimeoutError: Page did not reach verified controls within 120.0s"
+      ],
+      "pid": 78657,
+      "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-04/01-exchange/videos/31add2637164dde6b6277367986c263e.webm",
+      "sql_queries": 10,
+      "sql_violations": [],
+      "timeline_analysis": {
+        "samples": 1285,
+        "interval_ms": 100,
+        "blank_busy_without_loader": [],
+        "loader_visible_samples": 78
+      },
+      "video_analysis": {
+        "decoded_frames": 3244,
+        "fps": 25.0,
+        "duration_s": 129.76,
+        "near_blank_ratio": 0.07305795314426634,
+        "low_contrast_fade_ratio": 1.0,
+        "method": "Every decoded frame scaled to360x250; visual metrics are heuristic, paired with100ms DOM evidence",
+        "contact_sheets": [
+          "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-04/01-exchange/contact-sheet-00.jpg",
+          "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-04/01-exchange/contact-sheet-01.jpg"
+        ]
+      }
+    }
+  ],
+  "passed": false
+}

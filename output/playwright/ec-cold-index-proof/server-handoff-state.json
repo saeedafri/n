@@ -1,0 +1,10 @@
+{
+  "action": "stop",
+  "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+  "running_pid": 87725,
+  "pool_bytes": 134217728,
+  "buffer_pool_load_at_startup": false,
+  "buffer_pool_dump_at_shutdown": false,
+  "corpus_queries_performed": 0,
+  "OS_file_cache": "uncontrolled"
+}

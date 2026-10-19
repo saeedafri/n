@@ -711,6 +711,11 @@ KEYDEV_GUIDANCE_SUBTYPE_WORDS = ("guidance", "outlook")
 KEYDEV_NEWS_GUIDANCE_SUBTYPE = "Guidance Update"
 KEYDEV_GUIDANCE_HEADLINE_WORDS = ("guidance", "outlook", "forecast")
 
+# What those rows are shown as instead. 'Earnings News' is a real subtype the ETL
+# already writes (5,567 rows) and the one the headline-only rule would have given
+# them, so nothing invented reaches the Type column or its filter list.
+KEYDEV_NEWS_EARNINGS_SUBTYPE = "Earnings News"
+
 
 def keydev_is_guidance_subtype(subtype) -> bool:
     """True when the subtype's own name marks it as a guidance event."""
@@ -732,6 +737,26 @@ def keydev_is_guidance_row(subtype, headline) -> bool:
         return True
     text = str(headline or "").lower()
     return any(word in text for word in KEYDEV_GUIDANCE_HEADLINE_WORDS)
+
+
+def keydev_display_subtype(subtype, headline) -> str:
+    """The subtype as the user should see it in the Type column.
+
+    A row stored as 'Guidance Update' whose headline is not about guidance is
+    screened as Earnings, so showing it as 'Guidance Update' contradicts the
+    screen it is sitting in — the reported "Kroger to cut 3,000 corporate roles"
+    row read 'Guidance Update' inside an Earnings result. Worse, the Earnings
+    half's published column-filter domain deliberately excludes every guidance
+    subtype, so that label was a value the Type filter could not offer and the
+    Excel export could not honour.
+
+    Only the news-derived subtype is ever relabelled, and only to a subtype that
+    already exists. The stored value in coreiq_company_events is untouched.
+    """
+    text = str(subtype or "")
+    if text.strip() == KEYDEV_NEWS_GUIDANCE_SUBTYPE and not keydev_is_guidance_row(text, headline):
+        return KEYDEV_NEWS_EARNINGS_SUBTYPE
+    return text
 
 
 # Backward-compat: old DB/session-state keys → canonical new keys.

@@ -1,0 +1,68 @@
+{
+  "term": "%",
+  "method": "unanchorable_literal_scan",
+  "first_page_seconds": 0.010554542008321732,
+  "returned_body_bytes": 638891,
+  "page_ids": [
+    172635,
+    92973,
+    92607,
+    91974,
+    200212,
+    199760,
+    199118,
+    148142,
+    147902,
+    127846,
+    124787,
+    115898,
+    115514,
+    111367,
+    105336
+  ],
+  "expected_page_ids": [
+    172635,
+    92973,
+    92607,
+    91974,
+    200212,
+    199760,
+    199118,
+    148142,
+    147902,
+    127846,
+    124787,
+    115898,
+    115514,
+    111367,
+    105336
+  ],
+  "total_literal_matches": 21394,
+  "full_oracle_seconds_after_timing": 4.965699207998114,
+  "indexed_exact_all_count": null,
+  "indexed_exact_all_equals_oracle": null,
+  "first_page_equals_oracle": true,
+  "timed_queries": [
+    {
+      "seconds": 0.01029762500547804,
+      "rows": 15,
+      "body_bytes": 638891,
+      "sql": "SELECT id,quarter,transcript_text FROM coreiq_av_earnings_call_transcripts WHERE has_transcript=1 AND LOCATE(CAST(LOWER(:keyword) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0 ORDER BY year DESC,q DESC,id DESC LIMIT :needed",
+      "parameter_keys": [
+        "keyword",
+        "needed"
+      ]
+    }
+  ],
+  "server": {
+    "version": "8.0.44",
+    "buffer_pool_bytes": 134217728,
+    "buffer_pool_load_at_startup": 0,
+    "buffer_pool_dump_at_shutdown": 0
+  },
+  "coldness": "fresh mysqld buffer pool; OS file cache uncontrolled",
+  "source_scope": "eligible rows of existing local SQLite snapshot; not current live STG",
+  "helper_sha256": "84b3d39f94492bd037154e31acc3caf988b32bfd01a4617f3db1395decd3125f",
+  "oracle_predicate": "LOCATE(CAST(LOWER(:keyword) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0",
+  "quoted_run_comparison_after_timing": null
+}

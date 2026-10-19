@@ -1,0 +1,202 @@
+{
+  "execution": "disabled",
+  "approval_ready": false,
+  "source_table": "coreiq_av_earnings_call_transcripts",
+  "original_definition_sha256": "16f12e1a4c2749e02a5383de6732fbbcd67956b9a74e8f9c359757ef4dd2ac7c",
+  "original_fulltext_definitions": [
+    "FULLTEXT KEY `idx_transcript_fulltext_search` (`transcript_text`)"
+  ],
+  "original_stopwords": null,
+  "original_stopword_table": null,
+  "inspection": {
+    "show_create_table": "CREATE TABLE `coreiq_av_earnings_call_transcripts` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `source` varchar(64) NOT NULL,\n  `ticker` varchar(32) NOT NULL,\n  `quarter` varchar(8) NOT NULL,\n  `year` smallint NOT NULL,\n  `q` tinyint NOT NULL,\n  `transcript_text` longtext,\n  `has_transcript` tinyint(1) NOT NULL DEFAULT '0',\n  `title` varchar(512) DEFAULT NULL,\n  `event_datetime_utc` datetime DEFAULT NULL,\n  `fetched_at_utc` datetime NOT NULL,\n  `raw_json` json DEFAULT NULL,\n  `raw_json_sha1` char(40) DEFAULT NULL,\n  `last_error` text,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_src_ticker_quarter` (`source`,`ticker`,`quarter`),\n  KEY `idx_ticker` (`ticker`),\n  KEY `idx_year_q` (`year`,`q`),\n  KEY `idx_ec_ticker_quarter` (`ticker`,`quarter`),\n  KEY `idx_has_transcript_year` (`has_transcript`,`year`),\n  KEY `idx_has_transcript_ticker` (`has_transcript`,`ticker`),\n  KEY `idx_covering_transcript_lookup` (`has_transcript`,`ticker`,`transcript_text`(100)),\n  KEY `idx_ec_ticker_year_q` (`ticker`,`year`,`q`),\n  KEY `idx_ec_ticker_year_q_event` (`ticker`,`year`,`q`,`event_datetime_utc`),\n  KEY `idx_ec_cover_transcript_fetch` (`ticker`,`year`,`q`,`has_transcript`,`transcript_text`(100)),\n  KEY `idx_ec_cover_company_lookup` (`has_transcript`,`transcript_text`(10),`ticker`),\n  KEY `idx_ec_cover_ticker_years` (`ticker`,`has_transcript`,`transcript_text`(10),`year`),\n  KEY `idx_ec_cover_ticker_quarters` (`ticker`,`year`,`has_transcript`,`transcript_text`(10),`q`),\n  KEY `idx_ec_list_ordered` (`ticker`,`has_transcript`,`year`,`q`),\n  FULLTEXT KEY `idx_transcript_fulltext_search` (`transcript_text`)\n) ENGINE=InnoDB AUTO_INCREMENT=204098 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+    "server": {
+      "database_name": "coresight_market_data_stg",
+      "version": "8.0.46-azure",
+      "token_size": 2
+    },
+    "table": {
+      "ENGINE": "InnoDB",
+      "TABLE_ROWS": 29583,
+      "DATA_LENGTH": 2033729536,
+      "INDEX_LENGTH": 37650432,
+      "DATA_FREE": 4194304,
+      "TABLE_COLLATION": "utf8mb4_0900_ai_ci"
+    },
+    "text_column": {
+      "Field": "transcript_text",
+      "Type": "longtext",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "Null": "YES",
+      "Key": "MUL",
+      "Default": null,
+      "Extra": "",
+      "Privileges": "select,insert,update,references",
+      "Comment": ""
+    },
+    "parser": {
+      "PLUGIN_NAME": "ngram",
+      "PLUGIN_STATUS": "ACTIVE"
+    },
+    "original_stopwords": null,
+    "stopword_policy_note": "Session/global defaults do not prove the persistent per-table FTS policy.",
+    "persistent_policy_diagnostic_attempt": {
+      "started_utc": "2026-10-19T08:59:32Z",
+      "target": "coresight_market_data_stg/coreiq_av_earnings_call_transcripts",
+      "events": [],
+      "ddl_or_data_writes": 0,
+      "selector_before": "",
+      "status": "probe_failed",
+      "error_type": "OperationalError",
+      "error": "(1227, 'Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation')",
+      "restoration_observed": [
+        ""
+      ],
+      "selector_after": "",
+      "restoration_status": "verified",
+      "finished_utc": "2026-10-19T08:59:35Z"
+    },
+    "private_literal_fixture_artifact": "output/playwright/ec-cold-index-proof/native-python-lower-predicate-proof.json",
+    "python_lower_exception_artifact": "output/playwright/ec-cold-index-proof/python-lower-ascii-exceptions.json",
+    "original_stopword_table": null,
+    "private_quoted_run_fixture_artifact": "output/playwright/ec-cold-index-proof/native-quoted-runs-fixture.json"
+  },
+  "unverified": [
+    "Original table FULLTEXT stopword policy is unverified; exact rollback requires its captured ON/OFF value.",
+    "Original persistent stopword table name is unverified; capture stopword_table_name and preserve any custom table for rollback.",
+    "A maintenance window and paused ingestion/writers have not been approved.",
+    "Azure free storage and temporary build storage have not been verified; DATA_FREE is not server free disk.",
+    "Production-sized clone build duration, extra disk usage, and uncached search performance remain unmeasured."
+  ],
+  "maintenance_effects": [
+    "Dropping every FULLTEXT index resets the table's persistent stopword policy; ngram must be recreated first under OFF.",
+    "Existing FULLTEXT definitions are recreated unchanged, but their stopword policy becomes OFF: words such as 'the' may now match.",
+    "LOCK=SHARED permits reads and blocks source writes during each index build. MATCH consumers can fail while indexes are absent.",
+    "The 5-second lock settings bound lock acquisition; they do not bound ALTER TABLE execution. SELECT MAX_EXECUTION_TIME does not cap DDL.",
+    "Index builds are separate, implicitly committed DDL operations; failure requires stage-aware recovery during the maintenance window.",
+    "No source triggers, sidecar tables, global variable changes, source row writes, or index DDL are executed by this script."
+  ],
+  "before_and_after_data_check_sql": "CHECKSUM TABLE `coreiq_av_earnings_call_transcripts` EXTENDED;",
+  "data_check_note": "Run while writers remain paused; this reads table contents and can be expensive.",
+  "migration_sql": [
+    "SET @ec_saved_stopwords=@@SESSION.innodb_ft_enable_stopword;",
+    "SET @ec_saved_user_stopword_table=COALESCE(@@SESSION.innodb_ft_user_stopword_table,'');",
+    "SET @ec_saved_lock_wait=@@SESSION.lock_wait_timeout;",
+    "SET @ec_saved_row_lock_wait=@@SESSION.innodb_lock_wait_timeout;",
+    "SET SESSION lock_wait_timeout=5;",
+    "SET SESSION innodb_lock_wait_timeout=5;",
+    "SET SESSION innodb_ft_enable_stopword=OFF;",
+    "ALTER TABLE `coreiq_av_earnings_call_transcripts` DROP INDEX `idx_transcript_fulltext_search`, ALGORITHM=INPLACE, LOCK=SHARED;",
+    "ALTER TABLE `coreiq_av_earnings_call_transcripts` ADD FULLTEXT INDEX `idx_transcript_ngram_search` (`transcript_text`) WITH PARSER ngram, ALGORITHM=INPLACE, LOCK=SHARED;",
+    "ALTER TABLE `coreiq_av_earnings_call_transcripts` ADD FULLTEXT KEY `idx_transcript_fulltext_search` (`transcript_text`), ALGORITHM=INPLACE, LOCK=SHARED;",
+    "SET SESSION innodb_ft_enable_stopword=@ec_saved_stopwords;",
+    "SET SESSION innodb_ft_user_stopword_table=@ec_saved_user_stopword_table;",
+    "SET SESSION lock_wait_timeout=@ec_saved_lock_wait;",
+    "SET SESSION innodb_lock_wait_timeout=@ec_saved_row_lock_wait;"
+  ],
+  "rollback_sql": [
+    "SET @ec_saved_stopwords=@@SESSION.innodb_ft_enable_stopword;",
+    "SET @ec_saved_user_stopword_table=COALESCE(@@SESSION.innodb_ft_user_stopword_table,'');",
+    "SET @ec_saved_lock_wait=@@SESSION.lock_wait_timeout;",
+    "SET @ec_saved_row_lock_wait=@@SESSION.innodb_lock_wait_timeout;",
+    "SET SESSION lock_wait_timeout=5;",
+    "SET SESSION innodb_lock_wait_timeout=5;",
+    "SET SESSION innodb_ft_enable_stopword=@ec_original_stopword_policy;",
+    "SET SESSION innodb_ft_user_stopword_table=@ec_original_stopword_table;",
+    "ALTER TABLE `coreiq_av_earnings_call_transcripts` DROP INDEX `idx_transcript_fulltext_search`, DROP INDEX `idx_transcript_ngram_search`, ALGORITHM=INPLACE, LOCK=SHARED;",
+    "ALTER TABLE `coreiq_av_earnings_call_transcripts` ADD FULLTEXT KEY `idx_transcript_fulltext_search` (`transcript_text`), ALGORITHM=INPLACE, LOCK=SHARED;",
+    "SET SESSION innodb_ft_enable_stopword=@ec_saved_stopwords;",
+    "SET SESSION innodb_ft_user_stopword_table=@ec_saved_user_stopword_table;",
+    "SET SESSION lock_wait_timeout=@ec_saved_lock_wait;",
+    "SET SESSION innodb_lock_wait_timeout=@ec_saved_row_lock_wait;"
+  ],
+  "rollback_note": "First provide verified original use_stopword (0/1) and stopword_table_name (empty for default) if unknown. Preserve any custom table contents; if default was used, ensure the server stopword-table override is still empty. After a partial failure, drop only indexes that currently exist.",
+  "verification_sql": [
+    "SELECT @@version,@@ngram_token_size,@@SESSION.innodb_ft_enable_stopword;",
+    "SELECT PLUGIN_NAME,PLUGIN_STATUS FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME='ngram';",
+    "SHOW CREATE TABLE `coreiq_av_earnings_call_transcripts`;",
+    "SHOW INDEX FROM `coreiq_av_earnings_call_transcripts`;",
+    "SELECT SUM(year IS NULL) AS null_year, SUM(q IS NULL) AS null_q FROM `coreiq_av_earnings_call_transcripts` WHERE has_transcript=1;"
+  ],
+  "persistent_policy_preflight_command": "python3 scripts/ec_transcript_index_migration.py --inspect-fts-policy",
+  "persistent_policy_preflight_note": "Use the existing configured STG credentials with DBA diagnostic privileges. This explicit mode temporarily changes only an unused GLOBAL diagnostic selector, restores it in finally, and verifies restoration. --inspect remains SELECT/SHOW only.",
+  "query_examples": [
+    {
+      "term": "exchange",
+      "fallback_scan": false,
+      "sql": "SELECT /*+ MAX_EXECUTION_TIME(5000) */ id FROM `coreiq_av_earnings_call_transcripts` FORCE INDEX (`idx_transcript_ngram_search`) WHERE MATCH(transcript_text) AGAINST(%s IN BOOLEAN MODE) AND LOCATE(CAST(LOWER(%s) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0 ORDER BY id;",
+      "params": [
+        "+\"exchange\"",
+        "exchange"
+      ]
+    },
+    {
+      "term": "printenvnovalue",
+      "fallback_scan": false,
+      "sql": "SELECT /*+ MAX_EXECUTION_TIME(5000) */ id FROM `coreiq_av_earnings_call_transcripts` FORCE INDEX (`idx_transcript_ngram_search`) WHERE MATCH(transcript_text) AGAINST(%s IN BOOLEAN MODE) AND LOCATE(CAST(LOWER(%s) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0 ORDER BY id;",
+      "params": [
+        "+\"printenvnovalue\"",
+        "printenvnovalue"
+      ]
+    },
+    {
+      "term": "AI",
+      "fallback_scan": false,
+      "sql": "SELECT /*+ MAX_EXECUTION_TIME(5000) */ id FROM `coreiq_av_earnings_call_transcripts` FORCE INDEX (`idx_transcript_ngram_search`) WHERE MATCH(transcript_text) AGAINST(%s IN BOOLEAN MODE) AND LOCATE(CAST(LOWER(%s) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0 ORDER BY id;",
+      "params": [
+        "+\"AI\"",
+        "AI"
+      ]
+    },
+    {
+      "term": "foreign exchange",
+      "fallback_scan": false,
+      "sql": "SELECT /*+ MAX_EXECUTION_TIME(5000) */ id FROM `coreiq_av_earnings_call_transcripts` FORCE INDEX (`idx_transcript_ngram_search`) WHERE MATCH(transcript_text) AGAINST(%s IN BOOLEAN MODE) AND LOCATE(CAST(LOWER(%s) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0 ORDER BY id;",
+      "params": [
+        "+\"foreign\" +\"exchange\"",
+        "foreign exchange"
+      ]
+    },
+    {
+      "term": "R&D",
+      "fallback_scan": true,
+      "sql": "SELECT /*+ MAX_EXECUTION_TIME(5000) */ id FROM `coreiq_av_earnings_call_transcripts` WHERE LOCATE(CAST(LOWER(%s) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0 ORDER BY id;",
+      "params": [
+        "R&D"
+      ]
+    }
+  ],
+  "query_contract": [
+    "Require native MySQL 8.0, ACTIVE ngram parser, ngram_token_size=2, and utf8mb4_0900_ai_ci source collation.",
+    "AND quoted ASCII alphanumeric runs of at least two characters as positional ngram phrases, then verify binary LOWER literal matching with Python's dotted-I lowercase expansion. A quoted whole query can miss punctuation/phrase cases.",
+    "For ASCII queries this follows the product's lowercase literal contract; accent-insensitive collation expansions such as strasse/Straße and ae/æ are not matches.",
+    "Non-ASCII queries and terms with no usable bigram retain the exact scan fallback; this migration does not guarantee fast Unicode, one-character, or symbol-only negatives.",
+    "The isolated 23-term fixture proves the tested cases, not arbitrary Unicode or production performance.",
+    "Keep application routing unchanged until candidate recall, source data checks, original-index compatibility, and uncached UI tests pass."
+  ],
+  "isolated_fixture_terms": [
+    "foreign exchange",
+    "xchange",
+    "print",
+    "revenue",
+    "AI",
+    "in",
+    "aaa",
+    "iia",
+    "all",
+    "and",
+    "cafe",
+    "naive",
+    "été",
+    "e-commerce",
+    "R&D",
+    "a-b",
+    "abc",
+    "abc def",
+    "ab bc",
+    "ＡＩ",
+    "%",
+    "_",
+    "zqxm"
+  ]
+}

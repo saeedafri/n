@@ -1,0 +1,31 @@
+{
+  "purpose": "isolated snapshot corpus proof; no live STG or OS-cold claim",
+  "baseline_allocated_bytes": 1070489600,
+  "budget_bytes": 7000000000,
+  "source": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/server-logs/agg-cache/news_mirror.sqlite",
+  "phases": [
+    {
+      "name": "import",
+      "rows": 21455,
+      "body_bytes": 937345257,
+      "seconds": 26.93998837500112,
+      "incremental_allocated_bytes": 4381134848
+    }
+  ],
+  "resumed_existing_rows": 17970,
+  "construction": "empty FTS first; incremental inserts; resumed after disk-guard pause",
+  "fts_config": {
+    "optimize_checkpoint_limit": "180",
+    "synced_doc_id": "21421",
+    "stopword_table_name": "",
+    "use_stopword": "0"
+  },
+  "create_table": "CREATE TABLE `coreiq_av_earnings_call_transcripts` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `source` varchar(64) NOT NULL,\n  `ticker` varchar(32) NOT NULL,\n  `quarter` varchar(8) NOT NULL,\n  `year` smallint NOT NULL,\n  `q` tinyint NOT NULL,\n  `transcript_text` longtext,\n  `has_transcript` tinyint(1) NOT NULL DEFAULT '0',\n  `title` varchar(512) DEFAULT NULL,\n  `event_datetime_utc` datetime DEFAULT NULL,\n  `fetched_at_utc` datetime NOT NULL,\n  `raw_json` json DEFAULT NULL,\n  `raw_json_sha1` char(40) DEFAULT NULL,\n  `last_error` text,\n  `FTS_DOC_ID` bigint unsigned NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `FTS_DOC_ID_INDEX` (`FTS_DOC_ID`),\n  UNIQUE KEY `uq_src_ticker_quarter` (`source`,`ticker`,`quarter`),\n  KEY `idx_ticker` (`ticker`),\n  KEY `idx_year_q` (`year`,`q`),\n  KEY `idx_ec_ticker_quarter` (`ticker`,`quarter`),\n  KEY `idx_has_transcript_year` (`has_transcript`,`year`),\n  KEY `idx_has_transcript_ticker` (`has_transcript`,`ticker`),\n  KEY `idx_covering_transcript_lookup` (`has_transcript`,`ticker`,`transcript_text`(100)),\n  KEY `idx_ec_ticker_year_q` (`ticker`,`year`,`q`),\n  KEY `idx_ec_ticker_year_q_event` (`ticker`,`year`,`q`,`event_datetime_utc`),\n  KEY `idx_ec_cover_transcript_fetch` (`ticker`,`year`,`q`,`has_transcript`,`transcript_text`(100)),\n  KEY `idx_ec_cover_company_lookup` (`has_transcript`,`transcript_text`(10),`ticker`),\n  KEY `idx_ec_cover_ticker_years` (`ticker`,`has_transcript`,`transcript_text`(10),`year`),\n  KEY `idx_ec_cover_ticker_quarters` (`ticker`,`year`,`has_transcript`,`transcript_text`(10),`q`),\n  KEY `idx_ec_list_ordered` (`ticker`,`has_transcript`,`year`,`q`),\n  FULLTEXT KEY `idx_transcript_ngram_search` (`transcript_text`) /*!50100 WITH PARSER `ngram` */ ,\n  FULLTEXT KEY `idx_transcript_fulltext_search` (`transcript_text`)\n) ENGINE=InnoDB AUTO_INCREMENT=200688 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "server": {
+    "version": "8.0.44",
+    "buffer_pool_bytes": 134217728
+  },
+  "peak_incremental_allocated_bytes": 4364357632,
+  "peak_filesystem_growth_bytes": 4519514112,
+  "final_incremental_allocated_bytes": 4381138944
+}

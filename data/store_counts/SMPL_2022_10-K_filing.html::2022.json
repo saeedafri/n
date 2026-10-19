@@ -1,0 +1,14 @@
+{
+ "ticker": "SMPL",
+ "fiscal_year": 2022,
+ "value": 2,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "rating segment and reporting unit. Previously, during the fifty-two weeks ended August 28, 2021 and August 29, 2020, we had two reporting units which were our operating segments, Atkins and Quest. We a",
+ "fye_date": "2022-08-27",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SMPL/2022/10-K/filing.html::2022",
+ "extractor_version": 5
+}

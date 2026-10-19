@@ -1,0 +1,48 @@
+
+  You can now view your Streamlit app in your browser.
+
+  URL: http://127.0.0.1:8513
+
+[31m──[0m[31m────────────────────[0m[31m [0m[1;31mTraceback [0m[1;2;31m(most recent call last)[0m[31m [0m[31m─────────────────────[0m[31m──[0m
+[31m [0m [2m/opt/homebrew/lib/python3.14/site-packages/streamlit/runtime/scriptrunner/[0m[1mex[0m [31m [0m
+[31m [0m [1mec_code.py[0m:129 in exec_func_with_error_handling                              [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m [2m/opt/homebrew/lib/python3.14/site-packages/streamlit/runtime/scriptrunner/[0m[1msc[0m [31m [0m
+[31m [0m [1mript_runner.py[0m:689 in code_to_exec                                           [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m [2m/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/scripts/[0m[1mec_cold_app.py[0m: [31m [0m
+[31m [0m 132 in <module>                                                              [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m   [2m129 [0m[2m│   │   │   │   │   │   │      [0m[33m"[0m[33mtables[0m[33m"[0m: tables, [33m"[0m[33melapsed_ms[0m[33m"[0m: (time.m [31m [0m
+[31m [0m   [2m130 [0m[2m│   │   │   │   │   │   │      [0m[33m"[0m[33merror_type[0m[33m"[0m: [96mtype[0m(context.original_exc [31m [0m
+[31m [0m   [2m131 [0m[2m│   [0m                                                                   [31m [0m
+[31m [0m [31m❱ [0m132 [2m│   [0m[1;4m(AUDIT / [0m[1;4;33m"[0m[1;4;33mpolicy.json[0m[1;4;33m"[0m[1;4m).write_text(json.dumps({[0m                    [31m [0m
+[31m [0m   [2m133 [0m[2m│   │   [0m[1;4;33m"[0m[1;4;33menvironment[0m[1;4;33m"[0m[1;4m: POLICY, [0m[1;4;33m"[0m[1;4;33mpid[0m[1;4;33m"[0m[1;4m: os.getpid(), [0m[1;4;33m"[0m[1;4;33mst_cache_data[0m[1;4;33m"[0m[1;4m: [0m[1;4;33m"[0m[1;4;33mc[0m [31m [0m
+[31m [0m   [2m134 [0m[2m│   │   [0m[1;4;33m"[0m[1;4;33mresource_cache[0m[1;4;33m"[0m[1;4m: [0m[1;4;33m"[0m[1;4;33mretained for workflow resources and connect[0m [31m [0m
+[31m [0m   [2m135 [0m[2m│   │   [0m[1;4;33m"[0m[1;4;33mwatchlist_result_cache[0m[1;4;33m"[0m[1;4m: [0m[1;4;33m"[0m[1;4;33mcleared before every script rerun[0m[1;4;33m"[0m[1;4m,[0m [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m [2m/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versio[0m [31m [0m
+[31m [0m [2mns/3.14/lib/python3.14/pathlib/[0m[1m__init__.py[0m:809 in write_text                 [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m   [2m 806 [0m[2m│   │   [0m[94mif[0m [95mnot[0m [96misinstance[0m(data, [96mstr[0m):                                 [31m [0m
+[31m [0m   [2m 807 [0m[2m│   │   │   [0m[94mraise[0m [96mTypeError[0m([33m'[0m[33mdata must be str, not [0m[33m%s[0m[33m'[0m %              [31m [0m
+[31m [0m   [2m 808 [0m[2m│   │   │   │   │   │   │   [0mdata.[91m__class__[0m.[91m__name__[0m)                  [31m [0m
+[31m [0m [31m❱ [0m 809 [2m│   │   [0m[94mwith[0m [1;4;96mself[0m[1;4m.open(mode=[0m[1;4;33m'[0m[1;4;33mw[0m[1;4;33m'[0m[1;4m, encoding=encoding, errors=errors, ne[0m [31m [0m
+[31m [0m   [2m 810 [0m[2m│   │   │   [0m[94mreturn[0m f.write(data)                                      [31m [0m
+[31m [0m   [2m 811 [0m[2m│   [0m                                                                  [31m [0m
+[31m [0m   [2m 812 [0m[2m│   [0m_remove_leading_dot = operator.itemgetter([96mslice[0m([94m2[0m, [94mNone[0m))         [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m [2m/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versio[0m [31m [0m
+[31m [0m [2mns/3.14/lib/python3.14/pathlib/[0m[1m__init__.py[0m:771 in open                       [31m [0m
+[31m [0m                                                                              [31m [0m
+[31m [0m   [2m 768 [0m[2;33m│   │   [0m[33m"""[0m                                                           [31m [0m
+[31m [0m   [2m 769 [0m[2m│   │   [0m[94mif[0m [33m"[0m[33mb[0m[33m"[0m [95mnot[0m [95min[0m mode:                                           [31m [0m
+[31m [0m   [2m 770 [0m[2m│   │   │   [0mencoding = io.text_encoding(encoding)                     [31m [0m
+[31m [0m [31m❱ [0m 771 [2m│   │   [0m[94mreturn[0m [1;4mio.open([0m[1;4;96mself[0m[1;4m, mode, buffering, encoding, errors, newli[0m [31m [0m
+[31m [0m   [2m 772 [0m[2m│   [0m                                                                  [31m [0m
+[31m [0m   [2m 773 [0m[2m│   [0m[94mdef[0m[90m [0m[92mread_bytes[0m([96mself[0m):                                             [31m [0m
+[31m [0m   [2m 774 [0m[2;90m│   │   [0m[33m"""[0m                                                           [31m [0m
+[31m────────────────────────────────────────────────────────────────────────────────[0m
+[1;91mFileNotFoundError: [0m[1m[[0mErrno [1;36m2[0m[1m][0m No such file or directory: 
+[32m'output/playwright/ec-cold-baseline-20261019-01/01-exchange/policy.json'[0m
+  Stopping...

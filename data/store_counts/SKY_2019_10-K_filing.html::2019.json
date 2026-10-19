@@ -1,0 +1,14 @@
+{
+ "ticker": "SKY",
+ "fiscal_year": 2019,
+ "value": 21,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "a. In addition to our core home building business, we operate a factory-direct retail business, Titan Factory Direct, with 21 sale centers spanning the southern United States, and Star Fleet Truckin",
+ "fye_date": "2019-03-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SKY/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

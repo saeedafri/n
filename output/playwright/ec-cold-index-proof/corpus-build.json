@@ -1,0 +1,15 @@
+{
+  "purpose": "isolated snapshot corpus proof; no live STG or OS-cold claim",
+  "baseline_allocated_bytes": 1132597248,
+  "budget_bytes": 5000000000,
+  "source": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/server-logs/agg-cache/news_mirror.sqlite",
+  "phases": [
+    {
+      "name": "import",
+      "rows": 21455,
+      "body_bytes": 937345257,
+      "seconds": 29.388951917004306,
+      "incremental_allocated_bytes": 1158676480
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "term": "exchange",
+    "returncode": 0,
+    "campaign_seconds": 13.691233666992048
+  },
+  {
+    "term": "print",
+    "returncode": 0,
+    "campaign_seconds": 15.219281083001988
+  },
+  {
+    "term": "revenue",
+    "returncode": 0,
+    "campaign_seconds": 11.46489429200301
+  },
+  {
+    "term": "foreign exchange",
+    "returncode": 0,
+    "campaign_seconds": 22.839403707999736
+  },
+  {
+    "term": "printenv",
+    "returncode": 0,
+    "campaign_seconds": 26.768035917019006
+  },
+  {
+    "term": "AI",
+    "returncode": 0,
+    "campaign_seconds": 10.444821999990381
+  },
+  {
+    "term": "e-commerce",
+    "returncode": 0,
+    "campaign_seconds": 12.784209125005873
+  },
+  {
+    "term": "R&D",
+    "returncode": 0,
+    "campaign_seconds": 5.370247291022679
+  },
+  {
+    "term": "%",
+    "returncode": 0,
+    "campaign_seconds": 5.0560423329879995
+  },
+  {
+    "term": "_",
+    "returncode": 0,
+    "campaign_seconds": 6.386529000010341
+  },
+  {
+    "term": "zqxm",
+    "returncode": 0,
+    "campaign_seconds": 5.122986417001812
+  }
+]

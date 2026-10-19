@@ -1,0 +1,14 @@
+{
+ "ticker": "SNX",
+ "fiscal_year": 2015,
+ "value": 90,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "sign and integration solutions facilities are ISO 9001:2008 and ISO 14001:2004 certified. In our Concentrix segment, we operate approximately 90 delivery centers and administrative facilities in numerous countries through",
+ "fye_date": "2015-11-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SNX/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

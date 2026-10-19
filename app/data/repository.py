@@ -895,12 +895,16 @@ class IncomeStatementRepository:
                 return row['reported_currency']
         return "USD"
 
-# Hard cap for the un-indexable LIKE '%kw%' transcript scan (see
-# search_transcripts_fulltext). Only reached when the local word index is unavailable.
-_LIKE_FALLBACK_MS = int(os.getenv("TRANSCRIPT_LIKE_FALLBACK_MS", "4000"))
-# Answer the cross-transcript search from the local word index instead of MySQL's
-# FULLTEXT. Set TRANSCRIPT_LOCAL_SEARCH=0 to go back to MySQL without a deploy.
+# Set TRANSCRIPT_LOCAL_SEARCH=0 to use native MySQL batches without a deploy.
 _LOCAL_TRANSCRIPT_SEARCH = os.getenv("TRANSCRIPT_LOCAL_SEARCH", "1").strip() == "1"
+_NATIVE_TRANSCRIPT_NGRAM_SEARCH = os.getenv("TRANSCRIPT_NATIVE_NGRAM_SEARCH", "0").strip() == "1"
+_MYSQL_TRANSCRIPT_BATCH_SIZE = max(8, min(512, int(os.getenv("TRANSCRIPT_NATIVE_BATCH_SIZE", "64"))))
+_MYSQL_TRANSCRIPT_QUERY_MS = int(os.getenv("TRANSCRIPT_NATIVE_QUERY_MS", "5000"))
+_MYSQL_TRANSCRIPT_DEADLINE_SECONDS = float(os.getenv("TRANSCRIPT_NATIVE_DEADLINE_SECONDS", "20"))
+
+
+class TranscriptSearchError(RuntimeError):
+    """A transcript query failed before a complete search result was available."""
 
 
 def _news_run(sql, params, key):
@@ -2885,12 +2889,128 @@ class EarningsCallRepository:
         return years
 
     @staticmethod
-    def _like_page_from_word_index(keyword, scoped_tickers, year, q, limit, offset, cap=500):
-        """The cross-company LIKE '%keyword%' page, answered from the local copy's word
+    def _search_transcripts_mysql(keyword, scoped_tickers, year, q, limit, offset, after=None):
+        """Read an exact newest-first substring page directly from MySQL, without a cache.
+
+        Covering metadata batches skip empty future placeholders before bounded primary-key
+        text reads. A negative result is returned only after exhausting the selected scope.
+        """
+        from utils.server_logger import log_timing
+        from data.transcript_infix import literal_match_sql
+        ascii_literal = keyword.isascii()
+        keyword_lower = keyword.lower() if ascii_literal else None
+        text_predicate = literal_match_sql(keyword)
+        deadline = time.monotonic() + _MYSQL_TRANSCRIPT_DEADLINE_SECONDS
+        where = ["has_transcript = 1"]
+        filters: Dict = {"batch_size": _MYSQL_TRANSCRIPT_BATCH_SIZE}
+        if scoped_tickers:
+            keys = []
+            for i, ticker in enumerate(scoped_tickers):
+                key = f"scope_ticker_{i}"
+                keys.append(f":{key}")
+                filters[key] = ticker
+            where.append(f"ticker IN ({', '.join(keys)})")
+        if year is not None:
+            where.append("year = :year")
+            filters["year"] = year
+        if q is not None:
+            where.append("q = :q")
+            filters["q"] = q
+        selected = []
+        skip = max(0, int(offset or 0))
+        limit = int(limit)
+        if limit <= 0:
+            return []
+        cursor = dict(zip(("year", "q", "id"), after)) if after is not None else None
+        batches = 0
+
+        def query(select, params, phase):
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            if remaining_ms <= 0:
+                raise TranscriptSearchError("Transcript search is temporarily unavailable. Please retry.")
+            cap_ms = max(1, min(_MYSQL_TRANSCRIPT_QUERY_MS, remaining_ms))
+            started = time.perf_counter()
+            try:
+                return db_manager.execute_query_readonly_raising(
+                    f"SELECT /*+ MAX_EXECUTION_TIME({cap_ms}) */ " + select, params)
+            except Exception as exc:
+                log_structured_error(exc, page="earnings_calls", component="EarningsCallRepository",
+                                     operation=f"transcript_native_{phase}",
+                                     context=f"keyword={keyword!r} batch={batches} cap_ms={cap_ms}")
+                raise TranscriptSearchError("Transcript search is temporarily unavailable. Please retry.") from exc
+            finally:
+                elapsed_ms = (time.perf_counter() - started) * 1000
+                log_timing(f"TRANSCRIPT_NATIVE_{phase.upper()}", elapsed_ms,
+                           f"keyword={keyword[:80]!r} batch={batches}",
+                           level="WARNING" if elapsed_ms > 500 else "INFO")
+
+        while True:
+            batches += 1
+            params = filters.copy()
+            batch_where = where.copy()
+            if cursor is not None:
+                batch_where.append("(year, q, id) < (:scan_year, :scan_q, :scan_id)")
+                params.update(scan_year=cursor["year"], scan_q=cursor["q"], scan_id=cursor["id"])
+            candidates = query(
+                "id, ticker, year, q FROM coreiq_av_earnings_call_transcripts "
+                "FORCE INDEX (idx_ec_list_ordered) "
+                f"WHERE {' AND '.join(batch_where)} "
+                "ORDER BY year DESC, q DESC, id DESC LIMIT :batch_size", params, "metadata")
+            if not candidates:
+                return selected
+            chunk_size = 16 if ascii_literal else len(candidates)
+            for chunk_start in range(0, len(candidates), chunk_size):
+                chunk = candidates[chunk_start:chunk_start + chunk_size]
+                text_params: Dict = ({"body_limit": len(chunk), "keyword": keyword} if ascii_literal else
+                                     {"keyword": keyword, "text_limit": skip + limit - len(selected)})
+                id_keys = []
+                for i, row in enumerate(chunk):
+                    key = f"text_id_{i}"
+                    id_keys.append(f":{key}")
+                    text_params[key] = row["id"]
+                if ascii_literal:
+                    text_rows = query(
+                        "/* EC_TRANSCRIPT_SEARCH_TEXT */ id, quarter, "
+                        "CASE WHEN transcript_text IS NULL OR LENGTH(transcript_text) = 0 THEN NULL "
+                        f"WHEN {text_predicate} THEN transcript_text ELSE '' END AS transcript_text "
+                        "FROM coreiq_av_earnings_call_transcripts FORCE INDEX (PRIMARY) "
+                        f"WHERE id IN ({', '.join(id_keys)}) AND has_transcript = 1 "
+                        "LIMIT :body_limit", text_params, "text_bodies")
+                else:
+                    text_rows = query(
+                        "id, quarter, transcript_text FROM coreiq_av_earnings_call_transcripts "
+                        "FORCE INDEX (PRIMARY) "
+                        f"WHERE id IN ({', '.join(id_keys)}) AND has_transcript = 1 "
+                        f"AND {text_predicate} "
+                        "ORDER BY year DESC, q DESC, id DESC LIMIT :text_limit", text_params, "text_matches")
+                texts = {r["id"]: r for r in text_rows}
+                if ascii_literal and any(row["id"] not in texts or texts[row["id"]].get("transcript_text") is None
+                                         for row in chunk):
+                    raise TranscriptSearchError("Transcript search is temporarily unavailable. Please retry.")
+                for candidate in chunk:
+                    text = texts.get(candidate["id"])
+                    if text is None:
+                        continue
+                    if text.get("transcript_text") is None:
+                        raise TranscriptSearchError("Transcript search is temporarily unavailable. Please retry.")
+                    if ascii_literal and keyword_lower not in text["transcript_text"].lower():
+                        continue
+                    if skip:
+                        skip -= 1
+                        continue
+                    selected.append({**candidate, **text})
+                    if len(selected) == limit:
+                        return selected
+            if len(candidates) < _MYSQL_TRANSCRIPT_BATCH_SIZE:
+                return selected
+            cursor = candidates[-1]
+
+    @staticmethod
+    def _like_page_from_word_index(keyword, scoped_tickers, year, q, limit, offset, cap=500, after=None):
+        """The transcript LIKE '%keyword%' page, answered from the local copy's word
         index instead of scanning every transcript on MySQL (6-14 s for a rare word).
-        Same rows: the matching ids are exactly LIKE's; the 500-candidate cap keeps them
-        in the order MySQL reads them (idx_has_transcript_year → year, id; with a
-        ticker list idx_has_transcript_ticker → ticker, id). None → use MySQL."""
+        Matching ids are exactly LIKE's; retain the newest candidates before paging.
+        None → use MySQL."""
         from data import news_mirror
         ids = news_mirror.transcript_like_ids(keyword)
         if ids is None:
@@ -2898,7 +3018,7 @@ class EarningsCallRepository:
         if not ids:
             return []
         import json as _json
-        where = ["id IN (SELECT value FROM json_each(:ids))"]
+        where = ["has_transcript = 1", "id IN (SELECT value FROM json_each(:ids))"]
         p: Dict = {"ids": _json.dumps(ids), "limit": limit, "offset": offset or 0}
         if scoped_tickers:
             where.append("ticker IN (SELECT value FROM json_each(:tickers))")
@@ -2909,17 +3029,33 @@ class EarningsCallRepository:
         if q:
             where.append("q = :q")
             p["q"] = q
-        scan = "ticker, id" if scoped_tickers else "year, id"
+        if after is not None:
+            where.append("(year, q, id) < (:after_year, :after_q, :after_id)")
+            p.update(after_year=after[0], after_q=after[1], after_id=after[2])
         p["cap"] = cap
-        inner = ("SELECT id, ticker, year, quarter, q FROM coreiq_av_earnings_call_transcripts "
-                 f"WHERE {' AND '.join(where)} ORDER BY {scan} LIMIT :cap")
+        source = "coreiq_av_earnings_call_transcripts INDEXED BY ix_tx_search_metadata"
+        inner = (f"SELECT id, ticker, year, quarter, q FROM {source} "
+                 f"WHERE {' AND '.join(where)} ORDER BY year DESC, q DESC, id DESC LIMIT :cap")
+        sql = inner if limit is None else (
+            f"SELECT id, ticker, year, quarter, q FROM ({inner}) s "
+            "ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset")
+        started = time.perf_counter()
         try:
-            if limit is None:       # export: MySQL's unsorted LIMIT, in its read order
-                return news_mirror.query(inner, p)
-            return news_mirror.query(
-                f"SELECT id, ticker, year, quarter, q FROM ({inner}) s "
-                "ORDER BY year DESC, q DESC, id DESC LIMIT :limit OFFSET :offset", p)
-        except Exception:
+            try:
+                rows = news_mirror.query(sql, p)
+            except Exception as exc:
+                if "no such index: ix_tx_search_metadata" not in str(exc):
+                    raise
+                rows = news_mirror.query(sql.replace(" INDEXED BY ix_tx_search_metadata", ""), p)
+            from utils.server_logger import log_timing
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            log_timing("TRANSCRIPT_LOCAL_METADATA", elapsed_ms,
+                       f"keyword={keyword[:80]!r} candidates={len(ids)} rows={len(rows)} offset={offset}",
+                       level="WARNING" if elapsed_ms > 500 else "INFO")
+            return rows
+        except Exception as exc:
+            log_structured_error(exc, page="earnings_calls", component="EarningsCallRepository",
+                                 operation="transcript_local_metadata")
             return None
 
     @staticmethod
@@ -2933,230 +3069,79 @@ class EarningsCallRepository:
         limit: int = 50,
         allowed_tickers: Optional[Tuple[str, ...]] = None,
         offset: int = 0,
+        after: Optional[Tuple[int, int, int]] = None,
     ) -> List[Dict]:
-        """
-        Cross-transcript keyword search using MySQL FULLTEXT index.
+        """Search literal substrings in the local copy or bounded native MySQL batches.
 
-        Uses the existing idx_transcript_fulltext_search FULLTEXT index for
-        sub-20ms keyword lookup across all 2,170+ transcripts. Falls back to
-        LIKE for very short keywords (<3 chars) or stopwords.
-
-        Returns raw dicts with: id, ticker, year, quarter, q, transcript_text
+        Results are newest first. Failed or incomplete reads raise TranscriptSearchError.
         """
         from utils.server_logger import log_db_timing
-        import time
         total_start = time.perf_counter()
-
         keyword = keyword.strip()
         if not keyword:
             return []
-
-        scoped_tickers = tuple(
-            dict.fromkeys(
-                str(t).strip().upper()
-                for t in (allowed_tickers or ())
-                if str(t).strip()
-            )
-        )
+        scoped_tickers = tuple(dict.fromkeys(
+            str(t).strip().upper() for t in (allowed_tickers or ()) if str(t).strip()))
         if allowed_tickers is not None and not scoped_tickers:
             return []
-
-        params: Dict = {}
-        used_fallback = False
-
-        # NATURAL LANGUAGE mode (3+ chars). BOOLEAN mode (+word / +word*) is
-        # pathologically slow on this table — a single common term forces a full
-        # FTS scan and takes 30–230s per query (every page + "Show more"). Natural
-        # language mode uses the ranked index path and returns in <1s. The Python
-        # segment scan below refines the exact keyword match, so the coarser NL
-        # recall is fine. Sub-3-char / stopword keywords fall back to LIKE below.
-        # IMPORTANT: never SELECT transcript_text in the FULLTEXT + ORDER BY query.
-        # MySQL filesort materialises the LONGTEXT for every matched row before
-        # LIMIT, which costs 30–260s for a common term. We fetch only light columns
-        # here (sorted page of ids), then look up transcript_text for the page's
-        # ids by primary key below — a cheap, bounded second query.
-        # One company: LIKE on the ticker index instead. FULLTEXT scores every
-        # matching transcript in the table before the ticker filter applies, so a
-        # common word ('inventory' = 14,479 matches) took 110s cold for one
-        # company's ~60 transcripts; LIKE reads just those (~0.3s). The page's
-        # substring match is what LIKE does, so no result is lost.
         single_ticker = bool(ticker and ticker != 'ALL')
-        if len(keyword) >= 3 and not single_ticker:
-            base_query = """
-                SELECT id, ticker, year, quarter, q
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE MATCH(transcript_text) AGAINST (:kw IN NATURAL LANGUAGE MODE)
-                  AND has_transcript = 1
-            """
-            params['kw'] = keyword
-        else:
-            # Short keyword or one company: LIKE
-            base_query = """
-                SELECT id, ticker, year, quarter, q
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE transcript_text LIKE :kw
-                  AND has_transcript = 1
-            """
-            params['kw'] = f'%{keyword}%'
-
-        if ticker and ticker != 'ALL':
+        if single_ticker:
             clean_ticker = str(ticker).strip().upper()
             if scoped_tickers and clean_ticker not in scoped_tickers:
                 return []
-            base_query += " AND ticker = :ticker"
-            params['ticker'] = clean_ticker
-        elif scoped_tickers:
-            wl_keys = []
-            for idx, scoped_ticker in enumerate(scoped_tickers):
-                key = f"wl_ticker_{idx}"
-                wl_keys.append(f":{key}")
-                params[key] = scoped_ticker
-            base_query += f" AND ticker IN ({', '.join(wl_keys)})"
-
-        if year and str(year) != 'ALL':
-            base_query += " AND year = :year"
-            params['year'] = int(year) if isinstance(year, str) else year
-
-        if quarter and quarter != 'ALL':
-            q_int = EarningsCallRepository._parse_quarter_param(quarter)
-            if q_int:
-                base_query += " AND q = :quarter_q"
-                params['quarter_q'] = q_int
-
-        # Bounded relevance pre-filter. An ORDER BY directly on a FULLTEXT query
-        # makes MySQL disable ranking and FILESORT every matched row (thousands
-        # for a common word → 170s+). Instead take the top N rows by relevance in
-        # an inner query (fast — FTS can early-terminate, no filesort), then sort
-        # that bounded set by date for "newest first" display + paginate.
-        _FTS_CANDIDATE_CAP = 500
-        base_query = (
-            "SELECT id, ticker, year, quarter, q FROM (" + base_query
-            + " LIMIT :cand_cap) s ORDER BY year DESC, q DESC, id DESC "
-              "LIMIT :limit OFFSET :offset"
-        )
-        params['cand_cap'] = _FTS_CANDIDATE_CAP
-        params['limit'] = limit
-        params['offset'] = offset
-
-        _year_f = (int(year) if isinstance(year, str) else year) if year and str(year) != 'ALL' else None
-        _q_f = EarningsCallRepository._parse_quarter_param(quarter) if quarter and quarter != 'ALL' else None
-
-        # Execute main query. The local word index answers the same page in under a
-        # millisecond; MySQL's FULLTEXT costs 2-30 s on STG because the match itself is
-        # fast but the server is busy. Two differences, both visible to the user, which
-        # is why TRANSCRIPT_LOCAL_SEARCH=0 turns it off without a deploy:
-        #   * it matches substrings ("tarif" finds "tariffs"), a superset of FULLTEXT's
-        #     whole-word match — the same semantics the LIKE fallback below already has;
-        #   * candidates are the NEWEST 500, not the 500 most "relevant" then re-sorted
-        #     by date, so a recent match can no longer be pushed out by an older one.
-        query_start = time.perf_counter()
+            scoped_tickers = (clean_ticker,)
+        year_filter = int(year) if year and str(year) != 'ALL' else None
+        quarter_filter = EarningsCallRepository._parse_quarter_param(quarter) if quarter and quarter != 'ALL' else None
+        if _NATIVE_TRANSCRIPT_NGRAM_SEARCH:
+            from data.transcript_infix import InfixSearchError, search_page
+            try:
+                indexed = search_page(
+                    db_manager, keyword, scoped_tickers, year_filter, quarter_filter, limit, offset,
+                    after=after, query_ms=_MYSQL_TRANSCRIPT_QUERY_MS,
+                    budget_seconds=_MYSQL_TRANSCRIPT_DEADLINE_SECONDS, batch_size=_MYSQL_TRANSCRIPT_BATCH_SIZE)
+            except InfixSearchError as exc:
+                log_structured_error(exc, page="earnings_calls", component="EarningsCallRepository",
+                                     operation="transcript_native_ngram", context=f"keyword={keyword!r}")
+                raise TranscriptSearchError("Transcript search is temporarily unavailable. Please retry.") from exc
+            if indexed is not None:
+                return indexed
         results = None
-        served_by = "mysql_fulltext"
         if _LOCAL_TRANSCRIPT_SEARCH or (len(keyword) < 3 and not single_ticker):
             results = EarningsCallRepository._like_page_from_word_index(
-                keyword, scoped_tickers, _year_f, _q_f, limit, offset)
-            if results is not None:
-                served_by = "local_word_index"
+                keyword, scoped_tickers, year_filter, quarter_filter, limit, offset, after=after)
         if results is None:
-            results = db_manager.execute_query_readonly(base_query, params)
-        query_ms = (time.perf_counter() - query_start) * 1000
-        log_db_timing("search_transcripts_fulltext.main_query", "coreiq_av_earnings_call_transcripts", query_ms, rows=len(results), ticker=str(ticker or ''))
-        log_db_timing("[PERF] TRANSCRIPT_SEARCH", served_by, query_ms, rows=len(results), ticker=str(ticker or ''))
-
-        # FULLTEXT stopword fallback: if no results and keyword >= 3 chars, try LIKE
-        if not results and len(keyword) >= 3 and not single_ticker:
-            used_fallback = True
-            fallback = """
-                SELECT id, ticker, year, quarter, q
-                FROM coreiq_av_earnings_call_transcripts
-                WHERE transcript_text LIKE :kw AND has_transcript = 1
-            """
-            fb_params: Dict = {'kw': f'%{keyword}%'}
-            if ticker and ticker != 'ALL':
-                clean_ticker = str(ticker).strip().upper()
-                if scoped_tickers and clean_ticker not in scoped_tickers:
-                    return []
-                fallback += " AND ticker = :ticker"
-                fb_params['ticker'] = clean_ticker
-            elif scoped_tickers:
-                wl_keys = []
-                for idx, scoped_ticker in enumerate(scoped_tickers):
-                    key = f"fb_wl_ticker_{idx}"
-                    wl_keys.append(f":{key}")
-                    fb_params[key] = scoped_ticker
-                fallback += f" AND ticker IN ({', '.join(wl_keys)})"
-            if year and str(year) != 'ALL':
-                fallback += " AND year = :year"
-                fb_params['year'] = int(year) if isinstance(year, str) else year
-            if quarter and quarter != 'ALL':
-                q_int = EarningsCallRepository._parse_quarter_param(quarter)
-                if q_int:
-                    fallback += " AND q = :quarter_q"
-                    fb_params['quarter_q'] = q_int
-            # LIKE '%kw%' cannot use an index, so for a word FULLTEXT does not match
-            # this reads every transcript: 35 s on STG, and the page just hangs. The
-            # local word index above answers it in milliseconds; this is only reached
-            # when that copy is unavailable, so cap it and show what it found rather
-            # than holding the user. MAX_EXECUTION_TIME is MySQL 8's per-SELECT abort.
-            fallback = (
-                f"SELECT /*+ MAX_EXECUTION_TIME({_LIKE_FALLBACK_MS}) */ "
-                "id, ticker, year, quarter, q FROM (" + fallback
-                + " LIMIT :cand_cap) s ORDER BY year DESC, q DESC, id DESC "
-                  "LIMIT :limit OFFSET :offset"
-            )
-            fb_params['cand_cap'] = 500
-            fb_params['limit'] = limit
-            fb_params['offset'] = offset
-
-            fb_start = time.perf_counter()
-            results = EarningsCallRepository._like_page_from_word_index(
-                keyword, scoped_tickers, _year_f, _q_f, limit, offset)
-            served_by = "word_index"
-            if results is None:
-                served_by = "mysql_like_scan"
-                try:
-                    results = db_manager.execute_query_readonly(fallback, fb_params)
-                except Exception as exc:
-                    # ER_QUERY_TIMEOUT (3024) when the cap above fires; anything else is
-                    # a real failure. Either way an empty page beats a hung one.
-                    served_by = "mysql_like_timeout"
-                    log_structured_error(
-                        exc, page="earnings_calls", component="EarningsCallRepository",
-                        operation="search_transcripts_fulltext_like_fallback",
-                        context=f"keyword={keyword!r} cap_ms={_LIKE_FALLBACK_MS}",
-                    )
-                    results = []
-            fb_ms = (time.perf_counter() - fb_start) * 1000
-            log_db_timing("search_transcripts_fulltext.LIKE_served_by",
-                          served_by, fb_ms, rows=len(results), ticker=str(ticker or ''))
-            log_db_timing("search_transcripts_fulltext.LIKE_fallback", "coreiq_av_earnings_call_transcripts", fb_ms, rows=len(results), ticker=str(ticker or ''))
-
+            rows = EarningsCallRepository._search_transcripts_mysql(
+                keyword, scoped_tickers, year_filter, quarter_filter, limit, offset, after=after)
+            log_db_timing("search_transcripts_fulltext.TOTAL", "mysql_native_batches",
+                          (time.perf_counter() - total_start) * 1000, rows=len(rows), ticker=str(ticker or ''))
+            return rows
+        log_db_timing("search_transcripts_fulltext.main_query", "coreiq_av_earnings_call_transcripts",
+                      (time.perf_counter() - total_start) * 1000, rows=len(results), ticker=str(ticker or ''))
+        log_db_timing("[PERF] TRANSCRIPT_SEARCH", "local_word_index",
+                      (time.perf_counter() - total_start) * 1000, rows=len(results), ticker=str(ticker or ''))
         rows = [dict(r) for r in results]
-
-        # Deferred lookup: fetch transcript_text for ONLY this page's ids by primary
-        # key (cheap), instead of materialising it inside the sorted FULLTEXT query.
         page_ids = [r["id"] for r in rows if r.get("id") is not None]
         if page_ids:
             text_start = time.perf_counter()
-            id_keys = []
-            text_params: Dict = {}
-            for idx, pid in enumerate(page_ids):
-                key = f"tid_{idx}"
-                id_keys.append(f":{key}")
-                text_params[key] = pid
+            text_params = {f"tid_{i}": pid for i, pid in enumerate(page_ids)}
+            id_keys = ", ".join(f":{key}" for key in text_params)
             text_rows = _news_run(
                 "SELECT id, transcript_text FROM coreiq_av_earnings_call_transcripts "
-                f"WHERE id IN ({', '.join(id_keys)})",
-                text_params, "tx")
+                f"WHERE id IN ({id_keys})", text_params, "tx")
             text_by_id = {tr["id"]: tr.get("transcript_text") for tr in text_rows}
-            for r in rows:
-                r["transcript_text"] = text_by_id.get(r.get("id"))
+            missing_ids = {pid for pid in page_ids if text_by_id.get(pid) is None}
+            if missing_ids:
+                exc = TranscriptSearchError("Transcript search is temporarily unavailable. Please retry.")
+                log_structured_error(exc, page="earnings_calls", component="EarningsCallRepository",
+                                     operation="search_transcripts_fulltext_text_lookup",
+                                     context=f"expected={len(page_ids)} missing={len(missing_ids)}")
+                raise exc
+            for row in rows:
+                row["transcript_text"] = text_by_id[row["id"]]
             log_db_timing("search_transcripts_fulltext.text_lookup", "coreiq_av_earnings_call_transcripts",
                           (time.perf_counter() - text_start) * 1000, rows=len(text_rows), ticker=str(ticker or ''))
-
-        total_ms = (time.perf_counter() - total_start) * 1000
-        log_db_timing("search_transcripts_fulltext.TOTAL", "coreiq_av_earnings_call_transcripts", total_ms, rows=len(rows), ticker=str(ticker or ''))
-
+        log_db_timing("search_transcripts_fulltext.TOTAL", "coreiq_av_earnings_call_transcripts",
+                      (time.perf_counter() - total_start) * 1000, rows=len(rows), ticker=str(ticker or ''))
         return rows
 
     @staticmethod

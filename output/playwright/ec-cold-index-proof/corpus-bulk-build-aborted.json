@@ -1,0 +1,12 @@
+{
+  "status": "aborted_by_operator",
+  "operation": "ADD ngram FULLTEXT INPLACE LOCK SHARED on populated table",
+  "observed_alter_seconds": 114,
+  "free_kb_before_corpus": 37865968,
+  "free_kb_during_build": 24788556,
+  "observed_total_filesystem_growth_bytes": 13391269888,
+  "import_allocated_bytes": 1158676480,
+  "temporary_location": "MySQL default external tmpdir; datadir-only guard did not count these files",
+  "cleanup": "KILL QUERY; free disk recovered to36700076KB",
+  "scope": "isolated MySQL only; no shared DDL; no completed bulk build timing or final size"
+}

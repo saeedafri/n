@@ -1,0 +1,25 @@
+{
+  "completed_at": "2026-10-19T10:36:00.105161+00:00",
+  "removed_owned_temporary_assets": [
+    {
+      "name": "data",
+      "allocated_kib": 4416416
+    },
+    {
+      "name": "mysql-8.0.44-macos15-arm64",
+      "allocated_kib": 666340
+    },
+    {
+      "name": "mysql-8.0.44-macos15-arm64.tar.gz",
+      "allocated_kib": 180236
+    },
+    {
+      "name": "tmp",
+      "allocated_kib": 0
+    }
+  ],
+  "allocated_bytes_reclaimed_estimate": 5389303808,
+  "recordings_and_evidence_retained": true,
+  "preexisting_sqlite_present": true,
+  "private_server_stopped": true
+}

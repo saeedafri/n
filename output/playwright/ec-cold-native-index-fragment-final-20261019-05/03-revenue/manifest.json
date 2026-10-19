@@ -1,0 +1,641 @@
+{
+  "keyword": "revenue",
+  "status": "passed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/03-revenue",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-v3y3nvw0",
+  "port": 8513,
+  "mode": "isolated_native_snapshot",
+  "cache_scope": "application result caches bypassed; private MySQL buffer pool reset before this keyword; live STG/OS buffers uncontrolled",
+  "errors": [],
+  "case_audit_initial_state": {
+    "watermark": 0,
+    "requires_search_query": false,
+    "path": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/03-revenue/sql.jsonl"
+  },
+  "action_timings": [
+    {
+      "action": "initial_load",
+      "started_at": 1792404255.3400152,
+      "elapsed_ms": 8815.40758398478,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 2,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "search",
+      "started_at": 1792404266.2519019,
+      "elapsed_ms": 3391.108957992401,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          6,
+          7,
+          8
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_1",
+      "started_at": 1792404271.729034,
+      "elapsed_ms": 2236.8782089906745,
+      "cards": 30,
+      "sql": {
+        "counters": [
+          9,
+          10,
+          11
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_2",
+      "started_at": 1792404276.076843,
+      "elapsed_ms": 2150.430249981582,
+      "cards": 45,
+      "sql": {
+        "counters": [
+          12,
+          13,
+          14
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "view_first",
+      "started_at": 1792404280.359128,
+      "elapsed_ms": 8745.082624984207,
+      "sql": {
+        "counters": [
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30
+        ],
+        "SELECTs": 16,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 12,
+        "errors": 0,
+        "private_snapshot_queries": 4,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 12,
+        "catalogue_queries": 3,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "review_dwell_ms": 2000,
+  "filter_flow_requested": false,
+  "fragment_query_verification": true,
+  "expected_empty": false,
+  "private_server_restart": {
+    "started_at": 1792404252.846263,
+    "elapsed_ms": 881.1872005462646,
+    "report": {
+      "action": "restart",
+      "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+      "running_pid": 94907,
+      "pool_bytes": 134217728,
+      "buffer_pool_load_at_startup": false,
+      "buffer_pool_dump_at_shutdown": false,
+      "corpus_queries_performed": 0,
+      "OS_file_cache": "uncontrolled"
+    }
+  },
+  "isolated_native": {
+    "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+    "database": "ec_ngram_corpus_probe",
+    "origin": "private native MySQL eligible-transcript corpus snapshot, NOT live STG",
+    "support_metadata_origin": "live STG, read-only",
+    "index_flag": "TRANSCRIPT_NATIVE_NGRAM_SEARCH=1",
+    "connections": "NullPool private connections; fresh browser/application process for each keyword",
+    "readiness_manifest": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/corpus-readiness.json",
+    "readiness_manifest_sha256": "3219143c85fd890af728d67a69e4284a0c1378b17f7055f1731ae9904485f7ea"
+  },
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "pid": 94917,
+  "video_recording_started_at_estimate": 1792404255.274436,
+  "video_recording_ready_at": 1792404255.339944,
+  "pages": [
+    {
+      "cards": 15,
+      "keys": [
+        "3b77b0c3ba78f904842b5dbfeae886ad9b4b52fde24a6f538a1b230d780d4e84",
+        "560f3c6dcc59d146c8b2854d6e9e819b43565d8d6b5b731d5c12fecd2e5ef01e",
+        "79ead2786cc7558281d3c990bf364cfbfea5c495767f49b11184633eb0ea3b2f",
+        "8b14acd0442cfd0a41e2f92c133bce38831cae518fe8e47f6e51d41a3cd6ec61",
+        "e466ceb16d8575e74b589f57d4bd8fd354135269be1b26e0a5745e9267f59b92",
+        "bf3ddd1637baf4bbca13c3efdf5d32b9d8a786e935575b9ff23940d877de4170",
+        "e985b7fdeae9354a97b9ab29e2c41d5651d2d69a8d37932802d257bd5e0b435a",
+        "bea44c61466e091cbc2ee9f4628fb356629c56cd03f2fbf0c871e58823f30081",
+        "ad141122ee1b9c42fdfd7fd84b44251c2f5616bf67927520dd9660133e397a43",
+        "b0434cdad5319167742483078a0ae1a61eff3241139f423bcdca7d81fd63d5e2",
+        "f0b6e6fe89a90ebca4f3d67bdf86ad590487d4463e8f1c362115b57aff0e41eb",
+        "6c5828146fa062e11f251b285dd3170b76757d11bc01f9739d207f90132c8c8b",
+        "67723e7b08cccd870fe0e39532c0fcbbc9d54ddc72d3c8b9b59034b5902b663e",
+        "d67fa03cfd789e8fd459a5eb5a01213a4e7eb2736d561012f2e097536a1e568a",
+        "5df9963acb8f6f5719e68ade99813a4210fec19a3dc7684deeaacb4f9d1ecd4d"
+      ]
+    },
+    {
+      "cards": 30,
+      "keys": [
+        "3b77b0c3ba78f904842b5dbfeae886ad9b4b52fde24a6f538a1b230d780d4e84",
+        "560f3c6dcc59d146c8b2854d6e9e819b43565d8d6b5b731d5c12fecd2e5ef01e",
+        "79ead2786cc7558281d3c990bf364cfbfea5c495767f49b11184633eb0ea3b2f",
+        "8b14acd0442cfd0a41e2f92c133bce38831cae518fe8e47f6e51d41a3cd6ec61",
+        "e466ceb16d8575e74b589f57d4bd8fd354135269be1b26e0a5745e9267f59b92",
+        "bf3ddd1637baf4bbca13c3efdf5d32b9d8a786e935575b9ff23940d877de4170",
+        "e985b7fdeae9354a97b9ab29e2c41d5651d2d69a8d37932802d257bd5e0b435a",
+        "bea44c61466e091cbc2ee9f4628fb356629c56cd03f2fbf0c871e58823f30081",
+        "ad141122ee1b9c42fdfd7fd84b44251c2f5616bf67927520dd9660133e397a43",
+        "b0434cdad5319167742483078a0ae1a61eff3241139f423bcdca7d81fd63d5e2",
+        "f0b6e6fe89a90ebca4f3d67bdf86ad590487d4463e8f1c362115b57aff0e41eb",
+        "6c5828146fa062e11f251b285dd3170b76757d11bc01f9739d207f90132c8c8b",
+        "67723e7b08cccd870fe0e39532c0fcbbc9d54ddc72d3c8b9b59034b5902b663e",
+        "d67fa03cfd789e8fd459a5eb5a01213a4e7eb2736d561012f2e097536a1e568a",
+        "5df9963acb8f6f5719e68ade99813a4210fec19a3dc7684deeaacb4f9d1ecd4d",
+        "7de218b0f79ca35c298f5368b3622cdb903f689f5e68cc4c350f72190647b5f9",
+        "b8423fddf2ffe812216c8ec9fd6c31287b4a7d2274710ad07b126c9de0ad59a6",
+        "f6ec0434716b0422691b1958c37af3eed318fe1171a6a9919f09e6f0317a739b",
+        "c2a7753bbc49027d4a7adcf27ac71f681c63d8ca520aabd82153951e0dc772e5",
+        "7d203d3f8c124ba1a45558be4f4a1af377f573e9472e652b2cb796ed917d1335",
+        "599271a0ca89c07efc7a85702c82cbcac2ec843e97259d203233f1c80785e52e",
+        "b1db1f9d7f13702ee02de74c3a89bc72f4173c2c13a345bcfa6d1fabc0c20881",
+        "9db67cd35f95a6abe21b2f59a4575b198e724c59c247049261b294f7d9c0cc17",
+        "6dbfac347b188f90de1c070591dcf4504b1f0fa88129c948d2fb716ba48dae21",
+        "85a10631beccf39dfa80f3efc8ab16cf919ecb9652acc215ea6a117826164262",
+        "253ac57e014787eac168dff19ffe75627620f65e5ee8c9869d940138699217a7",
+        "50fe71c568ff737c7c03d20864e0df2f23b1ab52dbfcf22d92be5c53cb423665",
+        "e261fcdd35c73380f061c5050d7dd2126bffa58193ed40cee78fa33d8f8b6cd9",
+        "8f4492cd26e481957c48ef69d1464599d6499624afc623371cea645b5a99fe62",
+        "26c8fb755beefd37492f5879ad3d337149467c9c2a236f3c4e57c30b44e5239c"
+      ]
+    },
+    {
+      "cards": 45,
+      "keys": [
+        "3b77b0c3ba78f904842b5dbfeae886ad9b4b52fde24a6f538a1b230d780d4e84",
+        "560f3c6dcc59d146c8b2854d6e9e819b43565d8d6b5b731d5c12fecd2e5ef01e",
+        "79ead2786cc7558281d3c990bf364cfbfea5c495767f49b11184633eb0ea3b2f",
+        "8b14acd0442cfd0a41e2f92c133bce38831cae518fe8e47f6e51d41a3cd6ec61",
+        "e466ceb16d8575e74b589f57d4bd8fd354135269be1b26e0a5745e9267f59b92",
+        "bf3ddd1637baf4bbca13c3efdf5d32b9d8a786e935575b9ff23940d877de4170",
+        "e985b7fdeae9354a97b9ab29e2c41d5651d2d69a8d37932802d257bd5e0b435a",
+        "bea44c61466e091cbc2ee9f4628fb356629c56cd03f2fbf0c871e58823f30081",
+        "ad141122ee1b9c42fdfd7fd84b44251c2f5616bf67927520dd9660133e397a43",
+        "b0434cdad5319167742483078a0ae1a61eff3241139f423bcdca7d81fd63d5e2",
+        "f0b6e6fe89a90ebca4f3d67bdf86ad590487d4463e8f1c362115b57aff0e41eb",
+        "6c5828146fa062e11f251b285dd3170b76757d11bc01f9739d207f90132c8c8b",
+        "67723e7b08cccd870fe0e39532c0fcbbc9d54ddc72d3c8b9b59034b5902b663e",
+        "d67fa03cfd789e8fd459a5eb5a01213a4e7eb2736d561012f2e097536a1e568a",
+        "5df9963acb8f6f5719e68ade99813a4210fec19a3dc7684deeaacb4f9d1ecd4d",
+        "7de218b0f79ca35c298f5368b3622cdb903f689f5e68cc4c350f72190647b5f9",
+        "b8423fddf2ffe812216c8ec9fd6c31287b4a7d2274710ad07b126c9de0ad59a6",
+        "f6ec0434716b0422691b1958c37af3eed318fe1171a6a9919f09e6f0317a739b",
+        "c2a7753bbc49027d4a7adcf27ac71f681c63d8ca520aabd82153951e0dc772e5",
+        "7d203d3f8c124ba1a45558be4f4a1af377f573e9472e652b2cb796ed917d1335",
+        "599271a0ca89c07efc7a85702c82cbcac2ec843e97259d203233f1c80785e52e",
+        "b1db1f9d7f13702ee02de74c3a89bc72f4173c2c13a345bcfa6d1fabc0c20881",
+        "9db67cd35f95a6abe21b2f59a4575b198e724c59c247049261b294f7d9c0cc17",
+        "6dbfac347b188f90de1c070591dcf4504b1f0fa88129c948d2fb716ba48dae21",
+        "85a10631beccf39dfa80f3efc8ab16cf919ecb9652acc215ea6a117826164262",
+        "253ac57e014787eac168dff19ffe75627620f65e5ee8c9869d940138699217a7",
+        "50fe71c568ff737c7c03d20864e0df2f23b1ab52dbfcf22d92be5c53cb423665",
+        "e261fcdd35c73380f061c5050d7dd2126bffa58193ed40cee78fa33d8f8b6cd9",
+        "8f4492cd26e481957c48ef69d1464599d6499624afc623371cea645b5a99fe62",
+        "26c8fb755beefd37492f5879ad3d337149467c9c2a236f3c4e57c30b44e5239c",
+        "1c63b6fb6b89057236be2b2be97f4a28ecc3f413470ac070c6f1cc705dbd9e8f",
+        "3e426e60f99debba39c7795940165a256a3f95776ff58040421fa60292d6760e",
+        "17b2fda83fbf4ab427addb9a1b44332810b35f8e90592f32f8cd81e3bdcb0294",
+        "7334a773cb60c0d0b7f51dc773ef3b47fb613a9d66cf174281153df58d20de1e",
+        "632e9b8a3e9972b7920f70a549c69f5dac623d110c7b9c3ee5fa04b710366ec4",
+        "f5345e064f2e1f5c2935e4e974e1492fd8cd5768049c1248f26e1c8aaac3dc50",
+        "9a0f527db80b595be4cfec963da50e5206178691edc5ec48fc15e65d726f77bc",
+        "c2baded82b550f29d9cce32002a41c9d181916e8967a7a114f5d93c33027d428",
+        "325ed90b9c13ffe93e13ec298b9f67c98e246d9dbc3c5d56034707ec6e6bde9c",
+        "8ae8feb8bd6430ed36adeee60c9670feea9e30f24c0b6beb73952d28e583c1e7",
+        "c31a938439ee65d55938e151fd79919e41d9e32f6e305b19b098b1a37918a823",
+        "fa32a5cd552a311bc03caf9b38a3e87b03333d24ec60b3b8c3e039bc9d806745",
+        "7208303c0fc204168aa420c530ae843629c8350936c510696cc8057966e5865d",
+        "d46f18d2b31cddd768dbe6e43633a10bd2ae2b926c3d67d9fc3001836a59e461",
+        "b934fbe164d361bc39a0e099aa1cf91d8ce5a64d00af66ef75575a60c0ad9393"
+      ]
+    }
+  ],
+  "final_cards": [
+    {
+      "text": "Colette Kress\n...another outstanding quarter with record revenue, operating income, and EPS. Total reven...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=revenue",
+      "meta": "NVIDIA (NVDA) \u2022 2027 \u2022 Q2"
+    },
+    {
+      "text": "John Furner\n...ing 36% for Walmart U.S. Membership fee revenue grew 17% for the enterprise, led by Wal...\nWalmart Inc. (WMT) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=WMT&year=2027&quarter=Q1&highlight=revenue",
+      "meta": "Walmart Inc. (WMT) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Colette Kress\n... delivered an exceptional quarter, with revenue, operating income, and free cash flow e...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q1&highlight=revenue",
+      "meta": "NVIDIA (NVDA) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Operator\n...s on products, artificial intelligence, sales and marketing optimization, go-to-marke...\nAutodesk, Inc. (ADSK) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=ADSK&year=2027&quarter=Q1&highlight=revenue",
+      "meta": "Autodesk, Inc. (ADSK) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Sheryl Freeman\n...out limitation, any estimates regarding revenue or earnings. Generally, the financial i...\nPVH Corp. (PVH) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PVH&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "PVH Corp. (PVH) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Mary Coyne\n...ase, we ask ourselves: Will it increase revenue, will it increase efficiency and will i...\nJ.Jill, Inc. (JILL) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=JILL&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "J.Jill, Inc. (JILL) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Daniel Heaf\n...iday moments. We ended the quarter with net sales down 2% and adjusted EPS of $2.05, both...\nBath & Body Works, Inc. (BBWI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=BBWI&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Bath & Body Works, Inc. (BBWI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Shawn Nelson\n...rdless of macro, which is true, but for revenue growth to drive enhanced flow-through t...\nThe Lovesac Company (LOVE) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LOVE&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "The Lovesac Company (LOVE) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Sherman Miller\n...ods accounted for 10.9% of consolidated net sales. Combined, Specialty Eggs and Prepared ...\nCal-Maine Foods, Inc. (CALM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CALM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Cal-Maine Foods, Inc. (CALM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Max Levchin\n...I think we have an exceptionally strong revenue team, and Wayne, who runs it, is an exc...\nAffirm Holdings, Inc. (AFRM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AFRM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Affirm Holdings, Inc. (AFRM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Tarun Lal\n...y same-store sales as well as growth in revenue and adjusted EBITDA. Since joining the ...\nDave & Buster's Entertainment, Inc. (PLAY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PLAY&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Dave & Buster's Entertainment, Inc. (PLAY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Kevin D. Hochman\n... for fiscal 2027. Q4 Chili's same-store sales of +6% marked our 21st consecutive quar...\nBrinker International, Inc. (EAT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=EAT&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Brinker International, Inc. (EAT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "David Deno\n...rs that account for over 40% of tracked sales. This is a differentiator that we will ...\nCracker Barrel Old Country Store, Inc. (CBRL) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CBRL&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Cracker Barrel Old Country Store, Inc. (CBRL) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "J.K. Symancyk\n...st brands that represent roughly 70% of revenue. For fiscal '27, we're sharpening our g...\nSIGNET JEWELERS LTD (SIG) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SIG&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "SIGNET JEWELERS LTD (SIG) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Atif Malik\nThe first one is on the 26 SCAs, 35% of sales by 2030. Are these for both DRAM and NA...\nMICRON TECHNOLOGY Inc. (MU) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MU&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "MICRON TECHNOLOGY Inc. (MU) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Vladimir Tenev\n...rcs led to record results in Q2, record revenues of $1.3 billion. That's up 32% from la...\nLAM RESEARCH Corp. (LRCX) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LRCX&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "LAM RESEARCH Corp. (LRCX) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Rene Haas\n... record quarter and record fiscal year. Revenue this quarter was $1.49 billion, up 20%,...\nARM HOLDINGS PLC /UK (ARM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ARM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "ARM HOLDINGS PLC /UK (ARM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Dax Dasilva\n...rategy is working. Lightspeed delivered revenue and gross profit growth ahead of expect...\nLightspeed Commerce Inc. (LSPD) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LSPD&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Lightspeed Commerce Inc. (LSPD) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Jess Lubert\n...on-Atlas business and multiyear license revenue, the long-term opportunity of AI, our f...\nMongoDB Inc. (MDB) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MDB&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "MongoDB Inc. (MDB) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Eric Prengel\n...r products and solutions and our future revenue and other information. These forward-lo...\nElastic N.V. (ESTC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ESTC&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Elastic N.V. (ESTC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Rory Read\n...you today. In the fourth quarter, total revenue grew 9% year-over-year to $220.6 millio...\nSprinklr Inc. (CXM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CXM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Sprinklr Inc. (CXM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "William Magnuson\n...gy. In Q4, we generated $205,000,000 of revenue, up 28% year over year and 8% from the ...\nBraze Inc. (BRZE) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=BRZE&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Braze Inc. (BRZE) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Thomas Siebel\n...ain, a very highly experienced seasoned revenue officer. In the past weeks, we have reo...\nC3.ai Inc. (AI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AI&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "C3.ai Inc. (AI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Eric Yuan\n...r Zoom and for our industry. We grew Q4 revenue 5.3% and full year FY '26 revenue, 4.4%...\nZoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ZM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Zoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Martin Lam\n...edible fiscal year for Atlassian. Total revenue grew 28% to $1.8 billion. Cloud revenue...\nAtlassian Corporation (TEAM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TEAM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Atlassian Corporation (TEAM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "James Robert Anderson\n...ear for Coherent. On a pro forma basis, revenue increased 28% to a record $7 billion. O...\nCoherent Corp. (COHR) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=COHR&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Coherent Corp. (COHR) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Kris Newton\n...2027, our expectations regarding future revenue, profitability and shareholder returns,...\nNetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NTAP&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "NetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Operator\n...s on products, artificial intelligence, sales and marketing optimization, go-to-marke...\nAutodesk, Inc. (ADSK) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ADSK&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Autodesk, Inc. (ADSK) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Irving Tan\n...D company. We drove strong year-on-year revenue growth of 36%, while expanding our gros...\nWestern Digital Corporation (WDC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=WDC&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Western Digital Corporation (WDC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Sandy Douglas\n...I delivered low single digit underlying sales growth in line with our target addressa...\nUnited Natural Foods, Inc. (UNFI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=UNFI&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "United Natural Foods, Inc. (UNFI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Kevin Hourican\n...sco delivered over $22 billion of total revenue, a growth rate of 4.7%. These revenue r...\nSysco Corporation (SYY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SYY&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Sysco Corporation (SYY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "David V. Goeckeler\n...st proof point yet. We delivered record revenue, gross margin and earnings per share, e...\nSandisk Corporation (SNDK) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SNDK&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Sandisk Corporation (SNDK) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Michael Staiger\n...ng, without limitation, those regarding revenue, gross margin, operating expenses, othe...\nSuper Micro Computer, Inc. (SMCI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SMCI&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Super Micro Computer, Inc. (SMCI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Mark T. Smucker\n...d, now beyond half a billion dollars in sales. I am confident in our ability to conti...\nThe J. M. Smucker Company (SJM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=SJM&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "The J. M. Smucker Company (SJM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Scott McPherson\n...ng fiscal year, we have visibility into revenue, margin and profit opportunities, posit...\nPerformance Food Group Company (PFGC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PFGC&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Performance Food Group Company (PFGC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Nikesh Arora\n... $1 billion in next-generation security revenue by fiscal 22 as we were initiating our ...\nPalo Alto Networks, Inc. (PANW) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PANW&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Palo Alto Networks, Inc. (PANW) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Martin Schroeter\n... extend sales cycles and weighed on our revenue and signings performance. Customers are...\nKyndryl Holdings, Inc. (KD) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=KD&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Kyndryl Holdings, Inc. (KD) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Adam Berry\n...t quarter and full fiscal year 2027 net revenue and earnings. These statements are base...\nJabil Inc. (JBL) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=JBL&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Jabil Inc. (JBL) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Sasan Goodarzi\n...year 2026 with solid results. Full year revenue grew 14%, and we expanded operating mar...\nIntuit Inc. (INTU) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=INTU&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Intuit Inc. (INTU) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Roger Sachs\n... year-over-year or quarter-over-quarter revenue growth rates, we will be discussing org...\nDXC Technology Company (DXC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DXC&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "DXC Technology Company (DXC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Jeffrey W. Clarke\n... history. We delivered record full-year revenue and EPS. Revenue reached $113,500,000,0...\nDell Technologies Inc. (DELL) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DELL&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Dell Technologies Inc. (DELL) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Ahmed Sami Badri\n...ill discuss product results in terms of revenue, geographic and customer results in ter...\nCisco Systems, Inc. (CSCO) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CSCO&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Cisco Systems, Inc. (CSCO) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Philip Gallagher\n...iscal year, Avnet delivered substantial revenue, margin and earnings growth as market c...\nAvnet, Inc. (AVT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AVT&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "Avnet, Inc. (AVT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Doug Campbell\n...ty to carry. That flowed through to our top line and operating leverage as units sold de...\nAmerica's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CRMT&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "America's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Adolfo Villagomez\n... we must accelerate the recovery of our revenue trends. We recognize that our revenue t...\n1-800-FLOWERS.COM, Inc. (FLWS) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=FLWS&year=2026&quarter=Q4&highlight=revenue",
+      "meta": "1-800-FLOWERS.COM, Inc. (FLWS) \u2022 2026 \u2022 Q4"
+    }
+  ],
+  "results_url": "http://127.0.0.1:8513/earnings_calls?ticker=ALL",
+  "view_url": "http://127.0.0.1:8513/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=revenue",
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/03-revenue/videos/594e88ccd3bb6676e75f14ed6e860486.webm",
+  "sql_queries": 30,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 15,
+    "native_search_log_lines": 0,
+    "local_search_log_lines": 0,
+    "private_snapshot_transcript_queries": 15,
+    "private_snapshot_ngram_queries": 3,
+    "live_stg_support_queries": 15
+  },
+  "timeline_analysis": {
+    "samples": 356,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "framework_widget_binding_warnings": [],
+    "completed_error_samples_excluded": 0,
+    "loader_visible_samples": 162
+  },
+  "video_analysis": {
+    "decoded_frames": 918,
+    "fps": 25.0,
+    "duration_s": 36.72,
+    "near_blank_ratio": 0.0,
+    "low_contrast_fade_ratio": 0.528322440087146,
+    "main_content_roi": {
+      "scaled_frame_rect_xyxy": [
+        118,
+        80,
+        348,
+        233
+      ],
+      "scaled_frame_size": [
+        360,
+        250
+      ],
+      "near_blank_ratio": 0.0010893246187363835,
+      "low_contrast_fade_ratio": 0.5392156862745098,
+      "interpretation": "Raw measurements excluding header/sidebar; the normal cross-search placeholder can be quiet/bright. These flags alone never imply a defect; compare DOM loader, empty/error state and transcript validation."
+    },
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_transition_alignment": "Approximate video frame targets from wall-clock page-creation bounds; exact action wall clocks and100ms DOM states remain in manifest/timeline.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/03-revenue/contact-sheet-00.jpg",
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/03-revenue/contact-sheet-01.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": true,
+  "requested_actions": [
+    "initial_load",
+    "search",
+    "show_more_1",
+    "show_more_2",
+    "view_first"
+  ],
+  "functional_passed": true,
+  "performance_budget_ms": 5000,
+  "performance_passed": false,
+  "search_pagination_max_latency_ms": 3391.108957992401,
+  "search_pagination_performance_passed": true,
+  "case_audit_final_state": {
+    "watermark": 14,
+    "requires_search_query": false
+  }
+}

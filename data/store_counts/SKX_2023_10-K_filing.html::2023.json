@@ -1,0 +1,14 @@
+{
+ "ticker": "SKX",
+ "fiscal_year": 2023,
+ "value": 4537,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total Skechers stores | | | 4,537 | | | | 1,144 | | | | (513 | ) | | | 5,168 |",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SKX/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SDOT",
+ "fiscal_year": 2020,
+ "value": 32,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "As of December 31, 2020, our restaurant system consisted of 32 restaurants comprised of sixteen company-operated restaurants and sixteen franchised restaurants located in California, Georgia, Illinois, Maryland, New Jersey, New York, North Carolina, Oklahoma, Pennsylvania, Texas, Virginia, Washington, Rhode Island and Kuwait.",
+ "fye_date": "2020-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SDOT/2021/10-K/filing.html::2020",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SPWH",
+ "fiscal_year": 2017,
+ "value": 77,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "ngle-unit, stand-alone locations. Our stores average approximately 42,000 gross square feet. The following table lists the location by state of our 77 stores open as of March 24, 2017: | | |",
+ "fye_date": "2017-01-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SPWH/2017/10-K/filing.html::2017",
+ "extractor_version": 5
+}

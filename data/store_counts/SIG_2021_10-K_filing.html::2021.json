@@ -1,0 +1,14 @@
+{
+ "ticker": "SIG",
+ "fiscal_year": 2021,
+ "value": 2857,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total North America segment store activity | | 2,481 | | | 53 | | | (329) | | | 2,757 | | | 38 | | | (138) | | | 2,857 |",
+ "fye_date": "2021-01-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SIG/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}

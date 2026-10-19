@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2021,
+ "value": 602,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "lds. Certain retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of our 602 retail stores as of January 2, 2021: | | | | | | | | | | | | | | | | | | |",
+ "fye_date": "2021-01-02",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SNBR/2021/10-K/filing.html::2021",
+ "extractor_version": 5
+}

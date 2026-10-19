@@ -1,0 +1,5 @@
+{"at": 1792403189.964858, "monotonic": 260787.3065905, "function": "data.repository.EarningsCallRepository.get_companies_with_earnings", "count": 1, "cache": "BYPASS"}
+{"at": 1792403189.965128, "monotonic": 260787.30686125, "function": "data.repository.EarningsCallRepository.get_non_sec_transcript_companies", "count": 1, "cache": "BYPASS"}
+{"at": 1792403189.988279, "monotonic": 260787.33001175, "function": "data.repository.CompanyRepository.get_companies_map", "count": 1, "cache": "BYPASS"}
+{"at": 1792403189.988565, "monotonic": 260787.330297458, "function": "data.repository.CompanyRepository.get_companies_rows", "count": 1, "cache": "BYPASS"}
+{"at": 1792403194.646606, "monotonic": 260791.988327833, "function": "data.repository.EarningsCallRepository.get_all_available_years", "count": 1, "cache": "BYPASS"}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SNBR",
+ "fiscal_year": 2026,
+ "value": 600,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "ain retail store leases may contain options to extend the term of the original lease. The following table summarizes the geographic locations of Sleep Number’s 600 retail stores as of January 3, 2026: | | | | | | | | | | Retail Stores |",
+ "fye_date": "2026-01-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SNBR/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

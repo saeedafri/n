@@ -1,0 +1,64 @@
+{"at": 1792398479.171359, "monotonic": 256076.525198458, "event": "start", "counter": 1, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398479.548341, "monotonic": 256076.902178166, "event": "end", "counter": 1, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 376.97754200780764, "rowcount": 414}
+{"at": 1792398479.550158, "monotonic": 256076.903995375, "event": "start", "counter": 2, "operation": "SELECT", "tables": ["coreiq_companies"], "blocked": false}
+{"at": 1792398479.6704042, "monotonic": 256077.024241083, "event": "start", "counter": 3, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "blocked": false}
+{"at": 1792398479.924869, "monotonic": 256077.278704458, "event": "end", "counter": 3, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "elapsed_ms": 254.46087500313297, "rowcount": 12}
+{"at": 1792398480.0593832, "monotonic": 256077.413217916, "event": "end", "counter": 2, "operation": "SELECT", "tables": ["coreiq_companies"], "elapsed_ms": 509.21945899608545, "rowcount": 558}
+{"at": 1792398480.063045, "monotonic": 256077.416879666, "event": "start", "counter": 4, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398480.485815, "monotonic": 256077.839647166, "event": "end", "counter": 4, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 422.76366701116785, "rowcount": 22}
+{"at": 1792398480.486921, "monotonic": 256077.840753333, "event": "start", "counter": 5, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "blocked": false}
+{"at": 1792398481.0389812, "monotonic": 256078.392810333, "event": "end", "counter": 5, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "elapsed_ms": 552.0545830077026, "rowcount": 30}
+{"at": 1792398482.374061, "monotonic": 256079.7278835, "event": "start", "counter": 6, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398482.374301, "monotonic": 256079.728123541, "event": "start", "counter": 7, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "blocked": false}
+{"at": 1792398482.700097, "monotonic": 256080.05391725, "event": "end", "counter": 7, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "elapsed_ms": 325.7889999949839, "rowcount": 12}
+{"at": 1792398482.7021198, "monotonic": 256080.055940875, "event": "end", "counter": 6, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 328.05708298110403, "rowcount": 414}
+{"at": 1792398482.703155, "monotonic": 256080.056975958, "event": "start", "counter": 8, "operation": "SELECT", "tables": ["coreiq_companies"], "blocked": false}
+{"at": 1792398483.458435, "monotonic": 256080.8122515, "event": "end", "counter": 8, "operation": "SELECT", "tables": ["coreiq_companies"], "elapsed_ms": 755.2722920081578, "rowcount": 558}
+{"at": 1792398483.4762309, "monotonic": 256080.830048083, "event": "start", "counter": 9, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398483.869015, "monotonic": 256081.222829708, "event": "end", "counter": 9, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 392.778957990231, "rowcount": 22}
+{"at": 1792398483.8697338, "monotonic": 256081.223549333, "event": "start", "counter": 10, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "blocked": false}
+{"at": 1792398484.111068, "monotonic": 256081.464881625, "event": "end", "counter": 10, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "elapsed_ms": 241.33024999173358, "rowcount": 30}
+{"at": 1792398484.116575, "monotonic": 256081.470388333, "event": "start", "counter": 11, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398484.626973, "monotonic": 256081.980784458, "event": "end", "counter": 11, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 510.3935830120463, "rowcount": 64}
+{"at": 1792398484.6278348, "monotonic": 256081.981645916, "event": "start", "counter": 12, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398486.821873, "monotonic": 256084.175674375, "event": "end", "counter": 12, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 2194.023999996716, "rowcount": 16}
+{"at": 1792398488.211672, "monotonic": 256085.565467791, "event": "start", "counter": 13, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398488.2119098, "monotonic": 256085.5657055, "event": "start", "counter": 14, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "blocked": false}
+{"at": 1792398488.487148, "monotonic": 256085.840942458, "event": "end", "counter": 14, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "elapsed_ms": 275.2322909946088, "rowcount": 12}
+{"at": 1792398488.5876951, "monotonic": 256085.941489208, "event": "end", "counter": 13, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 376.0183329868596, "rowcount": 414}
+{"at": 1792398488.589155, "monotonic": 256085.942948333, "event": "start", "counter": 15, "operation": "SELECT", "tables": ["coreiq_companies"], "blocked": false}
+{"at": 1792398488.829692, "monotonic": 256086.183484375, "event": "end", "counter": 15, "operation": "SELECT", "tables": ["coreiq_companies"], "elapsed_ms": 240.5324169958476, "rowcount": 558}
+{"at": 1792398488.832771, "monotonic": 256086.186563583, "event": "start", "counter": 16, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398489.4880629, "monotonic": 256086.841852875, "event": "end", "counter": 16, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 655.2864169934765, "rowcount": 22}
+{"at": 1792398489.488935, "monotonic": 256086.84272475, "event": "start", "counter": 17, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "blocked": false}
+{"at": 1792398489.732949, "monotonic": 256087.086738208, "event": "end", "counter": 17, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "elapsed_ms": 244.0103750268463, "rowcount": 30}
+{"at": 1792398489.739459, "monotonic": 256087.093248291, "event": "start", "counter": 18, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398490.259275, "monotonic": 256087.613061875, "event": "end", "counter": 18, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 519.8096660024021, "rowcount": 64}
+{"at": 1792398490.2599978, "monotonic": 256087.613784416, "event": "start", "counter": 19, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398492.043596, "monotonic": 256089.39737425, "event": "end", "counter": 19, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 1783.5875829914585, "rowcount": 16}
+{"at": 1792398492.044321, "monotonic": 256089.398098583, "event": "start", "counter": 20, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398492.5585809, "monotonic": 256089.912356958, "event": "end", "counter": 20, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 514.2554999911226, "rowcount": 64}
+{"at": 1792398492.5594182, "monotonic": 256089.913194125, "event": "start", "counter": 21, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398497.632807, "monotonic": 256094.986560375, "event": "end", "counter": 21, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 5073.359750007512, "rowcount": 21}
+{"at": 1792398498.991101, "monotonic": 256096.344848041, "event": "start", "counter": 22, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398498.9913442, "monotonic": 256096.3450915, "event": "start", "counter": 23, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "blocked": false}
+{"at": 1792398499.263113, "monotonic": 256096.616859333, "event": "end", "counter": 23, "operation": "SELECT", "tables": ["coreiq_filing_metrics_v5"], "elapsed_ms": 271.7662919894792, "rowcount": 12}
+{"at": 1792398499.391835, "monotonic": 256096.7455805, "event": "end", "counter": 22, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 400.7299160002731, "rowcount": 414}
+{"at": 1792398499.393301, "monotonic": 256096.747047291, "event": "start", "counter": 24, "operation": "SELECT", "tables": ["coreiq_companies"], "blocked": false}
+{"at": 1792398499.895118, "monotonic": 256097.248862416, "event": "end", "counter": 24, "operation": "SELECT", "tables": ["coreiq_companies"], "elapsed_ms": 501.8109579978045, "rowcount": 558}
+{"at": 1792398499.8983412, "monotonic": 256097.25208525, "event": "start", "counter": 25, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398500.482131, "monotonic": 256097.835872833, "event": "end", "counter": 25, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 583.7852090189699, "rowcount": 22}
+{"at": 1792398500.483351, "monotonic": 256097.837093125, "event": "start", "counter": 26, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "blocked": false}
+{"at": 1792398500.775191, "monotonic": 256098.128932, "event": "end", "counter": 26, "operation": "SELECT", "tables": ["coreiq_watchlist_access", "coreiq_watchlist_companies", "coreiq_watchlists"], "elapsed_ms": 291.83595898211934, "rowcount": 30}
+{"at": 1792398500.780802, "monotonic": 256098.134542291, "event": "start", "counter": 27, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398501.762214, "monotonic": 256099.115951333, "event": "end", "counter": 27, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 981.407165993005, "rowcount": 64}
+{"at": 1792398501.763155, "monotonic": 256099.116891708, "event": "start", "counter": 28, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398504.039176, "monotonic": 256101.392905083, "event": "end", "counter": 28, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 2276.008750020992, "rowcount": 16}
+{"at": 1792398504.040094, "monotonic": 256101.393823125, "event": "start", "counter": 29, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398504.8538141, "monotonic": 256102.207539666, "event": "end", "counter": 29, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 813.7118330050725, "rowcount": 64}
+{"at": 1792398504.8548548, "monotonic": 256102.208581, "event": "start", "counter": 30, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398506.901064, "monotonic": 256104.254782541, "event": "end", "counter": 30, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 2046.1977919912897, "rowcount": 21}
+{"at": 1792398506.901868, "monotonic": 256104.255587, "event": "start", "counter": 31, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398507.565299, "monotonic": 256104.91902575, "event": "end", "counter": 31, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 663.425125007052, "rowcount": 64}
+{"at": 1792398507.56646, "monotonic": 256104.920176416, "event": "start", "counter": 32, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "blocked": false}
+{"at": 1792398512.568458, "monotonic": 256109.922159041, "event": "end", "counter": 32, "operation": "SELECT", "tables": ["coreiq_av_earnings_call_transcripts"], "elapsed_ms": 5001.97866698727, "rowcount": 18}

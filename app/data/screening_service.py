@@ -49,6 +49,7 @@ from data.screening_config import (
     KEYDEV_GUIDANCE_HEADLINE_WORDS,
     KEYDEV_GUIDANCE_SUBTYPE_WORDS,
     KEYDEV_NEWS_GUIDANCE_SUBTYPE,
+    keydev_display_subtype,
     keydev_is_guidance_row,
     keydev_is_guidance_subtype,
     TABULAR_MARKET_DATA_STMTS,
@@ -4759,9 +4760,9 @@ def apply_keydevs_criterion(
             lines = []
             for r in events:
                 ev_date = r.get("event_date")
-                subtype = r.get("event_subtype") or KEYDEV_CATEGORIES.get(
-                    r.get("event_category"), "Key Development"
-                )
+                subtype = keydev_display_subtype(
+                    r.get("event_subtype"), r.get("headline")
+                ) or KEYDEV_CATEGORIES.get(r.get("event_category"), "Key Development")
                 headline = (r.get("headline") or "")[:120]
                 if ev_date:
                     date_str = f"{ev_date.month}/{ev_date.day}/{ev_date.year}"
@@ -5367,9 +5368,9 @@ def _keydevs_records_from_rows(rows: list, with_ma: bool = False) -> list:
     for r in rows:
         ev_date = r.get("event_date")
         date_str = ev_date.strftime("%b-%d-%Y") if ev_date else "—"
-        subtype = r.get("event_subtype") or KEYDEV_CATEGORIES.get(
-            r.get("event_category"), "Key Development"
-        )
+        subtype = keydev_display_subtype(
+            r.get("event_subtype"), r.get("headline")
+        ) or KEYDEV_CATEGORIES.get(r.get("event_category"), "Key Development")
         cname = r.get("company_name") or r.get("ticker", "")
         exch = r.get("exchange_acronym") or ""
         ticker = r.get("ticker", "")

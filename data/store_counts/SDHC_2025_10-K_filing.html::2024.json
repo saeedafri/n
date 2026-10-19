@@ -1,0 +1,14 @@
+{
+ "ticker": "SDHC",
+ "fiscal_year": 2024,
+ "value": 2649,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 2,649 | | 3,044 | | 2,867 | | 2,368 | | 2,326 | | 2,297 | | 281 | | 718 | | 570",
+ "fye_date": "2024-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SDHC/2025/10-K/filing.html::2024",
+ "extractor_version": 5
+}

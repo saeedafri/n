@@ -1,0 +1,201 @@
+{
+  "keyword": "exchange",
+  "status": "failed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-regression-20261019-01/01-exchange",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-lgj_vpus",
+  "port": 8513,
+  "mode": "mysql_origin",
+  "cache_scope": "application result caches bypassed; native MySQL/SQLite/OS buffers not flushed",
+  "errors": [
+    "AssertionError: Visible application error: Transcript search could not finish. Please retry, or narrow the company/year filters."
+  ],
+  "action_timings": [
+    {
+      "action": "initial_load",
+      "started_at": 1792401659.914575,
+      "elapsed_ms": 11297.752207989106,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 5
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "search",
+      "started_at": 1792401673.307028,
+      "elapsed_ms": 9736.314290988958,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "SELECTs": 7,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 7
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "failed_action",
+      "started_at": 1792401685.1552079,
+      "elapsed_ms": 9047.73129199748,
+      "sql": {
+        "counters": [
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "SELECTs": 7,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 3,
+        "errors": 1,
+        "private_snapshot_queries": 0,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 7
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "review_dwell_ms": 2000,
+  "expected_empty": false,
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "b655ca8579160e70ca45864063aabec1cd5218e824435458a91a116aaae6ca3e",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "f6a2078701b6ae0cd3a75dc7c8217f426e8271dc7a1cbc7256d352611e52819d",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "7e88f0146ddc47ce8fe176fe2d6d04c8151cb8e121644cb91aac07d1c6d07f7d",
+    "scripts/ec_cold_e2e.py": "757d66ec5312384288baa0cf5c39f789308d3432d1bad03ac7e5723492c0806c",
+    "app/data/transcript_infix.py": "1ed04531e6dc2f19b94ae4c9227cae522d8bd4129f6ce13b775c396f58df5074",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af"
+  },
+  "pid": 89405,
+  "pages": [
+    {
+      "cards": 15,
+      "keys": [
+        "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+        "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+        "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+        "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+        "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+        "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+        "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+        "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+        "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+        "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+        "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+        "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+        "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+        "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+        "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac"
+      ]
+    }
+  ],
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-regression-20261019-01/01-exchange/videos/31071a626c39b774404c7cd2678fb38c.webm",
+  "sql_queries": 19,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 10,
+    "native_search_log_lines": 5,
+    "local_search_log_lines": 0,
+    "private_snapshot_transcript_queries": 0,
+    "private_snapshot_ngram_queries": 0,
+    "live_stg_support_queries": 19
+  },
+  "timeline_analysis": {
+    "samples": 363,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "completed_error_samples_excluded": 21,
+    "loader_visible_samples": 259
+  },
+  "video_analysis": {
+    "decoded_frames": 932,
+    "fps": 25.0,
+    "duration_s": 37.28,
+    "near_blank_ratio": 0.001072961373390558,
+    "low_contrast_fade_ratio": 0.7381974248927039,
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-regression-20261019-01/01-exchange/contact-sheet-00.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "b655ca8579160e70ca45864063aabec1cd5218e824435458a91a116aaae6ca3e",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "f6a2078701b6ae0cd3a75dc7c8217f426e8271dc7a1cbc7256d352611e52819d",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "7e88f0146ddc47ce8fe176fe2d6d04c8151cb8e121644cb91aac07d1c6d07f7d",
+    "scripts/ec_cold_e2e.py": "757d66ec5312384288baa0cf5c39f789308d3432d1bad03ac7e5723492c0806c",
+    "app/data/transcript_infix.py": "1ed04531e6dc2f19b94ae4c9227cae522d8bd4129f6ce13b775c396f58df5074",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": false,
+  "requested_actions": [
+    "initial_load",
+    "search",
+    "show_more_1",
+    "show_more_2"
+  ],
+  "functional_passed": false,
+  "performance_budget_ms": 5000,
+  "performance_passed": false,
+  "search_pagination_max_latency_ms": 9736.314290988958,
+  "search_pagination_performance_passed": false,
+  "post_recording_analysis": {
+    "code_sha256": "33a40e0f3a9202b5d4e0a8d95e211fc66ecfbb59ce88d68008216892ed279d88",
+    "recorded_analysis": "recorded-analysis.json",
+    "reason": "Completed visible error states are not blank busy states; contacts include final decoded frame. Actual query failure and original timing criteria unchanged."
+  }
+}

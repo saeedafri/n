@@ -1,0 +1,76 @@
+[
+  {
+    "table": "existing_on",
+    "original_index_term": "the",
+    "ids": []
+  },
+  {
+    "table": "existing_on",
+    "original_index_term": "and",
+    "ids": [
+      2,
+      8
+    ]
+  },
+  {
+    "table": "existing_on",
+    "ngram_probe": "R*",
+    "ids": [
+      1,
+      5,
+      8,
+      9,
+      100,
+      101
+    ]
+  },
+  {
+    "table": "existing_on",
+    "ngram_probe": "\"R&\"",
+    "ids": []
+  },
+  {
+    "table": "existing_on",
+    "ngram_probe": "\"&D\"",
+    "ids": []
+  },
+  {
+    "table": "first_off",
+    "original_index_term": "the",
+    "ids": [
+      3
+    ]
+  },
+  {
+    "table": "first_off",
+    "original_index_term": "and",
+    "ids": [
+      2,
+      8
+    ]
+  },
+  {
+    "table": "first_off",
+    "ngram_probe": "R*",
+    "ids": [
+      1,
+      3,
+      4,
+      5,
+      8,
+      9,
+      100,
+      101
+    ]
+  },
+  {
+    "table": "first_off",
+    "ngram_probe": "\"R&\"",
+    "ids": []
+  },
+  {
+    "table": "first_off",
+    "ngram_probe": "\"&D\"",
+    "ids": []
+  }
+]

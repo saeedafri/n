@@ -1,0 +1,47 @@
+{
+  "version": "8.0.44",
+  "new_session_stopwords": 1,
+  "fts_config": {
+    "optimize_checkpoint_limit": "180",
+    "synced_doc_id": "19",
+    "stopword_table_name": "",
+    "use_stopword": "0"
+  },
+  "checks": [
+    {
+      "term": "AI",
+      "verified_ids": [
+        2,
+        4,
+        5,
+        9,
+        100,
+        101,
+        102,
+        103
+      ]
+    },
+    {
+      "term": "in",
+      "verified_ids": [
+        2,
+        3,
+        4,
+        100,
+        101,
+        102,
+        103
+      ]
+    },
+    {
+      "term": "aaa",
+      "verified_ids": [
+        4,
+        100,
+        101,
+        102,
+        103
+      ]
+    }
+  ]
+}

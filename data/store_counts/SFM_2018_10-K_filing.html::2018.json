@@ -1,0 +1,14 @@
+{
+ "ticker": "SFM",
+ "fiscal_year": 2018,
+ "value": 313,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "customers, prospective and current team members and others. | Item 1B. | Unresolved Staff Comments None. | Item 2. | Properties As of December 30, 2018, we had 313 stores located in nineteen states, as shown in",
+ "fye_date": "2018-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SFM/2018/10-K/filing.html::2018",
+ "extractor_version": 5
+}

@@ -1,0 +1,158 @@
+{
+  "ready": true,
+  "server_running": false,
+  "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+  "database": "ec_ngram_corpus_probe",
+  "user": "root",
+  "password_required": false,
+  "table": "coreiq_av_earnings_call_transcripts",
+  "native_version": "8.0.44",
+  "ngram_token_size": 2,
+  "ngram_index": "idx_transcript_ngram_search",
+  "original_index": "idx_transcript_fulltext_search",
+  "required_feature_env": "TRANSCRIPT_NATIVE_NGRAM_SEARCH=1",
+  "snapshot": {
+    "source_path": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/server-logs/agg-cache/news_mirror.sqlite",
+    "source_file_bytes": 5215506432,
+    "source_file_mtime_utc": "2026-10-19T07:28:09.526458+00:00",
+    "counts": {
+      "eligible_rows": 21455,
+      "body_bytes": "937345257",
+      "min_id": 1,
+      "max_id": 200687,
+      "max_fetched_at_utc": "2026-10-18 01:07:14"
+    },
+    "live_STG_freshness_verified": false,
+    "metadata_columns": [
+      "id",
+      "source",
+      "ticker",
+      "quarter",
+      "year",
+      "q",
+      "has_transcript",
+      "event_datetime_utc",
+      "fetched_at_utc",
+      "raw_json_sha1"
+    ],
+    "all_metadata_equal": true,
+    "native_metadata_sha256": "96abb6b5c41262f46cb34f1c0c119a70395fd6dd907d985db9806384e733960d",
+    "source_metadata_sha256": "96abb6b5c41262f46cb34f1c0c119a70395fd6dd907d985db9806384e733960d",
+    "missing_snapshot_columns_null": [
+      "raw_json",
+      "last_error"
+    ],
+    "only_has_transcript_1_rows_copied": true,
+    "internal_fts_doc_id_sequential_source_primary_ids_preserved": true
+  },
+  "persistent_fts_policy_after_process_restarts": {
+    "optimize_checkpoint_limit": "180",
+    "synced_doc_id": "21456",
+    "stopword_table_name": "",
+    "use_stopword": "0"
+  },
+  "coldness": {
+    "fresh_mysqld_before_each_keyword": true,
+    "innodb_buffer_pool_bytes": 134217728,
+    "innodb_buffer_pool_load_at_startup": false,
+    "innodb_buffer_pool_dump_at_shutdown": false,
+    "oracle_queries_before_timing": 0,
+    "application_result_caches_used": false,
+    "Python_vocab_or_result_cache_used": false,
+    "OS_file_cache": "uncontrolled",
+    "live_STG_cold_performance_claim": false
+  },
+  "query_cases": [
+    {
+      "term": "AI",
+      "milliseconds": 158.199,
+      "total_literal_matches": 21450,
+      "all_indexed_exact_ids_equal_oracle": true,
+      "page_equal_oracle": true,
+      "candidate_count": 21450,
+      "prototype_override": null,
+      "prototype_equals_actual": true
+    },
+    {
+      "term": "exchange",
+      "milliseconds": 1296.152,
+      "total_literal_matches": 9603,
+      "all_indexed_exact_ids_equal_oracle": true,
+      "page_equal_oracle": true,
+      "candidate_count": 9603,
+      "prototype_override": "quoted_alnum_runs",
+      "prototype_equals_actual": null
+    },
+    {
+      "term": "foreign exchange",
+      "milliseconds": 2031.633,
+      "total_literal_matches": 4119,
+      "all_indexed_exact_ids_equal_oracle": true,
+      "page_equal_oracle": true,
+      "candidate_count": 5469,
+      "prototype_override": "quoted_alnum_runs",
+      "prototype_equals_actual": null
+    },
+    {
+      "term": "print",
+      "milliseconds": 1139.691,
+      "total_literal_matches": 9327,
+      "all_indexed_exact_ids_equal_oracle": true,
+      "page_equal_oracle": true,
+      "candidate_count": 9328,
+      "prototype_override": "quoted_alnum_runs",
+      "prototype_equals_actual": null
+    },
+    {
+      "term": "printenv",
+      "milliseconds": 2284.499,
+      "total_literal_matches": 0,
+      "all_indexed_exact_ids_equal_oracle": true,
+      "page_equal_oracle": true,
+      "candidate_count": 0,
+      "prototype_override": "quoted_alnum_runs",
+      "prototype_equals_actual": null
+    },
+    {
+      "term": "revenue",
+      "milliseconds": 1809.084,
+      "total_literal_matches": 18293,
+      "all_indexed_exact_ids_equal_oracle": true,
+      "page_equal_oracle": true,
+      "candidate_count": 18293,
+      "prototype_override": null,
+      "prototype_equals_actual": true
+    }
+  ],
+  "actual_helper_fixture": {
+    "artifact": "native-actual-helper-latest-fixture.json",
+    "cases": 39,
+    "passed": 39,
+    "indexed_cases": 28,
+    "explicit_ddl_options_proven": [
+      "ALTER TABLE runtime_fixture DROP INDEX idx_transcript_ngram_search, DROP INDEX idx_transcript_fulltext_search, ALGORITHM=INPLACE, LOCK=SHARED",
+      "ALTER TABLE runtime_fixture ADD FULLTEXT KEY idx_transcript_ngram_search(transcript_text) WITH PARSER ngram, ALGORITHM=INPLACE, LOCK=SHARED",
+      "ALTER TABLE runtime_fixture ADD FULLTEXT KEY idx_transcript_fulltext_search(transcript_text), ALGORITHM=INPLACE, LOCK=SHARED"
+    ],
+    "helper_sha256": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "candidate_override_used": false
+  },
+  "storage": {
+    "proof_directory_allocated_bytes": 5453209600,
+    "original_pre_corpus_baseline_allocated_bytes": 1132597248,
+    "final_incremental_allocated_bytes": 4320612352,
+    "corpus_schema_allocated_bytes": 4318920704,
+    "base_table_allocated_bytes": 1192230912,
+    "fulltext_aux_allocated_bytes_including_small_fixture": 3126329344,
+    "filesystem_free_bytes": 34357862400,
+    "construction": "empty ngram FTS under stopwordsOFF first, original wordFTS next, incremental inserts under defaultstopwordsON",
+    "completed_incremental_active_seconds_lower_bound": 199.58998837500113,
+    "pause": "first leg stopped at17970 rows by5GBguard; approved7GBbudget then resumed final3485rows",
+    "bulk_populated_ALTER_aborted_artifact": "corpus-bulk-build-aborted.json",
+    "bulk_build_complete_timing_or_peak_space_proven": false
+  },
+  "create_table": "CREATE TABLE `coreiq_av_earnings_call_transcripts` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `source` varchar(64) NOT NULL,\n  `ticker` varchar(32) NOT NULL,\n  `quarter` varchar(8) NOT NULL,\n  `year` smallint NOT NULL,\n  `q` tinyint NOT NULL,\n  `transcript_text` longtext,\n  `has_transcript` tinyint(1) NOT NULL DEFAULT '0',\n  `title` varchar(512) DEFAULT NULL,\n  `event_datetime_utc` datetime DEFAULT NULL,\n  `fetched_at_utc` datetime NOT NULL,\n  `raw_json` json DEFAULT NULL,\n  `raw_json_sha1` char(40) DEFAULT NULL,\n  `last_error` text,\n  `FTS_DOC_ID` bigint unsigned NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `FTS_DOC_ID_INDEX` (`FTS_DOC_ID`),\n  UNIQUE KEY `uq_src_ticker_quarter` (`source`,`ticker`,`quarter`),\n  KEY `idx_ticker` (`ticker`),\n  KEY `idx_year_q` (`year`,`q`),\n  KEY `idx_ec_ticker_quarter` (`ticker`,`quarter`),\n  KEY `idx_has_transcript_year` (`has_transcript`,`year`),\n  KEY `idx_has_transcript_ticker` (`has_transcript`,`ticker`),\n  KEY `idx_covering_transcript_lookup` (`has_transcript`,`ticker`,`transcript_text`(100)),\n  KEY `idx_ec_ticker_year_q` (`ticker`,`year`,`q`),\n  KEY `idx_ec_ticker_year_q_event` (`ticker`,`year`,`q`,`event_datetime_utc`),\n  KEY `idx_ec_cover_transcript_fetch` (`ticker`,`year`,`q`,`has_transcript`,`transcript_text`(100)),\n  KEY `idx_ec_cover_company_lookup` (`has_transcript`,`transcript_text`(10),`ticker`),\n  KEY `idx_ec_cover_ticker_years` (`ticker`,`has_transcript`,`transcript_text`(10),`year`),\n  KEY `idx_ec_cover_ticker_quarters` (`ticker`,`year`,`has_transcript`,`transcript_text`(10),`q`),\n  KEY `idx_ec_list_ordered` (`ticker`,`has_transcript`,`year`,`q`),\n  FULLTEXT KEY `idx_transcript_ngram_search` (`transcript_text`) /*!50100 WITH PARSER `ngram` */ ,\n  FULLTEXT KEY `idx_transcript_fulltext_search` (`transcript_text`)\n) ENGINE=InnoDB AUTO_INCREMENT=200688 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "helper_sha256": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+  "controller": "scripts/ec_ngram_corpus_probe.py server --action start|stop|restart --socket <this socket> --output <state.json>",
+  "shared_literal_builder_refactor_revalidated": true
+}

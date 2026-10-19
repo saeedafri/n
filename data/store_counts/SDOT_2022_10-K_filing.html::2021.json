@@ -1,0 +1,14 @@
+{
+ "ticker": "SDOT",
+ "fiscal_year": 2021,
+ "value": 20,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "l restaurants in New Jersey, New York, Connecticut and other New England states where we have significant concentration with 20 of our system restaurants, which could result in reduced market share for us and may",
+ "fye_date": "2021-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SDOT/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

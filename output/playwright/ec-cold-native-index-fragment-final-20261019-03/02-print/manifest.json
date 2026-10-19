@@ -1,0 +1,166 @@
+{
+  "keyword": "print",
+  "status": "failed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-03/02-print",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-8x4j2yyp",
+  "port": 8513,
+  "mode": "isolated_native_snapshot",
+  "cache_scope": "application result caches bypassed; private MySQL buffer pool reset before this keyword; live STG/OS buffers uncontrolled",
+  "errors": [
+    "TimeoutError: Page did not reach verified controls within 90.0s",
+    "No private native ngram index query observed"
+  ],
+  "action_timings": [
+    {
+      "action": "failed_action",
+      "started_at": 1792403188.144644,
+      "elapsed_ms": 90194.27295800415,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 2,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "review_dwell_ms": 2000,
+  "filter_flow_requested": false,
+  "fragment_query_verification": true,
+  "expected_empty": false,
+  "private_server_restart": {
+    "started_at": 1792403185.747614,
+    "elapsed_ms": 1090.378999710083,
+    "report": {
+      "action": "restart",
+      "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+      "running_pid": 93135,
+      "pool_bytes": 134217728,
+      "buffer_pool_load_at_startup": false,
+      "buffer_pool_dump_at_shutdown": false,
+      "corpus_queries_performed": 0,
+      "OS_file_cache": "uncontrolled"
+    }
+  },
+  "isolated_native": {
+    "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+    "database": "ec_ngram_corpus_probe",
+    "origin": "private native MySQL eligible-transcript corpus snapshot, NOT live STG",
+    "support_metadata_origin": "live STG, read-only",
+    "index_flag": "TRANSCRIPT_NATIVE_NGRAM_SEARCH=1",
+    "connections": "NullPool private connections; fresh browser/application process for each keyword",
+    "readiness_manifest": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/corpus-readiness.json",
+    "readiness_manifest_sha256": "3219143c85fd890af728d67a69e4284a0c1378b17f7055f1731ae9904485f7ea"
+  },
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "b2e2902b0497c99e74faa0f152de8f476365c9f44a930784e1ccbb8240234121",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "fc84f10a03db786fbddf1c7f995378da82444e62a2ce00e119b87400904de4b8",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "pid": 93143,
+  "video_recording_started_at_estimate": 1792403188.08291,
+  "video_recording_ready_at": 1792403188.144556,
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-03/02-print/videos/b7f078fe08e7826bafd6c54145989bea.webm",
+  "sql_queries": 5,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 2,
+    "native_search_log_lines": 0,
+    "local_search_log_lines": 0,
+    "private_snapshot_transcript_queries": 2,
+    "private_snapshot_ngram_queries": 0,
+    "live_stg_support_queries": 3
+  },
+  "timeline_analysis": {
+    "samples": 922,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "completed_error_samples_excluded": 0,
+    "loader_visible_samples": 52
+  },
+  "video_analysis": {
+    "decoded_frames": 2331,
+    "fps": 25.0,
+    "duration_s": 93.24,
+    "near_blank_ratio": 0.0,
+    "low_contrast_fade_ratio": 0.07593307593307594,
+    "main_content_roi": {
+      "scaled_frame_rect_xyxy": [
+        118,
+        80,
+        348,
+        233
+      ],
+      "scaled_frame_size": [
+        360,
+        250
+      ],
+      "near_blank_ratio": 0.0,
+      "low_contrast_fade_ratio": 0.07679107679107679,
+      "interpretation": "Raw measurements excluding header/sidebar; the normal cross-search placeholder can be quiet/bright. These flags alone never imply a defect; compare DOM loader, empty/error state and transcript validation."
+    },
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_transition_alignment": "Approximate video frame targets from wall-clock page-creation bounds; exact action wall clocks and100ms DOM states remain in manifest/timeline.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-03/02-print/contact-sheet-00.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "b2e2902b0497c99e74faa0f152de8f476365c9f44a930784e1ccbb8240234121",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "fc84f10a03db786fbddf1c7f995378da82444e62a2ce00e119b87400904de4b8",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": false,
+  "requested_actions": [
+    "initial_load",
+    "search",
+    "show_more_1",
+    "show_more_2",
+    "view_first"
+  ],
+  "functional_passed": false,
+  "performance_budget_ms": 5000,
+  "performance_passed": false,
+  "search_pagination_max_latency_ms": null,
+  "search_pagination_performance_passed": false
+}

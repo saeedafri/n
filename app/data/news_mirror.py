@@ -32,7 +32,7 @@ import time
 import unicodedata
 from datetime import date, datetime
 
-from utils.server_logger import log_warning as slog_warning
+from utils.server_logger import log_warning as slog_warning, log_timing
 
 TABLES = {
     "av": {
@@ -249,6 +249,9 @@ def _schema(c):
         c.execute(f"CREATE TABLE IF NOT EXISTS {t['source']} ({cols})")
         for i, ix in enumerate(t["indexes"]):
             c.execute(f"CREATE INDEX IF NOT EXISTS ix_{key}_{i} ON {t['source']} ({ix})")
+    c.execute("CREATE INDEX IF NOT EXISTS ix_tx_search_metadata ON "
+              "coreiq_av_earnings_call_transcripts "
+              "(has_transcript, year DESC, q DESC, id DESC, ticker, quarter)")
     c.execute(f"CREATE TABLE IF NOT EXISTS {COMPANIES['source']} (symbol TEXT, sector TEXT)")
     c.execute(f"CREATE INDEX IF NOT EXISTS ix_avc_symbol ON {COMPANIES['source']} (symbol)")
     c.execute("CREATE TABLE IF NOT EXISTS mirror_state (k TEXT PRIMARY KEY, v TEXT)")
@@ -1094,13 +1097,20 @@ def transcript_like_ids(keyword):
     cached = _LIKE_IDS.get(kw)
     if cached is not None:
         return cached
+    if len(_LIKE_IDS) >= 512:
+        _LIKE_IDS.clear()
     try:
         c = _conn()
         if _get_state(c, "tx:words") != "1":
             return None
         terms = _VOCAB["terms"]
         if terms is None:
+            started = time.perf_counter()
             terms = _VOCAB["terms"] = [r[0] for r in c.execute("SELECT term FROM tx_vocab")]
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            log_timing("TRANSCRIPT_LOCAL_VOCAB_LOAD", elapsed_ms, f"terms={len(terms)}",
+                       level="WARNING" if elapsed_ms > 500 else "INFO")
+        started = time.perf_counter()
         hits = [t for t in terms if kw in t]
         if not hits:
             _LIKE_IDS[kw] = []
@@ -1108,10 +1118,12 @@ def transcript_like_ids(keyword):
         match = " OR ".join('"' + t.replace('"', '""') + '"' for t in hits)
         src = TABLES["tx"]["source"]
         ids = [r[0] for r in c.execute(
-            f"SELECT t.id FROM tx_words w JOIN {src} t ON t.id = w.rowid "
-            f"WHERE tx_words MATCH ? AND t.has_transcript = 1", (match,))]
-        if len(_LIKE_IDS) > 512:
-            _LIKE_IDS.clear()
+            f"SELECT id FROM {src} INDEXED BY ix_tx_1 WHERE has_transcript = 1 "
+            "AND id IN (SELECT rowid FROM tx_words WHERE tx_words MATCH ?)", (match,))]
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        log_timing("TRANSCRIPT_LOCAL_MATCH_IDS", elapsed_ms,
+                   f"keyword={kw[:80]!r} terms={len(hits)} rows={len(ids)}",
+                   level="WARNING" if elapsed_ms > 500 else "INFO")
         _LIKE_IDS[kw] = ids
         return ids
     except Exception as exc:

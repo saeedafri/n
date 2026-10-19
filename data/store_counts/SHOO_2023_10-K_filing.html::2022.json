@@ -1,0 +1,14 @@
+{
+ "ticker": "SHOO",
+ "fiscal_year": 2022,
+ "value": 238,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores | | 238 | | | | 220 | | | | 218 | |",
+ "fye_date": "2022-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHOO/2023/10-K/filing.html::2022",
+ "extractor_version": 5
+}

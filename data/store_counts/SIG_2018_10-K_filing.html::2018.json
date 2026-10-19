@@ -1,0 +1,14 @@
+{
+ "ticker": "SIG",
+ "fiscal_year": 2018,
+ "value": 3556,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "'total stores open at the end of the year' repeated per table: 504 + 1,466 + 1,586 = 3,556, a figure stated in the filing",
+ "fye_date": "2018-02-03",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SIG/2018/10-K/filing.html::2018",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "SG",
+ "fiscal_year": 2023,
+ "value": 821,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "order delivered directly to an outpost station at their location during a dedicated time window each day, with lower customer fees than our delivery channels. As of the end of fiscal year 2023, we had 821 live Outpost locations. In addition, our Outpost and Caterin",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SG/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

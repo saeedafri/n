@@ -110,6 +110,7 @@ class DatabaseManager:
     """
     _instance: Optional['DatabaseManager'] = None
     _lock = threading.Lock()
+    _connect_lock = threading.Lock()
 
     # Phase 2: SQLAlchemy engine and session factory
     _engine: Any = None
@@ -132,19 +133,18 @@ class DatabaseManager:
         self._local = threading.local()
 
     def connect(self) -> None:
-        """
-        Initialize database connection pool with SSL and connection validation.
-        Uses singleton pattern - if engine exists, reuse it to avoid 4s SSL handshake.
+        """Configure pools once; real queries open connections on demand.
 
-        PERF FIX (2026-04-02): Create BOTH engines first (no I/O), then warm ALL
-        pool connections in ONE parallel batch. Previously engines were created and
-        warmed sequentially — 2 batches of 2 SSL handshakes = ~9s. Now 1 batch
-        of 6 concurrent handshakes = ~3.5s (one SSL latency instead of two).
+        DB_POOL_PREWARM=1 restores eager connection validation. Initialization is
+        serialized so concurrent first queries cannot create duplicate pools.
         """
-        # CRITICAL: If engine exists, reuse it (avoid expensive reconnection)
-        if self._engine is not None:
-            return
+        with self._connect_lock:
+            if self._engine is None:
+                self._configure_engines()
 
+    def _configure_engines(self) -> None:
+        _main_engine = None
+        _rd_engine = None
         try:
             ssl_enabled = self._config.ssl_enabled
             # Get actual connect_args (triggers late-binding if needed)
@@ -175,8 +175,7 @@ class DatabaseManager:
             # rely on pool_recycle to replace stale connections instead.
             _use_pre_ping = not ssl_enabled  # True for local, False for Azure
 
-            # ── Step 1: Create both engines (no I/O, ~0.3s each) ─────────
-            self._engine = create_engine(
+            _main_engine = create_engine(
                 self._config.connection_string,
                 poolclass=QueuePool,
                 pool_size=self._config.pool_size,
@@ -187,11 +186,11 @@ class DatabaseManager:
                 echo=False,
                 connect_args=connect_args,
             )
-            self._session_factory = sessionmaker(bind=self._engine)
+            _session_factory = sessionmaker(bind=_main_engine)
 
             # Read-only engine (AUTOCOMMIT) — avoids implicit BEGIN/ROLLBACK.
             # On Azure MySQL Flex (~230ms RTT), saves 2 round-trips per SELECT.
-            self._read_engine = create_engine(
+            _rd_engine = create_engine(
                 self._config.connection_string,
                 poolclass=QueuePool,
                 pool_size=self._config.pool_size,
@@ -209,53 +208,55 @@ class DatabaseManager:
             # execute+transfer time, pool saturation and memory for any query
             # over DB_SLOW_QUERY_MS — the signal missing from STG until now.
             try:
-                _install_db_slow_query_logging(self._engine, "main")
-                _install_db_slow_query_logging(self._read_engine, "read")
+                _install_db_slow_query_logging(_main_engine, "main")
+                _install_db_slow_query_logging(_rd_engine, "read")
             except Exception:
                 pass
-
-            # ── Step 2: Warm ALL connections in ONE parallel batch ────────
-            # On SSL (Azure): 6 connections across both engines — all SSL
-            # handshakes happen concurrently = ~3.5s (one handshake latency).
-            # 3 read connections: serves DATE_RANGE (4 parallel MIN/MAX) + AV/YF.
-            # 3 main connections: session-based writes + screening.
-            # On local: 1 connection per engine (no SSL overhead).
-            _main_engine = self._engine
-            _rd_engine = self._read_engine
 
             def _warm_conn(engine):
                 with engine.connect() as c:
                     c.execute(text("SELECT 1"))
 
-            try:
-                if ssl_enabled:
-                    import concurrent.futures
-                    _warm_tasks = (
-                        [(_main_engine,)] * 3 +
-                        [(_rd_engine,)] * 3
-                    )
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
-                        futs = [ex.submit(_warm_conn, eng) for (eng,) in _warm_tasks]
-                        for f in futs:
-                            f.result(timeout=30)
-                else:
-                    _warm_conn(_main_engine)
-                    _warm_conn(_rd_engine)
-            except Exception as test_err:
-                raise DatabaseConnectionError(
-                    f"Database connection test failed. Check credentials, network access, "
-                    f"and SSL configuration. Error: {test_err}"
-                )
-        except DatabaseConnectionError:
-            log_structured_error(DatabaseConnectionError("Connection test failed"), page="database", component="DatabaseManager.connect", operation="db_connection_test")
-            raise
-        except Exception as e:
-            # If read engine creation failed, clean up
-            if self._read_engine is None and self._engine is not None:
-                pass  # main engine OK, read engine will fall back
-            else:
-                log_structured_error(e, page="database", component="DatabaseManager.connect", operation="db_engine_create")
-                raise DatabaseConnectionError(f"Database connection failed: {e}")
+            if os.getenv("DB_POOL_PREWARM", "0").strip() == "1":
+                try:
+                    if ssl_enabled:
+                        import concurrent.futures
+                        _warm_tasks = (
+                            [(_main_engine,)] * 3 +
+                            [(_rd_engine,)] * 3
+                        )
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+                            futs = [ex.submit(_warm_conn, eng) for (eng,) in _warm_tasks]
+                            for f in futs:
+                                f.result(timeout=30)
+                    else:
+                        _warm_conn(_main_engine)
+                        _warm_conn(_rd_engine)
+                except Exception as test_err:
+                    raise DatabaseConnectionError(
+                        f"Database connection test failed. Check credentials, network access, "
+                        f"and SSL configuration. Error: {test_err}"
+                    ) from test_err
+
+            # Publish the main-engine readiness marker last, after both pools exist.
+            self._session_factory = _session_factory
+            self._read_engine = _rd_engine
+            self._engine = _main_engine
+        except Exception as exc:
+            for engine in (_main_engine, _rd_engine):
+                if engine is not None:
+                    try:
+                        engine.dispose()
+                    except Exception as dispose_error:
+                        log_structured_error(
+                            dispose_error, page="database", component="DatabaseManager.connect",
+                            operation="dispose_partial_engine",
+                        )
+            if isinstance(exc, DatabaseConnectionError):
+                log_structured_error(exc, page="database", component="DatabaseManager.connect", operation="db_connection_test")
+                raise
+            log_structured_error(exc, page="database", component="DatabaseManager.connect", operation="db_engine_create")
+            raise DatabaseConnectionError(f"Database connection failed: {exc}") from exc
 
     @contextmanager
     def get_session(self) -> Generator[Session, None, None]:

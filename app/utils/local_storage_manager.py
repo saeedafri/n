@@ -549,7 +549,7 @@ def set_persistent_state(key, value):
 # Convenience functions for Earnings Calls page
 # =============================================================================
 
-_EC_KEYS = ("ec_company", "ec_year", "ec_quarter")
+_EC_KEYS = ("ec_company", "ec_year", "ec_quarter", "ec_search")
 
 
 def load_earnings_calls_state():

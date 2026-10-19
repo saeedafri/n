@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "errors": [],
+  "timeline_analysis": {
+    "samples": 521,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "loader_visible_samples": 317
+  },
+  "video_analysis": {
+    "decoded_frames": 1333,
+    "fps": 25.0,
+    "duration_s": 53.32,
+    "near_blank_ratio": 0.0,
+    "low_contrast_fade_ratio": 0.6676669167291823,
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-20261019-01/04-foreign-exchange/contact-sheet-00.jpg"
+    ]
+  }
+}

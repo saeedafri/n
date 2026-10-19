@@ -1,0 +1,14 @@
+{
+ "ticker": "SKX",
+ "fiscal_year": 2015,
+ "value": 391,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "nt and positive comparable international store sales of 12.5%. We believe that we have established our presence in most major domestic retail markets. We had 391 domestic stores and 128 international retail stores as of February 15, 2016, and we currently plan to open approxim",
+ "fye_date": "2015-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SKX/2015/10-K/filing.html::2015",
+ "extractor_version": 5
+}

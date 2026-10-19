@@ -1,0 +1,14 @@
+{
+ "ticker": "SYF",
+ "fiscal_year": 2017,
+ "value": 45000,
+ "confidence": "medium",
+ "basis": "L3_llm",
+ "evidence": "approximately 45,000 retail locations",
+ "fye_date": "2017-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SYF/2018/10-K/filing.html::2017",
+ "extractor_version": 5
+}

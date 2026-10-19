@@ -1,0 +1,123 @@
+{
+  "keyword": "foreign exchange",
+  "status": "failed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-final-20261019-02/04-foreign-exchange",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-qozlf_73",
+  "port": 8513,
+  "mode": "mysql_origin",
+  "cache_scope": "application result caches bypassed; native MySQL/SQLite/OS buffers not flushed",
+  "errors": [
+    "AssertionError: Visible application error: Transcript search could not finish. Please retry, or narrow the company/year filters."
+  ],
+  "action_timings": [
+    {
+      "action": "initial_load",
+      "started_at": 1792399684.781329,
+      "elapsed_ms": 9408.008500002325,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "failed_action",
+      "started_at": 1792399694.2849832,
+      "elapsed_ms": 18616.439833014738,
+      "sql": {
+        "counters": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "SELECTs": 11,
+        "transcript_metadata_queries": 5,
+        "transcript_text_queries": 3,
+        "supporting_metadata_queries": 3,
+        "errors": 1
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "111da866735177bcdae21a0c3836519f6337babdf4d442e15bfbec4f1d83cb4d",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "f6a2078701b6ae0cd3a75dc7c8217f426e8271dc7a1cbc7256d352611e52819d",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "4ac4ca8d01f807a39df4bcd842761ef1a1ba2781a27a4f0975d008614b39f8b8",
+    "scripts/ec_cold_e2e.py": "5650c8f5a3563230692816dc6fb9697d3be60ddb4b10832f6f607bc0e77abe6f"
+  },
+  "pid": 82338,
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-final-20261019-02/04-foreign-exchange/videos/4a945f0ee0d63418809e72699fc3aaa2.webm",
+  "sql_queries": 16,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 10,
+    "native_search_log_lines": 6,
+    "local_search_log_lines": 0
+  },
+  "timeline_analysis": {
+    "samples": 281,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "loader_visible_samples": 250
+  },
+  "video_analysis": {
+    "decoded_frames": 727,
+    "fps": 25.0,
+    "duration_s": 29.08,
+    "near_blank_ratio": 0.0,
+    "low_contrast_fade_ratio": 0.921595598349381,
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-final-20261019-02/04-foreign-exchange/contact-sheet-00.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "111da866735177bcdae21a0c3836519f6337babdf4d442e15bfbec4f1d83cb4d",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "f6a2078701b6ae0cd3a75dc7c8217f426e8271dc7a1cbc7256d352611e52819d",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "4ac4ca8d01f807a39df4bcd842761ef1a1ba2781a27a4f0975d008614b39f8b8",
+    "scripts/ec_cold_e2e.py": "5650c8f5a3563230692816dc6fb9697d3be60ddb4b10832f6f607bc0e77abe6f"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": false,
+  "performance_budget_ms": 5000,
+  "performance_passed": false
+}

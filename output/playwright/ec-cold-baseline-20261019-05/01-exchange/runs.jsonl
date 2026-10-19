@@ -1,0 +1,10 @@
+{"at": 1792398474.46591, "monotonic": 256071.819778875, "event": "start", "rerun": 1, "watchlist_entries": 0}
+{"at": 1792398474.9702559, "monotonic": 256072.32412125, "event": "start", "rerun": 2, "watchlist_entries": 0}
+{"at": 1792398475.6003861, "monotonic": 256072.954246833, "event": "exit", "rerun": 2, "sql_count": 0, "violations": 0}
+{"at": 1792398481.047282, "monotonic": 256078.401110833, "event": "exit", "rerun": 2, "sql_count": 5, "violations": 0}
+{"at": 1792398482.365806, "monotonic": 256079.7196285, "event": "start", "rerun": 3, "watchlist_entries": 0}
+{"at": 1792398486.831508, "monotonic": 256084.185309958, "event": "exit", "rerun": 3, "sql_count": 12, "violations": 0}
+{"at": 1792398488.204352, "monotonic": 256085.558147416, "event": "start", "rerun": 4, "watchlist_entries": 0}
+{"at": 1792398497.641024, "monotonic": 256094.994777166, "event": "exit", "rerun": 4, "sql_count": 21, "violations": 0}
+{"at": 1792398498.982392, "monotonic": 256096.336139291, "event": "start", "rerun": 5, "watchlist_entries": 0}
+{"at": 1792398512.5795379, "monotonic": 256109.933238916, "event": "exit", "rerun": 5, "sql_count": 32, "violations": 0}

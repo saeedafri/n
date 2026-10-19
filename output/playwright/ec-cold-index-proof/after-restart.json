@@ -1,0 +1,824 @@
+{
+  "server": {
+    "version": "8.0.44",
+    "token_size": 2
+  },
+  "purpose": "small fixture correctness and DDL only",
+  "tables": {
+    "existing_on": {
+      "fts_config": {
+        "optimize_checkpoint_limit": "180",
+        "synced_doc_id": "14",
+        "stopword_table_name": "",
+        "use_stopword": "1"
+      },
+      "cases": [
+        {
+          "term": "foreign exchange",
+          "like_ids": [
+            1
+          ],
+          "phrase_verified_ids": [
+            1
+          ],
+          "anchor": "+\"fo\" +\"re\" +\"gn\" +\"ex\" +\"xc\" +\"ch\" +\"ng\" +\"ge\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            1
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "xchange",
+          "like_ids": [
+            1,
+            2,
+            8
+          ],
+          "phrase_verified_ids": [
+            1,
+            2,
+            8
+          ],
+          "anchor": "+\"xc\" +\"ch\" +\"ng\" +\"ge\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            1,
+            2,
+            8
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "print",
+          "like_ids": [
+            3,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            3,
+            100,
+            101
+          ],
+          "anchor": "+\"pr\" +\"nt\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            3,
+            100,
+            101
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "revenue",
+          "like_ids": [
+            1
+          ],
+          "phrase_verified_ids": [
+            1
+          ],
+          "anchor": "+\"re\" +\"ev\" +\"ve\" +\"nu\" +\"ue\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            1
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "AI",
+          "like_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_missing": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ]
+        },
+        {
+          "term": "in",
+          "like_ids": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ],
+          "phrase_missing": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ]
+        },
+        {
+          "term": "aaa",
+          "like_ids": [
+            4,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            4,
+            100,
+            101
+          ],
+          "phrase_missing": [
+            4,
+            100,
+            101
+          ]
+        },
+        {
+          "term": "iia",
+          "like_ids": [
+            4
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            4
+          ],
+          "phrase_missing": [
+            4
+          ]
+        },
+        {
+          "term": "all",
+          "like_ids": [
+            8
+          ],
+          "phrase_verified_ids": [
+            8
+          ],
+          "anchor": "+\"ll\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            8
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "and",
+          "like_ids": [
+            2,
+            8
+          ],
+          "phrase_verified_ids": [
+            2,
+            8
+          ],
+          "anchor": "+\"nd\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            2,
+            8
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "cafe",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [
+            5
+          ],
+          "anchor": "+\"fe\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "naive",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [
+            5
+          ],
+          "anchor": "+\"ve\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "été",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [
+            5
+          ],
+          "anchor": "+\"ét\" +\"té\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "e-commerce",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [],
+          "anchor": "+\"co\" +\"om\" +\"mm\" +\"me\" +\"er\" +\"rc\" +\"ce\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": [
+            5
+          ]
+        },
+        {
+          "term": "R&D",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": [
+            5
+          ]
+        },
+        {
+          "term": "a-b",
+          "like_ids": [],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [],
+          "phrase_missing": []
+        },
+        {
+          "term": "abc",
+          "like_ids": [
+            6
+          ],
+          "phrase_verified_ids": [
+            6
+          ],
+          "anchor": "+\"bc\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            6
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "abc def",
+          "like_ids": [
+            6
+          ],
+          "phrase_verified_ids": [
+            6
+          ],
+          "anchor": "+\"bc\" +\"ef\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            6
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "ab bc",
+          "like_ids": [
+            7
+          ],
+          "phrase_verified_ids": [
+            7
+          ],
+          "anchor": "+\"bc\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            7
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "ＡＩ",
+          "like_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            9
+          ],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_missing": [
+            2,
+            4,
+            5,
+            100,
+            101
+          ]
+        },
+        {
+          "term": "%",
+          "like_ids": [
+            9
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            9
+          ],
+          "phrase_missing": [
+            9
+          ]
+        },
+        {
+          "term": "_",
+          "like_ids": [
+            9
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            9
+          ],
+          "phrase_missing": [
+            9
+          ]
+        },
+        {
+          "term": "zqxm",
+          "like_ids": [],
+          "phrase_verified_ids": [],
+          "anchor": "+\"zq\" +\"qx\" +\"xm\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [],
+          "phrase_missing": []
+        }
+      ],
+      "create_table": "CREATE TABLE `existing_on` (\n  `id` int NOT NULL,\n  `transcript_text` longtext,\n  PRIMARY KEY (`id`),\n  FULLTEXT KEY `ft_original` (`transcript_text`),\n  FULLTEXT KEY `ft_ngram` (`transcript_text`) /*!50100 WITH PARSER `ngram` */ \n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+    },
+    "first_off": {
+      "fts_config": {
+        "optimize_checkpoint_limit": "180",
+        "synced_doc_id": "14",
+        "stopword_table_name": "",
+        "use_stopword": "0"
+      },
+      "cases": [
+        {
+          "term": "foreign exchange",
+          "like_ids": [
+            1
+          ],
+          "phrase_verified_ids": [
+            1
+          ],
+          "anchor": "+\"fo\" +\"or\" +\"re\" +\"ei\" +\"ig\" +\"gn\" +\"ex\" +\"xc\" +\"ch\" +\"ha\" +\"an\" +\"ng\" +\"ge\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            1
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "xchange",
+          "like_ids": [
+            1,
+            2,
+            8
+          ],
+          "phrase_verified_ids": [
+            1,
+            2,
+            8
+          ],
+          "anchor": "+\"xc\" +\"ch\" +\"ha\" +\"an\" +\"ng\" +\"ge\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            1,
+            2,
+            8
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "print",
+          "like_ids": [
+            3,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            3,
+            100,
+            101
+          ],
+          "anchor": "+\"pr\" +\"ri\" +\"in\" +\"nt\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            3,
+            100,
+            101
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "revenue",
+          "like_ids": [
+            1
+          ],
+          "phrase_verified_ids": [
+            1
+          ],
+          "anchor": "+\"re\" +\"ev\" +\"ve\" +\"en\" +\"nu\" +\"ue\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            1
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "AI",
+          "like_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "anchor": "+\"AI\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "in",
+          "like_ids": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ],
+          "anchor": "+\"in\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            2,
+            3,
+            4,
+            100,
+            101
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "aaa",
+          "like_ids": [
+            4,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            4,
+            100,
+            101
+          ],
+          "anchor": "+\"aa\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            4,
+            100,
+            101
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "iia",
+          "like_ids": [
+            4
+          ],
+          "phrase_verified_ids": [
+            4
+          ],
+          "anchor": "+\"ii\" +\"ia\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            4
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "all",
+          "like_ids": [
+            8
+          ],
+          "phrase_verified_ids": [
+            8
+          ],
+          "anchor": "+\"al\" +\"ll\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            8
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "and",
+          "like_ids": [
+            2,
+            8
+          ],
+          "phrase_verified_ids": [
+            2,
+            8
+          ],
+          "anchor": "+\"an\" +\"nd\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            2,
+            8
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "cafe",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [
+            5
+          ],
+          "anchor": "+\"ca\" +\"af\" +\"fe\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "naive",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [
+            5
+          ],
+          "anchor": "+\"na\" +\"ai\" +\"iv\" +\"ve\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "été",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [
+            5
+          ],
+          "anchor": "+\"ét\" +\"té\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "e-commerce",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [],
+          "anchor": "+\"co\" +\"om\" +\"mm\" +\"me\" +\"er\" +\"rc\" +\"ce\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": [
+            5
+          ]
+        },
+        {
+          "term": "R&D",
+          "like_ids": [
+            5
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            5
+          ],
+          "phrase_missing": [
+            5
+          ]
+        },
+        {
+          "term": "a-b",
+          "like_ids": [],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [],
+          "phrase_missing": []
+        },
+        {
+          "term": "abc",
+          "like_ids": [
+            6
+          ],
+          "phrase_verified_ids": [
+            6
+          ],
+          "anchor": "+\"ab\" +\"bc\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            6
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "abc def",
+          "like_ids": [
+            6
+          ],
+          "phrase_verified_ids": [
+            6
+          ],
+          "anchor": "+\"ab\" +\"bc\" +\"de\" +\"ef\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            6
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "ab bc",
+          "like_ids": [
+            7
+          ],
+          "phrase_verified_ids": [
+            7
+          ],
+          "anchor": "+\"ab\" +\"bc\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            7
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "ＡＩ",
+          "like_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_verified_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "anchor": "+\"ＡＩ\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [
+            2,
+            4,
+            5,
+            9,
+            100,
+            101
+          ],
+          "phrase_missing": []
+        },
+        {
+          "term": "%",
+          "like_ids": [
+            9
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            9
+          ],
+          "phrase_missing": [
+            9
+          ]
+        },
+        {
+          "term": "_",
+          "like_ids": [
+            9
+          ],
+          "phrase_verified_ids": [],
+          "anchor": null,
+          "fallback_scan": true,
+          "anchor_verified_ids": [
+            9
+          ],
+          "phrase_missing": [
+            9
+          ]
+        },
+        {
+          "term": "zqxm",
+          "like_ids": [],
+          "phrase_verified_ids": [],
+          "anchor": "+\"zq\" +\"qx\" +\"xm\"",
+          "fallback_scan": false,
+          "anchor_verified_ids": [],
+          "phrase_missing": []
+        }
+      ],
+      "create_table": "CREATE TABLE `first_off` (\n  `id` int NOT NULL,\n  `transcript_text` longtext,\n  PRIMARY KEY (`id`),\n  FULLTEXT KEY `ft_original` (`transcript_text`),\n  FULLTEXT KEY `ft_ngram` (`transcript_text`) /*!50100 WITH PARSER `ngram` */ \n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+    }
+  }
+}

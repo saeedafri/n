@@ -1,0 +1,14 @@
+{
+ "ticker": "SFM",
+ "fiscal_year": 2023,
+ "value": 386,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "e latest in wholesome, innovative products made with lifestyle-friendly ingredients such as organic, plant-based and gluten-free. Headquartered in Phoenix with 386 stores in 23 states as of January 1, 2023, we are one of the largest and fastest",
+ "fye_date": "2023-01-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SFM/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

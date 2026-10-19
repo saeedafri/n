@@ -1,0 +1,11 @@
+{"output": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/native-helper-unicode-control-fixture.json", "cases": 39, "passed": 37, "before": {"optimize_checkpoint_limit": "180", "synced_doc_id": "0", "stopword_table_name": "", "use_stopword": "1"}, "after": {"optimize_checkpoint_limit": "180", "synced_doc_id": "0", "stopword_table_name": "", "use_stopword": "0"}}
+Traceback (most recent call last):
+  File "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/scripts/ec_ngram_corpus_probe.py", line 372, in <module>
+    main()
+    ~~~~^^
+  File "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/scripts/ec_ngram_corpus_probe.py", line 364, in main
+    fixture(args)
+    ~~~~~~~^^^^^^
+  File "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/scripts/ec_ngram_corpus_probe.py", line 347, in fixture
+    raise AssertionError([case for case in cases if not case["passed"] or case["candidate_missing"]])
+AssertionError: [{'term': 'strasse', 'anchor': '+"st" +"tr" +"ra" +"as" +"ss" +"se"', 'oracle_locate_ids': [24, 22, 20], 'binary_lower_locate_ids': [24, 22], 'python_lower_ids': [24, 22], 'binary_lower_matches_python': True, 'candidate_missing_python_lower': [], 'candidate_ids': [22, 24], 'candidate_missing': [20], 'helper_ids': [24, 22], 'fallback_scan_required': False, 'passed': False}, {'term': 'ae', 'anchor': '+"ae"', 'oracle_locate_ids': [24, 22, 20], 'binary_lower_locate_ids': [22], 'python_lower_ids': [22], 'binary_lower_matches_python': True, 'candidate_missing_python_lower': [], 'candidate_ids': [22], 'candidate_missing': [20, 24], 'helper_ids': [22], 'fallback_scan_required': False, 'passed': False}]

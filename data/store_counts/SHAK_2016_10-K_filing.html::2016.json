@@ -1,0 +1,14 @@
+{
+ "ticker": "SHAK",
+ "fiscal_year": 2016,
+ "value": 114,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "titution, garnering significant media attention, critical acclaim and a passionately-devoted following. Since its inception, Shake Shack has grown rapidly—with 114 Shacks, as of December 28, 2016, in 13 countries and 16 states, as well",
+ "fye_date": "2016-12-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHAK/2016/10-K/filing.html::2016",
+ "extractor_version": 5
+}

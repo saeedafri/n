@@ -1,0 +1,351 @@
+{
+  "cases": [
+    {
+      "keyword": "exchange",
+      "status": "passed",
+      "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-05/01-exchange",
+      "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-xn8i3rpl",
+      "port": 8513,
+      "cache_scope": "application result caches bypassed; shared database/OS buffers not flushed",
+      "errors": [],
+      "pid": 79063,
+      "expected_empty": false,
+      "pages": [
+        {
+          "cards": 15,
+          "keys": [
+            "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+            "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+            "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+            "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+            "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+            "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+            "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+            "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+            "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+            "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+            "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+            "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+            "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+            "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+            "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac"
+          ]
+        },
+        {
+          "cards": 30,
+          "keys": [
+            "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+            "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+            "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+            "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+            "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+            "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+            "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+            "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+            "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+            "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+            "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+            "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+            "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+            "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+            "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac",
+            "5b22e99f9a5d7499fd886ab8fb5aeee9ecb76dc70156622d99bd0c7d80489981",
+            "ae606070829582e59f895e88e277b0e89fb769dfa8e441318f2e8cb7de6ee52e",
+            "581e5e960442d3dd8b4ff3a5d4db7108adcc8578a7e6536dd78a49b979855031",
+            "538ab8943584ddfaead7044850f37fe98199835eb7219bb73668ea1ca05e6316",
+            "ceed969a41e3ca58e3d64c0572207b895dc0a150d48f0d259b729998c5b545b7",
+            "6a8be8b2ec6dc2e451bd0989a3cd1d4b9bd093a3cf2bdb2eacc77e8617c03b4c",
+            "3fef20010063555171feedceb5e4ddb134967f475d193f2ab375483a997e92ce",
+            "faca5daa3b2199b43f2436aa69cc523f78fa4645663d3023e8aafd445c831690",
+            "539fdaf84dd942f9758d10983ec2bb923d92b05277747e77ec18f5f66ba75213",
+            "9a0a304fd754084f3621b9d2455938c1ef52ab299adbd3eca0e9e6fa29a31fed",
+            "796777f4465da93464ee33fb9acf79c79fbd32d29e0897017b1d8ad7c9e779a8",
+            "0c1105c19e5a6aa465e444f922adc74d90d8ed68e61750ba157d3ad0e79c2b8e",
+            "e5c27af0bff736e0ad466c8a9bf1bac97cc0f4d5dab80eddd1d44b62107720c0",
+            "cb85c340543d7e4317d7b3e48fe80a589e73c2ce106dbf8376fc91cf9150c025",
+            "a64564ffb97af49b0fdeca1bdee8125e34b0ce19f0392276819d12a2806d633c"
+          ]
+        },
+        {
+          "cards": 45,
+          "keys": [
+            "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+            "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+            "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+            "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+            "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+            "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+            "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+            "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+            "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+            "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+            "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+            "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+            "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+            "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+            "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac",
+            "5b22e99f9a5d7499fd886ab8fb5aeee9ecb76dc70156622d99bd0c7d80489981",
+            "ae606070829582e59f895e88e277b0e89fb769dfa8e441318f2e8cb7de6ee52e",
+            "581e5e960442d3dd8b4ff3a5d4db7108adcc8578a7e6536dd78a49b979855031",
+            "538ab8943584ddfaead7044850f37fe98199835eb7219bb73668ea1ca05e6316",
+            "ceed969a41e3ca58e3d64c0572207b895dc0a150d48f0d259b729998c5b545b7",
+            "6a8be8b2ec6dc2e451bd0989a3cd1d4b9bd093a3cf2bdb2eacc77e8617c03b4c",
+            "3fef20010063555171feedceb5e4ddb134967f475d193f2ab375483a997e92ce",
+            "faca5daa3b2199b43f2436aa69cc523f78fa4645663d3023e8aafd445c831690",
+            "539fdaf84dd942f9758d10983ec2bb923d92b05277747e77ec18f5f66ba75213",
+            "9a0a304fd754084f3621b9d2455938c1ef52ab299adbd3eca0e9e6fa29a31fed",
+            "796777f4465da93464ee33fb9acf79c79fbd32d29e0897017b1d8ad7c9e779a8",
+            "0c1105c19e5a6aa465e444f922adc74d90d8ed68e61750ba157d3ad0e79c2b8e",
+            "e5c27af0bff736e0ad466c8a9bf1bac97cc0f4d5dab80eddd1d44b62107720c0",
+            "cb85c340543d7e4317d7b3e48fe80a589e73c2ce106dbf8376fc91cf9150c025",
+            "a64564ffb97af49b0fdeca1bdee8125e34b0ce19f0392276819d12a2806d633c",
+            "a07c6b524e4743c1bfdfe03ceec1e2d7311d22bcfc4cb55c62bb341a6ae80da6",
+            "4eda2d224fa4ddddc6d70965e4ff32f0e2fd5449299d82d1acd05150df1f5922",
+            "9eb81ebe99c078a489851b45d2ccce9e33649a3e5a5809c604a992beb317dd26",
+            "8a1117a9ca983bcdb9a343db8d2825981f88aa400f451b9fec6c15174c69856f",
+            "2baca4aebd8402972faf09826e8a12b8933e3c240eb66f184e6796b71b0c9f5c",
+            "476ea19c52207184c7d30ea81053550832cade414116dd58707ff35c448ae021",
+            "83d8653988830341e38cfa822e2bab916c3f4bbc301120eed66ca3d1ed486f28",
+            "1481dda28eb9076d5dda7b17a00ae3d692ffe327d7bb49958ee65f0a41617ade",
+            "10cd68f65431b98bf3226cf8b71981c505422e4c7cc2de84784bd0347d30aeb5",
+            "a226f7167debb2fb33ca9e390007d76b92888e2d370cb191804a132d891d6df5",
+            "7ea98d9c41f507275e7eb96eb46d447fe528992735fd83bc2a5f017a06495705",
+            "39af4e5678b41d35b25cefcc50e5cd0bce024438857fbad6b2b82f9c0810058e",
+            "e6b43b9a57a78595358bc73e02baed4fbfa705b4ce3839786fb20e8ec8502ca0",
+            "ed2aebd13722f2c1866b9bab6d3f8348f64abef567fcf5eff122aa7488dd3cdb",
+            "7d6be2fe88b5a371d2dc250195b04214f92d2696f95d734ea4aa55a1384fea2c"
+          ]
+        }
+      ],
+      "final_cards": [
+        {
+          "text": "Toshiya Hari\n...ile on Form 8-K with the Securities and Exchange Commission. All our statements are made...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q2\nView \u2192",
+          "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=exchange"
+        },
+        {
+          "text": "John Rainey\n...n a constant currency basis. If current exchange rates were to stay where they are right...\nWalmart Inc. (WMT) \u2022 2027 \u2022 Q1\nView \u2192",
+          "href": "/earnings_calls?ticker=WMT&year=2027&quarter=Q1&highlight=exchange"
+        },
+        {
+          "text": "Toshiya Hari\n...ile on Form 8-K with the Securities and Exchange Commission. All our statements are made...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q1\nView \u2192",
+          "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q1&highlight=exchange"
+        },
+        {
+          "text": "Melissa Stone\n...duct costs as well as favorable foreign exchange. Importantly, we saw significant sequen...\nPVH Corp. (PVH) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=PVH&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Vladimir Tenev\n...lion in trading volume on decentralized exchanges after launch, which made it one of the...\nLAM RESEARCH Corp. (LRCX) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=LRCX&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Eric Prengel\n... in our filings with the Securities and Exchange Commission. We will also discuss certai...\nElastic N.V. (ESTC) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=ESTC&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Michelle Chang\n...where we are allowing a grace period in exchange for establishing a more substantial and...\nZoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=ZM&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Martin Lam\n...filings we make with the Securities and Exchange Commission from time to time, including...\nAtlassian Corporation (TEAM) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=TEAM&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Paul Jonas Silverstein\n...le on Form 8-Ks with the Securities and Exchange Commission. All our statements are made...\nCoherent Corp. (COHR) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=COHR&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Wissam G. Jabre\n...xcluding the effect of foreign currency exchange rates, which had little impact relative...\nNetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=NTAP&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Roger Sachs\n...s, which excludes the impact of foreign exchange and any inorganic activity. We will als...\nDXC Technology Company (DXC) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=DXC&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Jonathan Collins\n... and 10-Q filed with the Securities and Exchange Commission. Finally, unless otherwise s...\nAmerica's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=CRMT&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Andy Milevoj\n... public filings with the Securities and Exchange Commission. The company disclaims any o...\n1-800-FLOWERS.COM, Inc. (FLWS) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=FLWS&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Brian Campbell\n...d other filings with the Securities and Exchange Commission for a discussion of importan...\nAutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=AZO&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Gary Millerchip\n... changes in gasoline prices and foreign exchange, are intended as supplemental informati...\nCostco Wholesale Corporation (COST) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=COST&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Sallie A. DeMarsilis\n...he favorable impact of foreign currency exchange rates. Operating expenses were $89,300,...\nMovado Group, Inc. (MOV) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=MOV&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Raj Mehta\n...year, primarily due to foreign currency exchange rates. Total company operating margin e...\nCapri Holdings (CPRI) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=CPRI&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Justin Furby\n...cuments we file with the Securities and Exchange Commission, including our fiscal 2025 a...\nWorkday (WDAY) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=WDAY&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Toshiya Hari\n...ile on Form 8-K with the Securities and Exchange Commission. All our statements are made...\nNVIDIA (NVDA) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=NVDA&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Jonathan Neilson\n...rts and filings with the Securities and Exchange Commission. We do not undertake any dut...\nMicrosoft Corporation (MSFT) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=MSFT&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "John David Rainey\n...n a constant currency basis. If current exchange rates were to stay where they are now, ...\nWalmart Inc. (WMT) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=WMT&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Oona McCullough\n...mpany's filings with the Securities and Exchange Commission. For more detailed commentar...\nUrban Outfitters, Inc. (URBN) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=URBN&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Debra McConnell\n...ave also detailed the impact of foreign exchange on our consolidated results and our int...\nThe TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=TJX&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Andre Schulten\n...ersus prior year. We expect the foreign exchange headwind of approximately $50 million a...\nThe Procter & Gamble Company (PG) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=PG&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Operator\n...r other filings with the Securities and Exchange Commission. Today's presentation will a...\nThe Home Depot, Inc. (HD) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=HD&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Christina Colone\n...r other filings with the Securities and Exchange Commission for a complete list of risks...\nTapestry, Inc. (TPR) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=TPR&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Matthew Friend\n...s with no expected benefit from foreign exchange and currency-neutral revenue growth con...\nNIKE, Inc. (NKE) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=NKE&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Erinn Kohler\n...es and fluctuations in foreign currency exchange rates, geopolitical conflicts including...\nDeckers Outdoor Corporation (DECK) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=DECK&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Matthew M. Bilunas\n...iven by the favorable impact of foreign exchange rates, which was partially offset by a ...\nBest Buy (BBY) \u2022 2026 \u2022 Q4\nView \u2192",
+          "href": "/earnings_calls?ticker=BBY&year=2026&quarter=Q4&highlight=exchange"
+        },
+        {
+          "text": "Christopher Work\n... the prior year, and changes in foreign exchange positively increased total sales growth...\nZumiez Inc. (ZUMZ) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=ZUMZ&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Zachary Coughlin\n...d a positive impact of $0.14 related to exchange. Interest expense was $21 million, and ...\nPVH Corp. (PVH) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=PVH&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Isabel Janci\n...r other filings with the Securities and Exchange Commission. Today's presentation will a...\nThe Home Depot, Inc. (HD) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=HD&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Whitney Notaro\n...Form 10-K filed with the Securities and Exchange Commission on March 18, 2025, quarterly...\nThe Gap, Inc. (GAP) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=GAP&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Sharon John\n...s earnings call from the New York Stock Exchange, where we will also take part in the an...\nBuild-A-Bear Workshop, Inc. (BBW) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=BBW&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Mohit Gupta\n...rts and filings with the Securities and Exchange Commission. In addition, we will be ref...\nAbercrombie & Fitch Co. (ANF) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=ANF&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Georgia Quinn\n... in our filings with the Securities and Exchange Commission, including our most recent F...\nFORWARD INDUSTRIES, INC. (FWDI) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=FWDI&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Reed Anderson\n...r other filings with the Securities and Exchange Commission could cause actual results t...\nJ&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=JJSF&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Christopher Love\n... to our filings with the Securities and Exchange Commission for a more detailed discussi...\nArk Restaurants Corp. (ARKR) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=ARKR&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Christopher Suh\n...approximately 0.5 point of benefit from exchange rates. For our non-GAAP results, Pismo ...\nVISA Inc. (V) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=V&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Operator\n...ts that we file with the Securities and Exchange Commission, including the cautionary st...\nUNITEDHEALTH GROUP Inc. (UNH) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=UNH&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Sharon Yeshaya\n...red to the prior year, aided by foreign exchange. Micro results declined year-over-year,...\nMORGAN STANLEY (MS) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=MS&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Joseph J. Wolk\n...ts what we know today regarding foreign exchange rates, the broader macroeconomic enviro...\nJOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=JNJ&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Alastair Borthwick\n...h management and brokerage clearing and exchange costs in equities, respectively. We als...\nBANK OF AMERICA Corp. (BAC) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=BAC&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Eric Prengel\n... in our filings with the Securities and Exchange Commission. We will also discuss certai...\nElastic N.V. (ESTC) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=ESTC&year=2026&quarter=Q3&highlight=exchange"
+        },
+        {
+          "text": "Martin Lam\n...filings we make with the Securities and Exchange Commission from time to time, including...\nAtlassian Corporation (TEAM) \u2022 2026 \u2022 Q3\nView \u2192",
+          "href": "/earnings_calls?ticker=TEAM&year=2026&quarter=Q3&highlight=exchange"
+        }
+      ],
+      "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-05/01-exchange/videos/ca40bb57eb7313ed2ababb2e280a04cc.webm",
+      "sql_queries": 32,
+      "sql_violations": [],
+      "timeline_analysis": {
+        "samples": 397,
+        "interval_ms": 100,
+        "blank_busy_without_loader": [],
+        "loader_visible_samples": 330
+      },
+      "video_analysis": {
+        "decoded_frames": 1021,
+        "fps": 25.0,
+        "duration_s": 40.84,
+        "near_blank_ratio": 0.0009794319294809011,
+        "low_contrast_fade_ratio": 0.8481880509304603,
+        "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+        "contact_sheets": [
+          "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-baseline-20261019-05/01-exchange/contact-sheet-00.jpg"
+        ]
+      },
+      "action_timings_inferred": [
+        {
+          "action": "startup",
+          "started_at": 1792398474.223,
+          "elapsed_ms": 8065,
+          "source": "inferred from100ms DOM samples"
+        },
+        {
+          "action": "search exchange",
+          "started_at": 1792398482.388,
+          "elapsed_ms": 5700,
+          "source": "inferred from100ms DOM samples"
+        },
+        {
+          "action": "Show more 1",
+          "started_at": 1792398488.203,
+          "elapsed_ms": 10691,
+          "source": "inferred from100ms DOM samples"
+        },
+        {
+          "action": "Show more 2",
+          "started_at": 1792398498.989,
+          "elapsed_ms": 14800,
+          "source": "inferred from100ms DOM samples"
+        }
+      ]
+    }
+  ],
+  "passed": true
+}

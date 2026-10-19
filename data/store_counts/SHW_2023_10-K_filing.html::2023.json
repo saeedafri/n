@@ -1,0 +1,14 @@
+{
+ "ticker": "SHW",
+ "fiscal_year": 2023,
+ "value": 93,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | | 11 | 82 | 93 | | 24 | 42 | 66",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHW/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

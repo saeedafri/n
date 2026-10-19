@@ -1,0 +1,480 @@
+{
+  "oracle": "Python lower literal over raw source text",
+  "predicate": "LOCATE(CAST(LOWER(keyword) AS BINARY),CAST(LOWER(REPLACE(transcript_text,CONVERT(0xC4B0 USING utf8mb4),CONVERT(0x69CC87 USING utf8mb4))) AS BINARY))>0",
+  "cases": [
+    {
+      "term": "foreign exchange",
+      "sql_ids": [
+        1
+      ],
+      "python_ids": [
+        1
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "xchange",
+      "sql_ids": [
+        25,
+        8,
+        2,
+        1
+      ],
+      "python_ids": [
+        25,
+        8,
+        2,
+        1
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "print",
+      "sql_ids": [
+        21,
+        3
+      ],
+      "python_ids": [
+        21,
+        3
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "revenue",
+      "sql_ids": [
+        1
+      ],
+      "python_ids": [
+        1
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "AI",
+      "sql_ids": [
+        20,
+        4,
+        2
+      ],
+      "python_ids": [
+        20,
+        4,
+        2
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "in",
+      "sql_ids": [
+        24,
+        21,
+        4,
+        3,
+        2
+      ],
+      "python_ids": [
+        24,
+        21,
+        4,
+        3,
+        2
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "aaa",
+      "sql_ids": [
+        4
+      ],
+      "python_ids": [
+        4
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "iia",
+      "sql_ids": [
+        4
+      ],
+      "python_ids": [
+        4
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "all",
+      "sql_ids": [
+        8
+      ],
+      "python_ids": [
+        8
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "and",
+      "sql_ids": [
+        23,
+        8,
+        2
+      ],
+      "python_ids": [
+        23,
+        8,
+        2
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "cafe",
+      "sql_ids": [
+        20
+      ],
+      "python_ids": [
+        20
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "naive",
+      "sql_ids": [],
+      "python_ids": [],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "été",
+      "sql_ids": [
+        5
+      ],
+      "python_ids": [
+        5
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "e-commerce",
+      "sql_ids": [
+        5
+      ],
+      "python_ids": [
+        5
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "R&D",
+      "sql_ids": [
+        5
+      ],
+      "python_ids": [
+        5
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "a-b",
+      "sql_ids": [
+        302
+      ],
+      "python_ids": [
+        302
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "abc",
+      "sql_ids": [
+        6
+      ],
+      "python_ids": [
+        6
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "abc def",
+      "sql_ids": [
+        6
+      ],
+      "python_ids": [
+        6
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "ab bc",
+      "sql_ids": [
+        7
+      ],
+      "python_ids": [
+        7
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "ＡＩ",
+      "sql_ids": [
+        23,
+        9
+      ],
+      "python_ids": [
+        23,
+        9
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "%",
+      "sql_ids": [
+        9
+      ],
+      "python_ids": [
+        9
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "_",
+      "sql_ids": [
+        305,
+        9
+      ],
+      "python_ids": [
+        305,
+        9
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "zqxm",
+      "sql_ids": [],
+      "python_ids": [],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "exchange",
+      "sql_ids": [
+        25,
+        8,
+        2,
+        1
+      ],
+      "python_ids": [
+        25,
+        8,
+        2,
+        1
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "strasse",
+      "sql_ids": [
+        24,
+        22
+      ],
+      "python_ids": [
+        24,
+        22
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "Straße",
+      "sql_ids": [
+        20
+      ],
+      "python_ids": [
+        20
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "ae",
+      "sql_ids": [
+        22
+      ],
+      "python_ids": [
+        22
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "æ",
+      "sql_ids": [
+        24,
+        20
+      ],
+      "python_ids": [
+        24,
+        20
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "fi",
+      "sql_ids": [],
+      "python_ids": [],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "can't",
+      "sql_ids": [
+        20
+      ],
+      "python_ids": [
+        20
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "don't",
+      "sql_ids": [
+        20
+      ],
+      "python_ids": [
+        20
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "can’t",
+      "sql_ids": [
+        22
+      ],
+      "python_ids": [
+        22
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "café",
+      "sql_ids": [
+        20
+      ],
+      "python_ids": [
+        20
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "naïve",
+      "sql_ids": [
+        22,
+        5
+      ],
+      "python_ids": [
+        22,
+        5
+      ],
+      "equal": true,
+      "candidate_missing_python": null
+    },
+    {
+      "term": "printer",
+      "sql_ids": [
+        3
+      ],
+      "python_ids": [
+        3
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "ab",
+      "sql_ids": [
+        7,
+        6,
+        3
+      ],
+      "python_ids": [
+        7,
+        6,
+        3
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "ix",
+      "sql_ids": [],
+      "python_ids": [],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "ka",
+      "sql_ids": [
+        24
+      ],
+      "python_ids": [
+        24
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    },
+    {
+      "term": "kelvin",
+      "sql_ids": [
+        24
+      ],
+      "python_ids": [
+        24
+      ],
+      "equal": true,
+      "candidate_missing_python": []
+    }
+  ],
+  "explain_after_original_fts_readded": [
+    {
+      "id": 1,
+      "select_type": "SIMPLE",
+      "table": "runtime_fixture",
+      "partitions": null,
+      "type": "fulltext",
+      "possible_keys": "idx_transcript_ngram_search",
+      "key": "idx_transcript_ngram_search",
+      "key_len": "0",
+      "ref": "const",
+      "rows": 1,
+      "filtered": 100.0,
+      "Extra": "Using where; Ft_hints: no_ranking"
+    }
+  ],
+  "passed": 39
+}

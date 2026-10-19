@@ -448,14 +448,14 @@ body:has(.cs-al-ov) .cs-page-subspinner{display:none!important;}
    failsafe fires, and the user sees a spinner over content that already
    rendered (server said 553ms; user clicked Ratios for 12.8s with nothing
    happening — STG log 16-Jul 22:20:57→22:21:10).
-   Failsafe shortened 22s → 6s: nothing here legitimately renders that long
-   (a bounded tab fetch caps at ~4s), so a spinner still up at 6s is stuck. */
+   Default failsafe is 6s; callers with longer work can disable it and clear
+   their placeholder when the render exits. */
 .cs-al-ov{position:fixed!important;inset:0!important;z-index:2147483000;
   background:rgba(244,244,244,.62);
   -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
   display:flex;align-items:center;justify-content:center;
   pointer-events:none!important;
-  animation:cs-al-in .18s ease both, cs-al-failsafe .4s ease 6s forwards;}
+  animation:cs-al-in .18s ease both__CS_LOADER_FAILSAFE__;}
 /* The sticky loader is hidden by its own script when the run ends and the
    results have painted (600s cap). The 6s fade above cut it off mid-run: a
    cold People screen showed no spinner from 6.5s until its grid drew at 16s. */
@@ -481,10 +481,13 @@ body:has(.cs-al-ov) .cs-page-subspinner{display:none!important;}
 """
 
 
-def _branded_overlay_html(label: str, oid: str = "cs-app-loader") -> str:
+def _branded_overlay_html(label: str, oid: str = "cs-app-loader", *, auto_hide: bool = True) -> str:
     """The branded Coresight loader card (logo + red spinner + dynamic label)."""
     return (
-        _BRANDED_LOADER_CSS
+        _BRANDED_LOADER_CSS.replace(
+            "__CS_LOADER_FAILSAFE__",
+            ", cs-al-failsafe .4s ease 6s forwards" if auto_hide else "",
+        )
         + f'<div id="{oid}" class="cs-al-ov"><div class="cs-al-card">'
         + f'<img src="{_CS_LOGO_URL}" alt="Coresight" referrerpolicy="no-referrer" '
         + 'onerror="this.style.display=\'none\'">'
@@ -494,7 +497,7 @@ def _branded_overlay_html(label: str, oid: str = "cs-app-loader") -> str:
     )
 
 
-def render_page_loader(label: str = "Loading", overlay: bool = True, placeholder=None):
+def render_page_loader(label: str = "Loading", overlay: bool = True, placeholder=None, *, auto_hide: bool = True):
     """Branded Coresight loader — a centered white card with the Coresight logo, a red
     spinner and a DYNAMIC {label} (e.g. "Loading Income Statement"). Shown via st.empty()
     so it is visible DURING the server compute and cleared when the Python render
@@ -506,11 +509,12 @@ def render_page_loader(label: str = "Loading", overlay: bool = True, placeholder
     overlay stays up until the grid actually appears (never vanishes onto a blank area).
 
     `overlay` is kept for backwards-compat (the card is always a centered overlay now).
+    Set `auto_hide=False` for slow work; the caller must clear the holder in a finally block.
     Returns the st.empty() placeholder; call .empty() on it when done.
     """
     try:
         holder = placeholder if placeholder is not None else st.empty()
-        holder.markdown(_branded_overlay_html(label), unsafe_allow_html=True)
+        holder.markdown(_branded_overlay_html(label, auto_hide=auto_hide), unsafe_allow_html=True)
         return holder
     except Exception as e:
         log_structured_error(e, page="loading", component="render_page_loader", operation="render page loader")

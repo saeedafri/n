@@ -1,0 +1,14 @@
+{
+ "ticker": "SHAK",
+ "fiscal_year": 2019,
+ "value": 275,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "titution, garnering significant media attention, critical acclaim and a passionately-devoted following. Since its inception, Shake Shack has grown rapidly—with 275 Shacks, as of December 25, 2019, in 15 countries and 30 states, as well",
+ "fye_date": "2019-12-25",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SHAK/2019/10-K/filing.html::2019",
+ "extractor_version": 5
+}

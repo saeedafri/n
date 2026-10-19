@@ -1,0 +1,3730 @@
+{
+  "keyword": "exchange",
+  "status": "passed",
+  "directory": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange",
+  "cache_dir": "/var/folders/9p/sq_mymws4s99z7k9fcc6_hdc0000gn/T/ec-cold-cache-l0xv2xg1",
+  "port": 8513,
+  "mode": "isolated_native_snapshot",
+  "cache_scope": "application result caches bypassed; private MySQL buffer pool reset before this keyword; live STG/OS buffers uncontrolled",
+  "errors": [],
+  "case_audit_initial_state": {
+    "watermark": 0,
+    "requires_search_query": false,
+    "path": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange/sql.jsonl"
+  },
+  "action_timings": [
+    {
+      "action": "initial_load",
+      "started_at": 1792404110.815231,
+      "elapsed_ms": 8156.774666975252,
+      "sql": {
+        "counters": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 2,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "search",
+      "started_at": 1792404121.086039,
+      "elapsed_ms": 3480.080249981256,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          6,
+          7,
+          8
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_1",
+      "started_at": 1792404126.647632,
+      "elapsed_ms": 2498.3990830078255,
+      "cards": 30,
+      "sql": {
+        "counters": [
+          9,
+          10,
+          11
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "show_more_2",
+      "started_at": 1792404131.236873,
+      "elapsed_ms": 2020.5166660016403,
+      "cards": 45,
+      "sql": {
+        "counters": [
+          12,
+          13,
+          14
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_company",
+      "selected": "NVIDIA (NVDA)",
+      "before": "Selected All Companies. Company",
+      "no_op": false,
+      "started_at": 1792404135.379903,
+      "elapsed_ms": 7465.572750021238,
+      "cards": 2,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ]
+        }
+      ],
+      "transcript_header": [
+        "NVIDIA (NVDA)2027Q2Report date: Aug 26, 2026Quarter ended: Jul 31, 2026Fiscal Period: Q2 FY2027"
+      ],
+      "controls_after": [
+        {
+          "label": "Selected NVIDIA (NVDA). Company",
+          "value": ""
+        },
+        {
+          "label": "Selected 2027. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected Q2. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {
+        "ticker": "NVDA"
+      },
+      "sql": {
+        "counters": [
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "SELECTs": 15,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 10,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 10,
+        "catalogue_queries": 4,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_year",
+      "selected": "2026",
+      "before": "Selected 2027. Year",
+      "no_op": false,
+      "started_at": 1792404145.09022,
+      "elapsed_ms": 7663.252334023127,
+      "cards": 1,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ]
+        }
+      ],
+      "transcript_header": [
+        "NVIDIA (NVDA)2026Q4Report date: Feb 25, 2026Quarter ended: Jan 31, 2026Fiscal Period: Q4 FY2026"
+      ],
+      "controls_after": [
+        {
+          "label": "Selected NVIDIA (NVDA). Company",
+          "value": ""
+        },
+        {
+          "label": "Selected 2026. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected Q4. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {
+        "ticker": "NVDA",
+        "year": "2026"
+      },
+      "sql": {
+        "counters": [
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44
+        ],
+        "SELECTs": 15,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 10,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 10,
+        "catalogue_queries": 4,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_quarter",
+      "selected": "Q1",
+      "before": "Selected Q4. Quarter",
+      "no_op": false,
+      "started_at": 1792404155.002205,
+      "elapsed_ms": 7659.378290991299,
+      "cards": 1,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q1"
+          ]
+        }
+      ],
+      "transcript_header": [
+        "NVIDIA (NVDA)2026Q1Report date: May 28, 2025Quarter ended: Apr 30, 2025Fiscal Period: Q1 FY2026"
+      ],
+      "controls_after": [
+        {
+          "label": "Selected NVIDIA (NVDA). Company",
+          "value": ""
+        },
+        {
+          "label": "Selected 2026. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected Q1. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {
+        "ticker": "NVDA",
+        "year": "2026",
+        "quarter": "Q1"
+      },
+      "sql": {
+        "counters": [
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58
+        ],
+        "SELECTs": 14,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 10,
+        "errors": 0,
+        "private_snapshot_queries": 4,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 10,
+        "catalogue_queries": 3,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "reset_company",
+      "selected": "All Companies",
+      "before": "Selected NVIDIA (NVDA). Company",
+      "no_op": false,
+      "started_at": 1792404164.9185338,
+      "elapsed_ms": 2704.3750830052886,
+      "cards": 45,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "LRCX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ESTC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ZM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TEAM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COHR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NTAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DXC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "CRMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "FLWS"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "AZO"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COST"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "MOV"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "CPRI"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WDAY"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "MSFT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "URBN"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TJX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PG"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TPR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NKE"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DECK"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BBY"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ZUMZ"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "GAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BBW"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ANF"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "FWDI"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "JJSF"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ARKR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "V"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "UNH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "MS"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "JNJ"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BAC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ESTC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TEAM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        }
+      ],
+      "transcript_header": [],
+      "controls_after": [
+        {
+          "label": "Selected \u2014 No watchlist \u2014. Watchlist",
+          "value": ""
+        },
+        {
+          "label": "Selected All Companies. Company",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Quarter",
+          "value": ""
+        }
+      ],
+      "canonical_scope_evidence": {
+        "expected": [
+          "exchange",
+          "ALL",
+          "ALL",
+          "ALL",
+          null
+        ],
+        "fresh_export_signature": true,
+        "log_byte_watermark": 56308
+      },
+      "expected_scope": {},
+      "reused_accumulator": true,
+      "sql": {
+        "counters": [
+          59,
+          60,
+          61,
+          62,
+          63
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 2,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_watchlist",
+      "selected": "Coresight-100 (99 companies)",
+      "before": "Selected \u2014 No watchlist \u2014. Watchlist",
+      "no_op": false,
+      "started_at": 1792404169.7619462,
+      "elapsed_ms": 4318.877875019098,
+      "cards": 15,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COST"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "URBN"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TJX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PG"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TPR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NKE"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DECK"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BBY"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "GAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        }
+      ],
+      "transcript_header": [],
+      "controls_after": [
+        {
+          "label": "Selected Coresight-100 (99 companies). Watchlist",
+          "value": ""
+        },
+        {
+          "label": "Selected All Companies. Company",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {},
+      "sql": {
+        "counters": [
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72
+        ],
+        "SELECTs": 9,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 4,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 4,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "reset_watchlist",
+      "selected": "\u2014 No watchlist \u2014",
+      "before": "Selected Coresight-100 (99 companies). Watchlist",
+      "no_op": false,
+      "started_at": 1792404176.2140641,
+      "elapsed_ms": 3220.5649159732275,
+      "cards": 15,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "LRCX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ESTC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ZM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TEAM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COHR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NTAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DXC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "CRMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "FLWS"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "AZO"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COST"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        }
+      ],
+      "transcript_header": [],
+      "controls_after": [
+        {
+          "label": "Selected \u2014 No watchlist \u2014. Watchlist",
+          "value": ""
+        },
+        {
+          "label": "Selected All Companies. Company",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Quarter",
+          "value": ""
+        }
+      ],
+      "canonical_scope_evidence": {
+        "expected": [
+          "exchange",
+          "ALL",
+          "ALL",
+          "ALL",
+          null
+        ],
+        "fresh_export_signature": true,
+        "log_byte_watermark": 75499
+      },
+      "expected_scope": {},
+      "sql": {
+        "counters": [
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80
+        ],
+        "SELECTs": 8,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "new_keyword",
+      "keyword": "print",
+      "started_at": 1792404181.550706,
+      "elapsed_ms": 2440.754624985857,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          81,
+          82,
+          83
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "new_keyword_show_more",
+      "started_at": 1792404186.0244029,
+      "elapsed_ms": 2234.2858749907464,
+      "cards": 30,
+      "sql": {
+        "counters": [
+          84,
+          85,
+          86
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "restore_original_keyword",
+      "keyword": "exchange",
+      "started_at": 1792404190.3715048,
+      "elapsed_ms": 2318.15424998058,
+      "cards": 15,
+      "sql": {
+        "counters": [
+          87,
+          88,
+          89
+        ],
+        "SELECTs": 3,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 0,
+        "errors": 0,
+        "private_snapshot_queries": 3,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 0,
+        "catalogue_queries": 0,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "search_queries_only": true,
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "view_first",
+      "started_at": 1792404194.720557,
+      "elapsed_ms": 7272.9016250232235,
+      "sql": {
+        "counters": [
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105
+        ],
+        "SELECTs": 16,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 12,
+        "errors": 0,
+        "private_snapshot_queries": 4,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 12,
+        "catalogue_queries": 3,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "review_dwell_ms": 2000,
+  "filter_flow_requested": true,
+  "fragment_query_verification": true,
+  "expected_empty": false,
+  "private_server_restart": {
+    "started_at": 1792404108.513449,
+    "elapsed_ms": 619.1449165344238,
+    "report": {
+      "action": "restart",
+      "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+      "running_pid": 94729,
+      "pool_bytes": 134217728,
+      "buffer_pool_load_at_startup": false,
+      "buffer_pool_dump_at_shutdown": false,
+      "corpus_queries_performed": 0,
+      "OS_file_cache": "uncontrolled"
+    }
+  },
+  "isolated_native": {
+    "socket": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/mysql.sock",
+    "database": "ec_ngram_corpus_probe",
+    "origin": "private native MySQL eligible-transcript corpus snapshot, NOT live STG",
+    "support_metadata_origin": "live STG, read-only",
+    "index_flag": "TRANSCRIPT_NATIVE_NGRAM_SEARCH=1",
+    "connections": "NullPool private connections; fresh browser/application process for each keyword",
+    "readiness_manifest": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-index-proof/corpus-readiness.json",
+    "readiness_manifest_sha256": "3219143c85fd890af728d67a69e4284a0c1378b17f7055f1731ae9904485f7ea"
+  },
+  "source_hashes_start": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "pid": 94735,
+  "video_recording_started_at_estimate": 1792404110.628492,
+  "video_recording_ready_at": 1792404110.815155,
+  "pages": [
+    {
+      "cards": 15,
+      "keys": [
+        "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+        "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+        "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+        "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+        "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+        "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+        "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+        "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+        "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+        "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+        "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+        "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+        "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+        "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+        "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac"
+      ]
+    },
+    {
+      "cards": 30,
+      "keys": [
+        "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+        "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+        "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+        "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+        "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+        "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+        "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+        "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+        "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+        "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+        "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+        "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+        "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+        "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+        "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac",
+        "5b22e99f9a5d7499fd886ab8fb5aeee9ecb76dc70156622d99bd0c7d80489981",
+        "ae606070829582e59f895e88e277b0e89fb769dfa8e441318f2e8cb7de6ee52e",
+        "581e5e960442d3dd8b4ff3a5d4db7108adcc8578a7e6536dd78a49b979855031",
+        "538ab8943584ddfaead7044850f37fe98199835eb7219bb73668ea1ca05e6316",
+        "ceed969a41e3ca58e3d64c0572207b895dc0a150d48f0d259b729998c5b545b7",
+        "6a8be8b2ec6dc2e451bd0989a3cd1d4b9bd093a3cf2bdb2eacc77e8617c03b4c",
+        "3fef20010063555171feedceb5e4ddb134967f475d193f2ab375483a997e92ce",
+        "faca5daa3b2199b43f2436aa69cc523f78fa4645663d3023e8aafd445c831690",
+        "539fdaf84dd942f9758d10983ec2bb923d92b05277747e77ec18f5f66ba75213",
+        "9a0a304fd754084f3621b9d2455938c1ef52ab299adbd3eca0e9e6fa29a31fed",
+        "796777f4465da93464ee33fb9acf79c79fbd32d29e0897017b1d8ad7c9e779a8",
+        "0c1105c19e5a6aa465e444f922adc74d90d8ed68e61750ba157d3ad0e79c2b8e",
+        "e5c27af0bff736e0ad466c8a9bf1bac97cc0f4d5dab80eddd1d44b62107720c0",
+        "cb85c340543d7e4317d7b3e48fe80a589e73c2ce106dbf8376fc91cf9150c025",
+        "a64564ffb97af49b0fdeca1bdee8125e34b0ce19f0392276819d12a2806d633c"
+      ]
+    },
+    {
+      "cards": 45,
+      "keys": [
+        "c41113f22c2b5252e2e94fa02f6a097b91be4ca5f916eab29f7aa8ccac56c059",
+        "fe13b8b050466c9b05498e80ade724451a986c25cfa81d535c31e26fa7009a77",
+        "b7da47211cd1a6ab16ba47d65e4c7948e68e9a33a79d1571ffd4666c2434b247",
+        "416c3bd0e84dabd512be597987ab837c5be36d3bfe8ef81ba49c0bc33fa46092",
+        "8eab04b3b621f1f41add372bd79cdc775c78c586a80a28f014adbbca13c5d9af",
+        "5939e29a0103c8f2886c59cd40f860e2d3c3fabdcd33865f75a60576b05d8a86",
+        "c28c3e55da13aaf46131d0097a5af05f31e4f32f740f4ca0dc1e65ea6720d03a",
+        "7fadc64a45cc4e5272cd395533a9717acb649c7631aed1fbe226351c4c10de19",
+        "bc612e313f2f757742a0f54e3154987f357942594dd9ff8bce326c4f420aaaa6",
+        "98bfe2af69d27b2e36b323b7d349374ad6d16d6a83dae53b5820537aab97628b",
+        "1dc3c25eadbdf242009b54c25df6027287bf6eb25c0177f443238effe7a3c193",
+        "359a3dc871d9af8fa54782eb5d18a2574e8bbfce24eda59e7158fbbc2ee19638",
+        "a875c1fdd8e2da36b76f51bf9724277e6da48671fc7ccc9134ced6d805a6a559",
+        "7a62aed6000476630c3f6b64a389e306ee17508dc9c3c74c5e84244aeeb453d8",
+        "a8d9a3659a336c74d2e7afbf048b5742375d6d94c2b7fc619e3e62a6ba1316ac",
+        "5b22e99f9a5d7499fd886ab8fb5aeee9ecb76dc70156622d99bd0c7d80489981",
+        "ae606070829582e59f895e88e277b0e89fb769dfa8e441318f2e8cb7de6ee52e",
+        "581e5e960442d3dd8b4ff3a5d4db7108adcc8578a7e6536dd78a49b979855031",
+        "538ab8943584ddfaead7044850f37fe98199835eb7219bb73668ea1ca05e6316",
+        "ceed969a41e3ca58e3d64c0572207b895dc0a150d48f0d259b729998c5b545b7",
+        "6a8be8b2ec6dc2e451bd0989a3cd1d4b9bd093a3cf2bdb2eacc77e8617c03b4c",
+        "3fef20010063555171feedceb5e4ddb134967f475d193f2ab375483a997e92ce",
+        "faca5daa3b2199b43f2436aa69cc523f78fa4645663d3023e8aafd445c831690",
+        "539fdaf84dd942f9758d10983ec2bb923d92b05277747e77ec18f5f66ba75213",
+        "9a0a304fd754084f3621b9d2455938c1ef52ab299adbd3eca0e9e6fa29a31fed",
+        "796777f4465da93464ee33fb9acf79c79fbd32d29e0897017b1d8ad7c9e779a8",
+        "0c1105c19e5a6aa465e444f922adc74d90d8ed68e61750ba157d3ad0e79c2b8e",
+        "e5c27af0bff736e0ad466c8a9bf1bac97cc0f4d5dab80eddd1d44b62107720c0",
+        "cb85c340543d7e4317d7b3e48fe80a589e73c2ce106dbf8376fc91cf9150c025",
+        "a64564ffb97af49b0fdeca1bdee8125e34b0ce19f0392276819d12a2806d633c",
+        "a07c6b524e4743c1bfdfe03ceec1e2d7311d22bcfc4cb55c62bb341a6ae80da6",
+        "4eda2d224fa4ddddc6d70965e4ff32f0e2fd5449299d82d1acd05150df1f5922",
+        "9eb81ebe99c078a489851b45d2ccce9e33649a3e5a5809c604a992beb317dd26",
+        "8a1117a9ca983bcdb9a343db8d2825981f88aa400f451b9fec6c15174c69856f",
+        "2baca4aebd8402972faf09826e8a12b8933e3c240eb66f184e6796b71b0c9f5c",
+        "476ea19c52207184c7d30ea81053550832cade414116dd58707ff35c448ae021",
+        "83d8653988830341e38cfa822e2bab916c3f4bbc301120eed66ca3d1ed486f28",
+        "1481dda28eb9076d5dda7b17a00ae3d692ffe327d7bb49958ee65f0a41617ade",
+        "10cd68f65431b98bf3226cf8b71981c505422e4c7cc2de84784bd0347d30aeb5",
+        "a226f7167debb2fb33ca9e390007d76b92888e2d370cb191804a132d891d6df5",
+        "7ea98d9c41f507275e7eb96eb46d447fe528992735fd83bc2a5f017a06495705",
+        "39af4e5678b41d35b25cefcc50e5cd0bce024438857fbad6b2b82f9c0810058e",
+        "e6b43b9a57a78595358bc73e02baed4fbfa705b4ce3839786fb20e8ec8502ca0",
+        "ed2aebd13722f2c1866b9bab6d3f8348f64abef567fcf5eff122aa7488dd3cdb",
+        "7d6be2fe88b5a371d2dc250195b04214f92d2696f95d734ea4aa55a1384fea2c"
+      ]
+    }
+  ],
+  "final_cards": [
+    {
+      "text": "Toshiya Hari\n...ile on Form 8-K with the Securities and Exchange Commission. All our statements are made...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q2\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=exchange",
+      "meta": "NVIDIA (NVDA) \u2022 2027 \u2022 Q2"
+    },
+    {
+      "text": "John Rainey\n...n a constant currency basis. If current exchange rates were to stay where they are right...\nWalmart Inc. (WMT) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=WMT&year=2027&quarter=Q1&highlight=exchange",
+      "meta": "Walmart Inc. (WMT) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Toshiya Hari\n...ile on Form 8-K with the Securities and Exchange Commission. All our statements are made...\nNVIDIA (NVDA) \u2022 2027 \u2022 Q1\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2027&quarter=Q1&highlight=exchange",
+      "meta": "NVIDIA (NVDA) \u2022 2027 \u2022 Q1"
+    },
+    {
+      "text": "Melissa Stone\n...duct costs as well as favorable foreign exchange. Importantly, we saw significant sequen...\nPVH Corp. (PVH) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PVH&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "PVH Corp. (PVH) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Vladimir Tenev\n...lion in trading volume on decentralized exchanges after launch, which made it one of the...\nLAM RESEARCH Corp. (LRCX) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=LRCX&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "LAM RESEARCH Corp. (LRCX) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Eric Prengel\n... in our filings with the Securities and Exchange Commission. We will also discuss certai...\nElastic N.V. (ESTC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ESTC&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Elastic N.V. (ESTC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Michelle Chang\n...where we are allowing a grace period in exchange for establishing a more substantial and...\nZoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=ZM&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Zoom Communications, Inc. (ZM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Martin Lam\n...filings we make with the Securities and Exchange Commission from time to time, including...\nAtlassian Corporation (TEAM) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TEAM&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Atlassian Corporation (TEAM) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Paul Jonas Silverstein\n...le on Form 8-Ks with the Securities and Exchange Commission. All our statements are made...\nCoherent Corp. (COHR) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=COHR&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Coherent Corp. (COHR) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Wissam G. Jabre\n...xcluding the effect of foreign currency exchange rates, which had little impact relative...\nNetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NTAP&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "NetApp, Inc. (NTAP) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Roger Sachs\n...s, which excludes the impact of foreign exchange and any inorganic activity. We will als...\nDXC Technology Company (DXC) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DXC&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "DXC Technology Company (DXC) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Jonathan Collins\n... and 10-Q filed with the Securities and Exchange Commission. Finally, unless otherwise s...\nAmerica's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CRMT&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "America's Car-Mart, Inc. (CRMT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Andy Milevoj\n... public filings with the Securities and Exchange Commission. The company disclaims any o...\n1-800-FLOWERS.COM, Inc. (FLWS) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=FLWS&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "1-800-FLOWERS.COM, Inc. (FLWS) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Brian Campbell\n...d other filings with the Securities and Exchange Commission for a discussion of importan...\nAutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=AZO&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "AutoZone, Inc. (AZO) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Gary Millerchip\n... changes in gasoline prices and foreign exchange, are intended as supplemental informati...\nCostco Wholesale Corporation (COST) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=COST&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Costco Wholesale Corporation (COST) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Sallie A. DeMarsilis\n...he favorable impact of foreign currency exchange rates. Operating expenses were $89,300,...\nMovado Group, Inc. (MOV) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MOV&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Movado Group, Inc. (MOV) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Raj Mehta\n...year, primarily due to foreign currency exchange rates. Total company operating margin e...\nCapri Holdings (CPRI) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=CPRI&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Capri Holdings (CPRI) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Justin Furby\n...cuments we file with the Securities and Exchange Commission, including our fiscal 2025 a...\nWorkday (WDAY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=WDAY&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Workday (WDAY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Toshiya Hari\n...ile on Form 8-K with the Securities and Exchange Commission. All our statements are made...\nNVIDIA (NVDA) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NVDA&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "NVIDIA (NVDA) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Jonathan Neilson\n...rts and filings with the Securities and Exchange Commission. We do not undertake any dut...\nMicrosoft Corporation (MSFT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=MSFT&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Microsoft Corporation (MSFT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "John David Rainey\n...n a constant currency basis. If current exchange rates were to stay where they are now, ...\nWalmart Inc. (WMT) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=WMT&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Walmart Inc. (WMT) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Oona McCullough\n...mpany's filings with the Securities and Exchange Commission. For more detailed commentar...\nUrban Outfitters, Inc. (URBN) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=URBN&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Urban Outfitters, Inc. (URBN) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Debra McConnell\n...ave also detailed the impact of foreign exchange on our consolidated results and our int...\nThe TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TJX&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "The TJX Companies, Inc. (TJX) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Andre Schulten\n...ersus prior year. We expect the foreign exchange headwind of approximately $50 million a...\nThe Procter & Gamble Company (PG) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=PG&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "The Procter & Gamble Company (PG) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Operator\n...r other filings with the Securities and Exchange Commission. Today's presentation will a...\nThe Home Depot, Inc. (HD) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=HD&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "The Home Depot, Inc. (HD) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Christina Colone\n...r other filings with the Securities and Exchange Commission for a complete list of risks...\nTapestry, Inc. (TPR) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=TPR&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Tapestry, Inc. (TPR) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Matthew Friend\n...s with no expected benefit from foreign exchange and currency-neutral revenue growth con...\nNIKE, Inc. (NKE) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=NKE&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "NIKE, Inc. (NKE) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Erinn Kohler\n...es and fluctuations in foreign currency exchange rates, geopolitical conflicts including...\nDeckers Outdoor Corporation (DECK) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=DECK&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Deckers Outdoor Corporation (DECK) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Matthew M. Bilunas\n...iven by the favorable impact of foreign exchange rates, which was partially offset by a ...\nBest Buy (BBY) \u2022 2026 \u2022 Q4\nView \u2192",
+      "href": "/earnings_calls?ticker=BBY&year=2026&quarter=Q4&highlight=exchange",
+      "meta": "Best Buy (BBY) \u2022 2026 \u2022 Q4"
+    },
+    {
+      "text": "Christopher Work\n... the prior year, and changes in foreign exchange positively increased total sales growth...\nZumiez Inc. (ZUMZ) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=ZUMZ&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "Zumiez Inc. (ZUMZ) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Zachary Coughlin\n...d a positive impact of $0.14 related to exchange. Interest expense was $21 million, and ...\nPVH Corp. (PVH) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=PVH&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "PVH Corp. (PVH) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Isabel Janci\n...r other filings with the Securities and Exchange Commission. Today's presentation will a...\nThe Home Depot, Inc. (HD) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=HD&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "The Home Depot, Inc. (HD) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Whitney Notaro\n...Form 10-K filed with the Securities and Exchange Commission on March 18, 2025, quarterly...\nThe Gap, Inc. (GAP) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=GAP&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "The Gap, Inc. (GAP) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Sharon John\n...s earnings call from the New York Stock Exchange, where we will also take part in the an...\nBuild-A-Bear Workshop, Inc. (BBW) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=BBW&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "Build-A-Bear Workshop, Inc. (BBW) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Mohit Gupta\n...rts and filings with the Securities and Exchange Commission. In addition, we will be ref...\nAbercrombie & Fitch Co. (ANF) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=ANF&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "Abercrombie & Fitch Co. (ANF) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Georgia Quinn\n... in our filings with the Securities and Exchange Commission, including our most recent F...\nFORWARD INDUSTRIES, INC. (FWDI) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=FWDI&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "FORWARD INDUSTRIES, INC. (FWDI) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Reed Anderson\n...r other filings with the Securities and Exchange Commission could cause actual results t...\nJ&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=JJSF&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "J&J Snack Foods Corp. (JJSF) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Christopher Love\n... to our filings with the Securities and Exchange Commission for a more detailed discussi...\nArk Restaurants Corp. (ARKR) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=ARKR&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "Ark Restaurants Corp. (ARKR) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Christopher Suh\n...approximately 0.5 point of benefit from exchange rates. For our non-GAAP results, Pismo ...\nVISA Inc. (V) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=V&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "VISA Inc. (V) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Operator\n...ts that we file with the Securities and Exchange Commission, including the cautionary st...\nUNITEDHEALTH GROUP Inc. (UNH) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=UNH&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "UNITEDHEALTH GROUP Inc. (UNH) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Sharon Yeshaya\n...red to the prior year, aided by foreign exchange. Micro results declined year-over-year,...\nMORGAN STANLEY (MS) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=MS&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "MORGAN STANLEY (MS) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Joseph J. Wolk\n...ts what we know today regarding foreign exchange rates, the broader macroeconomic enviro...\nJOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=JNJ&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "JOHNSON & JOHNSON (JNJ) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Alastair Borthwick\n...h management and brokerage clearing and exchange costs in equities, respectively. We als...\nBANK OF AMERICA Corp. (BAC) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=BAC&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "BANK OF AMERICA Corp. (BAC) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Eric Prengel\n... in our filings with the Securities and Exchange Commission. We will also discuss certai...\nElastic N.V. (ESTC) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=ESTC&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "Elastic N.V. (ESTC) \u2022 2026 \u2022 Q3"
+    },
+    {
+      "text": "Martin Lam\n...filings we make with the Securities and Exchange Commission from time to time, including...\nAtlassian Corporation (TEAM) \u2022 2026 \u2022 Q3\nView \u2192",
+      "href": "/earnings_calls?ticker=TEAM&year=2026&quarter=Q3&highlight=exchange",
+      "meta": "Atlassian Corporation (TEAM) \u2022 2026 \u2022 Q3"
+    }
+  ],
+  "filter_flow": [
+    {
+      "action": "filter_company",
+      "selected": "NVIDIA (NVDA)",
+      "before": "Selected All Companies. Company",
+      "no_op": false,
+      "started_at": 1792404135.379903,
+      "elapsed_ms": 7465.572750021238,
+      "cards": 2,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ]
+        }
+      ],
+      "transcript_header": [
+        "NVIDIA (NVDA)2027Q2Report date: Aug 26, 2026Quarter ended: Jul 31, 2026Fiscal Period: Q2 FY2027"
+      ],
+      "controls_after": [
+        {
+          "label": "Selected NVIDIA (NVDA). Company",
+          "value": ""
+        },
+        {
+          "label": "Selected 2027. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected Q2. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {
+        "ticker": "NVDA"
+      },
+      "sql": {
+        "counters": [
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "SELECTs": 15,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 10,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 10,
+        "catalogue_queries": 4,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_year",
+      "selected": "2026",
+      "before": "Selected 2027. Year",
+      "no_op": false,
+      "started_at": 1792404145.09022,
+      "elapsed_ms": 7663.252334023127,
+      "cards": 1,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ]
+        }
+      ],
+      "transcript_header": [
+        "NVIDIA (NVDA)2026Q4Report date: Feb 25, 2026Quarter ended: Jan 31, 2026Fiscal Period: Q4 FY2026"
+      ],
+      "controls_after": [
+        {
+          "label": "Selected NVIDIA (NVDA). Company",
+          "value": ""
+        },
+        {
+          "label": "Selected 2026. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected Q4. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {
+        "ticker": "NVDA",
+        "year": "2026"
+      },
+      "sql": {
+        "counters": [
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44
+        ],
+        "SELECTs": 15,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 10,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 10,
+        "catalogue_queries": 4,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_quarter",
+      "selected": "Q1",
+      "before": "Selected Q4. Quarter",
+      "no_op": false,
+      "started_at": 1792404155.002205,
+      "elapsed_ms": 7659.378290991299,
+      "cards": 1,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q1"
+          ]
+        }
+      ],
+      "transcript_header": [
+        "NVIDIA (NVDA)2026Q1Report date: May 28, 2025Quarter ended: Apr 30, 2025Fiscal Period: Q1 FY2026"
+      ],
+      "controls_after": [
+        {
+          "label": "Selected NVIDIA (NVDA). Company",
+          "value": ""
+        },
+        {
+          "label": "Selected 2026. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected Q1. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {
+        "ticker": "NVDA",
+        "year": "2026",
+        "quarter": "Q1"
+      },
+      "sql": {
+        "counters": [
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58
+        ],
+        "SELECTs": 14,
+        "transcript_metadata_queries": 3,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 10,
+        "errors": 0,
+        "private_snapshot_queries": 4,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 10,
+        "catalogue_queries": 3,
+        "detail_queries": 1,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "reset_company",
+      "selected": "All Companies",
+      "before": "Selected NVIDIA (NVDA). Company",
+      "no_op": false,
+      "started_at": 1792404164.9185338,
+      "elapsed_ms": 2704.3750830052886,
+      "cards": 45,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "LRCX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ESTC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ZM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TEAM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COHR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NTAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DXC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "CRMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "FLWS"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "AZO"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COST"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "MOV"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "CPRI"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WDAY"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "MSFT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "URBN"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TJX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PG"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TPR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NKE"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DECK"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BBY"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ZUMZ"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "GAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BBW"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ANF"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "FWDI"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "JJSF"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ARKR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "V"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "UNH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "MS"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "JNJ"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BAC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ESTC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TEAM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        }
+      ],
+      "transcript_header": [],
+      "controls_after": [
+        {
+          "label": "Selected \u2014 No watchlist \u2014. Watchlist",
+          "value": ""
+        },
+        {
+          "label": "Selected All Companies. Company",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Quarter",
+          "value": ""
+        }
+      ],
+      "canonical_scope_evidence": {
+        "expected": [
+          "exchange",
+          "ALL",
+          "ALL",
+          "ALL",
+          null
+        ],
+        "fresh_export_signature": true,
+        "log_byte_watermark": 56308
+      },
+      "expected_scope": {},
+      "reused_accumulator": true,
+      "sql": {
+        "counters": [
+          59,
+          60,
+          61,
+          62,
+          63
+        ],
+        "SELECTs": 5,
+        "transcript_metadata_queries": 2,
+        "transcript_text_queries": 0,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 2,
+        "private_snapshot_ngram_queries": 0,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 0
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "filter_watchlist",
+      "selected": "Coresight-100 (99 companies)",
+      "before": "Selected \u2014 No watchlist \u2014. Watchlist",
+      "no_op": false,
+      "started_at": 1792404169.7619462,
+      "elapsed_ms": 4318.877875019098,
+      "cards": 15,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COST"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "URBN"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TJX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PG"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TPR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NKE"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DECK"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "BBY"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "HD"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "GAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q3"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        }
+      ],
+      "transcript_header": [],
+      "controls_after": [
+        {
+          "label": "Selected Coresight-100 (99 companies). Watchlist",
+          "value": ""
+        },
+        {
+          "label": "Selected All Companies. Company",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Quarter",
+          "value": ""
+        }
+      ],
+      "expected_scope": {},
+      "sql": {
+        "counters": [
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72
+        ],
+        "SELECTs": 9,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 4,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 4,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    },
+    {
+      "action": "reset_watchlist",
+      "selected": "\u2014 No watchlist \u2014",
+      "before": "Selected Coresight-100 (99 companies). Watchlist",
+      "no_op": false,
+      "started_at": 1792404176.2140641,
+      "elapsed_ms": 3220.5649159732275,
+      "cards": 15,
+      "result_query_parameters": [
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q2"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "WMT"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NVDA"
+          ],
+          "year": [
+            "2027"
+          ],
+          "quarter": [
+            "Q1"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "PVH"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "LRCX"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ESTC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "ZM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "TEAM"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COHR"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "NTAP"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "DXC"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "CRMT"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "FLWS"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "AZO"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        },
+        {
+          "ticker": [
+            "COST"
+          ],
+          "year": [
+            "2026"
+          ],
+          "quarter": [
+            "Q4"
+          ],
+          "highlight": [
+            "exchange"
+          ]
+        }
+      ],
+      "transcript_header": [],
+      "controls_after": [
+        {
+          "label": "Selected \u2014 No watchlist \u2014. Watchlist",
+          "value": ""
+        },
+        {
+          "label": "Selected All Companies. Company",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Year",
+          "value": ""
+        },
+        {
+          "label": "Selected ALL. Quarter",
+          "value": ""
+        }
+      ],
+      "canonical_scope_evidence": {
+        "expected": [
+          "exchange",
+          "ALL",
+          "ALL",
+          "ALL",
+          null
+        ],
+        "fresh_export_signature": true,
+        "log_byte_watermark": 75499
+      },
+      "expected_scope": {},
+      "sql": {
+        "counters": [
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80
+        ],
+        "SELECTs": 8,
+        "transcript_metadata_queries": 4,
+        "transcript_text_queries": 1,
+        "supporting_metadata_queries": 3,
+        "errors": 0,
+        "private_snapshot_queries": 5,
+        "private_snapshot_ngram_queries": 1,
+        "live_stg_support_queries": 3,
+        "catalogue_queries": 2,
+        "detail_queries": 0,
+        "search_queries": 3
+      },
+      "local_index": {
+        "queries": 0,
+        "word_index_served": 0,
+        "word_index_declined": 0
+      }
+    }
+  ],
+  "results_url": "http://127.0.0.1:8513/earnings_calls?ticker=ALL",
+  "view_url": "http://127.0.0.1:8513/earnings_calls?ticker=NVDA&year=2027&quarter=Q2&highlight=exchange",
+  "video": "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange/videos/5b3985e0a932ceb43778d9d6d2769214.webm",
+  "sql_queries": 105,
+  "sql_violations": [],
+  "search_route_evidence": {
+    "sqlite_word_index_calls": 0,
+    "sqlite_word_index_declines": 0,
+    "sqlite_queries": 0,
+    "origin_transcript_queries": 50,
+    "native_search_log_lines": 0,
+    "local_search_log_lines": 0,
+    "private_snapshot_transcript_queries": 50,
+    "private_snapshot_ngram_queries": 8,
+    "live_stg_support_queries": 55
+  },
+  "timeline_analysis": {
+    "samples": 931,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [],
+    "framework_widget_binding_warnings": [],
+    "completed_error_samples_excluded": 0,
+    "loader_visible_samples": 420
+  },
+  "video_analysis": {
+    "decoded_frames": 2356,
+    "fps": 25.0,
+    "duration_s": 94.24,
+    "near_blank_ratio": 0.00042444821731748726,
+    "low_contrast_fade_ratio": 0.47495755517826826,
+    "main_content_roi": {
+      "scaled_frame_rect_xyxy": [
+        118,
+        80,
+        348,
+        233
+      ],
+      "scaled_frame_size": [
+        360,
+        250
+      ],
+      "near_blank_ratio": 0.0008488964346349745,
+      "low_contrast_fade_ratio": 0.45543293718166383,
+      "interpretation": "Raw measurements excluding header/sidebar; the normal cross-search placeholder can be quiet/bright. These flags alone never imply a defect; compare DOM loader, empty/error state and transcript validation."
+    },
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_transition_alignment": "Approximate video frame targets from wall-clock page-creation bounds; exact action wall clocks and100ms DOM states remain in manifest/timeline.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange/contact-sheet-00.jpg",
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange/contact-sheet-01.jpg",
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange/contact-sheet-02.jpg",
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-native-index-fragment-final-20261019-05/01-exchange/contact-sheet-03.jpg"
+    ]
+  },
+  "source_hashes_end": {
+    "app/core/database.py": "52be170360d04432e8b6013c1ecd912501ffd9117aab901112124737dcde235c",
+    "app/data/repository.py": "9bfcc8f13482b3762f570b459983e2093b2cfcdec097045095b484d0a484820f",
+    "app/data/news_mirror.py": "f6992f6d2b1cc174132f8209e9aad8c1a60c9de15f31c367c08096403e563079",
+    "app/pages/earnings_calls.py": "66373cda100df783782c02a5116d481c7044b37b9d204621d048927cc8b16d6f",
+    "app/components/loading.py": "148ae669b22551bdafcbcd21b2b86483501edfdab4c2710b8de0fce470c5191a",
+    "app/data/watchlist_service.py": "b0e665516ba1968113d827073b8ccd2fc714a0c2f0d4b6d696962104316b741d",
+    "app/utils/local_storage_manager.py": "ecd1b413339a7f2559b68ce86340c6051922dd49dd3c17ecd98bac889ef9af2c",
+    "scripts/ec_cold_app.py": "1c8c1650bab7219917b8f334bf433bb7b4769ef39d5e5d5c6abcfc4c462e0d90",
+    "scripts/ec_cold_e2e.py": "9bc2b36b11f2a5c878cc1d3b43f93092c8fca3765d39baf831667ace71e0e381",
+    "app/data/transcript_infix.py": "4e9a5cfce6811e475815b51be0e1a24915a6d7f8a34bdd96d0b4dcc64aeebe74",
+    "scripts/ec_ngram_corpus_probe.py": "5e4eea22916a1c8514a94c2fa083ec50323f4269d8d46e2bd09285973204a9af",
+    "scripts/ec_transcript_index_migration.py": "d1b2c7517a9ad473e02e3418eef571801047b14bbbc18a63662bacc52ee52f0a"
+  },
+  "source_changed_during_case": false,
+  "functional_search_passed": true,
+  "requested_actions": [
+    "filter_company",
+    "filter_quarter",
+    "filter_watchlist",
+    "filter_year",
+    "initial_load",
+    "new_keyword",
+    "new_keyword_show_more",
+    "reset_company",
+    "reset_watchlist",
+    "restore_original_keyword",
+    "search",
+    "show_more_1",
+    "show_more_2",
+    "view_first"
+  ],
+  "functional_passed": true,
+  "performance_budget_ms": 5000,
+  "performance_passed": false,
+  "search_pagination_max_latency_ms": 3480.080249981256,
+  "search_pagination_performance_passed": true,
+  "case_audit_final_state": {
+    "watermark": 89,
+    "requires_search_query": false
+  }
+}

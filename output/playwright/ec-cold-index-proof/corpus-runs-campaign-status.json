@@ -1,0 +1,32 @@
+[
+  {
+    "term": "printenv",
+    "returncode": 0,
+    "campaign_seconds": 9.385489374981262
+  },
+  {
+    "term": "foreign exchange",
+    "returncode": 0,
+    "campaign_seconds": 13.164705875009531
+  },
+  {
+    "term": "exchange",
+    "returncode": 0,
+    "campaign_seconds": 9.628271833003964
+  },
+  {
+    "term": "print",
+    "returncode": 0,
+    "campaign_seconds": 9.385017249995144
+  },
+  {
+    "term": "revenue",
+    "returncode": 0,
+    "campaign_seconds": 12.567584167001769
+  },
+  {
+    "term": "AI",
+    "returncode": 0,
+    "campaign_seconds": 10.156740749982418
+  }
+]

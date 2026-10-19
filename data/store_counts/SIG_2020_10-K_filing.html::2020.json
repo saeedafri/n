@@ -1,0 +1,14 @@
+{
+ "ticker": "SIG",
+ "fiscal_year": 2020,
+ "value": 2757,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 1,187 | | | 630 | | | 115 | | | 251 | | | 555 | | | 19 | | | 2,757 | | | 271 | | | 180 | | | 451 | | | 3,208 |",
+ "fye_date": "2020-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SIG/2020/10-K/filing.html::2020",
+ "extractor_version": 5
+}

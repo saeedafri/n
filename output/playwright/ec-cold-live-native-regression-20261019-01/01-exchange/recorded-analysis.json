@@ -1,0 +1,29 @@
+{
+  "status": "failed",
+  "errors": [
+    "AssertionError: Visible application error: Transcript search could not finish. Please retry, or narrow the company/year filters.",
+    "Blank busy interval without visible loader exceeded500ms"
+  ],
+  "timeline_analysis": {
+    "samples": 363,
+    "interval_ms": 100,
+    "blank_busy_without_loader": [
+      {
+        "start_ms": 1792401694244,
+        "duration_ms": 1999
+      }
+    ],
+    "loader_visible_samples": 259
+  },
+  "video_analysis": {
+    "decoded_frames": 932,
+    "fps": 25.0,
+    "duration_s": 37.28,
+    "near_blank_ratio": 0.001072961373390558,
+    "low_contrast_fade_ratio": 0.7381974248927039,
+    "method": "Every decoded frame scaled to360x250; blank=std<1; lowcontrastfade=mean>225 and1<=std<10. Loading overlays intentionally fade content; these metrics are paired with100ms DOM loader evidence.",
+    "contact_sheets": [
+      "/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/output/playwright/ec-cold-live-native-regression-20261019-01/01-exchange/contact-sheet-00.jpg"
+    ]
+  }
+}

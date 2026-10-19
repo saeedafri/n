@@ -1,0 +1,16 @@
+{
+  "started_utc": "2026-10-19T08:59:32Z",
+  "target": "coresight_market_data_stg/coreiq_av_earnings_call_transcripts",
+  "events": [],
+  "ddl_or_data_writes": 0,
+  "selector_before": "",
+  "status": "probe_failed",
+  "error_type": "OperationalError",
+  "error": "(1227, 'Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation')",
+  "restoration_observed": [
+    ""
+  ],
+  "selector_after": "",
+  "restoration_status": "verified",
+  "finished_utc": "2026-10-19T08:59:35Z"
+}

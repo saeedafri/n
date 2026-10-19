@@ -1,0 +1,14 @@
+{
+ "ticker": "SPTN",
+ "fiscal_year": 2023,
+ "value": 156,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Number of stores at end of year | | 156 | | | | 156 | | | | 145 | | | | 147 | | | | 144 |",
+ "fye_date": "2023-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SPTN/2023/10-K/filing.html::2023",
+ "extractor_version": 5
+}

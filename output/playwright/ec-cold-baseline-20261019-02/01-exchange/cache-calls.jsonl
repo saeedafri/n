@@ -1,0 +1,17 @@
+{"at": 1792398166.866379, "monotonic": 255764.221024833, "function": "data.repository.CompanyRepository.get_company_by_ticker", "count": 1, "cache": "BYPASS"}
+{"at": 1792398166.866623, "monotonic": 255764.221268666, "function": "data.repository.CompanyRepository.get_companies_map", "count": 1, "cache": "BYPASS"}
+{"at": 1792398166.866922, "monotonic": 255764.221568666, "function": "data.repository.CompanyRepository.get_companies_rows", "count": 1, "cache": "BYPASS"}
+{"at": 1792398171.204304, "monotonic": 255768.55893975, "function": "data.repository.EarningsCallRepository.get_companies_with_earnings", "count": 1, "cache": "BYPASS"}
+{"at": 1792398171.2049952, "monotonic": 255768.559631, "function": "data.repository.EarningsCallRepository.get_non_sec_transcript_companies", "count": 1, "cache": "BYPASS"}
+{"at": 1792398171.874196, "monotonic": 255769.228830625, "function": "data.repository.CompanyRepository.get_companies_map", "count": 2, "cache": "BYPASS"}
+{"at": 1792398171.8743622, "monotonic": 255769.228995791, "function": "data.repository.CompanyRepository.get_companies_rows", "count": 2, "cache": "BYPASS"}
+{"at": 1792398173.666508, "monotonic": 255771.021137625, "function": "data.repository.EarningsCallRepository.get_years_and_quarters", "count": 1, "cache": "BYPASS"}
+{"at": 1792398174.2144818, "monotonic": 255771.569110916, "function": "data.repository.EarningsCallRepository.get_earnings_calls", "count": 1, "cache": "BYPASS"}
+{"at": 1792398174.215151, "monotonic": 255771.569779791, "function": "data.repository.EarningsCalendarRepository.get_earnings_event_dates", "count": 1, "cache": "BYPASS"}
+{"at": 1792398174.21524, "monotonic": 255771.569869166, "function": "data.repository.EarningsCalendarRepository._get_fiscal_year_end_map", "count": 1, "cache": "BYPASS"}
+{"at": 1792398174.9776158, "monotonic": 255772.332243333, "function": "__main__.parse_transcript", "count": 1, "cache": "BYPASS"}
+{"at": 1792398178.5049422, "monotonic": 255775.859561208, "function": "data.repository.EarningsCalendarRepository._fiscal_numbering_convention", "count": 1, "cache": "BYPASS"}
+{"at": 1792398180.17672, "monotonic": 255777.531335166, "function": "data.repository.EarningsCalendarRepository.get_earnings_display_period", "count": 1, "cache": "BYPASS"}
+{"at": 1792398180.970073, "monotonic": 255778.324686208, "function": "data.repository.EarningsCalendarRepository._get_fiscal_year_end_map", "count": 2, "cache": "BYPASS"}
+{"at": 1792398182.73737, "monotonic": 255780.091979, "function": "__main__._cached_transcript_pdf", "count": 1, "cache": "BYPASS"}
+{"at": 1792398183.1521852, "monotonic": 255780.506792666, "function": "__main__.parse_transcript", "count": 2, "cache": "BYPASS"}
