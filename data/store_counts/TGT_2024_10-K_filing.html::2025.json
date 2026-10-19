@@ -1,0 +1,14 @@
+{
+ "ticker": "TGT",
+ "fiscal_year": 2025,
+ "value": 1978,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 1,978 | | 66 |",
+ "fye_date": "2025-02-01",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TGT/2024/10-K/filing.html::2025",
+ "extractor_version": 5
+}

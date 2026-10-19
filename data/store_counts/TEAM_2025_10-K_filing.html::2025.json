@@ -1,0 +1,14 @@
+{
+ "ticker": "TEAM",
+ "fiscal_year": 2025,
+ "value": 4599,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 4,599 | | | 7 | | | 8,181 |",
+ "fye_date": "2025-06-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TEAM/2025/10-K/filing.html::2025",
+ "extractor_version": 5
+}

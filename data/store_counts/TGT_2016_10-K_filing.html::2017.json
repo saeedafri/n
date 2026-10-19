@@ -1,0 +1,14 @@
+{
+ "ticker": "TGT",
+ "fiscal_year": 2017,
+ "value": 1802,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | 1,802 | | 40 |",
+ "fye_date": "2017-01-28",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TGT/2016/10-K/filing.html::2017",
+ "extractor_version": 5
+}
