@@ -6865,6 +6865,13 @@ def _people_company_meta(company_df: pd.DataFrame) -> pd.DataFrame:
     return meta.drop_duplicates(subset=["ticker"])
 
 
+def _industry_by_ticker(company_meta: pd.DataFrame) -> Dict[str, str]:
+    """Ticker -> Industry from _people_company_meta (empty if it carries none)."""
+    if "Industry" not in company_meta.columns:
+        return {}
+    return dict(zip(company_meta["ticker"].astype(str), company_meta["Industry"].astype(str)))
+
+
 def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
     """Label and format the year-column People grid (people_service.pivot_people_years)."""
     out = grid.rename(columns={
@@ -6994,7 +7001,10 @@ def _render_people_results():
         # criterion makes it the exact ticker set — nothing outside it is shown.
         narrowed = _watchlist_on() or _narrowing_criteria(company_criteria)
         tickers_in_scope = set(company_df["ticker"].astype(str)) if narrowed else None
-        company_meta = _people_company_meta(company_df)
+        # Lookup only (scope is tickers_in_scope): the widened universe, so an
+        # executive at a non-Coresight company still gets its Industry, as in
+        # Key Devs. Materialized and warmed at boot — a dict join, no DB.
+        company_meta = _people_company_meta(get_all_companies_universe())
         # One section per category the criteria name, each filtered only by its
         # own criteria and reading only its own dataset — a remuneration screen
         # never loads 8-K events, a management-changes screen never loads pay.
@@ -7174,9 +7184,11 @@ def _render_people_events(category: str, tickers_in_scope: Optional[set], people
             return
         names = dict(zip(company_meta["ticker"].astype(str),
                          company_meta.get("Company", company_meta["ticker"]).astype(str)))
+        industries = _industry_by_ticker(company_meta)
         display = pd.DataFrame({
             "Company":     df["ticker"].astype(str).map(lambda t: names.get(t, t)),
             "Ticker":      df["ticker"].astype(str),
+            "Industry":    df["ticker"].astype(str).map(industries).fillna(""),
             "Date":        df["event_date"].dt.strftime("%Y-%m-%d").fillna(""),
             "Type":        df["event_subtype"].astype(str),
             "Headline":    df["headline"].fillna(""),
@@ -7201,7 +7213,7 @@ def _render_people_events(category: str, tickers_in_scope: Optional[set], people
             empty_message=f"No {label.lower()} found.",
             pinned_column="Company",
             link_columns=["Source Link"],
-            filter_domains=_full_domains(display, ("Company", "Type", "Source")),
+            filter_domains=_full_domains(display, ("Company", "Industry", "Type", "Source")),
         )
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_people_events",
@@ -7241,6 +7253,8 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
         display = pd.DataFrame({
             "Company":          out["Company"].astype(str),
             "Ticker":           out["ticker"].astype(str),
+            "Industry":         out.get("Industry", pd.Series("", index=out.index))
+                                   .astype(object).fillna("").astype(str),
             "Disclosed":        day("filing_date"),
             "Announced":        day("notice_date"),
             "Effective":        day("effective_date").where(day("effective_date") != "",
@@ -7285,7 +7299,7 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             pinned_column="Executive Name",
             link_columns=["Source Link"] if "Source Link" in display.columns else None,
             filter_domains=_full_domains(display, ("Change", "Event", "Role", "Company",
-                                                   "Source")),
+                                                   "Industry", "Source")),
         )
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_management_changes",
@@ -7319,6 +7333,7 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
         moves = compare_move_pay(moves, get_people_universe())
         names = dict(zip(company_meta["ticker"].astype(str),
                          company_meta.get("Company", company_meta["ticker"]).astype(str)))
+        industries = _industry_by_ticker(company_meta)
 
         def money(v):
             return "" if pd.isna(v) else f"${v:,.0f}"
@@ -7332,6 +7347,8 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
             "Previous Title":   moves["moved_from_title"].fillna(""),
             "Left":             moves["moved_from_date"].dt.strftime("%Y-%m-%d").fillna(""),
             "To Company":       moves["ticker"].astype(str).map(lambda t: names.get(t, t)),
+            # The appointing company's industry — the row's own ticker.
+            "Industry":         moves["ticker"].astype(str).map(industries).fillna(""),
             "New Title":        moves["titles"].fillna(""),
             "Role":             role_bucket(moves["role"]),
             "Joined":           moves["effective_date"].fillna(moves["notice_date"]).dt.strftime("%Y-%m-%d"),
@@ -7349,7 +7366,7 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
         _render_filterable_results_grid(display, key="people_moves_grid",
                                         empty_message="No executive moves found.",
                                         pinned_column="Executive Name",
-                                        filter_domains=_full_domains(display, ("Role",)))
+                                        filter_domains=_full_domains(display, ("Role", "Industry")))
         st.caption("Pay is total compensation for the latest year disclosed at the old "
                    "company and the first year disclosed at the new one; blank where "
                    "that company's pay is not on file. Offer Base Salary is the salary the "
