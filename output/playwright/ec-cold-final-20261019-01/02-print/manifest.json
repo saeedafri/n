@@ -1,8 +1,0 @@
-{
-  "keyword": "print",
-  "status": "interrupted_before_keyword",
-  "partial": true,
-  "sql_queries": 3,
-  "sql_violations": [],
-  "note": "Campaign stopped byroot afterexchange. Printbrowserbootstrap began beforeinterrupt; keyword wasnot submitted."
-}
