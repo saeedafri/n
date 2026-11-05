@@ -6367,8 +6367,11 @@ class StockQuoteRepository:
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     @_log_query_time
-    def get_latest_capitalization(ticker: str) -> Optional[Dict[str, Any]]:
+    def get_latest_capitalization(ticker: str, as_of: Optional[date] = None) -> Optional[Dict[str, Any]]:
         """Market cap with the dates it is made of, plus the latest balance sheet.
+
+        With `as_of`, everything is taken on or before that day instead: the last
+        close, the shares reported by then and the latest balance sheet by then.
 
         Market cap = the latest CLOSE on file (day D) × the latest shares
         outstanding reported on or before D (the nearest later report when none
@@ -6385,16 +6388,16 @@ class StockQuoteRepository:
         if is_sec:
             price = db_manager.execute_query_readonly("""
                 SELECT day_date, close FROM coreiq_av_time_series_daily
-                WHERE ticker = :t AND close IS NOT NULL
+                WHERE ticker = :t AND close IS NOT NULL AND day_date <= :d
                 ORDER BY day_date DESC LIMIT 1
-            """, {"t": ticker})
+            """, {"t": ticker, "d": as_of or date.max})
         else:
             # coreiq_yf_time_series_daily stores the base ticker ('ATD', not 'ATD.TO').
             price = db_manager.execute_query_readonly("""
                 SELECT day_date, close FROM coreiq_yf_time_series_daily
-                WHERE ticker = :t AND close IS NOT NULL
+                WHERE ticker = :t AND close IS NOT NULL AND day_date <= :d
                 ORDER BY day_date DESC LIMIT 1
-            """, {"t": ticker.split(".")[0]})
+            """, {"t": ticker.split(".")[0], "d": as_of or date.max})
         if not price:
             return None
         price_date = price[0]["day_date"]
@@ -6428,8 +6431,9 @@ class StockQuoteRepository:
         balance, balance_date, reported_currency = {}, None, None
         rows = [r for pt in ("quarterly", "annual")
                 for r in BalanceSheetRepository._fetch_all_annual_rows(ticker, pt)]
+        rows = [r for r in rows if not as_of or str(r["fiscal_date_ending"])[:10] <= as_of.isoformat()]
         if rows:
-            latest = max(rows, key=lambda r: r["fiscal_date_ending"])
+            latest = max(rows, key=lambda r: str(r["fiscal_date_ending"])[:10])
             balance = balance_capitalization(BalanceSheetRepository._parse_raw_json(latest["raw_json"]) or {})
             balance_date = latest["fiscal_date_ending"]
             reported_currency = latest.get("reported_currency")
@@ -6445,6 +6449,23 @@ class StockQuoteRepository:
             "balance_date": balance_date,
             "reported_currency": reported_currency,
         }
+
+    @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def get_capitalization_dates(ticker: str) -> Dict[str, Any]:
+        """Dates the capitalization can be shown for: the first close on file and
+        the company's fiscal year ends (period ends of its annual balance sheets)."""
+        from data.source_router import get_company_source
+
+        if (get_company_source(ticker) or "SEC") != "YFinance":
+            table, key = "coreiq_av_time_series_daily", ticker
+        else:
+            table, key = "coreiq_yf_time_series_daily", ticker.split(".")[0]
+        first = db_manager.execute_query_readonly(
+            f"SELECT MIN(day_date) AS d FROM {table} WHERE ticker = :t AND close IS NOT NULL", {"t": key})
+        year_ends = sorted({date.fromisoformat(str(r["fiscal_date_ending"])[:10])
+                            for r in BalanceSheetRepository._fetch_all_annual_rows(ticker, "annual")})
+        return {"first_close": first[0]["d"] if first else None, "fiscal_year_ends": year_ends}
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)

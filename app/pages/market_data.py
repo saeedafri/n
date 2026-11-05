@@ -1332,19 +1332,67 @@ def fx_rate(from_currency: Optional[str], to_currency: Optional[str], on: Option
     return None
 
 
+CAP_MODES = ["Latest", "Calendar Year End", "Fiscal Year End"]
+
+
+def pick_capitalization_date(ticker: str, day) -> tuple:
+    """"As of" picker above the capitalization block: Latest, Dec 31 of a year, or
+    a fiscal year end, with ◀ ▶ to step between years. Returns (as_of, title)."""
+    from data.repository import StockQuoteRepository
+
+    mode_col, prev_col, label_col, next_col, _ = st.columns([2.6, 0.3, 1.2, 0.3, 2.2], vertical_alignment="center")
+    with mode_col:
+        mode = st.segmented_control("As of", CAP_MODES, default="Latest", key="cap_as_of_mode",
+                                    label_visibility="collapsed") or "Latest"
+    if mode == "Latest":
+        return None, "Latest Capitalization"
+
+    today = date.today()
+    dates = StockQuoteRepository.get_capitalization_dates(ticker)
+    first = dates["first_close"]
+    if mode == "Calendar Year End":
+        choices = [date(y, 12, 31) for y in range(first.year if first else today.year, today.year + 1)
+                   if date(y, 12, 31) <= today]
+    else:
+        choices = [d for d in dates["fiscal_year_ends"] if d <= today and (not first or d >= first)]
+    if not choices:
+        label_col.caption("No year ends on file")
+        return None, "Latest Capitalization"
+
+    key = f"cap_as_of_{mode}_{ticker}"
+    if st.session_state.get(key) not in choices:
+        st.session_state[key] = choices[-1]
+
+    def step(by):
+        i = choices.index(st.session_state[key]) + by
+        st.session_state[key] = choices[max(0, min(i, len(choices) - 1))]
+
+    picked = st.session_state[key]
+    prev_col.button("◀", key=f"{key}_prev", on_click=step, args=(-1,), disabled=picked == choices[0],
+                    help="Previous year")
+    next_col.button("▶", key=f"{key}_next", on_click=step, args=(1,), disabled=picked == choices[-1],
+                    help="Next year")
+    if mode == "Calendar Year End":
+        label_col.markdown(f"**Dec-31-{picked.year}**")
+        return picked, f"Capitalization as of Dec-31-{picked.year}"
+    label_col.markdown(f"**FY ending {day(picked)}**")
+    return picked, f"Capitalization at Fiscal Year End {day(picked)}"
+
+
 def render_latest_capitalization(ticker: str, target_currency: str, units_scale: float, units_label: str) -> None:
     """Key Stats "Latest Capitalization": market cap, TEV and total capital, each
     line with the date it comes from, plus the stacked bar chart."""
     import plotly.graph_objects as go
     from data.repository import StockQuoteRepository
 
-    cap = StockQuoteRepository.get_latest_capitalization(ticker)
-    if not cap or not cap.get("market_cap"):
-        st.info("Latest capitalization is not available for this company (no closing price or share count on file).")
-        return
-
     def day(d):
         return d.strftime("%b-%d-%Y") if d else "n/a"
+
+    as_of, title = pick_capitalization_date(ticker, day)
+    cap = StockQuoteRepository.get_latest_capitalization(ticker, as_of)
+    if not cap or not cap.get("market_cap"):
+        st.info("Capitalization is not available for this company and date (no closing price or share count on file).")
+        return
 
     # Everything shown in the Key Stats currency, converted at the price date.
     mcap_rate = fx_rate(cap["currency"], target_currency, cap["price_date"])
@@ -1404,12 +1452,12 @@ def render_latest_capitalization(ticker: str, target_currency: str, units_scale:
     .cap-gap td {{ padding-top:10px; }}
     .cap-note {{ font-size:11px; color:#666; padding:6px 12px 8px; line-height:1.5; }}
     </style>
-    <div class="cap-box"><div class="cap-head">Latest Capitalization ({units_label} of {target_currency})</div>
+    <div class="cap-box"><div class="cap-head">{title} ({units_label} of {target_currency})</div>
     <table class="cap-table"><tr><th>Currency</th><th>{target_currency}</th><th>As of</th></tr>{body}</table>
     <div class="cap-note">Market Capitalization = closing price on {day(cap['price_date'])} × shares outstanding
     {('reported ' + day(cap['shares_date'])) if cap['shares_date'] else '(latest reported)'}; the close is the latest day
-    with a closing price on file. Balance-sheet items are from the latest reported balance sheet
-    ({bs_day}, {cap['reported_currency'] or 'n/a'}); Total Debt includes lease obligations where reported.
+    with a closing price on file{(' on or before ' + day(as_of)) if as_of else ''}. Balance-sheet items are from the latest
+    balance sheet reported{(' for a period ending on or before ' + day(as_of)) if as_of else ''} ({bs_day}, {cap['reported_currency'] or 'n/a'}); Total Debt includes lease obligations where reported.
     Amounts converted at the {day(cap['price_date'])} exchange rate.</div></div>"""
 
     left, right = st.columns([1.15, 1])
