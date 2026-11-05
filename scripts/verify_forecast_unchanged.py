@@ -14,7 +14,7 @@ regression and should block release.
 import sys, importlib.util, warnings
 import numpy as np, pandas as pd
 warnings.filterwarnings("ignore")
-APP="/Users/mohdsaeedafri/Code-Base/Real/CapIQReplacement/app"
+APP="/Users/mohdsaeedafri/Code-Base/Real/MIP-test/app"
 sys.path.insert(0, APP)
 
 def load(path, name):

@@ -5,6 +5,7 @@ Renamed from "Market Data Portal" on 2026-10-06. Env var names (`MDP_CACHE_DIR`,
 `MDP_CATEGORICAL`), the `market_data_user_sessions` table, the `/market_data` URL and the
 `marketdata-stg.coresight.com` host keep their old spelling on purpose — they are
 infrastructure contracts, not branding.
+**Local folders (renamed 2026-11-05):** testing = `~/Code-Base/Real/MIP-test` (was `CapIQReplacement`), STG = `~/All-Code-Base/MIP-STG` (was `market-data-stg`), prod = `~/All-Code-Base/MIP-prod` (was `market-prod`). Workspace: `~/Code-Base/CapIQReplacement.code-workspace` (entries "MIP test", "MIP STG", "MIP prod").
 **Stack:** Streamlit + Python 3, SQLAlchemy 2, MySQL (Azure Flexible Server), MCP servers
 
 ---
@@ -296,8 +297,8 @@ Two testing envs, both dev-only (no clients). Folder names are NOT literal.
 
 | | Path | Role |
 |---|---|---|
-| **Testing 1** | `/Users/mohdsaeedafri/All-Code-Base/market-data-stg` | Source of truth for changes |
-| **Testing 2** | `/Users/mohdsaeedafri/All-Code-Base/market-prod` (git branch `pro-deploy`) | Backup env — mirrors a live container |
+| **Testing 1** | `/Users/mohdsaeedafri/All-Code-Base/MIP-STG` | Source of truth for changes |
+| **Testing 2** | `/Users/mohdsaeedafri/All-Code-Base/MIP-prod` (git branch `pro-deploy`) | Backup env — mirrors a live container |
 
 Testing 2 is updated **directly in its container via a web command box** (`/logs` page),
 **never** via git push.
@@ -312,7 +313,7 @@ This is the proven approach. Do not re-litigate it; `patch` and blanket `sed` bo
    for p in $(pgrep -f streamlit); do readlink /proc/$p/cwd; done
    ```
    **NEVER `find /`** — it scans the 500 GB `/home` share and times out at 120 s.
-2. **Build the target file locally first** in `market-prod`, then generate commands from it.
+2. **Build the target file locally first** in `MIP-prod`, then generate commands from it.
 3. **One command per file**, ending with its own verify:
    ```bash
    cd /tmp/<hash> && echo '<base64>' | base64 -d > <path> && echo "<sha256>  <path>" | sha256sum -c
