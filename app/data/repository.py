@@ -6310,8 +6310,141 @@ class ForexRepository:
 
         return rate_map
 
+
+# Yahoo quotes London, Johannesburg and Tel Aviv prices in the minor unit
+# (pence, cents, agorot). Market cap and FX need the major currency.
+_MINOR_UNIT_CURRENCIES = {"GBp": ("GBP", 100.0), "GBX": ("GBP", 100.0),
+                          "ZAc": ("ZAR", 100.0), "ILA": ("ILS", 100.0)}
+
+
+def quote_currency(code: Optional[str]) -> Tuple[Optional[str], float]:
+    """(major currency, divisor) for a quote currency: "GBp" -> ("GBP", 100)."""
+    return _MINOR_UNIT_CURRENCIES.get(code or "", (code, 1.0))
+
+
+def balance_capitalization(raw: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """Cash, debt and equity from one balance-sheet raw_json, in full units.
+
+    Same rules as the Ratios tab: total debt is shortLongTermDebtTotal (it
+    includes lease obligations) or the sum of its parts; AV often repeats cash
+    as cashAndShortTermInvestments, so short-term investments are added only
+    when that happens.
+    """
+    def num(*keys):
+        for k in keys:
+            v = raw.get(k)
+            try:
+                if v is not None and v != "None":
+                    return float(v)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    cash = num("cashAndCashEquivalentsAtCarryingValue")
+    cash_st = num("cashAndShortTermInvestments")
+    st_inv = num("shortTermInvestments")
+    if cash_st is None:
+        cash_st = cash
+    if cash_st is not None and st_inv is not None and cash is not None and cash_st == cash:
+        cash_st += st_inv
+    total_debt = num("shortLongTermDebtTotal", "totalDebt")
+    if total_debt is None:
+        parts = [num("shortTermDebt", "currentDebt"), num("longTermDebt", "longTermDebtNoncurrent"),
+                 num("capitalLeaseObligations")]
+        total_debt = sum(p for p in parts if p is not None) if any(p is not None for p in parts) else None
+    return {
+        "cash_st": cash_st,
+        "total_debt": total_debt,
+        "preferred": num("preferredStock", "preferredStockValue"),
+        "minority": num("minorityInterest", "noncontrollingInterest"),
+        "common_equity": num("totalShareholderEquity"),
+    }
+
+
 class StockQuoteRepository:
     """Repository for Stock Quote table — fetches latest price data + company overview."""
+
+    @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)
+    @_log_query_time
+    def get_latest_capitalization(ticker: str) -> Optional[Dict[str, Any]]:
+        """Market cap with the dates it is made of, plus the latest balance sheet.
+
+        Market cap = the latest CLOSE on file (day D) × the latest shares
+        outstanding reported on or before D (the nearest later report when none
+        is earlier). The latest price row is not used blindly: about half the
+        Yahoo tickers have a NULL close on most days, so D is the last day that
+        has one. Shares fall back to the overview's undated count.
+
+        Returns None without a close. Amounts are full units: market cap in
+        `currency` (major unit), balance-sheet items in `reported_currency`.
+        """
+        from data.source_router import get_company_source
+
+        is_sec = (get_company_source(ticker) or "SEC") != "YFinance"
+        if is_sec:
+            price = db_manager.execute_query_readonly("""
+                SELECT day_date, close FROM coreiq_av_time_series_daily
+                WHERE ticker = :t AND close IS NOT NULL
+                ORDER BY day_date DESC LIMIT 1
+            """, {"t": ticker})
+        else:
+            # coreiq_yf_time_series_daily stores the base ticker ('ATD', not 'ATD.TO').
+            price = db_manager.execute_query_readonly("""
+                SELECT day_date, close FROM coreiq_yf_time_series_daily
+                WHERE ticker = :t AND close IS NOT NULL
+                ORDER BY day_date DESC LIMIT 1
+            """, {"t": ticker.split(".")[0]})
+        if not price:
+            return None
+        price_date = price[0]["day_date"]
+
+        if is_sec:
+            shares_rows = db_manager.execute_query_readonly("""
+                SELECT report_date AS d, COALESCE(shares_outstanding_basic, shares_outstanding_diluted) AS n
+                FROM coreiq_av_shares_outstanding
+                WHERE ticker = :t AND COALESCE(shares_outstanding_basic, shares_outstanding_diluted) > 0
+                ORDER BY report_date DESC
+            """, {"t": ticker})
+        else:
+            shares_rows = db_manager.execute_query_readonly("""
+                SELECT asof_date AS d, shares_outstanding AS n
+                FROM coreiq_yf_shares_outstanding
+                WHERE ticker = :t AND shares_outstanding > 0
+                ORDER BY asof_date DESC
+            """, {"t": ticker.split(".")[0]})
+        earlier = [r for r in shares_rows if r["d"] <= price_date]
+        shares_row = earlier[0] if earlier else (shares_rows[-1] if shares_rows else None)
+
+        overview = CompanyOverviewRepository.get_company_overview(ticker)
+        currency, divisor = quote_currency(getattr(overview, "currency", None))
+        if shares_row:
+            shares, shares_date = float(shares_row["n"]), shares_row["d"]
+        else:
+            shares, shares_date = getattr(overview, "shares_outstanding", None), None
+            shares = float(shares) if shares else None
+        close = float(price[0]["close"]) / divisor
+
+        balance, balance_date, reported_currency = {}, None, None
+        rows = [r for pt in ("quarterly", "annual")
+                for r in BalanceSheetRepository._fetch_all_annual_rows(ticker, pt)]
+        if rows:
+            latest = max(rows, key=lambda r: r["fiscal_date_ending"])
+            balance = balance_capitalization(BalanceSheetRepository._parse_raw_json(latest["raw_json"]) or {})
+            balance_date = latest["fiscal_date_ending"]
+            reported_currency = latest.get("reported_currency")
+
+        return {
+            "currency": currency,
+            "price": close,
+            "price_date": price_date,
+            "shares": shares,
+            "shares_date": shares_date,
+            "market_cap": close * shares if shares else None,
+            "balance": balance,
+            "balance_date": balance_date,
+            "reported_currency": reported_currency,
+        }
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)

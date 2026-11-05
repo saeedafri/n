@@ -1317,6 +1317,125 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
         st.error("Something went wrong loading ratings data. Please try again.")
 
 
+def fx_rate(from_currency: Optional[str], to_currency: Optional[str], on: Optional[date] = None) -> Optional[float]:
+    """Rate on `on` (latest when None), the inverse pair when only that is stored,
+    else None. ForexRepository answers 1.0 for a pair it does not have, which
+    would silently add CAD to USD — that is treated as missing here."""
+    if not from_currency or not to_currency or from_currency == to_currency:
+        return 1.0
+    rate = ForexRepository.get_conversion_rate(from_currency, to_currency, on)
+    if rate and rate != 1.0:
+        return rate
+    rate = ForexRepository.get_conversion_rate(to_currency, from_currency, on)
+    if rate and rate != 1.0:
+        return 1.0 / rate
+    return None
+
+
+def render_latest_capitalization(ticker: str, target_currency: str, units_scale: float, units_label: str) -> None:
+    """Key Stats "Latest Capitalization": market cap, TEV and total capital, each
+    line with the date it comes from, plus the stacked bar chart."""
+    import plotly.graph_objects as go
+    from data.repository import StockQuoteRepository
+
+    cap = StockQuoteRepository.get_latest_capitalization(ticker)
+    if not cap or not cap.get("market_cap"):
+        st.info("Latest capitalization is not available for this company (no closing price or share count on file).")
+        return
+
+    def day(d):
+        return d.strftime("%b-%d-%Y") if d else "n/a"
+
+    # Everything shown in the Key Stats currency, converted at the price date.
+    mcap_rate = fx_rate(cap["currency"], target_currency, cap["price_date"])
+    bs_rate = fx_rate(cap["reported_currency"], target_currency, cap["price_date"])
+    if mcap_rate is None:
+        target_currency, mcap_rate, bs_rate = cap["currency"], 1.0, fx_rate(cap["reported_currency"], cap["currency"], cap["price_date"])
+
+    def mm(v, rate):
+        return None if v is None or rate is None else v / 1_000_000 * rate * units_scale
+
+    bal = cap["balance"]
+    mcap = mm(cap["market_cap"], mcap_rate)
+    cash, debt = mm(bal.get("cash_st"), bs_rate), mm(bal.get("total_debt"), bs_rate)
+    pref, minority = mm(bal.get("preferred"), bs_rate), mm(bal.get("minority"), bs_rate)
+    equity = mm(bal.get("common_equity"), bs_rate)
+    # TEV needs cash and debt on file; preferred / minority are absent for most companies (0).
+    tev = (mcap - cash + debt + (pref or 0) + (minority or 0)) if None not in (cash, debt) else None
+    total_capital = (equity + debt + (pref or 0) + (minority or 0)) if None not in (equity, debt) else None
+
+    def num(v):
+        return "-" if v is None else f"{v:,.1f}"
+
+    bs_day = day(cap["balance_date"])
+    price_sym = get_currency_symbol(cap["currency"])
+    rows = [
+        ("Share Price", f"{price_sym} {cap['price']:,.2f}".strip() + ("" if cap["currency"] == target_currency else f" {cap['currency']}"),
+         f"Close {day(cap['price_date'])}", ""),
+        ("Shares Out. (mm)", num(cap["shares"] / 1_000_000 if cap["shares"] else None),
+         day(cap["shares_date"]) if cap["shares_date"] else "latest reported", ""),
+        ("Market Capitalization", num(mcap), day(cap["price_date"]), "cap-key"),
+        ("- Cash &amp; Short Term Investments", num(cash), bs_day, "cap-sub"),
+        ("+ Total Debt", num(debt), bs_day, "cap-sub"),
+        ("+ Pref. Equity", num(pref), bs_day, "cap-sub"),
+        ("+ Total Minority Interest", num(minority), bs_day, "cap-sub"),
+        ("= Total Enterprise Value (TEV)", num(tev), "", "cap-total"),
+        ("Book Value of Common Equity", num(equity), bs_day, "cap-gap"),
+        ("+ Pref. Equity", num(pref), bs_day, "cap-sub"),
+        ("+ Total Minority Interest", num(minority), bs_day, "cap-sub"),
+        ("+ Total Debt", num(debt), bs_day, "cap-sub"),
+        ("= Total Capital", num(total_capital), "", "cap-total"),
+    ]
+    body = "".join(
+        f'<tr class="{cls}"><td>{label}</td><td class="cap-num">{value}</td><td class="cap-date">{when}</td></tr>'
+        for label, value, when, cls in rows)
+    table = f"""<style>
+    .cap-box {{ border:1px solid #CFCFCF; border-radius:12px; overflow:hidden; font-family:'Roboto',sans-serif; }}
+    .cap-head {{ background:#F2F2F2; padding:6px 12px; font-weight:700; font-size:16px; border-bottom:1px solid #CFCFCF; }}
+    .cap-table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+    .cap-table td {{ padding:3px 12px; border-bottom:1px solid #F0F0F0; white-space:nowrap; }}
+    .cap-table th {{ padding:4px 12px; text-align:right; font-size:12px; color:#555; background:#FAFAFA; }}
+    .cap-table th:first-child {{ text-align:left; }}
+    .cap-num {{ text-align:right; font-variant-numeric:tabular-nums; }}
+    .cap-date {{ text-align:right; color:#6c757d; font-size:12px; }}
+    .cap-key td {{ font-weight:700; }} .cap-key .cap-num {{ color:#0055BB; }}
+    .cap-sub td:first-child {{ padding-left:24px; color:#444; }}
+    .cap-total td {{ font-weight:700; border-top:1.5px solid #333; }}
+    .cap-gap td {{ padding-top:10px; }}
+    .cap-note {{ font-size:11px; color:#666; padding:6px 12px 8px; line-height:1.5; }}
+    </style>
+    <div class="cap-box"><div class="cap-head">Latest Capitalization ({units_label} of {target_currency})</div>
+    <table class="cap-table"><tr><th>Currency</th><th>{target_currency}</th><th>As of</th></tr>{body}</table>
+    <div class="cap-note">Market Capitalization = closing price on {day(cap['price_date'])} × shares outstanding
+    {('reported ' + day(cap['shares_date'])) if cap['shares_date'] else '(latest reported)'}; the close is the latest day
+    with a closing price on file. Balance-sheet items are from the latest reported balance sheet
+    ({bs_day}, {cap['reported_currency'] or 'n/a'}); Total Debt includes lease obligations where reported.
+    Amounts converted at the {day(cap['price_date'])} exchange rate.</div></div>"""
+
+    left, right = st.columns([1.15, 1])
+    with left:
+        st.html(table)
+    with right:
+        net_liability = (tev - mcap) if tev is not None else None
+        total_liability = (total_capital - equity) if total_capital is not None else None
+        fig = go.Figure()
+        for name, values, color in [
+            ("Market Capitalization", [mcap, mcap, None], "#A63A32"),
+            ("Net Liability", [None, net_liability, None], "#12A4C9"),
+            ("Common Equity", [None, None, equity], "#2E6B30"),
+            ("Total Liability", [None, None, total_liability], "#EF8A3C"),
+        ]:
+            fig.add_bar(name=name, x=["Market Cap", "TEV", "Total Capital"], y=values, marker_color=color,
+                        hovertemplate=f"{name}: %{{y:,.1f}}<extra></extra>")
+        fig.update_layout(barmode="relative", height=380, margin=dict(l=10, r=10, t=30, b=10),
+                          plot_bgcolor="#FFFFFF", legend=dict(orientation="h", y=-0.12),
+                          yaxis=dict(title=f"{units_label} of {target_currency}", gridcolor="#EEE"),
+                          title=dict(text=f"As of {day(cap['price_date'])}", font=dict(size=13)))
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.caption("TEV = Market Cap + Net Liability (debt, preferred and minority interest, net of cash). "
+                   "Total Capital = Common Equity + Total Liability.")
+
+
 def render_stock_quote(ticker: str, currency: str = "USD", company_overview=None) -> None:
     """Render Stock Quote and Chart table matching Figma design node-id=20660-223833.
 
@@ -1499,6 +1618,21 @@ def render_stock_quote(ticker: str, currency: str = "USD", company_overview=None
         week_52_hl   = f"{w52h} / {w52l}"
     else:
         market_cap = shares_out = div_yield = week_52_hl = "-"
+
+    # Same dated figure as Key Stats' Latest Capitalization: last close on file ×
+    # shares reported on/before it. The overview's share count is undated, and the
+    # newest quote row has no close for about half the Yahoo tickers.
+    try:
+        _cap = StockQuoteRepository.get_latest_capitalization(ticker)
+    except Exception as _cap_exc:
+        log_structured_error(_cap_exc, page="market_data", component="render_stock_quote",
+                             operation="get_latest_capitalization")
+        _cap = None
+    if _cap and _cap.get("market_cap"):
+        _curr_sym = get_currency_symbol(_cap["currency"]) or _curr_sym
+        market_cap = (f'{_fmt_mktcap_mm(_cap["market_cap"] / 1_000_000)}'
+                      f'<span style="color:#6c757d;font-size:12px;"> as of {_cap["price_date"]:%b-%d-%Y}</span>')
+        shares_out = _fmt_mm(_cap["shares"] / 1_000_000)
 
     # ── 8 rows - Single column layout (label, value) for better readability ──
     rows = [
@@ -3968,6 +4102,14 @@ def render_page():
                 else:
                     st.info("No key stats data available for the selected date range")
 
+            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+            try:
+                render_latest_capitalization(selected_ticker, st.session_state.get("target_currency", "USD"),
+                                             units_scale, units_label)
+            except Exception as _cap_exc:
+                log_structured_error(_cap_exc, page="market_data", component="render_page",
+                                     operation="render_latest_capitalization")
+                st.info("Latest capitalization could not be loaded.")
 
         except Exception as e:
             log_structured_error(e, page="market_data", component="render_page", operation="RENDER_KEY_STATS")
