@@ -416,6 +416,7 @@ from data.watchlist_service import (
     revoke_watchlist_access        as wl_revoke_access,
     get_watchlist_access_grants    as wl_get_grants,
     ensure_tables                  as wl_ensure_tables,
+    watchlist_label,
 )
 
 # ---------------------------------------------------------------------------
@@ -3346,7 +3347,7 @@ def _dialog_watchlist_manager():
                         # Also sync bar selectbox
                         # Switch to edit mode showing the new watchlist
                         st.session_state["wl_dlg_mode"]        = "edit"
-                        st.session_state["_wl_dlg_preselect"]  = nm.strip()
+                        st.session_state["_wl_dlg_preselect"]  = new_id
                         st.session_state.pop("wl_dlg_select", None)
                         # Clean up create-mode keys
                         for _k in ("wl_create_name", "wl_create_desc",
@@ -3362,7 +3363,8 @@ def _dialog_watchlist_manager():
     # EDIT MODE  — dropdown + description + companies + save/delete
     # ═══════════════════════════════════════════════════════════════════
     watchlists = _cached_user_watchlists(user_email)
-    wl_names   = [w["name"] for w in watchlists]
+    wl_by_id   = {w["id"]: w for w in watchlists}
+    wl_ids     = list(wl_by_id)
 
     if not watchlists:
         st.info("No watchlists yet. Click 'Create New +' to add your first watchlist.")
@@ -3379,15 +3381,16 @@ def _dialog_watchlist_manager():
         # Use a separate key _wl_dlg_preselect (not the widget key) to avoid
         # the "set via Session State API + default value" Streamlit warning.
         _preselect = st.session_state.get("_wl_dlg_preselect")
-        _idx = wl_names.index(_preselect) if _preselect and _preselect in wl_names else 0
-        selected_name = st.selectbox(
+        _idx = wl_ids.index(_preselect) if _preselect in wl_by_id else 0
+        selected_id = st.selectbox(
             "Watchlist",
-            options=wl_names,
+            options=wl_ids,
             index=_idx,
+            format_func=lambda i: watchlist_label(wl_by_id[i]),
             key="wl_dlg_select",
             label_visibility="collapsed",
         )
-        selected_wl = watchlists[wl_names.index(selected_name)]
+        selected_wl = wl_by_id[selected_id]
 
     with create_col:
         if st.button("Create New  +", key="wl_dlg_create_link",
@@ -3662,20 +3665,21 @@ def _render_watchlist_bar():
 
         with select_col:
             if watchlists:
-                wl_options = ["— None —"] + [w["name"] for w in watchlists]
-                cur_name   = st.session_state.get("scr_active_watchlist_name")
-                cur_idx    = wl_options.index(cur_name) if cur_name in wl_options else 0
+                wl_by_id   = {w["id"]: w for w in watchlists}
+                wl_options = [None] + list(wl_by_id)
+                cur_idx    = wl_options.index(active_id) if active_id in wl_by_id else 0
 
                 sel = st.selectbox(
                     "watchlist",
                     options=wl_options,
                     index=cur_idx,
+                    format_func=lambda i: "— None —" if i is None else watchlist_label(wl_by_id[i]),
                     key="scr_wl_bar_select",
                     label_visibility="collapsed",
                 )
 
                 # Detect change and apply
-                if sel == "— None —":
+                if sel is None:
                     if active_id is not None:
                         st.session_state.scr_active_watchlist_id   = None
                         st.session_state.scr_active_watchlist_name = None
@@ -3689,7 +3693,7 @@ def _render_watchlist_bar():
                         _queue_toast("Watchlist cleared", icon="🔄")
                         st.rerun()
                 else:
-                    chosen = next((w for w in watchlists if w["name"] == sel), None)
+                    chosen = wl_by_id.get(sel)
                     if chosen and chosen["id"] != active_id:
                         st.session_state.scr_active_watchlist_id   = chosen["id"]
                         st.session_state.scr_active_watchlist_name = chosen["name"]

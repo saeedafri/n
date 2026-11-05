@@ -313,6 +313,18 @@ def get_user_watchlists(user_email: str, *, background_refresh: bool = False) ->
         return []
 
 
+def watchlist_label(watchlist: Dict) -> str:
+    """Dropdown text: name plus who created it.
+
+    Only the creator's email is stored (no display names), so show the part
+    before the "@". It also tells apart two watchlists that share a name.
+    """
+    creator = (watchlist.get("created_by") or "").split("@")[0]
+    if not creator:
+        return watchlist["name"]
+    return f"{watchlist['name']}  —  created by {creator}"
+
+
 def get_watchlist_companies(watchlist_id: int) -> List[Dict]:
     """Return all companies in a watchlist (ticker, company_name, sector, country)."""
     _require_tables()
