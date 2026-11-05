@@ -3637,6 +3637,59 @@ def _dialog_watchlist_manager():
 # WATCHLIST BAR  (shown above criteria palette)
 # =============================================================================
 
+# Puts the "created by" part of a watchlist label (data/watchlist_service.
+# watchlist_label) on the right of the dropdown, in grey. A selectbox option is
+# plain text, so the split happens in the page: the script rewrites the text
+# node React owns and appends its own span. It never removes a React node —
+# that is what threw removeChild before (see the sticky loader).
+_WL_CREATOR_RIGHT_JS = """
+<script>
+(function () {
+  if (window.__csWlCreatorRight) return;
+  window.__csWlCreatorRight = true;
+  // Built at run time so this script's own source never contains it.
+  const SEP = "  " + String.fromCharCode(8212) + "  created by ";
+  function split(el) {
+    const text = Array.from(el.childNodes).find(
+      n => n.nodeType === 3 && n.nodeValue.indexOf(SEP) > 0);
+    if (!text) return;
+    const at = text.nodeValue.indexOf(SEP);
+    const who = text.nodeValue.slice(at + SEP.length);
+    text.nodeValue = text.nodeValue.slice(0, at);
+    let tag = el.querySelector(":scope > .cs-wl-creator");
+    if (!tag) {
+      tag = document.createElement("span");
+      tag.className = "cs-wl-creator";
+      tag.style.cssText = "margin-left:auto;padding-left:16px;color:#6c757d;" +
+                          "font-size:0.85em;white-space:nowrap;";
+      el.appendChild(tag);
+    }
+    tag.textContent = "Created by " + who;
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.width = "100%";
+  }
+  function scan(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const hits = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement;
+      if (el && !el.closest("script,style") && n.nodeValue.indexOf(SEP) > 0) hits.push(el);
+    }
+    hits.forEach(split);
+  }
+  new MutationObserver(muts => {
+    for (const m of muts) {
+      const root = m.type === "characterData" ? m.target.parentElement : m.target;
+      if (root) scan(root);
+    }
+  }).observe(document.body, {childList: true, subtree: true, characterData: true});
+  scan(document.body);
+})();
+</script>
+"""
+
+
 def _render_watchlist_bar():
     """Compact watchlist bar — single row: title | selectbox | Edit/Manage button.
 
@@ -3677,6 +3730,8 @@ def _render_watchlist_bar():
                     key="scr_wl_bar_select",
                     label_visibility="collapsed",
                 )
+                # The dialog's selector shares the page, so this covers it too.
+                st.html(_WL_CREATOR_RIGHT_JS, unsafe_allow_javascript=True)
 
                 # Detect change and apply
                 if sel is None:
@@ -7225,6 +7280,16 @@ def _render_people_events(category: str, tickers_in_scope: Optional[set], people
         st.error(f"{label} could not be loaded. Please try again shortly.")
 
 
+def _years_in_role_text(years, note: str) -> str:
+    """"Not yet started" for a future start; "≥ n" when a stint before our
+    history (2016) is missing from the total; blank when unknown."""
+    if note == "Not yet started":
+        return note
+    if pd.isna(years):
+        return ""
+    return f"≥ {years:.1f}" if note == "partial" else f"{years:.1f}"
+
+
 def _render_management_changes(tickers_in_scope: Optional[set], people_criteria: List[dict],
                                company_meta: pd.DataFrame) -> None:
     """Appointments and departures (8-K Item 5.02, 6-K, Form 3, executive news)
@@ -7270,13 +7335,15 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             "Previous Title":   out["previous_title"].fillna(""),
             "Role":             role_bucket(out["role"]),
             "Succeeds":         out["replaces"].fillna(""),
-            "Succeeded By":     out["replaced_by"].fillna(""),
             "Reason":           out["reason"].fillna(""),
             "Role Start":       out["role_start"].dt.strftime("%Y-%m-%d").fillna(""),
             "Role End":         out["role_end"].dt.strftime("%Y-%m-%d").where(
                 out["role_end"].notna(),
                 out["role_start"].notna().map({True: "present", False: ""})),
-            "Years in Role":    out["years_in_role"].map(lambda v: "" if pd.isna(v) else f"{v:.1f}"),
+            # Total years at the company across every stint (data/management_changes.add_tenure).
+            "Years in Role":    [_years_in_role_text(v, note) for v, note in
+                                 zip(out["years_in_role"], out["tenure_note"].fillna(""))],
+            "Roles Held":       out["roles_held"].fillna(""),
             "Source":           out["source"].fillna("").astype(str),
             # 8-K: our Company Filings page. 6-K, Form 3 (its rendered page) and
             # news are not on it, so the filing on sec.gov or the article itself.

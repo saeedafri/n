@@ -771,48 +771,90 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
         df[col] = pd.to_datetime(df[col], errors="coerce")
     for col in ("ticker", "change", "event_type", "role", "confidence"):
         df[col] = df[col].fillna("").astype("category")
-    df = add_tenure(df)
     df = mark_moves(df, {r.get("event_id"): r.get("situation") or "" for r in rows}, names or {})
     return df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
 
 
 def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.DataFrame:
-    """Role start / end / years for every appointment, and the same pair on the
-    departure that closes it.
+    """Role start / end per period, and the person's total years at the company.
 
-    A role starts at the appointment's effective date (announcement date when
-    none is stated) and ends at the first later departure of the same person
-    at the same company, of the same kind (board seat vs officer role). No
-    departure -> the role is ongoing and years run to `today`. Only dates the
-    filings state are used; a filing YEAR is never taken as a start date.
-    Roles that began before our 8-K history (2016) have no appointment row, so
-    their tenure is not computed rather than guessed.
+    Periods: a role starts at the appointment's effective date (announcement
+    date when none is stated) and ends at the first later departure of the same
+    person at the same company, of the same kind (board seat vs officer role).
+    No departure -> the role is ongoing. Only dates the filings state are used.
+
+    Years in role = the person's total time at the company (same name, same
+    ticker): the union of all their periods, each cut off at `today`, so a
+    person who leaves and returns has both stints added and overlapping roles
+    (CFO and director at once) are counted once. A role starting after `today`
+    is "Not yet started". A departure with no appointment on file closed a role
+    that began before our 8-K history (2016); the total then misses that stint
+    and is marked "partial".
     """
     today = today or pd.Timestamp.today().normalize()
     df = df.copy()
     for col in ("role_start", "role_end"):
         df[col] = pd.NaT
     df["years_in_role"] = float("nan")
+    df["tenure_note"] = ""
+    df["roles_held"] = ""
     people = df["change"].isin(["Appointment", "Departure"])
+    if not people.any():
+        return df
     when = df["effective_date"].fillna(df["notice_date"])
-    key = df["ticker"].astype(str) + "#" + df["person"].map(person_key) + "#" + df["is_board"].astype(str)
-    for _, idx in df[people].groupby(key[people]).groups.items():
-        group = df.loc[idx].assign(_when=when[idx]).sort_values("_when")
-        departures = group[group["change"] == "Departure"]
-        for i, row in group[group["change"] == "Appointment"].iterrows():
-            start = row["_when"]
-            if pd.isna(start):
+    person = df["ticker"].astype(str) + "#" + df["person"].map(person_key)
+    kind = person + "#" + df["is_board"].astype(str)
+    title = df["titles"].fillna("").astype(str).where(df["titles"].fillna("") != "",
+                                                      df["title"].fillna("").astype(str))
+    # Plain Python over the ~8k appointment/departure rows: a pandas groupby +
+    # iterrows + df.at loop took 8 s here, and this runs on every cache refresh.
+    groups: Dict[str, list] = {}
+    for i, k, ch, w in zip(df.index[people], kind[people], df["change"][people], when[people]):
+        groups.setdefault(k, []).append((w, ch, i))
+    periods: Dict[str, list] = {}
+    partial = set()
+    for k, items in groups.items():
+        departures = sorted((w, i) for w, ch, i in items if ch == "Departure" and pd.notna(w))
+        closed = set()
+        for w, ch, i in items:
+            if ch != "Appointment" or pd.isna(w):
                 continue
-            later = departures[departures["_when"] > start]
-            end = later["_when"].iloc[0] if len(later) else pd.NaT
-            df.at[i, "role_start"] = start
-            df.at[i, "role_end"] = end
-            df.at[i, "years_in_role"] = round(((end if pd.notna(end) else today) - start).days / 365.25, 1)
-            if len(later):
-                j = later.index[0]
-                df.at[j, "role_start"] = start
-                df.at[j, "role_end"] = end
-                df.at[j, "years_in_role"] = df.at[i, "years_in_role"]
+            j = next((d for dw, d in departures if dw > w), None)
+            end = when[j] if j is not None else pd.NaT
+            rows = [i] if j is None else [i, j]
+            closed.update(rows[1:])
+            periods.setdefault(person[i], []).append((w, end, title[i], rows))
+        if any(d not in closed for _, d in departures) or any(
+                ch == "Departure" and pd.isna(w) for w, ch, _ in items):
+            partial.add(k.rsplit("#", 1)[0])
+    start_at, end_at, years_at, note_at, held_at = {}, {}, {}, {}, {}
+    for who, spans in periods.items():
+        spans.sort(key=lambda p: p[0])
+        days, cover_end = 0, None
+        for start, end, _, _ in spans:
+            stop = min(end, today) if pd.notna(end) else today
+            begin = max(start, cover_end) if cover_end is not None else start
+            if stop > begin:
+                days += (stop - begin).days
+                cover_end = stop
+        years = round(days / 365.25, 1)
+        held = "; ".join(dict.fromkeys(
+            f"{t or 'Role'} {s:%Y-%m-%d} – " + (f"{e:%Y-%m-%d}" if pd.notna(e) else "present")
+            for s, e, t, _ in spans))
+        for start, end, _, rows in spans:
+            for r in rows:
+                start_at[r], end_at[r], held_at[r] = start, end, held
+                if start > today:
+                    note_at[r] = "Not yet started"
+                else:
+                    years_at[r] = years
+                    note_at[r] = "partial" if who in partial else ""
+    idx = df.index.to_series()
+    df["role_start"] = pd.to_datetime(idx.map(start_at))
+    df["role_end"] = pd.to_datetime(idx.map(end_at))
+    df["years_in_role"] = idx.map(years_at).astype(float)
+    df["tenure_note"] = idx.map(note_at).fillna("")
+    df["roles_held"] = idx.map(held_at).fillna("")
     return df
 
 
@@ -1183,7 +1225,8 @@ def get_management_changes() -> pd.DataFrame:
 
     The first three are materialized to disk; Form 3 rows are added on read, from
     their own background-refreshed frame."""
-    return add_form3(_filings_and_news())
+    # Tenure runs to today, so it is computed on read, never in the disk build.
+    return add_tenure(add_form3(_filings_and_news()))
 
 
 def _filings_and_news() -> pd.DataFrame:

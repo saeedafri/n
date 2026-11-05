@@ -157,6 +157,37 @@ def test_tenure_pairs_appointment_and_departure():
     assert pd.isna(out.loc[3, "role_end"]) and out.loc[3, "years_in_role"] == 2.0
 
 
+def test_tenure_sums_rejoins_and_never_goes_negative():
+    from data.management_changes import add_tenure
+    today = pd.Timestamp("2026-01-01")
+    df = pd.DataFrame([
+        # Jane: CFO 2018-01-01 → 2020-01-01, rejoins as CEO 2022-01-01 (ongoing) = 2 + 4 years.
+        _row(effective_date=pd.Timestamp("2018-01-01"), event_id=1),
+        _row(change="Departure", effective_date=pd.Timestamp("2020-01-01"), event_id=2),
+        _row(effective_date=pd.Timestamp("2022-01-01"), titles="Chief Executive Officer", event_id=3),
+        # Same person on the board 2019 → 2021 overlaps her CFO period: counted once.
+        _row(is_board=True, titles="Director", effective_date=pd.Timestamp("2019-01-01"), event_id=4),
+        _row(change="Departure", is_board=True, effective_date=pd.Timestamp("2021-01-01"), event_id=5),
+        # Starts after today.
+        _row(person="Future Hire", effective_date=pd.Timestamp("2026-03-01"), event_id=6),
+        # Leaves after today: counted only up to today.
+        _row(person="Leaving Soon", effective_date=pd.Timestamp("2025-01-01"), event_id=7),
+        _row(person="Leaving Soon", change="Departure", effective_date=pd.Timestamp("2027-01-01"), event_id=8),
+        # Left in 2017 from a role that began before our history, rejoined 2024.
+        _row(person="Old Timer", change="Departure", effective_date=pd.Timestamp("2017-01-01"), event_id=9),
+        _row(person="Old Timer", effective_date=pd.Timestamp("2024-01-01"), event_id=10),
+    ])
+    out = add_tenure(df, today=today).set_index("event_id")
+    jane = round((pd.Timestamp("2021-01-01") - pd.Timestamp("2018-01-01")).days / 365.25
+                 + (today - pd.Timestamp("2022-01-01")).days / 365.25, 1)
+    assert out.loc[1, "years_in_role"] == jane and out.loc[3, "years_in_role"] == jane
+    assert "Chief Executive Officer 2022-01-01 – present" in out.loc[1, "roles_held"]
+    assert pd.isna(out.loc[6, "years_in_role"]) and out.loc[6, "tenure_note"] == "Not yet started"
+    assert out.loc[7, "years_in_role"] == 1.0 and out.loc[8, "years_in_role"] == 1.0
+    assert out.loc[10, "years_in_role"] == 2.0 and out.loc[10, "tenure_note"] == "partial"
+    assert (out["years_in_role"].dropna() >= 0).all()
+
+
 def test_move_needs_old_company_named_in_new_filing():
     """Same name at two companies is a move only if the new filing names the old one."""
     from data.management_changes import mark_moves
