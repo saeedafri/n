@@ -615,6 +615,7 @@ CHANGE_COLUMNS = [
     "is_board", "notice_date", "effective_date", "effective_note", "replaces", "replaced_by",
     "reason", "no_disagreement", "confidence", "age", "role_start", "role_end", "years_in_role",
     "moved_from", "moved_from_title", "moved_from_date", "offer_salary",
+    "role_before", "company_before",
     "evidence", "source_ref", "event_id",
     "source", "also_reported",
 ]
@@ -701,6 +702,69 @@ _BASE_SALARY = re.compile(
     r"(?:approximately\s+)?\$\s?(\d[\d,]*(?:\.\d+)?)(\s*million)?", re.I)
 
 
+_PRIOR_CUE = re.compile(r"\b(?:prior to|previously|most recently|before joining|before that)\b", re.I)
+_SERVED = re.compile(
+    r"\b(?:most recently |previously |had |also )?served(?: most recently)? as (?:the |a |an |its )?"
+    r"(?P<span>[A-Z][^.;()]{2,160}?)(?=,? (?:from|since|between|until|where|when|prior|before|after|beginning"
+    r"|starting|for over|for more|for approximately)\b|[.;(]|, a |, an |, the |, which|$)")
+# "served as Senior Vice President of Finance": a department, not the employer.
+_DEPARTMENTS = re.compile(r"^(?:the )?(?:Board|Directors|Finance|Accounting|Operations|Marketing|Engineering|Sales"
+                          r"|Science|Human Resources|Strategy|Technology|Corporate|Global|North America"
+                          r"|Supply Chain|Legal|Investor)\b", re.I)
+
+
+def prior_role(situation: str, person: str) -> tuple:
+    """(title, company) of the job the appointment biography says the person
+    held before: "Prior to joining Nike, Mr. Denton served as Executive Vice
+    President, Chief Financial Officer of Lowe's Companies, Inc." -> ("Executive
+    Vice President, Chief Financial Officer", "Lowe's Companies, Inc"). ("", "")
+    when the biography names no prior employer."""
+    surname = (person or "").split()[-1] if person else ""
+    for sentence in split_sentences(item_body(situation)):
+        if not surname or surname not in sentence or not _PRIOR_CUE.search(sentence):
+            continue
+        m = _SERVED.search(sentence)
+        if not m:
+            continue
+        span = re.sub(r"\s+", " ", m.group("span")).strip(" ,")
+        sep = next((s for s in (" at ", " of ", " with ", " for ") if s in span), None)
+        if not sep:
+            continue
+        # "VP, Accounting at Reformation": the employer follows the LAST " at ";
+        # "CFO of Lowe's" / "Head of Advisory of KPMG": it follows the last " of ".
+        title, company = span.rsplit(sep, 1)
+        company = re.split(r",? (?:and|in|on|to|where|which|until)\b", company)[0].strip(" ,")
+        title = re.sub(r",? and$", "", title.strip(" ,"))
+        if (len(title) > 90 or len(company) < 2 or len(company) > 60 or not company[:1].isupper()
+                or re.search(r"\d|’s|'s|\b(?:he|she|they|has|have|was|also|previously|serviced)\b", title)
+                or _DEPARTMENTS.match(company)):
+            continue
+        return title, company
+    return "", ""
+
+
+def fill_role_before(df: pd.DataFrame, names: Dict[str, str]) -> pd.DataFrame:
+    """Role / company before an appointment, most reliable first:
+      1. the title the filing says the person was promoted from (same company);
+      2. a verified move (mark_moves): the old company and its departure title;
+      3. the biography's prior job (prior_role).
+    company_before "" with a role_before means the same company."""
+    df = df.copy()
+    role, company = df["role_before"].fillna("").astype(str), df["company_before"].fillna("").astype(str)
+    moved = df["moved_from"].fillna("").astype(str)
+    for i in df.index[moved != ""]:
+        mover_company = names.get(moved[i], moved[i])
+        # The bio's job is the move's job when it names the same company.
+        word = short_name(mover_company).split(" ")[0].lower()
+        bio_same = bool(word) and word in company[i].lower()
+        role[i] = df.at[i, "moved_from_title"] or (role[i] if bio_same else "")
+        company[i] = mover_company
+    promoted = df["previous_title"].fillna("").astype(str) != ""
+    role[promoted], company[promoted] = df.loc[promoted, "previous_title"], ""
+    df["role_before"], df["company_before"] = role, company
+    return df
+
+
 def offer_salary(situation: str, person: str) -> float:
     """The annual base salary an appointment 8-K states for this person ("will
     receive an annual base salary of $850,000"), or NaN. The person's surname
@@ -753,6 +817,7 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
                      event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
             if e.get("change") == "Appointment":
                 e["offer_salary"] = offer_salary(r.get("situation") or "", e.get("person") or "")
+                e["role_before"], e["company_before"] = prior_role(r.get("situation") or "", e.get("person") or "")
             # The filing date is the announcement when the text gives none.
             e["notice_date"] = e.get("notice_date") or filed
             records.append(e)
@@ -772,6 +837,7 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
     for col in ("ticker", "change", "event_type", "role", "confidence"):
         df[col] = df[col].fillna("").astype("category")
     df = mark_moves(df, {r.get("event_id"): r.get("situation") or "" for r in rows}, names or {})
+    df = fill_role_before(df, names or {})
     return df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
 
 
@@ -798,6 +864,8 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
     df["years_in_role"] = float("nan")
     df["tenure_note"] = ""
     df["roles_held"] = ""
+    for col in ("role_before", "company_before"):
+        df[col] = df[col].fillna("").astype(str) if col in df else ""
     people = df["change"].isin(["Appointment", "Departure"])
     if not people.any():
         return df
@@ -827,7 +895,7 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
         if any(d not in closed for _, d in departures) or any(
                 ch == "Departure" and pd.isna(w) for w, ch, _ in items):
             partial.add(k.rsplit("#", 1)[0])
-    start_at, end_at, years_at, note_at, held_at = {}, {}, {}, {}, {}
+    start_at, end_at, years_at, note_at, held_at, earlier_at = {}, {}, {}, {}, {}, {}
     for who, spans in periods.items():
         spans.sort(key=lambda p: p[0])
         days, cover_end = 0, None
@@ -841,7 +909,12 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
         held = "; ".join(dict.fromkeys(
             f"{t or 'Role'} {s:%Y-%m-%d} – " + (f"{e:%Y-%m-%d}" if pd.notna(e) else "present")
             for s, e, t, _ in spans))
-        for start, end, _, rows in spans:
+        for n, (start, end, now_title, rows) in enumerate(spans):
+            # The person's previous role at this company, for Role Before; a
+            # re-election to the same seat is not a role before.
+            earlier = next((t for s, _, t, _ in reversed(spans[:n]) if s < start and t and t != now_title), "")
+            if earlier:
+                earlier_at[rows[0]] = earlier
             for r in rows:
                 start_at[r], end_at[r], held_at[r] = start, end, held
                 if start > today:
@@ -855,6 +928,9 @@ def add_tenure(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.Dat
     df["years_in_role"] = idx.map(years_at).astype(float)
     df["tenure_note"] = idx.map(note_at).fillna("")
     df["roles_held"] = idx.map(held_at).fillna("")
+    # Nothing stated by the filing: the role held before at the same company.
+    blank = df["role_before"].eq("") & df["change"].eq("Appointment")
+    df.loc[blank, "role_before"] = idx[blank].map(earlier_at).fillna("")
     return df
 
 
@@ -1238,6 +1314,7 @@ def _filings_and_news() -> pd.DataFrame:
         "where": "event_category IN ('Management Changes', 'Governance')",
     }]
     return materialized_or_build(
+        # _v11: role_before / company_before (promotion, move, biography) (2026-11-05).
         # _v10: news source is the feed ("AV News" / "YF News"), not the outlet;
         #       offer_salary from the appointment 8-K (2026-10-16).
         # _v9: news titles from the article summary, departing executive the
@@ -1252,7 +1329,7 @@ def _filings_and_news() -> pd.DataFrame:
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v10", _build_management_changes, sources,
+        "management_changes_v11", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 

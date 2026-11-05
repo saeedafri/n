@@ -7332,10 +7332,13 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             "Change":           out["change"].astype(str),
             "Event":            out["event_type"].astype(str),
             "Title(s)":         out["titles"].fillna(""),
-            "Previous Title":   out["previous_title"].fillna(""),
+            # The title / employer before this appointment (data/management_changes.fill_role_before);
+            # no company with a role means the same company.
+            "Role Before":      out["role_before"].fillna(""),
+            "Company Before":   out["company_before"].fillna("").where(
+                out["company_before"].fillna("") != "",
+                out["Company"].where(out["role_before"].fillna("") != "", "")),
             "Role":             role_bucket(out["role"]),
-            "Succeeds":         out["replaces"].fillna(""),
-            "Reason":           out["reason"].fillna(""),
             "Role Start":       out["role_start"].dt.strftime("%Y-%m-%d").fillna(""),
             "Role End":         out["role_end"].dt.strftime("%Y-%m-%d").where(
                 out["role_end"].notna(),

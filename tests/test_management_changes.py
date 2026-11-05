@@ -188,6 +188,32 @@ def test_tenure_sums_rejoins_and_never_goes_negative():
     assert (out["years_in_role"].dropna() >= 0).all()
 
 
+def test_role_and_company_before():
+    from data.management_changes import add_tenure, fill_role_before, prior_role
+    assert prior_role("Prior to joining Nike, Mr. Denton served as Executive Vice President, Chief "
+                      "Financial Officer of Lowe’s Companies, Inc. from 2018 to 2025.", "David Denton") == \
+        ("Executive Vice President, Chief Financial Officer", "Lowe’s Companies, Inc")
+    assert prior_role("Previously, Ms. Bruce served as Senior Vice President, Accounting at Reformation.",
+                      "Curtiss Bruce") == ("Senior Vice President, Accounting", "Reformation")
+    assert prior_role("Ms. Smith served as Senior Vice President of Finance since 2019.", "Ann Smith") == ("", "")
+    df = pd.DataFrame([
+        _row(event_id=1, previous_title="President, U.S.", role_before="CFO", company_before="Acme"),
+        _row(event_id=2, person="Mover", moved_from="LOW", moved_from_title="CFO",
+             role_before="", company_before=""),
+        _row(event_id=3, person="Bio Only", role_before="COO", company_before="Gap Inc"),
+    ])
+    out = fill_role_before(df, {"LOW": "Lowe's Companies, Inc."}).set_index("event_id")
+    assert (out.loc[1, "role_before"], out.loc[1, "company_before"]) == ("President, U.S.", "")
+    assert (out.loc[2, "role_before"], out.loc[2, "company_before"]) == ("CFO", "Lowe's Companies, Inc.")
+    assert (out.loc[3, "role_before"], out.loc[3, "company_before"]) == ("COO", "Gap Inc")
+    # Nothing stated: the person's earlier role at the same company.
+    tenure = add_tenure(pd.DataFrame([
+        _row(effective_date=pd.Timestamp("2018-01-01"), titles="Chief Financial Officer", event_id=1),
+        _row(effective_date=pd.Timestamp("2022-01-01"), titles="Chief Executive Officer", event_id=2),
+    ]), today=pd.Timestamp("2026-01-01")).set_index("event_id")
+    assert tenure.loc[2, "role_before"] == "Chief Financial Officer" and tenure.loc[1, "role_before"] == ""
+
+
 def test_move_needs_old_company_named_in_new_filing():
     """Same name at two companies is a move only if the new filing names the old one."""
     from data.management_changes import mark_moves
