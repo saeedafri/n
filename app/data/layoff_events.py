@@ -41,9 +41,18 @@ _RELEVANT = re.compile(
     rf"\bworkforce\s+reductions?\b|\breductions?\s+in\s+(?:force|workforce)\b|"
     rf"\bend(?:s|ing)?\s+(?:\w+\s+)?operations\s+at\b",
     re.I)
-# Cuts that are not this company's job or site cuts.
+# Cuts that are not this company's job or site cuts — and stories that are not
+# reports of a cut at all: law-firm solicitations, news roundups, stock-price
+# commentary and speculation (data-team review 2026-11-13; some duplicated a
+# real event already in the file).
 _NOT_A_CUT = re.compile(r"\bavoid(?:s|ed|ing)?\s+layoffs\b|\b(?:debt|capital)\s+restructuring\b|"
-                        r"restructuring\s+(?:deal|support\s+agreement)|\brecall\w*\b", re.I)
+                        r"restructuring\s+(?:deal|support\s+agreement)|\brecall\w*\b|"
+                        r"\blaw\s+firm\b|\bclass\s+action\b|\bshareholders?\s+(?:alert|rights)\b|\binvestigat\w+\b|"
+                        r"\bround-?up\b|\bdigest\b|\bmorning\s+squawk\b|\bnewsletter\b|"
+                        r"\bstock\s+(?:today|slips|falls|drops|jumps|rises|price)\b|\(\w{1,6}\)\s+stock\b|"
+                        r"\binvestors?\s+(?:watch|buzz|should|need)|\bimpact\b[^.]{0,60}\binvestors\b|"
+                        r"\bbiggest\s+clue\b|\bwill\s+[^.]{0,40}\bever\b|\?\s*$|"
+                        r"\bno\s+(?:\w+\s+){0,2}lay-?offs\b|\bpledg\w+\b", re.I)
 
 _GENERIC_WORDS = set("""
 inc incorporated corp corporation co company companies group holdings holding international intl
@@ -92,6 +101,47 @@ def names_company(headline: str, ticker: str, name: str) -> bool:
         return True
     base = re.escape(ticker.split("-")[0].split(".")[0])
     return bool(base) and bool(re.search(rf"(?:\(|\$|\b){base}(?::|\)|\b)", text))
+
+
+def lead_owners(names: Dict[str, str]) -> Dict[str, set]:
+    """Distinctive name word -> tickers whose company name carries it."""
+    index: Dict[str, set] = {}
+    for ticker, name in names.items():
+        for word in name_words(name):
+            index.setdefault(word, set()).add(ticker)
+    return index
+
+
+def led_by_other_company(headline: str, ticker: str, name: str, index: Dict[str, set]) -> bool:
+    """The headline's subject is another company: "Disney Signs Adobe AI Deal
+    Amid Reported Job Cut Plans" (filed under ADBE), "Alaska Air to cut 200
+    jobs" (filed under DAL — "air" is in Delta Air Lines too)."""
+    words = _words(re.sub(r"^\s*(?:exclusive|breaking|update\s*\d*)\s*[:\-]\s*", "", headline or "", flags=re.I))
+    if not words:
+        return False
+    lead = words[0].lower().removesuffix("'s")
+    owners = index.get(lead)
+    return bool(owners) and ticker not in owners and lead not in name_words(name)
+
+
+def subject_company(headline: str, tickers, names: Dict[str, str]) -> Optional[str]:
+    """Of the companies one story is filed under, the one making the cut: the
+    company named nearest BEFORE the cut phrase. "After Arcellx buyout close,
+    Gilead trims 108 jobs" -> Gilead, not Arcellx. None when no filed company
+    comes before it: a roundup ("Layoffs in food industry mount as PepsiCo
+    joins Coca-Cola ...") or a story about others ("While some tech giants cut
+    jobs, Palo Alto Networks and Nvidia are hiring")."""
+    cut = _RELEVANT.search(headline or "")
+    if not cut:
+        return None
+    text = (headline or "").lower().replace("’", "'")
+    best, best_at = None, -1
+    for ticker in tickers:
+        for word in name_words(names.get(ticker, "")):
+            m = re.search(rf"\b{re.escape(word)}(?:'s)?\b", text[:cut.start()])
+            if m and m.start() > best_at:
+                best, best_at = ticker, m.start()
+    return best
 
 
 def is_layoff_news(headline: str) -> bool:
@@ -161,10 +211,23 @@ def clean_layoff_events(df: pd.DataFrame, names: Dict[str, str], window_days: in
     is_filing = df["source"].astype(str).str.startswith("SEC")
     summary = df["situation"].where(is_filing, "").fillna("").map(item_205_summary)
     df["headline"] = df["headline"].where(~is_filing | summary.eq(""), summary)
-    named = pd.Series([names_company(h, t, names.get(t, "")) for h, t in zip(df["headline"], df["ticker"])],
-                      index=df.index)
+    index = lead_owners(names)
+    named = pd.Series([names_company(h, t, names.get(t, "")) and not led_by_other_company(h, t, names.get(t, ""), index)
+                       for h, t in zip(df["headline"], df["ticker"])], index=df.index)
     keep = is_filing | (df["headline"].map(is_layoff_news) & named)
     df = df[keep].copy()
+    # One story filed under several companies: only the one making the cut keeps
+    # it (data-team review follow-up 2026-11-13: Gilead's cut at Arcellx under
+    # both ACLX and GILD; an industry roundup under KO and WMT).
+    news = ~df["source"].astype(str).str.startswith("SEC")
+    owners = {}
+    for headline, tickers in df[news].groupby("headline")["ticker"]:
+        companies = set(tickers)
+        if len({" ".join(sorted(name_words(names.get(t, t)))) or t for t in companies}) > 1:
+            owners[headline] = subject_company(headline, sorted(companies), names)
+    if owners:
+        lost = news & df["headline"].isin(owners.keys()) & (df["ticker"] != df["headline"].map(owners))
+        df = df[~lost].copy()
     text = df["headline"].fillna("") + " " + df["situation"].fillna("")
     df["jobs"] = text.map(jobs_of)
     df["workforce_pct"] = text.map(share_of)

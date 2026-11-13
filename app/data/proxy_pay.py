@@ -20,6 +20,7 @@ on disk (empty until the first refresh has run).
 No DB writes. The copy lives in the materialize cache dir (/home/mdp-cache on STG).
 """
 
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -37,11 +38,18 @@ except Exception:  # pragma: no cover
     def log_warning(*a, **kw): pass
 
 # _v2: name/title split and shared-year-cell rows (2026-10-15).
-FRAME_NAME = "proxy_pay_v2"
+# _v3: a name cell spanning into the next executive's rows no longer merges the
+#      two (Tesla Musk/Taneja, Arhaus, Coty; 2026-11-13). Every proxy is re-read;
+#      until that finishes, readers get v2 (people_service drops its merged blocks).
+FRAME_NAME = "proxy_pay_v3"
+_PREVIOUS_FRAME = "proxy_pay_v2"
 SEC_USER_AGENT = "Coresight Research mohdsaeedafri@coresight.com"
 
-# Each proxy restates three fiscal years, so the newest three proxies give five.
-PROXIES_PER_COMPANY = 3
+# Each proxy restates three fiscal years. Ten proxies reach back to ~2013, so
+# the older years the data team's table holds can be checked against the filing
+# (people_service._fix_copied_pay; data-team review 2026-11-13). Proxies already
+# read are never fetched again, so only the first refresh reads the back years.
+PROXIES_PER_COMPANY = 10
 
 _PROXY_QUERY = """
     SELECT ticker, event_date, source_ref
@@ -63,6 +71,28 @@ _COLUMN_PATTERNS = [
     ("all_other_compensation", r"all\s*other"),
     ("total_compensation",     r"\btotal\b"),
 ]
+
+
+# Cheap "anything new?" signal: 0.9 s, where listing every proxy (_PROXY_QUERY)
+# is ~40 s (it reads every date partition). The hourly upkeep asks this first.
+_SIGNAL_QUERY = """
+    SELECT MAX(event_id) AS last_id, COUNT(*) AS n
+    FROM coreiq_company_events
+    WHERE event_category = 'Proxy/Governance'
+      AND event_subtype = 'Executive Compensation (DEF 14A)'
+"""
+_SIGNAL_FILE = "proxy_pay_signal.txt"
+
+
+def _signal_path() -> Optional[str]:
+    from utils.materialize import _cache_dir
+    folder = _cache_dir()
+    return f"{folder}/{_SIGNAL_FILE}" if folder else None
+
+
+def _proxy_signal() -> str:
+    row = (db_manager.execute_query_readonly_raising(_SIGNAL_QUERY, {}) or [{}])[0]
+    return f"{FRAME_NAME}:{PROXIES_PER_COMPANY}:{row.get('last_id')}:{row.get('n')}"
 
 
 def proxy_url(source_ref: str) -> str:
@@ -114,40 +144,70 @@ def _grid(table) -> List[List[tuple]]:
     grid[r][c] = (cell id, text). A spanned cell has the same id in every
     position it covers, which is how a value under a three-column "Salary"
     header is found whichever of the three columns it sits in.
+
+    A row spanned wider than the table's usual width is a wrong rowspan in the
+    filing: Tesla's 2026 proxy spans Musk's name cell over Taneja's first two
+    rows, which pushed Taneja's year and pay two columns right, out from under
+    their headers. Such a span is cut short at that row and the grid laid out
+    again.
     """
     rows = [list(h) for h in (table.headers or [])] + [list(r.cells) for r in table.rows]
-    taken: dict = {}
-    grid: List[List[tuple]] = []
-    for r, cells in enumerate(rows):
-        c = 0
-        for cell in cells:
-            while (r, c) in taken:
-                c += 1
-            text = (cell.text() or "").strip()
-            for dr in range(max(1, cell.rowspan or 1)):
-                for dc in range(max(1, cell.colspan or 1)):
-                    taken[(r + dr, c + dc)] = (id(cell), text)
-            c += max(1, cell.colspan or 1)
-    for r in range(len(rows)):
-        width = max([c for (rr, c) in taken if rr == r], default=-1) + 1
-        grid.append([taken.get((r, c), (None, "")) for c in range(width)])
-    return grid
+    cut: dict = {}   # id(cell) -> rows it may span
+    for _ in range(4):
+        taken: dict = {}
+        for r, cells in enumerate(rows):
+            c = 0
+            for cell in cells:
+                while (r, c) in taken:
+                    c += 1
+                text = (cell.text() or "").strip()
+                for dr in range(min(max(1, cell.rowspan or 1), cut.get(id(cell), 1 << 30))):
+                    for dc in range(max(1, cell.colspan or 1)):
+                        taken[(r + dr, c + dc)] = (id(cell), text, r, cell)
+                c += max(1, cell.colspan or 1)
+        widths = [max([c for (rr, c) in taken if rr == r], default=-1) + 1 for r in range(len(rows))]
+        usual = max(set(widths), key=widths.count) if widths else 0
+        changed = False
+        for r in (r for r, w in enumerate(widths) if w > usual):
+            # The oldest span reaching into the row is the wrong one: Taneja's
+            # own name cell spans his rows legitimately.
+            carried = [(v[2], id(v[3])) for (rr, _), v in taken.items() if rr == r and v[2] < r]
+            if carried:
+                start, cell = min(carried)
+                if cut.get(cell, 1 << 30) > r - start:
+                    cut[cell], changed = r - start, True
+        if not changed:
+            break
+    return [[taken[(r, c)][:2] if (r, c) in taken else (None, "") for c in range(widths[r])]
+            for r in range(len(rows))]
+
+
+# One stacked figure: an amount, a dash, a footnote mark.
+_STACKED_PART = re.compile(r"[\s$(),.\d\u2014\u2013\u2011-]*")
 
 
 def _explode(grid) -> List[List[tuple]]:
     """Split a row that stacks several years in one cell ("2025\n\n2024\n\n2023",
-    every money cell stacked the same way) into one row per year."""
+    every money cell stacked the same way) into one row per year. Arhaus 2026
+    stacks them one line apart ("2025\n2024\n2023"): then only the year and
+    figure cells are split, the name/title cell keeps its lines."""
     out = []
     for row in grid:
-        parts = [re.split(r"\n\s*\n", text) for _, text in row]
-        stacked = next((p for p in parts if len(p) > 1 and all(_year(x) for x in p)), None)
+        stacked, figures_only = None, False
+        for sep, figures_only in ((r"\n\s*\n", False), (r"\s*\n\s*", True)):
+            parts = [re.split(sep, text) for _, text in row]
+            stacked = next((p for p in parts if len(p) > 1 and all(_year(x) for x in p)), None)
+            if stacked:
+                break
         if not stacked:
             out.append(row)
             continue
         n = len(stacked)
+        split = [len(p) == n and (not figures_only or all(_year(x) or _STACKED_PART.fullmatch(x) for x in p))
+                 for p in parts]
         for k in range(n):
-            out.append([((cell_id, k), p[k]) if len(p) == n else (cell_id, text)
-                        for (cell_id, text), p in zip(row, parts)])
+            out.append([((cell_id, k), p[k]) if ok else (cell_id, text)
+                        for (cell_id, text), p, ok in zip(row, parts, split)])
     return out
 
 
@@ -321,10 +381,19 @@ def parse_summary_compensation(html: str) -> List[dict]:
 def read_proxy_pay() -> pd.DataFrame:
     """The parsed rows on disk, or an empty frame. Never builds, never waits."""
     from utils.materialize import _disk_copy
-    obj = _disk_copy(FRAME_NAME)
-    if isinstance(obj, tuple) and len(obj) == 2:
-        return obj[0]
-    return pd.DataFrame()
+    copies = [obj for obj in (_disk_copy(FRAME_NAME), _disk_copy(_PREVIOUS_FRAME))
+              if isinstance(obj, tuple) and len(obj) == 2]
+    if not copies:
+        return pd.DataFrame()
+    rows, done = copies[0]
+    if len(copies) == 2:
+        # Re-read proxies come from the new frame, the rest from the old one
+        # until the background refresh reaches them.
+        old_rows, _ = copies[1]
+        if len(old_rows):
+            rows = pd.concat([rows, old_rows[~old_rows["accession"].isin(set(done["accession"]))]],
+                             ignore_index=True)
+    return rows
 
 
 def _wanted_proxies() -> pd.DataFrame:
@@ -354,6 +423,14 @@ def refresh_proxy_pay(limit: Optional[int] = None, save_every: int = 25) -> int:
     session = requests.Session()
     session.headers["User-Agent"] = SEC_USER_AGENT
     t0 = time.perf_counter()
+    # Nothing new on file since the last complete refresh: stop here (~1 s).
+    signal, path = None, _signal_path()
+    try:
+        signal = _proxy_signal()
+        if not limit and path and os.path.exists(path) and open(path).read().strip() == signal:
+            return 0
+    except Exception as exc:
+        log_structured_error(exc, page="proxy_pay", component="refresh_proxy_pay", operation="proxy_signal")
     obj = _disk_copy(FRAME_NAME)
     rows, done = (obj if isinstance(obj, tuple) and len(obj) == 2
                   else (pd.DataFrame(), pd.DataFrame(columns=["accession"])))
@@ -362,7 +439,15 @@ def refresh_proxy_pay(limit: Optional[int] = None, save_every: int = 25) -> int:
     todo = todo[~todo["accession"].isin(seen)]
     if limit:
         todo = todo.head(limit)
+    failed = 0
+
+    def remember():
+        # Only after a complete pass: a failed download must be retried.
+        if signal and path and not limit and not failed:
+            with open(path, "w") as fh:
+                fh.write(signal)
     if todo.empty:
+        remember()
         return 0
 
     def fetch(item):
@@ -379,6 +464,7 @@ def refresh_proxy_pay(limit: Optional[int] = None, save_every: int = 25) -> int:
     with ThreadPoolExecutor(max_workers=4) as pool:
         for item, html in pool.map(fetch, todo.itertuples()):
             if isinstance(html, Exception):
+                failed += 1
                 # Left out of `done`: a network failure is retried on the next run.
                 log_structured_error(html, page="proxy_pay", component="refresh_proxy_pay",
                                      operation="read_proxy", context=item.url)
@@ -405,6 +491,7 @@ def refresh_proxy_pay(limit: Optional[int] = None, save_every: int = 25) -> int:
         rows = pd.concat([rows, pd.DataFrame(new_rows)], ignore_index=True)
         done = pd.concat([done, pd.DataFrame({"accession": new_done})], ignore_index=True)
         write_materialized(FRAME_NAME, (rows, done), [])
+    remember()
     log_timing("PROXY_PAY_REFRESH", (time.perf_counter() - t0) * 1000,
-               details=f"read={read} rows={len(rows)} proxies={len(done)}", level="WARNING")
+               details=f"read={read} rows={len(rows)} proxies={len(done)} failed={failed}", level="WARNING")
     return read

@@ -452,28 +452,74 @@ def _warm_people_screening() -> None:
     # Layoffs & restructuring: ~5-35s when the disk copy is gone.
     for category in PEOPLE_EVENT_CATEGORIES:
         get_people_events(category)
-    # Proxy pay for the companies coreiq_executives_compensation lacks: only proxies
-    # not read before (~1-6s each; ~1,200 on an empty cache dir, saved every 25).
-    from data.proxy_pay import refresh_proxy_pay
+    # Then the upkeep loop, on this one thread for the life of the process.
+    _people_upkeep_loop()
+
+
+# How often the People thread looks for new data. A look that finds nothing
+# costs one small query (the list of proxies on file) and no downloads.
+PEOPLE_UPKEEP_SECONDS = 3600
+# The quality check runs after every update and at least this often.
+PEOPLE_QUALITY_SECONDS = 6 * 3600
+
+
+def people_upkeep(run_form3: bool, run_check: bool) -> dict:
+    """One pass of People upkeep. Only new data is fetched; nothing is rebuilt
+    from scratch:
+      * proxies: only proxies not read before are downloaded and appended to
+        proxy_pay (a company's new DEF 14A, or a company new to the data); the
+        merged People view is then recomputed from disk (~5 s);
+      * Form 3: only filings not read before (every 6 h);
+      * second tickers of a company: re-derived from the DB (every 6 h);
+      * the quality check (people_quality): after any update, else every 6 h.
+    Returns what happened, for the log and for tests."""
+    from data.management_changes import get_management_changes
+    from data.people_service import get_people_universe, refresh_ticker_aliases
+    did = {"proxies": 0, "form3": False, "checked": False}
     try:
-        if refresh_proxy_pay():
-            get_people_universe.clear()
+        refresh_ticker_aliases()
     except Exception as exc:
-        log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
-                             operation="refresh_proxy_pay")
-    # Form 3 appointments: only filings not read before (~5k a year for our
-    # issuers, ~0.15 s each on an empty cache dir (~25 min), newest first, saved
-    # every 100 and shown as it lands). Then again every 6 h, so new filings and
-    # newly added companies arrive without a deploy (~70 s of index reading plus
-    # ~0.15 s per new filing).
-    from data.form3_appointments import REFRESH_SECONDS, refresh_form3
-    while True:
+        log_structured_error(exc, page="cache_manager", component="people_upkeep", operation="ticker_aliases")
+    try:
+        from data.proxy_pay import refresh_proxy_pay
+        did["proxies"] = refresh_proxy_pay() or 0
+        if did["proxies"]:
+            get_people_universe.clear()
+            get_people_universe()   # rebuilt here (~5 s), not by a visitor
+    except Exception as exc:
+        log_structured_error(exc, page="cache_manager", component="people_upkeep", operation="refresh_proxy_pay")
+    if run_form3:
         try:
+            from data.form3_appointments import refresh_form3
             refresh_form3(on_save=get_management_changes.clear)
+            did["form3"] = True
         except Exception as exc:
-            log_structured_error(exc, page="cache_manager", component="_warm_people_screening",
-                                 operation="refresh_form3")
-        time.sleep(REFRESH_SECONDS)
+            log_structured_error(exc, page="cache_manager", component="people_upkeep", operation="refresh_form3")
+    if run_check or did["proxies"] or did["form3"]:
+        try:
+            from data.people_quality import check_people_quality
+            check_people_quality()
+            did["checked"] = True
+        except Exception as exc:
+            log_structured_error(exc, page="cache_manager", component="people_upkeep", operation="people_quality")
+    return did
+
+
+def _people_upkeep_loop() -> None:
+    """Hourly: new proxies; every 6 h: Form 3 and the quality check (also after
+    any update). Form 3's first read on an empty cache dir is ~25 min, saved
+    every 100 and shown as it lands."""
+    from data.form3_appointments import REFRESH_SECONDS
+    last_form3 = last_check = 0.0
+    while True:
+        now = time.time()
+        did = people_upkeep(run_form3=now - last_form3 >= REFRESH_SECONDS,
+                            run_check=now - last_check >= PEOPLE_QUALITY_SECONDS)
+        if did["form3"]:
+            last_form3 = now
+        if did["checked"]:
+            last_check = now
+        time.sleep(PEOPLE_UPKEEP_SECONDS)
 
 
 def _background_warmup_thread():

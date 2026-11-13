@@ -25,8 +25,11 @@ Schema notes:
 See docs/superpowers/specs/2026-10-06-screening-people-criteria-design.md.
 """
 
+import hashlib
 import json
+import os
 import re
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -73,6 +76,9 @@ _FORMER_REGEX = re.compile(r"\bformer\b", re.I)
 _NAME_ZERO_WIDTH = re.compile(r"[\u200b-\u200f\ufeff]")
 _NAME_FOOTNOTE = re.compile(r"\s*(\(\s*\d+\s*\)|\[\s*\d+\s*\]|\d{1,2})\s*$")
 _NAME_TRAILING_MARKS = re.compile(r"[\s*\u2013\u2014-]+$")
+# Yahoo writes "Mr. Timothy D. Cook": the honorific is not part of the name
+# (599 People rows carried one, data-team review 2026-11-13).
+_NAME_HONORIFIC_LEAD = re.compile(r"^(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\.?\s+(?=\S)", re.I)
 
 # Title words the extractor glues AFTER a name: "Brian T. Olsavsky SVP and",
 # "Franck J. Moison Retired", "Martin P. Waters CEO/President". Each spelling
@@ -81,7 +87,12 @@ _NAME_TITLE_WORDS = {
     "svp", "sevp", "evp", "vp", "and", "&", "ceo", "cfo", "coo", "president",
     "retired", "former", "division", "enterprise", "sector", "corporate",
     "special", "strategic", "technical", "advisor", "founder", "chief",
-    "officer", "executive", "chairman", "group",
+    "officer", "executive", "chairman", "group", "commerce",
+    # Title fragments stored as names ("Senior Vice", "CHAIR OF THE BOARD",
+    # "General Manager, RBIS"), each a copy of a real executive's pay row
+    # (data-team review 2026-11-13).
+    "senior", "vice", "general", "counsel", "manager", "chair", "board", "secretary",
+    "treasurer", "controller", "operations", "of", "the",
 }
 # Never part of WHO someone is. Yahoo prefixes every officer with an honorific,
 # so first-token keys read "Mr." as the first name and merged Bernard Arnault
@@ -95,6 +106,7 @@ def _is_title_token(token: str) -> bool:
     return not word or all(part in _NAME_TITLE_WORDS for part in word.split("/") if part)
 
 
+@lru_cache(maxsize=200_000)
 def clean_person_name(name):
     """Strip extraction junk from an executive name.
 
@@ -102,7 +114,15 @@ def clean_person_name(name):
     only by a footnote marker or an invisible character, and each one became its
     own grid row.
     """
-    text = _NAME_ZERO_WIDTH.sub("", (name or "")).strip()
+    text = _NAME_HONORIFIC_LEAD.sub("", _NAME_ZERO_WIDTH.sub("", (name or "")).strip())
+    # "Julie A. D’ Emilio" and "Julie A. D’Emilio" are one person (two grid rows
+    # with one pay history, review 2026-11-13).
+    text = re.sub(r"\b([DO])['’]\s+(?=[A-Z])", r"\1’", text)
+    text = re.sub(r"\b([A-Z])\s+\.(?=\s)", r"\1.", text)         # "A . Christina Hennington"
+    first = text.split(" ", 1)[0]
+    if len(first) > 2 and text.count(first + " ") > 1:            # "Coolidge E. Rhodes, Jr. Coolidge E"
+        once = text[:text.index(first + " ", 1)].strip()
+        text = once if len(once.split()) >= 2 else text
     # Twice: "Galanti 8 9" style double markers do occur.
     for _ in range(2):
         stripped = _NAME_FOOTNOTE.sub("", text).strip()
@@ -126,7 +146,10 @@ def clean_person_name(name):
 # "Anthropologie Group", "Abercrombie & Fitch/ abercrombie kids").
 # "Famous Footwear", "Label and Graphic", "Wholesale and Dist. Ops", "and
 # Accounting", "Jr.** Douglas" (proxy title lines, 2026-10-16).
-_NOT_PERSON_WORDS = {"brands", "group", "systems", "kids", "stores", "division", "segment",
+_NOT_PERSON_WORDS = {"america", "americas", "sales", "development", "strategy", "care", "engineering",
+                     "brand", "fintech", "financial", "principal", "technologies", "director",
+                     "inc", "corp", "llc", "ltd", "co-founder", "founder", "region", "business",
+                     "brands", "group", "systems", "kids", "stores", "division", "segment",
                      "consumer", "international", "retail", "corporate", "markets", "services",
                      "coatings", "projects", "footwear", "graphic", "wholesale", "ops", "dist",
                      "accounting", "materials", "operations", "solutions", "products", "and"}
@@ -136,11 +159,14 @@ _NAME_SUFFIX_FIRST = re.compile(r"^(?:jr|sr|ii|iii|iv)\b", re.I)
 def is_person_name(name: str) -> bool:
     """False for a cleaned "name" that is a business unit, not a person."""
     tokens = (name or "").split()
-    return (len(tokens) >= 2 and not any(c in name for c in "&/*")
+    return (len(tokens) >= 2 and not any(c in name for c in "&/*—()")
+            and any(len(re.sub(r"[^A-Za-z]", "", t)) >= 2 for t in tokens)      # not "G. A"
+            and not any(_is_title_token(t) for t in tokens)
             and not _NAME_SUFFIX_FIRST.match(name)
             and not any(t.lower().strip(".,") in _NOT_PERSON_WORDS for t in tokens))
 
 
+@lru_cache(maxsize=200_000)
 def person_key(name):
     """Every full name word, for matching one person across spellings.
 
@@ -157,11 +183,429 @@ def person_key(name):
     "Mr. Tae-Moon Roh Ph.D." keys as tae-moon|roh, not mr|ph.
     """
     tokens = [t for t in (re.sub(r"[^\w'-]", "", t)
-                          for t in re.split(r"[\s.]+", clean_person_name(name).lower()))
+                          for t in re.split(r"[\s.]+", clean_person_name(name).lower().replace("’", "'")))
               if len(t) > 1 and t not in _NAME_HONORIFICS and t not in _NAME_SUFFIXES]
     return "|".join(tokens)
 
 
+def person_id(name) -> str:
+    """Stable ID for one person across the four People exports and their
+    spellings: "Anthony DiSilvestro" and "Anthony P. DiSilvestro" share one.
+    # ponytail: name-based; two different people with the same full name share
+    # an ID. Add the company to the key if that ever matters more than movers.
+    """
+    key = person_key(name)
+    return "P" + hashlib.sha1(key.encode()).hexdigest()[:8].upper() if key else ""
+
+
+def _load_ticker_aliases() -> Dict[str, str]:
+    path = os.path.join(os.path.dirname(__file__), "ticker_aliases.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return {k: v for k, v in json.load(fh).items() if not k.startswith("_")}
+    except (OSError, ValueError):
+        return {}
+
+
+# Only what the database cannot tell (no SEC CIK, or a ticker no table holds).
+# Everything else is derived from the DB (refresh_ticker_aliases).
+TICKER_ALIAS_OVERRIDES = _load_ticker_aliases()
+# The live map: overrides + the DB-derived pairs. Mutated in place on refresh so
+# every module holding a reference sees the new pairs.
+TICKER_ALIASES: Dict[str, str] = dict(TICKER_ALIAS_OVERRIDES)
+_ALIASES_LOADED_AT = 0.0
+ALIAS_REFRESH_SECONDS = 6 * 3600
+
+_NAME_NOISE = re.compile(
+    r"\b(?:the|inc|incorporated|corp|corporation|co|company|companies|ltd|limited|plc|llc|lp|holdings?|"
+    r"group|sa|ag|nv|se|spa|class [a-z]|series [a-z]|adr|ads|common stock|ordinary shares|new|de)\b")
+
+
+def company_name_key(name) -> str:
+    """"Victoria's Secret & Co." and "VICTORIA'S SECRET" -> "victoria's secret";
+    "Block, Inc. (Square)" -> "block"; "Brown-Forman Corp." -> "brown forman"."""
+    text = re.sub(r"\(.*?\)|/[a-z]{2,4}/", " ", str(name or "").lower().replace("’", "'"))
+    text = _NAME_NOISE.sub(" ", re.sub(r"[^a-z0-9' ]+", " ", text))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# A line that is never the company's main share: rights, units, warrants,
+# preferreds (AACBR, AACBU, ABLVW, AAM-WT, ABR-PD).
+_SECONDARY_LINE = re.compile(r"^[A-Z]{4}[UWRZ]$|^[A-Z]{3,4}WW$|-(?:WT?|WS|UN?|RT?|P[A-Z]?)$")
+
+
+def derive_ticker_aliases(listings: List[dict], coverage: Dict[str, str],
+                          activity: Dict[str, int], listed: Optional[Dict[str, tuple]] = None) -> Dict[str, str]:
+    """ticker -> the company's one ticker, for tickers that are the same issuer.
+
+    `listings`: {ticker, cik, name} rows from every company master. Two tickers
+    are one company when they share a CIK AND a company name (normalised): CCZ
+    and CMCSA ("COMCAST CORP"), VSCO and VSXY ("Victoria's Secret"). A shared
+    CIK with different names is a data error, never merged (CRI Carter's / GIL
+    Gildan, FTI / NOMD). `coverage`: ticker -> listing_status for the Coresight
+    list; `listed`: ticker -> (active, market cap) from the Alpha Vantage
+    listing. The one ticker is the Coresight one (Public first); else not a
+    rights/unit/warrant/preferred line; else the active line with the largest
+    market cap (CMCSA $106bn over CCZ, AFG over the AFGC debenture); else the
+    most events; else the plainest symbol.
+    """
+    listed = listed or {}
+    by_cik: Dict[str, Dict[str, set]] = {}
+    for row in listings:
+        cik = str(row.get("cik") or "").strip()
+        ticker = str(row.get("ticker") or "").strip()
+        if not cik.isdigit() or not ticker:
+            continue
+        names = by_cik.setdefault(str(int(cik)), {}).setdefault(ticker, set())
+        key = company_name_key(row.get("name"))
+        if key:
+            names.add(key)
+    aliases: Dict[str, str] = {}
+    for tickers in by_cik.values():
+        if len(tickers) < 2:
+            continue
+        # Groups of tickers that share a name inside this CIK.
+        groups: List[set] = []
+        for ticker, names in tickers.items():
+            joined = [g for g in groups if any(tickers[t] & names for t in g)]
+            merged = {ticker}.union(*joined) if joined else {ticker}
+            groups = [g for g in groups if g not in joined] + [merged]
+        for group in groups:
+            if len(group) < 2:
+                continue
+            best = sorted(group, key=lambda t: (
+                0 if coverage.get(t) == "Public" else 1 if t in coverage else 2,
+                bool(_SECONDARY_LINE.search(t)),
+                not listed.get(t, (False, 0))[0], -(listed.get(t, (False, 0))[1] or 0),
+                -activity.get(t, 0), bool(re.search(r"[^A-Z0-9]", t)), len(t), t))[0]
+            aliases.update({t: best for t in group if t != best})
+    return aliases
+
+
+def refresh_ticker_aliases(force: bool = False) -> Dict[str, str]:
+    """Re-derive the alias map from the database (at most every 6 h unless
+    forced). A new company listed under two tickers is folded on the next
+    refresh, without anyone editing a list. A failed read keeps the last map."""
+    global _ALIASES_LOADED_AT
+    import time as _time
+    if not force and _time.time() - _ALIASES_LOADED_AT < ALIAS_REFRESH_SECONDS:
+        return TICKER_ALIASES
+    try:
+        listings = db_manager.execute_query_readonly_raising(
+            "SELECT ticker, cik, name FROM coreiq_sec_companies_all", {}) or []
+        covered = db_manager.execute_query_readonly_raising(
+            "SELECT ticker, cik, name, name_coresight, listing_status FROM coreiq_companies", {}) or []
+        listings = list(listings) + [dict(r, name=n) for r in covered
+                                     for n in (r.get("name"), r.get("name_coresight")) if n]
+        coverage = {str(r["ticker"]): str(r.get("listing_status") or "") for r in covered}
+        # Event counts only for tickers that share a CIK (a few dozen).
+        shared = {}
+        for r in listings:
+            if str(r.get("cik") or "").strip().isdigit():
+                shared.setdefault(str(int(str(r["cik"]).strip())), set()).add(str(r["ticker"]))
+        candidates = sorted({t for ts in shared.values() if len(ts) > 1 for t in ts})
+        activity, listed = {}, {}
+        if candidates:
+            marks = ", ".join(f":t{i}" for i in range(len(candidates)))
+            params = {f"t{i}": t for i, t in enumerate(candidates)}
+            for r in db_manager.execute_query_readonly_raising(
+                    f"SELECT ticker, COUNT(*) AS n FROM coreiq_company_events WHERE ticker IN ({marks}) GROUP BY ticker",
+                    params) or []:
+                activity[str(r["ticker"])] = int(r["n"])
+            for r in db_manager.execute_query_readonly_raising(
+                    f"SELECT symbol, listing_status, market_capitalization FROM coreiq_av_companies_all "
+                    f"WHERE symbol IN ({marks})", params) or []:
+                listed[str(r["symbol"])] = (str(r.get("listing_status") or "") == "Active",
+                                            _to_float(r.get("market_capitalization")) or 0)
+        derived = derive_ticker_aliases(listings, coverage, activity, listed)
+    except Exception as exc:
+        log_structured_error(exc, page="people_service", component="refresh_ticker_aliases",
+                             operation="derive_ticker_aliases")
+        return TICKER_ALIASES
+    fresh = {**derived, **TICKER_ALIAS_OVERRIDES}
+    added = sorted(set(fresh) - set(TICKER_ALIASES))
+    first = _ALIASES_LOADED_AT == 0.0
+    TICKER_ALIASES.clear()
+    TICKER_ALIASES.update(fresh)
+    _ALIASES_LOADED_AT = _time.time()
+    if added and not first:
+        # A company newly found under a second ticker: folded from now on.
+        log_warning(f"[PEOPLE_TICKER_ALIASES] new: {', '.join(f'{t}->{fresh[t]}' for t in added[:20])}")
+    log_timing("PEOPLE_TICKER_ALIASES", 0, details=f"pairs={len(fresh)} new={0 if first else len(added)}")
+    return TICKER_ALIASES
+
+
+def canonical_ticker(ticker) -> str:
+    text = str(ticker or "").strip()
+    return TICKER_ALIASES.get(text, text)
+
+
+def canonical_tickers(df: pd.DataFrame, columns=("ticker",)) -> pd.DataFrame:
+    """Fold alias tickers on read: a frame materialized before a pair was found
+    still shows one ticker per company."""
+    hit = [c for c in columns if c in df.columns
+           and df[c].astype(str).isin(TICKER_ALIASES.keys()).any()]
+    if not hit:
+        return df
+    df = df.copy()
+    for col in hit:
+        was_category = isinstance(df[col].dtype, pd.CategoricalDtype)
+        df[col] = df[col].astype(str).map(canonical_ticker)
+        if was_category:
+            df[col] = df[col].astype("category")
+    return df
+
+
+_CORP_WORD = re.compile(r"\b(?:Inc|Incorporated|Corp|Corporation|Co|Company|Companies|Ltd|Limited|plc|"
+                        r"LLC|LP|SA|AG|NV|SE|SpA|Group|Holdings?|Brands|Restaurants|Bancorp|"
+                        r"Soci[ée]t[ée]|S\.?A\.?P\.?I|C\.?V)\b", re.I)
+_KEEP_CAPS = {"AG", "SA", "NV", "SE", "LP", "LLC", "USA", "US", "UK", "ADR", "II", "III", "IV",
+              "AT&T", "CVS", "IBM", "HP", "GE", "JD", "BP", "H&M", "TJX", "PVH", "3M", "ODP", "AMC", "NCR"}
+_CAPS_AS = {"JPMORGAN": "JPMorgan", "PLC": "plc", "LTD": "Ltd", "MCDONALD'S": "McDonald's"}
+
+
+# Names that are styled in capitals on purpose.
+_STYLED_CAPS = {"JAKKS", "SYNNEX", "NVIDIA", "ASICS", "IKEA", "LEGO", "KAYAK", "ULTA", "GEICO", "YETI"}
+
+
+def smart_title(text: str) -> str:
+    """"SIGNET JEWELERS LTD" -> "Signet Jewelers Ltd"; "CHEVRON Corp." -> "Chevron
+    Corp."; mixed-case names untouched."""
+    letters = [c for c in text or "" if c.isalpha()]
+    if not letters or " " not in text.strip():
+        # One word is a listing code ("CLIFFORDML", HK 3686): it goes with the
+        # ticker and is shown as filed (user, 2026-11-13).
+        return text or ""
+    if sum(c.isupper() for c in letters) < 0.8 * len(letters):
+        # Mostly mixed case: only a shouted long word is fixed.
+        return re.sub(r"\b[A-Z]{5,}\b", lambda m: m.group(0) if m.group(0) in _STYLED_CAPS
+                      else m.group(0).capitalize(), text)
+
+    def word(w):
+        core = w.strip(".,")
+        if core in _CAPS_AS:
+            return w.replace(core, _CAPS_AS[core])
+        if core in _KEEP_CAPS or core in _STYLED_CAPS \
+                or (len(core) <= 3 and core.isalpha() and not re.search(r"[AEIOUY]", core)) \
+                or re.fullmatch(r"(?:[A-Z]\.)+[A-Z]?\.?", core + "."):
+            return w
+        return "-".join(re.sub(r"^Mc(\w)", lambda m: "Mc" + m.group(1).upper(), p.capitalize())
+                        for p in w.split("-"))
+    return " ".join(word(w) for w in text.split())
+
+
+def company_display_name(coresight: str, legal: str = "", ticker: str = "") -> str:
+    """The company's name, not a brand list, a former name or a ticker.
+
+    Coresight's own label wins, except (data-team review 2026-11-13):
+      * a list of brands ("KFC, Pizza Hut, Taco Bell" -> "Yum! Brands, Inc.");
+      * a former name the legal name records in brackets ("Square" ->
+        "Block, Inc." from "Block, Inc. (Square)");
+      * a ticker-like code ("QRTEA", "CLIFFORDML") when a real name exists;
+    and an all-caps name is put in title case ("ELI LILLY & Co.").
+    """
+    coresight, legal = (coresight or "").strip(), re.sub(r"\s*/[A-Z]{2,4}/\s*$|\s*/\s*ADR$", "", (legal or "").strip())
+    former = re.match(rf"^(.+?)\s*\(\s*{re.escape(coresight)}\s*\)$", legal) if coresight else None
+    if former:
+        return former.group(1).strip()
+    brand_list = "," in coresight and not _CORP_WORD.search(coresight)
+    code_like = bool(coresight) and (coresight == ticker or (" " not in coresight and coresight.isupper()
+                                                            and len(coresight) > 4))
+    name = legal if legal and (not coresight or brand_list or code_like) else coresight or legal
+    return smart_title(name)
+
+
+# Junk the proxy extractor glues onto a position (data-team review 2026-11-13):
+# footnote prose, director-bio fields, years, footnote marks, dated asides.
+_TITLE_FOOTNOTE_PROSE = re.compile(
+    r"\s+(?:Aggregate\s+grant|The\s+amounts?\b|Amounts?\s+(?:shown|reported|represent|in\s+this)|"
+    r"Represents\b|Reflects\b|Consists\s+of|See\s+(?:Note|the\s+section)|In\s+accordance\b|"
+    r"(?:Mr|Ms|Mrs|Dr)\.\s+[A-Z][a-z]).*$", re.S)
+_TITLE_BIO = re.compile(r"\b(?:Age\s*:?\s*\d{2}\b|Director\s+since\s*:?\s*(?:19|20)\d{2}|"
+                        r"(?:Committees?|Race/Ethnicity|Gender|Tenure)\s*:\s*\S+)", re.I)
+_TITLE_DATED_ASIDE = re.compile(r"\s*\([^()]*\b(?:19|20)\d{2}\b[^()]*\)"
+                                r"|,?\s+(?:as\s+of|until|through|effective|since|from)\s+"
+                                r"(?:[A-Z][a-z]+\.?\s+\d{1,2},?\s+)?(?:19|20)\d{2}\b")
+_TITLE_YEARS = re.compile(r"(?:\s+(?:19|20)\d{2})+(?=\s*$)")
+_TITLE_MARKS = re.compile(r"\s*(?:\*+|\(\s*\d{1,2}\s*\)|\[\s*\d{1,2}\s*\])|\s+\d{1,2}\s*$")
+_TITLE_LEAD_JUNK = re.compile(r"^(?:(?:Jr|Sr|II|III|IV)\.?\**\s+|\d{2}\s+(?=[A-Z]))")
+_TITLE_SEC_WORDING = re.compile(
+    r"[,;]?\s*(?:and\s+)?(?:as\s+)?(?:the\s+)?(?:Company[’']s\s+)?(?:interim\s+)?"
+    r"principal\s+(?:executive|financial|accounting|operating)\s+officer\b", re.I)
+_TITLE_DANGLING = re.compile(r"[\s,;&/–—-]+(?:and|of|the)?\s*$|\s+(?:and|of|the)\s*$")
+
+
+_TITLE_START_WORD = r"(?:Former|Interim|Executive|Senior|Chief|President|Vice|EVP|SVP|Group|Global|General|Chair\w*|Head)"
+# "… U.S. Stores Carol B. Tomé Former Chief Financial Officer": a second person
+# (first name, initial, surname) run on before their own title.
+_TITLE_SECOND_PERSON = re.compile(
+    rf"\s+[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][\w'’À-ſ\-]+(?:,?\s+(?:Jr|Sr|II|III)\.?)?\s+(?={_TITLE_START_WORD}\b)")
+# A performance goal read as a title: "Drive product innovation and deliver …".
+_TITLE_GOAL = re.compile(r"^(?:Drive|Deliver|Complete|Improve|Lead|Grow|Achieve|Execute|Develop|Expand|"
+                         r"Continue|Strengthen|Build|Advance|Accelerate|Support)\b", re.I)
+_TITLE_ABBREVIATIONS = [(r"\bEVP\b", "executive vice president"), (r"\bSVP\b", "senior vice president"),
+                        (r"\bVP\b", "vice president"), (r"\bCEO\b", "chief executive officer"),
+                        (r"\bCFO\b", "chief financial officer"), (r"\bCOO\b", "chief operating officer"),
+                        (r"&", "and"), (r"\bthe Board\b", ""), (r"\bof the\b", "of")]
+
+
+# Rank words every executive title shares: "EVP, CFO" and "EVP, Stores" are
+# two titles even though most of their words match.
+_TITLE_RANK_WORDS = {"and", "of", "our", "the", "executive", "vice", "senior", "chief", "officer", "group", "global"}
+
+
+def _title_words(text: str) -> set:
+    for pattern, full in _TITLE_ABBREVIATIONS:
+        text = re.sub(pattern, full, text)
+    return {w for w in re.findall(r"[a-z]+", text.lower()) if w not in _TITLE_RANK_WORDS}
+
+
+def _one_wording(text: str) -> str:
+    """"Executive Vice President & Chief Administrative Officer Executive Vice
+    President and Chief Administrative Officer" -> the first wording: later
+    proxies' spellings of the same title were run together."""
+    # Only after a complete title ("... Officer", "... (COO)"): "EVP and" + "Chief
+    # Operating Officer" is one title, not two wordings.
+    starts = [m.start(1) for m in re.finditer(
+        rf"(?:Officer|President|Director|Counsel|Secretary|Treasurer|Controller|Chair\w*|CEO|CFO|COO|CAO|\)|”|\")"
+        rf"(\s+)(?={_TITLE_START_WORD}\b|our\s)", text)]
+    for at in starts:
+        head, tail = text[:at].strip(" ,;"), text[at:].strip(" ,;")
+        a, b = _title_words(head), _title_words(tail)
+        if a and b and len(a & b) >= 0.75 * min(len(a), len(b)) and len(a & b) >= 0.5 * max(len(a), len(b)):
+            return head if len(head) >= len(tail) else _one_wording(tail)
+    return text
+
+
+@lru_cache(maxsize=200_000)
+def clean_title(title) -> str:
+    """A position as a title: no footnote prose, director-bio fields ("Age: 60",
+    "Director Since: 2023"), year runs ("President, Brands 2024 2023"), footnote
+    marks, dated asides ("(through Sept. 10, 2023)") or SEC designations
+    ("principal accounting officer") next to a real title."""
+    text = re.sub(r"\s+", " ", str(title or "")).strip()
+    if not text:
+        return ""
+    if _TITLE_GOAL.match(text):
+        start = re.search(rf"\b{_TITLE_START_WORD}\b", text)
+        text = text[start.start():] if start else ""
+    text = re.split(r"\s*_{3,}", text, 1)[0]
+    text = _TITLE_SECOND_PERSON.split(text, 1)[0]
+    text = _TITLE_FOOTNOTE_PROSE.sub("", text)
+    text = _TITLE_BIO.sub(" ", text)
+    text = _TITLE_DATED_ASIDE.sub("", text)
+    text = _TITLE_MARKS.sub("", _TITLE_YEARS.sub("", text))
+    text = _TITLE_LEAD_JUNK.sub("", re.sub(r"\s+", " ", text).strip())
+    without = _TITLE_SEC_WORDING.sub("", text).strip(" ,;")
+    if re.search(r"[A-Za-z]{2,}", without):
+        text = without
+    elif text:
+        # The designation is the only title on file: say it as a title.
+        text = re.sub(r"^(?:the\s+)?(?:Company[’']s\s+)?", "", text, flags=re.I).title()
+    text = _one_wording(text)
+    if len(text) > 150:
+        # ponytail: an unrecognised footnote; keep its first clause only.
+        text = re.split(r"\.\s", text, 1)[0][:150].rsplit(" ", 1)[0]
+    previous = None
+    while previous != text:
+        previous, text = text, _TITLE_DANGLING.sub("", text).strip()
+    return text
+
+
+def raw_lead(raw_row: str) -> str:
+    """The filed row's text before its first year: whose row it is."""
+    return re.split(r"\s(?:19|20)\d\d\b", " " + (raw_row or ""), 1)[0].strip()
+
+
+def row_owner(name: str, position: str, raw_row: str) -> tuple:
+    """(name, position) of the executive a stored pay row belongs to.
+
+    The data team's extractor sometimes files a Summary Compensation Table row
+    under the PREVIOUS executive: Lowe's "Brandon J. Sink" rows carry Joseph M.
+    McFarland III's figures, and often the position runs both titles together.
+    The filed row text (raw_row) starts with whose row it is, so a row whose
+    text starts with someone else's name is theirs — the source of the "same
+    pay history" pairs (Sink/McFarland, Sankaran/McCollam, Ford/McCabe;
+    data-team review 2026-11-13).
+    """
+    lead = raw_lead(raw_row)
+    own = person_key(name).split("|")
+    if not lead or (own[-1] and own[-1] in lead.lower()):
+        return name, position
+    words = lead.split()
+    for k in range(min(6, len(words)), 1, -1):
+        candidate = " ".join(words[:k]).strip(" ,")
+        if any(_is_title_token(w) for w in words[:k]):
+            continue
+        cleaned = clean_person_name(candidate)
+        if is_person_name(cleaned) and person_key(cleaned).split("|")[-1] not in own:
+            rest = " ".join(words[k:]).strip(" ,;")
+            title = position.split(candidate, 1)[1].strip(" ,;") if candidate in position else rest
+            return cleaned, title
+    return name, position
+
+
+def _drop_copied_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop a row whose stored position names a colleague AND whose pay equals
+    that colleague's pay for the same year: it is a copy of their row filed
+    under the wrong executive, in a restated year whose row text names no one
+    (Target 2018-19: "John J. Mulligan" / "... Michael E. McNamara EVP & CIO"
+    carrying McNamara's totals). The executive's own row for that year, from
+    another proxy, is kept."""
+    total = pd.to_numeric(df["total_compensation"], errors="coerce").round(0)
+    keys = df["executive_name"].map(person_key)
+    pay = {}
+    for t, k, y, v in zip(df["ticker"].astype(str), keys, df["year"], total):
+        if pd.notna(v):
+            pay.setdefault((t, k, y), set()).add(v)
+    # Named by first and last name: "Coolidge E. Rhodes, Jr" in a position is
+    # the "Coolidge E. Rhodes, Jr." on file.
+    people = df.groupby(df["ticker"].astype(str), observed=True)["executive_name"].agg(
+        lambda s: {person_key(n) for n in s if len(person_key(n).split("|")) >= 2})
+    drop = []
+    for i, t, k, y, v, pos in zip(df.index, df["ticker"].astype(str), keys, df["year"], total,
+                                  df["raw_position"].fillna("")):
+        if pd.isna(v) or not pos:
+            continue
+        words = set(re.findall(r"[\w'’-]+", pos.lower().replace("’", "'")))
+        if any(ok != k and {ok.split("|")[0], ok.split("|")[-1]} <= words and v in pay.get((t, ok, y), ())
+               for ok in people.get(t, ())):
+            drop.append(i)
+    return df.drop(index=drop)
+
+
+def _owner_by_title(df: pd.DataFrame) -> pd.DataFrame:
+    """Rows whose filed text starts with ANOTHER executive's title, not a name:
+    Victoria's Secret 2024 "Scott Sekella" / "Chief Financial and Operating
+    Officer Chief Human Resources and Legal Officer" with the row text "Chief
+    Human Resources and Legal Officer 2024 746,154 ..." is Melinda McAfee's
+    row. Reassigned when the title ends the run-together position and exactly
+    one other executive of that company holds it."""
+    raw = df["raw_lead"].fillna("")
+    lead = raw.map(clean_title)
+    # By person, not spelling: "Joseph McFarland III" and "Joseph M. McFarland
+    # III" are one holder (the fullest spelling is used).
+    holders: Dict[tuple, Dict[str, str]] = {}
+    for t, n, title in zip(df["ticker"].astype(str), df["executive_name"], df["title"]):
+        same = holders.setdefault((t, title.lower()), {})
+        key = person_key(n)
+        if len(n) > len(same.get(key, "")):
+            same[key] = n
+    df = df.copy()
+    for i in df.index[lead.ne("")]:
+        position, own = str(df.at[i, "raw_position"] or ""), df.at[i, "executive_name"]
+        # The run-together position (before clean_title tidies it) ends with the title.
+        if position.lower() == raw[i].lower() or not position.lower().endswith(" " + raw[i].lower()):
+            continue
+        others = {k: n for k, n in holders.get((str(df.at[i, "ticker"]), lead[i].lower()), {}).items()
+                  if k != person_key(own)}
+        if len(others) == 1:
+            df.at[i, "executive_name"], df.at[i, "title"] = next(iter(others.values())), lead[i]
+            df.at[i, "role"], df.at[i, "is_former"] = classify_role(lead[i]), is_former_title(lead[i])
+    return df
+
+
+@lru_cache(maxsize=50_000)
 def classify_role(title: Optional[str]) -> str:
     """Collapse a free-text executive title into one selectable role bucket.
 
@@ -297,21 +741,58 @@ _FRAME_COLUMNS = [
     "exercised_value", "unexercised_value",
     "age", "year_born",
     "source", "filing_form", "filing_year", "filing_blob", "confidence",
-    # Build-time only: the total as printed at the end of the filed row. Used by
-    # _repair_pay and dropped before the frame is stored.
-    "raw_total",
+    # Build-time only: the total as printed at the end of the filed row (used by
+    # _repair_pay) and the row text before its year (used by _owner_by_title).
+    "raw_total", "raw_lead", "raw_position",
 ]
 
 
-def _sec_records(rows: List[Dict[str, Any]]) -> List[dict]:
-    """Map SEC proxy rows onto the unified people schema."""
+_COMPANY_WORDS: Optional[Dict[str, set]] = None
+
+
+def company_words() -> Dict[str, set]:
+    """ticker -> the words of the company's names (coreiq_companies), so the
+    company itself is never read as a person ("Urban Outfitters, Inc"). One
+    query per process (~625 rows)."""
+    global _COMPANY_WORDS
+    if _COMPANY_WORDS is None:
+        found: Dict[str, set] = {}
+        try:
+            for r in db_manager.execute_query_readonly(
+                    "SELECT ticker, name, name_coresight FROM coreiq_companies") or []:
+                found.setdefault(canonical_ticker(r.get("ticker")), set()).update(
+                    re.findall(r"[a-z]+", f"{r.get('name') or ''} {r.get('name_coresight') or ''}".lower()))
+        except Exception as exc:
+            log_structured_error(exc, page="people_service", component="company_words",
+                                 operation="fetch_company_names")
+            return found
+        _COMPANY_WORDS = found
+    return _COMPANY_WORDS
+
+
+def is_company_name(name: str, ticker: str, words: Dict[str, set]) -> bool:
+    found = set(re.findall(r"[a-z]+", (name or "").lower())) - {"inc", "co", "corp"}
+    return bool(found) and found <= words.get(ticker, set())
+
+
+def _sec_records(rows: List[Dict[str, Any]], company_words: Optional[Dict[str, set]] = None) -> List[dict]:
+    """Map SEC proxy rows onto the unified people schema.
+
+    `company_words` (ticker -> words of the company's names) drops the company
+    itself read as a person ("Urban Outfitters, Inc", 14 URBN rows copying a
+    real executive's pay)."""
+    company_words = company_words or {}
     out = []
     for r in rows:
-        ticker = (r.get("ticker") or "").strip()
-        name = clean_person_name(r.get("executive_name"))
+        ticker = canonical_ticker(r.get("ticker"))
+        raw = _NAME_ZERO_WIDTH.sub("", r.get("raw_row") or "")
+        stored_position = re.sub(r"\s+", " ", _NAME_ZERO_WIDTH.sub("", r.get("position") or "")).strip()
+        name, position = row_owner(clean_person_name(r.get("executive_name")), stored_position, raw)
         if not is_person_name(name):
             continue
-        title = (r.get("position") or "").strip()
+        if is_company_name(name, ticker, company_words):
+            continue
+        title = clean_title(position)
         out.append({
             "ticker":                 ticker,
             "executive_name":         name,
@@ -339,6 +820,8 @@ def _sec_records(rows: List[Dict[str, Any]]) -> List[dict]:
             "filing_blob":            (r.get("blob_name") or "").strip(),
             "confidence":             _to_int(r.get("confidence_score")),
             "raw_total":              last_row_amount(r.get("raw_row")),
+            "raw_lead":               re.sub(r"\s+", " ", raw_lead(raw)),
+            "raw_position":           stored_position,
         })
     return out
 
@@ -374,7 +857,7 @@ def _yf_records(rows: List[Dict[str, Any]], fx: Dict[str, Dict[int, float]]) -> 
     """
     out = []
     for r in rows:
-        ticker = (r.get("ticker") or "").strip()
+        ticker = canonical_ticker(r.get("ticker"))
         payload = r.get("payload_json")
         if not payload:
             continue
@@ -388,7 +871,7 @@ def _yf_records(rows: List[Dict[str, Any]], fx: Dict[str, Dict[int, float]]) -> 
             if not isinstance(o, dict):
                 continue
             name = clean_person_name(o.get("name"))
-            title = (o.get("title") or "").strip()
+            title = clean_title(o.get("title"))
             if not name and not title:
                 continue
             year = _to_int(o.get("fiscalYear"))
@@ -480,7 +963,7 @@ def _repair_pay(df: pd.DataFrame) -> pd.DataFrame:
     rescued = ~adds_up(total) & total.notna() & adds_up(df["raw_total"])
     df.loc[rescued, "total_compensation"] = df.loc[rescued, "raw_total"]
     df["_sane"] = (df["total_compensation"].isna() | adds_up(df["total_compensation"])).astype(int)
-    return df.drop(columns=["raw_total"])
+    return df.drop(columns=["raw_total", "raw_lead", "raw_position"], errors="ignore")
 
 
 def _merge_name_variants(df: pd.DataFrame) -> pd.Series:
@@ -711,21 +1194,24 @@ def _finish_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _proxy_records(proxy: pd.DataFrame) -> List[dict]:
+def _proxy_records(proxy: pd.DataFrame, words: Optional[Dict[str, set]] = None) -> List[dict]:
     """Map proxy_pay rows (edgartools-read Summary Compensation Tables) onto the
     unified people schema. They are SEC proxies like coreiq_executives_compensation."""
+    words = words or {}
     out = []
-    for r in proxy.to_dict("records"):
+    # One vectorised date parse: per-row pd.to_datetime was a third of this
+    # function on 46k rows.
+    filed_years = pd.to_datetime(proxy.get("filing_date"), errors="coerce").dt.year if len(proxy) else []
+    for r, filed_year in zip(proxy.to_dict("records"), filed_years):
         name = clean_person_name(r.get("executive_name"))
-        if not is_person_name(name):
+        if not is_person_name(name) or is_company_name(name, canonical_ticker(r.get("ticker")), words):
             continue
-        title = (r.get("title") or "").strip()
-        filed = pd.to_datetime(r.get("filing_date"), errors="coerce")
+        title = clean_title(r.get("title"))
         out.append({
             **{col: r.get(col) for col in ("salary", "bonus", "stock_awards", "option_awards",
                                            "non_equity_incentive", "all_other_compensation",
                                            "total_compensation")},
-            "ticker":          r.get("ticker"),
+            "ticker":          canonical_ticker(r.get("ticker")),
             "executive_name":  name,
             "title":           title,
             "role":            classify_role(title),
@@ -734,7 +1220,7 @@ def _proxy_records(proxy: pd.DataFrame) -> List[dict]:
             "pay_currency":    "",
             "source":          "SEC",
             "filing_form":     "DEF 14A",
-            "filing_year":     None if pd.isna(filed) else filed.year,
+            "filing_year":     None if pd.isna(filed_year) else int(filed_year),
             "filing_blob":     r.get("url") or "",
         })
     return out
@@ -772,6 +1258,149 @@ def fill_missing_titles(df: pd.DataFrame, form3: Optional[pd.DataFrame] = None) 
     return df
 
 
+_TITLE_CUT_SHORT = re.compile(
+    r"\b(?:Chief|Executive|Senior|Vice|Global|Group|Principal|Deputy|Assistant|Interim)$", re.I)
+
+
+def _names_in_title(df: pd.DataFrame) -> List[Optional[str]]:
+    """Per row, the first OTHER executive of the same company whose full name
+    appears in the title — two positions run together. None when there is none."""
+    names = df.groupby(df["ticker"].astype(str), observed=True)["executive_name"].agg(
+        lambda s: {n for n in s if len(str(n).split()) >= 2})
+    out = []
+    for t, n, title in zip(df["ticker"].astype(str), df["executive_name"], df["title"].fillna("")):
+        hits = [(title.find(o), o) for o in names.get(t, ()) if o != n and o in title]
+        out.append(min(hits)[1] if hits else None)
+    return out
+
+
+def tidy_titles(df: pd.DataFrame) -> pd.DataFrame:
+    """Title repairs that need the whole company or person (on read, after
+    every source is in):
+      * another executive's name inside a title is where a second position was
+        run on ("Chief Executive Officer Patrice de Talhouët, Chief Financial
+        Officer" on Camillo Pane) — the title is cut there;
+      * a title cut short ("President and Chief", "Executive") takes the same
+        person's fuller title from another year; a lone word is left blank for
+        fill_missing_titles.
+    """
+    if df.empty:
+        return df
+    titles = df["title"].fillna("").astype(str).tolist()
+    for i, other in enumerate(_names_in_title(df)):
+        if other:
+            titles[i] = clean_title(titles[i].split(other, 1)[0])
+    keys = (df["ticker"].astype(str) + "#" + df["executive_name"].map(person_key)).tolist()
+    by_person: Dict[str, List[str]] = {}
+    for k, t in zip(keys, titles):
+        by_person.setdefault(k, []).append(t)
+    for i, (k, t) in enumerate(zip(keys, titles)):
+        if t and _TITLE_CUT_SHORT.search(t):
+            fuller = [x for x in by_person[k] if len(x) > len(t) and x.lower().startswith(t.lower())
+                      and not _TITLE_CUT_SHORT.search(x)]
+            titles[i] = max(set(fuller), key=fuller.count) if fuller else ("" if " " not in t else t)
+    changed = [a != b for a, b in zip(titles, df["title"].fillna("").astype(str))]
+    if not any(changed):
+        return df
+    df = df.copy()
+    df["title"] = titles
+    roles = df["role"].astype(object)
+    roles[changed] = [classify_role(t) for t, c in zip(titles, changed) if c]
+    df["role"] = roles.astype("category")
+    return df
+
+
+def add_status(df: pd.DataFrame) -> pd.DataFrame:
+    """`status` per person: "Former" when their latest title says so, or when
+    the company's latest proxy on file no longer names them; else "Current".
+    Yahoo's officer list is a current list, so a Yahoo-only person is Current
+    unless the title says Former."""
+    if df.empty:
+        return df.assign(status=pd.Series(dtype=object))
+    year = pd.to_numeric(df["year"], errors="coerce")
+    key = df["ticker"].astype(str) + "#" + df["executive_name"].map(person_key)
+    sec = df["source"].astype(str).str.contains("SEC")
+    company_latest = year.where(sec).groupby(df["ticker"].astype(str)).transform("max")
+    person_latest = year.groupby(key).transform("max")
+    gone = (sec & person_latest.lt(company_latest)).groupby(key).transform("max")
+    latest_former = (df["is_former"].astype(bool) & year.eq(person_latest)).groupby(key).transform("max")
+    return df.assign(status=(gone | latest_former).map({True: "Former", False: "Current"}))
+
+
+def _name_words(name) -> frozenset:
+    """Name words of 3+ letters, any order or spelling: "Cofer, Timothy",
+    "Timothy Cofer" and "TIMOTHY COFER, age" all share {timothy, cofer}."""
+    return frozenset(w for w in re.findall(r"[^\W\d_]{3,}", str(name or "").lower().replace("’", "'"))
+                     if w not in _NAME_HONORIFICS and w not in _NAME_SUFFIXES and w != "age")
+
+
+def _fix_copied_pay(universe: pd.DataFrame, recs: pd.DataFrame) -> pd.DataFrame:
+    """Where the data team's table gives an executive the SAME total as a
+    colleague in a year, check that year's proxy as we read it (proxy_pay):
+      * the filing gives this person a different total -> the filing's figures
+        (Target 2018: Mulligan stored with McNamara's $5,356,168; filed
+        $8,575,733);
+      * the filing does not list this person at all but lists a colleague with
+        exactly this total -> the row is a copy and is dropped (Victoria's
+        Secret 2023 "Scott Sekella" with Melinda McAfee's $2,564,782; he joined
+        in 2024);
+      * the filing gives both the same total -> genuine equal pay (e.l.f.,
+        Amazon, co-founders), left alone.
+    One person is matched across spellings by shared name words ("Cofer,
+    Timothy" in the filing is "Timothy Cofer" in the table). Elsewhere the two
+    sources agree on 98.7% of person-years (STG, 2026-11-13); nothing else is
+    touched."""
+    sec = universe["source"].astype(str).eq("SEC") & universe["total_compensation"].notna()
+    if not sec.any() or recs.empty:
+        return universe
+    total = universe["total_compensation"].round(0)
+    year = pd.to_numeric(universe["year"], errors="coerce")
+    tick = universe["ticker"].astype(str)
+    words = universe["executive_name"].map(_name_words)
+    # Who holds each (company, year, total), in the table or in the filings.
+    paid: Dict[tuple, List[frozenset]] = {}
+    for t, w, y, v in zip(tick, words, year, total):
+        if pd.notna(v) and pd.notna(y):
+            paid.setdefault((t, int(y), v), []).append(w)
+    filed: Dict[tuple, List[tuple]] = {}      # (ticker, year) -> [(name words, row)]
+    proxies: Dict[tuple, set] = {}            # (ticker, year) -> proxies read that cover it
+    for t, n, y, row in zip(recs["ticker"].astype(str), recs["executive_name"], recs["year"],
+                            recs[_PAY_PARTS + ["total_compensation", "filing_blob"]].to_dict("records")):
+        if pd.notna(row["total_compensation"]) and pd.notna(y):
+            paid.setdefault((t, int(y), round(row["total_compensation"])), []).append(_name_words(n))
+            filed.setdefault((t, int(y)), []).append((_name_words(n), row))
+            proxies.setdefault((t, int(y)), set()).add(row["filing_blob"])
+    # Executives the table itself holds for that company-year: a figure our
+    # parser credits to a brand ("Old Navy") proves nothing about who is missing.
+    known: Dict[tuple, List[frozenset]] = {}
+    for t, w, y in zip(tick, words, year):
+        if pd.notna(y):
+            known.setdefault((t, int(y)), []).append(w)
+    universe = universe.copy()
+    fixed, drop = 0, []
+    for i in universe.index[sec]:
+        if pd.isna(year[i]) or not words[i]:
+            continue
+        key = (tick[i], int(year[i]))
+        if not any(w and not (w & words[i]) for w in paid.get(key + (total[i],), [])):
+            continue                                  # nobody else has this figure
+        mine = [row for w, row in filed.get(key, []) if w & words[i]]
+        if mine:
+            if all(abs(row["total_compensation"] - total[i]) > 1000 for row in mine):
+                for col, value in mine[0].items():
+                    universe.at[i, col] = value
+                fixed += 1
+        elif len(proxies.get(key, ())) >= 2 and any(
+                not (w & words[i]) and abs(row["total_compensation"] - total[i]) <= 1000
+                and any(w & k for k in known.get(key, []) if k != words[i])
+                for w, row in filed.get(key, [])):
+            # Two or more proxies cover the year, none lists this person, and a
+            # colleague the table knows holds exactly this figure.
+            drop.append(i)
+    log_timing("PEOPLE_COPIED_PAY_FIXED", 0, details=f"rows={fixed} dropped={len(drop)}")
+    return universe.drop(index=drop)
+
+
 def add_proxy_pay(universe: pd.DataFrame) -> pd.DataFrame:
     """Add the proxy_pay rows for company-years coreiq_executives_compensation lacks.
 
@@ -784,10 +1413,28 @@ def add_proxy_pay(universe: pd.DataFrame) -> pd.DataFrame:
     proxy = read_proxy_pay()
     if proxy.empty:
         return universe
-    recs = pd.DataFrame(_proxy_records(proxy), columns=_FRAME_COLUMNS)
+    recs = pd.DataFrame(_proxy_records(proxy, company_words()), columns=_FRAME_COLUMNS)
+    # A parsed block that ran two executives together (proxy_pay_v2; the parser
+    # is fixed in v3) names the second one in its title and carries their
+    # figures (Tesla 2023: "Elon Musk" with Vaibhav Taneja's $278,000). Dropped.
+    pool = pd.concat([universe[["ticker", "executive_name", "title"]],
+                      recs[["ticker", "executive_name", "title"]]], ignore_index=True)
+    recs = recs[[o is None for o in _names_in_title(pool)[len(universe):]]]
+    universe = _fix_copied_pay(universe, recs)
     sec = universe[universe["source"].astype(str).eq("SEC")]
-    have = set(zip(sec["ticker"].astype(str), pd.to_numeric(sec["year"], errors="coerce")))
-    recs = recs[[(t, y) not in have for t, y in zip(recs["ticker"].astype(str), recs["year"])]]
+    years = pd.to_numeric(sec["year"], errors="coerce")
+    have = set(zip(sec["ticker"].astype(str), years))
+    # A company-year the table holds can still lack someone: the rows row_owner
+    # hands back to their real owner leave the executive they were filed under
+    # with nothing (Lowe's 2024 had no Brandon Sink). Matched on surname so a
+    # nickname spelling is not added twice.
+    # Any shared name word counts: "A. Christina" is Target's "A. Christina
+    # Hennington" filed without her surname.
+    words = {}
+    for t, y, n in zip(sec["ticker"].astype(str), years, sec["executive_name"]):
+        words.setdefault((t, y), set()).update(person_key(n).split("|"))
+    recs = recs[[(t, y) not in have or not (set(person_key(n).split("|")) & words[(t, y)])
+                 for t, y, n in zip(recs["ticker"].astype(str), recs["year"], recs["executive_name"])]]
     if recs.empty:
         return universe
     # One person, one row in the year pivot: take the spelling already on file for
@@ -814,6 +1461,7 @@ def _build_people_universe() -> pd.DataFrame:
     """
     import time as _time
     t0 = _time.perf_counter()
+    refresh_ticker_aliases()
 
     try:
         sec_rows = db_manager.execute_query_readonly(_SEC_QUERY) or []
@@ -841,7 +1489,7 @@ def _build_people_universe() -> pd.DataFrame:
                              component="_build_people_universe",
                              operation="fetch_fx_rates")
 
-    records = _sec_records(sec_rows) + _yf_records(yf_rows, fx)
+    records = _sec_records(sec_rows, company_words()) + _yf_records(yf_rows, fx)
 
     df = pd.DataFrame(records, columns=_FRAME_COLUMNS)
 
@@ -849,7 +1497,7 @@ def _build_people_universe() -> pd.DataFrame:
         log_warning("[PEOPLE] universe built EMPTY — both sources returned nothing")
         return df
 
-    df = _collapse_restatements(df)
+    df = _collapse_restatements(_drop_copied_rows(_owner_by_title(df)))
     df = _merge_sources(df)
     df = _finish_frame(df)
 
@@ -898,12 +1546,20 @@ def get_people_universe() -> pd.DataFrame:
         # would keep serving the old snapshot.
         # _v4: business-unit "names" dropped, footnote-before-title fix (2026-10-12).
         # _v5: more title lines read as names dropped ("Famous Footwear") (2026-10-16).
-        "people_universe_v5", _build_people_universe, sources,
+        # _v6: rows handed to the executive the filed row names (row_owner), titles
+        #      cleaned, honorifics dropped, one ticker per company (2026-11-13).
+        "people_universe_v6", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
+    # Tickers folded on read too: a second ticker found after the frame was
+    # saved (refresh_ticker_aliases) still lands on the company's one ticker.
+    refresh_ticker_aliases()
+    universe = canonical_tickers(universe)
+    if len(universe) and universe.duplicated(["ticker", "executive_name", "year", "source"]).any():
+        universe = universe.drop_duplicates(["ticker", "executive_name", "year", "source"])
     # Merged on read, not stored: proxy_pay grows in the background and clears
     # this cache when it does (cache_manager._warm_people_screening).
-    return fill_missing_titles(add_proxy_pay(universe))
+    return add_status(fill_missing_titles(tidy_titles(add_proxy_pay(universe))))
 
 
 # =============================================================================
@@ -1092,6 +1748,8 @@ def _build_people_events(category: str) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=["ticker", "event_date", "event_subtype", "headline",
                                      "source", "source_ref", "situation"])
     df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce")
+    refresh_ticker_aliases()
+    df["ticker"] = df["ticker"].map(canonical_ticker)
     if category == "layoffs_restructuring":
         from data.layoff_events import clean_layoff_events
         from data.screening_service import get_all_companies_universe
@@ -1110,9 +1768,14 @@ def get_people_events(category: str) -> pd.DataFrame:
     sources = [{"table": "coreiq_company_events", "signal": "MAX(event_id)",
                 "where": f"event_category = '{event_category}'"}]
     # _v2: layoffs filtered, attributed and folded (data.layoff_events) (2026-10-16).
-    return materialized_or_build(f"people_events_{category}_v2",
-                                 lambda: _build_people_events(category), sources,
-                                 clear=lambda: get_people_events.clear())
+    # _v3: one ticker per company; other-company headlines, law-firm ads,
+    #      roundups and commentary dropped (2026-11-13).
+    # _v4: one story under several companies kept only by the one making the cut.
+    events = materialized_or_build(f"people_events_{category}_v4",
+                                   lambda: _build_people_events(category), sources,
+                                   clear=lambda: get_people_events.clear())
+    refresh_ticker_aliases()
+    return canonical_tickers(events)
 
 
 def period_mask(dates: pd.Series, criterion: dict, today=None) -> pd.Series:
@@ -1245,7 +1908,7 @@ def pivot_people_years(df: pd.DataFrame, metrics: List[str],
     latest = (rows.sort_values("year", ascending=False, na_position="last", kind="mergesort")
                   .drop_duplicates(who))
     attrs = [c for c in ("Company", "Industry", "Country of Incorporation", "title", "role",
-                         "age", "year_born") if c in latest.columns]
+                         "status", "age", "year_born") if c in latest.columns]
     identity = latest[who + attrs]
 
     long = []
@@ -1272,6 +1935,6 @@ def pivot_people_years(df: pd.DataFrame, metrics: List[str],
 
     sort_by = (["Company"] if "Company" in grid.columns else []) + ["executive_name", "_order"]
     grid = grid.sort_values(sort_by, kind="mergesort").drop(columns="_order")
-    lead = [c for c in ("Company", "ticker", "executive_name", "title", "role", "Industry",
+    lead = [c for c in ("Company", "ticker", "executive_name", "title", "role", "status", "Industry",
                         "Country of Incorporation", "age", "year_born") if c in grid.columns]
     return grid[lead + ["Metric"] + year_cols].reset_index(drop=True)

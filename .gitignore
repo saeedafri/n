@@ -42,6 +42,7 @@ scripts/*
 !scripts/ec_cold_app.py
 !scripts/ec_cold_e2e.py
 !scripts/ec_ngram_corpus_probe.py
+!scripts/people_quality_sweep.py
 docs/*
 *.png
 # EDGAR store-totals disk cache (rebuilt on demand, 24h TTL)

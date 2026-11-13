@@ -32,8 +32,8 @@ def test_departure_with_multiple_titles_and_dates():
         "another opportunity.")
     e = got[("Michael J. Ragusa", "Departure")]
     assert e["event_type"] == "Resignation"
-    assert split_titles(e["title"]) == ["Senior Vice President", "Chief Accounting Officer",
-                                        "principal accounting officer"], e["title"]
+    # The SEC designation is dropped beside a real title (data-team review 2026-11-13).
+    assert split_titles(e["title"]) == ["Senior Vice President", "Chief Accounting Officer"], e["title"]
     assert e["notice_date"] == pd.Timestamp("2026-09-25")
     assert e["effective_date"] == pd.Timestamp("2026-11-01")
     assert "another opportunity" in e["reason"]
@@ -250,12 +250,22 @@ def test_move_pay_comparison():
                                moved_from_date=pd.Timestamp("2026-04-01"),
                                notice_date=pd.Timestamp("2026-06-23"))])
     people = pd.DataFrame({
-        "ticker": ["LOW", "LOW", "NKE"], "executive_name": ["David M. Denton"] * 3,
-        "year": [2025, 2026, 2026], "total_compensation": [10.0, 99.0, 15.0],
-        "total_pay": [None, None, None]})
+        "ticker": ["LOW", "LOW", "NKE", "NKE"], "executive_name": ["David M. Denton"] * 4,
+        "title": ["CFO"] * 4, "year": [2025, 2026, 2026, 2027],
+        "total_compensation": [10.0, 99.0, 15.0, 20.0], "total_pay": [None] * 4})
+    # Full years only (data-team rule 2026-11-13): 2026 is part-paid at both
+    # companies, so 2025 at Lowe's vs 2027 at Nike.
     out = compare_move_pay(moves, people).iloc[0]
-    assert out["prior_pay"] == 99.0 and out["new_pay"] == 15.0
-    assert out["pay_change_pct"] == round((15 / 99 - 1) * 100, 1)
+    assert (out["prior_pay"], out["prior_pay_year"], out["new_pay"], out["new_pay_year"]) == (10.0, 2025, 20.0, 2027)
+    assert out["pay_change_pct"] == 100.0 and out["pay_comparable"] == ""
+    # Only the joining year on file: shown, but not compared.
+    out = compare_move_pay(moves, people[people["year"] != 2027]).iloc[0]
+    assert out["new_pay_year"] == 2026 and pd.isna(out["pay_change_pct"])
+    assert out["pay_comparable"] == "Not comparable: part-year pay"
+    # Larsson-style: years far apart.
+    far = people.assign(year=[2019, 2026, 2026, 2027])
+    out = compare_move_pay(moves, far[far["year"] != 2026]).iloc[0]
+    assert out["pay_comparable"] == "Not comparable: 8 years apart" and pd.isna(out["pay_change_pct"])
 
 
 def test_company_name_is_not_a_person():

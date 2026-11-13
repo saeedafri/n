@@ -28,7 +28,7 @@ import time
 import uuid
 import streamlit as st
 import pandas as pd
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Dict, List, Optional
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
@@ -345,13 +345,18 @@ from data.management_changes import accession_of, compare_move_pay, get_manageme
 from data.people_service import (
     apply_people_criterion,
     build_people_summary,
+    canonical_ticker,
+    classify_role,
+    company_display_name,
     get_people_events,
     get_people_universe,
     people_criteria_for,
     period_mask,
+    person_id,
     person_key,
     pivot_people_years,
     role_bucket,
+    smart_title,
 )
 from data.screening_service import (
     get_all_industries,
@@ -6920,8 +6925,25 @@ def _people_company_meta(company_df: pd.DataFrame) -> pd.DataFrame:
         cols["sector"] = "Industry"
     if "country" in company_df.columns:
         cols["country"] = "Country of Incorporation"
-    meta = company_df[list(cols.keys())].rename(columns=cols)
-    return meta.drop_duplicates(subset=["ticker"])
+    meta = company_df[list(cols.keys())].rename(columns=cols).drop_duplicates(subset=["ticker"]).copy()
+    if "Company" in meta.columns:
+        # The company's name, not a brand list, former name, ticker code or
+        # ALL CAPS (data-team review 2026-11-13) — the same name in all four
+        # People exports, so they join on Company as well as Ticker.
+        try:
+            from data.repository import CompanyRepository
+            legal = {str(r.get("ticker")): (r.get("name_coresight") or "", r.get("name") or "")
+                     for r in CompanyRepository.get_companies_rows() or []}
+        except Exception as exc:
+            log_structured_error(exc, page="screening", component="_people_company_meta",
+                                 operation="read_company_names")
+            legal = {}
+        meta["Company"] = [company_display_name(*legal[t], ticker=t) if t in legal else smart_title(str(n))
+                           for t, n in zip(meta["ticker"].astype(str), meta["Company"].fillna(""))]
+    if "Country of Incorporation" in meta.columns:
+        meta["Country of Incorporation"] = meta["Country of Incorporation"].fillna("").astype(str).str.strip() \
+            .replace({"USA": "United States", "US": "United States", "U.S.": "United States", "UK": "United Kingdom"})
+    return meta
 
 
 def _industry_by_ticker(company_meta: pd.DataFrame) -> Dict[str, str]:
@@ -6935,8 +6957,10 @@ def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
     """Label and format the year-column People grid (people_service.pivot_people_years)."""
     out = grid.rename(columns={
         "ticker": "Ticker", "executive_name": "Executive Name", "title": "Title",
-        "role": "Role", "age": "Age",
+        "role": "Role", "status": "Status", "age": "Age",
     })
+    if "Executive Name" in out.columns:
+        out["Person ID"] = out["Executive Name"].map(person_id)
     if "Role" in out.columns:
         out["Role"] = role_bucket(out["Role"])
     year_cols = [c for c in out.columns if str(c).isdigit()]
@@ -6945,8 +6969,8 @@ def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
     for col in ("Age",):
         if col in out.columns:
             out[col] = out[col].apply(lambda v: "" if pd.isna(v) else str(int(v)))
-    for col in ("Company", "Ticker", "Executive Name", "Title", "Role", "Industry",
-                "Country of Incorporation", "Metric"):
+    for col in ("Company", "Ticker", "Person ID", "Executive Name", "Title", "Role", "Status",
+                "Industry", "Country of Incorporation", "Metric"):
         if col in out.columns:
             # astype(object) first: Role / Ticker are categorical in the frame and
             # fillna("") on a Categorical without "" raises.
@@ -6956,8 +6980,92 @@ def _format_people_display(grid: pd.DataFrame) -> pd.DataFrame:
     return out[lead + ["Metric"] + year_cols]
 
 
-def _build_people_excel(display_df: pd.DataFrame) -> bytes:
-    """Styled workbook of the People grid, matching the other screening exports."""
+# What each column of the People exports means — written to a "Notes" sheet in
+# every workbook (the data team asked what each date means, 2026-11-13).
+_PEOPLE_COMMON_NOTES = {
+    "Company": "The company's name (legal name where Coresight's label is a brand list, a former name or a code).",
+    "Ticker": "One ticker per company in all four People exports (share classes, debt lines and renamed tickers folded).",
+    "Person ID": "The same person in all four People exports, whatever the spelling (built from the full name).",
+    "Industry": "Coresight industry classification (primary_industry_coresight).",
+}
+PEOPLE_EXPORT_NOTES = {
+    "People_Screening": {
+        "Status": "Former when the latest title says so or the company's latest proxy on file no longer names "
+                  "the person; otherwise Current.",
+        "Year columns": "Fiscal year of the proxy Summary Compensation Table (SEC) or Yahoo's fiscal year.",
+        "Total Compensation": "SEC proxy Summary Compensation Table total, in US dollars as filed.",
+        "Total Pay": "Yahoo Finance officer pay, converted from the company's reporting currency to US dollars at "
+                     "that fiscal year's year-end rate (non-US companies such as SAP, Prada, adidas, ANTA).",
+        "Age": "Yahoo's age, or the age an appointment 8-K states; SEC pay tables do not state age.",
+    },
+    "Management_Changes": {
+        "Disclosed": "Date the filing (8-K, 6-K, Form 3) was filed, or the news article's date. The period "
+                     "filter reads this date.",
+        "Announced": "Date the filing text says the change was announced or decided; the Disclosed date when the "
+                     "text gives none. Blank for Form 3 rows: a Form 3 is a holdings report, not an announcement.",
+        "Effective": "Date the change takes effect as the filing states it; for Form 3, the date the person "
+                     "became an officer or director. 'immediately' / 'at annual meeting' when no date is given.",
+        "Role Start / Role End": "This role at this company, from the appointment's effective date to the next "
+                                 "departure; 'present' when none is on file.",
+        "Years in Role": "Total years at the company across all stints; '≥' when a stint began before 2016.",
+    },
+    "Executive_Moves": {
+        "Left": "Effective date of the departure from the old company (its announcement date when none is stated).",
+        "Joined": "Effective date of the appointment at the new company (its announcement date when none is stated).",
+        "Months Between": "Months from Left to Joined. Check flags gaps over 12 months: a role in between may be missing.",
+        "Prior Total Pay / Year": "Total compensation for the last full year at the old company (the year before "
+                                  "the year they left).",
+        "New Total Pay / Year": "Total compensation for the first full year at the new company (the year after "
+                                "the year they joined).",
+        "Pay Change %": "Only when both are full years at most 3 years apart; otherwise 'Not comparable' and why.",
+        "Offer Base Salary": "Base salary stated in the new company's appointment 8-K.",
+    },
+    "Layoffs_and_Restructuring": {
+        "Date": "Filing date of the 8-K Item 2.05, or the news article's date. Reports of one cut within 3 days "
+                "are one row.",
+        "Jobs / % of Workforce / Charges": "As stated in the filing or headline; blank when not stated.",
+    },
+}
+
+_XL_MONEY = re.compile(r"^-?\$-?\d[\d,]*(?:\.\d+)?$")
+_XL_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_XL_PCT = re.compile(r"^[+-]?\d+(?:\.\d+)?%$")
+_XL_NUM = re.compile(r"^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^-?\d+(?:\.\d+)?$")
+# Codes that look like numbers: "9983" is a ticker, not nine thousand.
+_XL_TEXT_COLUMNS = {"Ticker", "Person ID"}
+
+
+def _excel_cell(column: str, value):
+    """(value, number format) for one export cell: "$1,234" -> 1234 as money,
+    "2026-11-09" -> a date, "+5.0%" -> 0.05, "54" -> 54. The grid shows text;
+    the workbook must hold real numbers and dates (data-team review 2026-11-13)."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None, None
+    if not isinstance(value, str):
+        return value, None
+    text = value.strip()
+    if not text:
+        return None, None
+    if column in _XL_TEXT_COLUMNS:
+        return text, None
+    if _XL_MONEY.match(text):
+        return float(text.replace("$", "").replace(",", "")), '"$"#,##0'
+    if _XL_DATE.match(text):
+        return datetime.strptime(text, "%Y-%m-%d"), "yyyy-mm-dd"
+    if _XL_PCT.match(text):
+        return float(text.rstrip("%")) / 100, "+0.0%;-0.0%" if text[0] in "+-" else "0.0%"
+    if _XL_NUM.match(text):
+        number = float(text.replace(",", ""))
+        whole = number.is_integer()
+        return (int(number) if whole else number), ("0" if "Year" in column or column == "Age" else
+                                                    "#,##0" if whole else "#,##0.0")
+    return text, None
+
+
+def _build_people_excel(display_df: pd.DataFrame, sheet: str = "People",
+                        notes: Optional[Dict[str, str]] = None) -> bytes:
+    """Styled workbook of a People grid, matching the other screening exports:
+    real numbers and dates, the section's own sheet name, and a Notes sheet."""
     try:
         from io import BytesIO
         import openpyxl
@@ -6968,20 +7076,32 @@ def _build_people_excel(display_df: pd.DataFrame) -> bytes:
         display_df = display_df.drop(columns=["::auto_unique_id::"], errors="ignore")
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "People"
+        ws.title = re.sub(r"[\\/*?:\[\]]", "", sheet)[:31] or "People"
         red_fill = PatternFill("solid", fgColor="D62E2F")
         bold_white = Font(bold=True, color="FFFFFF")
-        for ci, col_name in enumerate(display_df.columns, 1):
+        columns = [str(c) for c in display_df.columns]
+        for ci, col_name in enumerate(columns, 1):
             cell = ws.cell(row=1, column=ci, value=col_name)
             cell.fill = red_fill
             cell.font = bold_white
             cell.alignment = Alignment(horizontal="center")
         for ri, row_data in enumerate(display_df.itertuples(index=False), 2):
             for ci, val in enumerate(row_data, 1):
-                ws.cell(row=ri, column=ci, value=val)
+                value, fmt = _excel_cell(columns[ci - 1], val)
+                cell = ws.cell(row=ri, column=ci, value=value)
+                if fmt:
+                    cell.number_format = fmt
         for col in ws.columns:
             max_len = max((len(str(c.value or "")) for c in col), default=10)
             ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+        ws.freeze_panes = "A2"
+        if notes:
+            sheet_notes = wb.create_sheet("Notes")
+            for ri, (col_name, text) in enumerate([("Column", "Meaning")] + list(notes.items()), 1):
+                sheet_notes.cell(row=ri, column=1, value=col_name).font = Font(bold=True)
+                sheet_notes.cell(row=ri, column=2, value=text).alignment = Alignment(wrap_text=True)
+            sheet_notes.column_dimensions["A"].width = 28
+            sheet_notes.column_dimensions["B"].width = 110
         buf = BytesIO()
         wb.save(buf)
         return buf.getvalue()
@@ -7095,10 +7215,12 @@ def _render_people_results():
 
 
 def _in_scope(tickers: pd.Series, scope: Optional[set]) -> pd.Series:
-    """True for rows whose ticker is in the People scope (None = all)."""
+    """True for rows whose ticker is in the People scope (None = all). People
+    rows carry one ticker per company (people_service.canonical_ticker), so a
+    watchlist naming VSCO still finds Victoria's Secret filed as VSXY."""
     if scope is None:
         return pd.Series(True, index=tickers.index)
-    return tickers.astype(str).isin(scope)
+    return tickers.astype(str).isin({canonical_ticker(t) for t in scope})
 
 
 def _render_people_grid(tickers_in_scope: Optional[set], people_criteria: List[dict],
@@ -7182,8 +7304,10 @@ def _render_results_header(html: str, display_df: pd.DataFrame, file_stem: str,
     with dl:
         # Deferred: built on click. Building all three workbooks up front cost
         # seconds per Show Results (7,125 management-change rows).
+        notes = {**{k: v for k, v in _PEOPLE_COMMON_NOTES.items() if k in display_df.columns},
+                 **PEOPLE_EXPORT_NOTES.get(file_stem, {})}
         _render_excel_js_download(
-            lambda: _build_people_excel(display_df),
+            lambda: _build_people_excel(display_df, sheet=title or file_stem.replace("_", " "), notes=notes),
             f"{file_stem}_{_dt_now.now().strftime('%Y%m%d_%H%M')}.xlsx",
             label="Excel",
         )
@@ -7325,9 +7449,12 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
             "Industry":         out.get("Industry", pd.Series("", index=out.index))
                                    .astype(object).fillna("").astype(str),
             "Disclosed":        day("filing_date"),
-            "Announced":        day("notice_date"),
+            # A Form 3 announces nothing: its "notice" date is the day the person
+            # became an insider, shown under Effective (data-team review 2026-11-13).
+            "Announced":        day("notice_date").where(out["source"].astype(str) != "SEC Form 3", ""),
             "Effective":        day("effective_date").where(day("effective_date") != "",
                                                             out["effective_note"].fillna("")),
+            "Person ID":        out["person"].map(person_id),
             "Executive Name":   out["person"],
             "Change":           out["change"].astype(str),
             "Event":            out["event_type"].astype(str),
@@ -7355,7 +7482,7 @@ def _render_management_changes(tickers_in_scope: Optional[set], people_criteria:
         })
         # Columns blank for every row of this result say nothing.
         display = display[[c for c in display.columns
-                           if c in ("Company", "Executive Name", "Change")
+                           if c in ("Company", "Person ID", "Executive Name", "Change")
                            or display[c].astype(str).str.strip().ne("").any()]]
 
         log_timing("MGMT_CHANGES_RENDER", (time.perf_counter() - t0) * 1000,
@@ -7415,17 +7542,35 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
         def year(v):
             return "" if pd.isna(v) else str(int(v))
 
+        # One spelling per person: "Anthony DiSilvestro" and "Anthony P.
+        # DiSilvestro" are one executive with two moves (the fullest wins).
+        spelling = (changes.assign(_key=changes["person"].map(person_key), _len=changes["person"].str.len())
+                           .sort_values("_len", ascending=False).drop_duplicates("_key")
+                           .set_index("_key")["person"])
+        keys = moves["person"].map(person_key)
+        joined = moves["effective_date"].fillna(moves["notice_date"])
+        months = ((joined - moves["moved_from_date"]).dt.days / 30.44).round()
+        # A board seat whose holder is a named executive at the new company
+        # became an executive there (Trac Pham, Sprinklr's CEO): the role is the
+        # one the pay was disclosed under, not "Board".
+        exec_title = moves["new_pay_title"].fillna("").astype(str)
+        became_exec = moves["role"].astype(str).eq("Board") & exec_title.ne("") \
+            & ~exec_title.map(classify_role).isin([PEOPLE_ROLE_OTHER, PEOPLE_ROLE_BOARD])
         display = pd.DataFrame({
-            "Executive Name":   moves["person"],
+            "Person ID":        moves["person"].map(person_id),
+            "Executive Name":   keys.map(spelling).fillna(moves["person"]),
             "From Company":     moves["moved_from"].map(lambda t: names.get(str(t), str(t))),
             "Previous Title":   moves["moved_from_title"].fillna(""),
             "Left":             moves["moved_from_date"].dt.strftime("%Y-%m-%d").fillna(""),
             "To Company":       moves["ticker"].astype(str).map(lambda t: names.get(t, t)),
             # The appointing company's industry — the row's own ticker.
             "Industry":         moves["ticker"].astype(str).map(industries).fillna(""),
-            "New Title":        moves["titles"].fillna(""),
-            "Role":             role_bucket(moves["role"]),
-            "Joined":           moves["effective_date"].fillna(moves["notice_date"]).dt.strftime("%Y-%m-%d"),
+            "New Title":        moves["titles"].fillna("").where(~became_exec, exec_title),
+            "Role":             role_bucket(moves["role"].astype(str).where(~became_exec, exec_title.map(classify_role))),
+            "Joined":           joined.dt.strftime("%Y-%m-%d"),
+            "Months Between":   months.map(lambda v: "" if pd.isna(v) else str(int(v))),
+            "Check":            months.map(lambda v: "Gap over 12 months: a role in between may be missing"
+                                           if pd.notna(v) and v > 12 else ""),
             "Prior Total Pay":  moves["prior_pay"].map(money),
             "Prior Pay Year":   moves["prior_pay_year"].map(year),
             "New Total Pay":    moves["new_pay"].map(money),
@@ -7433,7 +7578,9 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
             # The appointment 8-K's stated base salary: there a year before the
             # new company's proxy shows total pay.
             "Offer Base Salary": moves["offer_salary"].map(money) if "offer_salary" in moves else "",
-            "Pay Change %":     moves["pay_change_pct"].map(lambda v: "" if pd.isna(v) else f"{v:+.1f}%"),
+            # Only full years at most three years apart (compare_move_pay).
+            "Pay Change %":     [f"{v:+.1f}%" if pd.notna(v) else why for v, why in
+                                 zip(moves["pay_change_pct"], moves["pay_comparable"].fillna(""))],
         }).sort_values("Joined", ascending=False)
         _render_results_header(f"<strong>{len(display)}</strong> executive moves",
                                display, "Executive_Moves", title="Executive Moves")
@@ -7441,10 +7588,11 @@ def _render_executive_moves(tickers_in_scope: Optional[set], people_criteria: Li
                                         empty_message="No executive moves found.",
                                         pinned_column="Executive Name",
                                         filter_domains=_full_domains(display, ("Role", "Industry")))
-        st.caption("Pay is total compensation for the latest year disclosed at the old "
-                   "company and the first year disclosed at the new one; blank where "
-                   "that company's pay is not on file. Offer Base Salary is the salary the "
-                   "new company's appointment 8-K states.")
+        st.caption("Pay is total compensation for the last full year at the old company and "
+                   "the first full year at the new one; blank where that company's pay is not "
+                   "on file. Pay Change % is shown only when both are full years at most three "
+                   "years apart. Offer Base Salary is the salary the new company's appointment "
+                   "8-K states.")
     except Exception as e:
         log_structured_error(e, page="screening", component="_render_executive_moves",
                              operation="render_executive_moves")

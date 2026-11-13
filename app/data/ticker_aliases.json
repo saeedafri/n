@@ -1,0 +1,5 @@
+{
+  "_comment": "Only pairs the database cannot tell. Every other second ticker of a company (share class, debt/ETN line, warrant, bankruptcy Q ticker, renamed ticker) is found automatically: same CIK AND same company name in coreiq_sec_companies_all / coreiq_companies (people_service.refresh_ticker_aliases, every 6 h). 6288 is Fast Retailing's US DRS line (no SEC CIK); QRTEA is QVC Group's old ticker, in no company table.",
+  "6288": "9983",
+  "QRTEA": "QVCPQ"
+}

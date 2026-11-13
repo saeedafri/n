@@ -830,14 +830,17 @@ PEOPLE_ROLE_PATTERNS = [
     ("CEO",                   r"chief\s+exec|\bceo\b"),
     ("CFO",                   r"chief\s+financ|\bcfo\b"),
     ("COO",                   r"chief\s+operat|\bcoo\b"),
-    ("CIO/CTO",               r"chief\s+(info|tech|digital|data)|\bcio\b|\bcto\b"),
+    ("CIO/CTO",               r"chief\s+(info|tech|digital|data)|\bcio\b|\bcto\b|\bcdo\b"),
     ("General Counsel",       r"general\s+counsel|chief\s+legal|legal\s+affairs|\bcounsel\b"),
     ("Chair",                 r"\bchair"),
     # The lookbehind is load-bearing: "Executive Vice President, M&A and
     # Corporate Affairs" contains "President" as a whole word, so a plain
     # \bpresident\b swallowed every EVP/SVP into the President bucket.
     ("President",             r"(?<!vice[\s-])\bpresident\b"),
-    ("Other C-Suite",         r"\bchief\b"),
+    # The abbreviations too: "EVP, CHRO" and "SVP, CAO" fell through to
+    # EVP/SVP/VP while "Chief Human Resources Officer" was Other C-Suite
+    # (data-team review 2026-11-13).
+    ("Other C-Suite",         r"\bchief\b|\bc(?:hr|a|m|l|p|c|r|s|x|b|g|ai|iso|ho)o\b"),
     ("Investor Relations",    r"investor\s+relations"),
     ("Company Secretary",     r"\bsecretary\b"),
     ("Board / Exec Director", r"executive\s+director|executive\s+board|corporate\s+director"
@@ -903,7 +906,7 @@ PEOPLE_YEARS = list(range(_CURRENT_FY, 2012, -1))
 # per-year value columns. Source / filing columns are deliberately absent: the
 # published view does not say where a figure came from (manager, 2026-10-09).
 PEOPLE_DISPLAY_COLUMNS = [
-    "Company", "Ticker", "Executive Name", "Title", "Role",
+    "Company", "Ticker", "Person ID", "Executive Name", "Title", "Role", "Status",
     "Industry", "Country of Incorporation", "Age",
 ]
 

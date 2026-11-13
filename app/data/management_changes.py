@@ -34,7 +34,8 @@ import pandas as pd
 import streamlit as st
 
 from core.database import db_manager
-from data.people_service import classify_role, person_key
+from data.people_service import (canonical_ticker, canonical_tickers, classify_role, person_key,
+                                 refresh_ticker_aliases)
 
 try:
     from utils.server_logger import log_structured_error, log_timing
@@ -149,6 +150,7 @@ chain place stores brands foods retail products services partners capital digita
 banking segment division business americas asia pacific emerging markets consumer global
 news release immediate about industry leader veteran insider exec tech yes no takes temporary medical leave companies
 strategic projects
+certain specified officers employees executives directors named persons individuals
 """.split())
 _NAME_WORD = r"[A-ZÀ-ÖØ-Þ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+"
 _NAME = re.compile(
@@ -259,12 +261,35 @@ def _clean_title(raw: str) -> str:
     return title
 
 
+_CHIEF_PHRASE = re.compile(r"\bChief\b.*?(?:\bOfficer\b|$)")
+_SEC_DESIGNATION = re.compile(r"^(?:the\s+)?(?:Company[’']s\s+)?(?:interim\s+)?principal\s+"
+                              r"(?:executive|financial|accounting|operating)\s+officer(?:\s+of\s+.+)?$", re.I)
+
+
 def split_titles(title: str) -> List[str]:
     """'Senior Vice President, Chief Accounting Officer and Controller'
     -> ['Senior Vice President', 'Chief Accounting Officer', 'Controller'].
-    "President and Chief Executive Officer" splits too; each part stands alone."""
-    parts = re.split(r"\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*(?=[A-Z][a-z]+\s+Officer)", title or "")
-    return [p.strip() for p in parts if re.search(_TITLE_START, p)]
+    "President and Chief Executive Officer" splits too; each part stands alone.
+
+    "Chief Operating and Financial Officer" is ONE title: splitting it at "and"
+    showed "Chief Operating" (data-team review 2026-11-13). The SEC designation
+    ("the Company's principal accounting officer") is dropped next to a real
+    title and capitalised when it is the only one."""
+    text = re.sub(r"^\s*Title:\s*", "", title or "", flags=re.I)
+    kept: List[str] = []
+
+    def protect(m):
+        kept.append(m.group(0))
+        return f"\x00{len(kept) - 1}\x00"
+
+    text = _CHIEF_PHRASE.sub(protect, text)
+    parts = re.split(r"\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*(?=[A-Z][a-z]+\s+Officer)", text)
+    parts = [re.sub(r"\x00(\d+)\x00", lambda m: kept[int(m.group(1))], p).strip() for p in parts]
+    parts = [p for p in parts if re.search(_TITLE_START, p)]
+    real = [p for p in parts if not _SEC_DESIGNATION.match(p)]
+    if real:
+        return real
+    return [re.sub(r"^(?:the\s+)?(?:Company[’']s\s+)?", "", p, flags=re.I).title() for p in parts]
 
 
 _BOARD_SEAT = re.compile(
@@ -333,6 +358,9 @@ _SKIP = re.compile(
     r"family\s+relationships?|Act\s+of\s+\d{4}|Item\s+404|arrangement\s+or\s+understanding|no\s+disagreement|"
     r"not\s+(?:the\s+)?result\s+of\s+any\s+disagreement|holds?\s+a\s+(?:bachelor|master|B\.|M\.)|"
     r"graduated|degree|recently\s+retired|is\s+the\s+(?:former|retired)|formerly|collectively|Named\s+Executive\s+Officers|"
+    # A biography's past retirement, not this filing's event: "Mr. McKenzie, 55,
+    # retired from the Company in July 2026" (NIKE, rehired as CAO).
+    r",\s*\d{2},\s*retired\s+from|has\s+not\s+held\s+another\s+position|"
     r"(?:was|were)\s+(?:promoted|appointed|named)\b[^.]{0,80}\bin\s+(?:19|20)\d{2}\b|"
     r"attached\s+(?:hereto|to\s+this)|incorporated\s+herein\s+by\s+reference|(?:filed|furnished)\s+(?:herewith\s+)?as\s+Exhibit)\b", re.I)
 _HYPOTHETICAL = re.compile(
@@ -456,6 +484,16 @@ def extract_events(situation: str) -> List[dict]:
                 if not hit:
                     continue
                 pos, name = hit
+                # "appointed Michael Quartieri ... to fill the seat created by Melvin
+                # Flanigan's resignation": the departure is the possessor's.
+                owner = re.search(r"([A-Z][\w\-]+)['’]s\s+$", sentence[max(0, verb.start() - 40):verb.start()])
+                if kind == "Departure" and owner and owner.group(1) not in name:
+                    continue
+                # "Mr. Lauren may step down as Chief Creative Officer": a contract
+                # term, not a departure.
+                if kind == "Departure" and re.search(r"\b(?:may|might|could|would|can)\s+(?:\w+\s+)?$",
+                                                     sentence[max(0, verb.start() - 25):verb.start()], re.I):
+                    continue
                 name_end = _name_end(sentence, pos)
                 # "appointed NAME as CFO" reads after the name; "NAME resigned as
                 # CFO" / "NAME was named CFO" read after the verb.
@@ -664,11 +702,21 @@ def mark_moves(df: pd.DataFrame, bodies: Dict[int, str], names: Dict[str, str]) 
         others = candidates[candidates["ticker"] != ticker].copy()
         others["_gap"] = (when - others["notice_date"]).dt.days if pd.notna(when) else None
         others = others[others["_gap"].between(-366, 5 * 366)]
-        # The departure closest BEFORE the appointment first, then one filed
-        # shortly after it — never an older, unrelated departure from the same
-        # company (Denton's 2022 Lowe's row vs his 2026 one).
+        # Ending an interim title is not leaving the company: Zinsner stopped
+        # being Intel's interim co-CEO and stayed its CFO (review 2026-11-13).
+        others = others[~others["title"].fillna("").str.contains(r"\b(?:Interim|Acting)\b", case=False)]
+        if bool(df.at[i, "is_board"]):
+            # A board seat taken while still in the old job is an extra seat, not
+            # a move: Michele Buck joined JPMorgan's board as Hershey's CEO.
+            start = df.at[i, "effective_date"] if pd.notna(df.at[i, "effective_date"]) else when
+            left = others["effective_date"].fillna(others["notice_date"])
+            others = others[(left <= start + pd.Timedelta(days=30)).fillna(False)] if pd.notna(start) else others
+        # The nearest departure, before or after: Tanner left Wendy's two days
+        # after Hershey announced him, and PepsiCo (18 months earlier) was
+        # winning only because "before" ranked first. Never an older, unrelated
+        # departure from the same company (Denton's 2022 Lowe's row vs his 2026 one).
         others = others.assign(_after=others["_gap"] < 0, _dist=others["_gap"].abs()) \
-                       .sort_values(["_after", "_dist"])
+                       .sort_values(["_dist", "_after"])
         for _, dep in others.iterrows():
             word = short_name(names.get(str(dep["ticker"]), ""))
             if not word:
@@ -794,11 +842,13 @@ def is_company_not_person(person: str, company_word: str, situation: str) -> boo
     return not re.search(rf"\b(?:Mr|Ms|Mrs|Dr)\.?\s+{re.escape(surname)}\b", situation)
 
 
-def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> pd.DataFrame:
+def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None,
+                  moves: bool = True) -> pd.DataFrame:
     """Flatten stored 5.02 rows into one row per person event.
 
     `names` (ticker -> company name) enables move detection; without it no
-    appointment is flagged as a move."""
+    appointment is flagged as a move. `moves=False` leaves move detection to
+    the caller (the full build runs it once news departures are in)."""
     records = []
     for r in rows:
         try:
@@ -812,7 +862,7 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
         for e in events:
             if is_company_not_person(e.get("person"), company_word, r.get("situation") or ""):
                 continue
-            ticker = (r.get("ticker") or "").strip()
+            ticker = canonical_ticker(r.get("ticker"))
             e.update(ticker=ticker, filing_date=filed, source_ref=r.get("source_ref") or "",
                      event_id=r.get("event_id"), source=source_label(r.get("source")), also_reported="")
             if e.get("change") == "Appointment":
@@ -836,8 +886,9 @@ def build_changes(rows: List[dict], names: Optional[Dict[str, str]] = None) -> p
         df[col] = pd.to_datetime(df[col], errors="coerce")
     for col in ("ticker", "change", "event_type", "role", "confidence"):
         df[col] = df[col].fillna("").astype("category")
-    df = mark_moves(df, {r.get("event_id"): r.get("situation") or "" for r in rows}, names or {})
-    df = fill_role_before(df, names or {})
+    if moves:
+        df = mark_moves(df, {r.get("event_id"): r.get("situation") or "" for r in rows}, names or {})
+        df = fill_role_before(df, names or {})
     return df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
 
 
@@ -993,7 +1044,8 @@ def _about_company(text: Optional[str], company: str) -> bool:
 
 
 def _news_event(person: str, kind: str, title: str, headline: str, confidence: str) -> Optional[dict]:
-    person = re.sub(r"^\S+'s\s+", "", person.strip())          # "PNC's Jenn LaClair"
+    # "PNC's Jenn LaClair", "Four Seasons' Ben Hallam": the former employer.
+    person = re.sub(r"^(?:\S+\s+){0,3}?\S+(?:'s|s')\s+(?=[A-Z])", "", person.strip().replace("’", "'"))
     if not _is_name(person) or re.search(r"\b(?:Inc|Corp|Co|Ltd|LLC|Group|Holdings|Brands|Stores)\b", person):
         return None
     title = _N_TITLE_END.sub("", title.strip()).strip(" .")
@@ -1078,6 +1130,11 @@ def parse_news(headline: str, summary: str, company: str) -> List[dict]:
     # The company must be the subject: "Imperva taps former Oracle exec" is not Oracle's.
     if not (role and kind and _about_company(text[:min(role.start(), verb.start())], company)):
         return []
+    # A campaign or a rumour is not a change: "Elliott ... pushes for new CEO"
+    # read the summary's "Ralph Lauren" as Lululemon's new CEO.
+    if re.search(r"\b(?:push(?:es|ing)?\s+for|urg(?:es|ing)|calls?\s+for|seek(?:s|ing)?|demands?|could|may|"
+                 r"might|consider(?:s|ing)?|eyes|search(?:es|ing)?\s+for|reportedly|rumou?r\w*)\b", text, re.I):
+        return []
     wanted = _role_of(role.group(0), text)
     for e in extract_events(summary or ""):
         if e.get("change") == kind and e.get("person") and _is_name(e["person"]) \
@@ -1144,7 +1201,7 @@ def build_news_changes(rows: List[dict], names: Dict[str, str]) -> pd.DataFrame:
     records = []
     index = tickers_by_short_name(names)
     for r in rows:
-        ticker = (r.get("ticker") or "").strip()
+        ticker = canonical_ticker(r.get("ticker"))
         when = pd.Timestamp(r.get("event_date")) if r.get("event_date") else pd.NaT
         found = parse_news(r.get("headline") or "", r.get("situation") or "", names.get(ticker, ""))
         if not found:
@@ -1205,6 +1262,7 @@ def _fold_repeats(df: pd.DataFrame, primary: Optional[pd.DataFrame] = None, days
 def _build_management_changes() -> pd.DataFrame:
     import time as _time
     t0 = _time.perf_counter()
+    refresh_ticker_aliases()
     # Raises: a timeout read as "no events" would be materialized and served.
     rows = db_manager.execute_query_readonly_raising(_EVENTS_QUERY)
     names: Dict[str, str] = {}
@@ -1223,7 +1281,7 @@ def _build_management_changes() -> pd.DataFrame:
     except Exception as exc:
         log_structured_error(exc, page="management_changes", component="_build_management_changes",
                              operation="fetch_company_names")
-    df = build_changes(rows, names)
+    df = build_changes(rows, names, moves=False)
     try:
         news_rows = db_manager.execute_query_readonly_raising(_NEWS_QUERY) or []
     except Exception as exc:
@@ -1241,10 +1299,14 @@ def _build_management_changes() -> pd.DataFrame:
             df[col] = pd.to_datetime(df[col], errors="coerce")
         for col in ("ticker", "change", "event_type", "role", "confidence"):
             df[col] = df[col].fillna("").astype("category")
-        # News rows are never move-checked: "" like an 8-K with no move. Left NaN,
-        # they read as "nan" != "" and every news appointment listed as a move.
-        df[["moved_from", "moved_from_title"]] = df[["moved_from", "moved_from_title"]].fillna("")
         df = df.sort_values(["filing_date", "ticker"], ascending=[False, True]).reset_index(drop=True)
+    if len(df):
+        # Moves are matched once news is in: a departure reported only by the news
+        # (Tanner leaving Wendy's) is the job a later appointment left. The
+        # appointing company's own 8-K must still name the old employer, so a
+        # news appointment (no 8-K text) is never a move.
+        df = fill_role_before(mark_moves(df, {r.get("event_id"): r.get("situation") or "" for r in rows},
+                                         names), names)
     log_timing("MGMT_CHANGES_BUILD", (_time.perf_counter() - t0) * 1000,
                details=f"filings={len(rows)} news_items={len(news_rows)} events={len(df)} "
                        f"news_events={int((df['source'].astype(str) != '').sum() - df['source'].astype(str).str.startswith('SEC').sum()) if len(df) else 0}")
@@ -1261,9 +1323,16 @@ def form3_changes(rows: pd.DataFrame) -> pd.DataFrame:
     # ponytail: size cut-off; Corteva's 6 on the same day are real appointments.
     batch = rows.groupby(["ticker", "became_insider"], dropna=False)["person"].transform("size")
     rows = rows[batch < 8]
-    title = rows["title"].where(rows["title"].astype(bool), "Director")
+    # Free-text officer titles: "(i) The reporting person's title is EVP, Chief
+    # Purchasing & Merchandising Officer. (ii) ..." and "Title: ...".
+    title = (rows["title"].fillna("").astype(str)
+             .str.replace(r"^\s*(?:\(\w{1,4}\)\s*)?The\s+reporting\s+person['’]s\s+title\s+is\s+", "",
+                          regex=True, flags=re.I)
+             .str.replace(r"^\s*Title:\s*", "", regex=True, flags=re.I)
+             .str.split(r"\.\s+\(", n=1).str[0].str.strip(" ."))
+    title = title.where(title.astype(bool), "Director")
     out = pd.DataFrame({
-        "ticker": rows["ticker"], "filing_date": rows["filing_date"], "change": "Appointment",
+        "ticker": rows["ticker"].map(canonical_ticker), "filing_date": rows["filing_date"], "change": "Appointment",
         "event_type": "Appointment", "person": rows["person"], "title": title,
         "titles": title.map(lambda t: " | ".join(split_titles(t)) or t),
         "role": [_role_of(t, "") for t in title], "is_board": rows["is_director"] & ~rows["is_officer"],
@@ -1302,7 +1371,9 @@ def get_management_changes() -> pd.DataFrame:
     The first three are materialized to disk; Form 3 rows are added on read, from
     their own background-refreshed frame."""
     # Tenure runs to today, so it is computed on read, never in the disk build.
-    return add_tenure(add_form3(_filings_and_news()))
+    # Tickers folded on read too (a pair found after the frame was saved).
+    refresh_ticker_aliases()
+    return add_tenure(canonical_tickers(add_form3(_filings_and_news()), ("ticker", "moved_from")))
 
 
 def _filings_and_news() -> pd.DataFrame:
@@ -1329,7 +1400,10 @@ def _filings_and_news() -> pd.DataFrame:
         # _v4: filer's own name no longer read as a person (2026-10-12).
         # _v3: filing_year / filing_unit for the internal filing link (2026-10-12).
         # Bump on any column change.
-        "management_changes_v11", _build_management_changes, sources,
+        # _v12: data-team review fixes — biography retirements, possessive
+        #       resignations, "Certain Officers", whole "Chief X and Y Officer"
+        #       titles, moves matched after news, one ticker per company (2026-11-13).
+        "management_changes_v12", _build_management_changes, sources,
         clear=lambda: get_management_changes.clear(),
     )
 
@@ -1337,14 +1411,27 @@ def _filings_and_news() -> pd.DataFrame:
 def compare_move_pay(moves: pd.DataFrame, people: pd.DataFrame) -> pd.DataFrame:
     """Prior vs new total compensation for each executive move.
 
-    Prior = the person's latest disclosed year at the old company up to the year
-    they left; new = their first disclosed year at the new company from the year
-    they joined. Matched on (ticker, person_key). A side with no disclosure stays
-    blank — a board seat, or a company whose proxy we do not hold, has none.
+    Prior = the last FULL year at the old company: the latest disclosed year
+    before the year they left (the leaving year is part-paid), else the leaving
+    year itself. New = the first FULL year at the new company: the first year
+    after the year they joined (a joining year is part-paid: Thomas George's
+    $86,985 at Genesco), else the joining year. Matched on (ticker, person_key);
+    a side with no disclosure stays blank.
+
+    `pay_change_pct` is computed only when both years are full years and at most
+    three years apart (data-team rule, 2026-11-13); otherwise `pay_comparable`
+    says why it is not (Larsson 2017 vs 2021; Madore 2016 vs 2016).
+
+    A board-seat appointment whose person is a named executive at the new
+    company became an executive there (Trac Pham, Sprinklr's CEO): `new_pay_title`
+    carries the title the pay was disclosed under.
     """
     out = moves.copy()
     for col in ("prior_pay", "prior_pay_year", "new_pay", "new_pay_year"):
         out[col] = float("nan")
+    out["new_pay_title"] = ""
+    out["pay_comparable"] = ""
+    out["pay_change_pct"] = float("nan")
     if people is None or people.empty or out.empty:
         return out
     pay = people.assign(
@@ -1352,20 +1439,34 @@ def compare_move_pay(moves: pd.DataFrame, people: pd.DataFrame) -> pd.DataFrame:
         _pay=people["total_compensation"].fillna(people["total_pay"]),
         _year=pd.to_numeric(people["year"], errors="coerce"),
     ).dropna(subset=["_pay", "_year"])
-    index = {k: g for k, g in pay.groupby([pay["ticker"].astype(str), pay["_key"]])}
+    index = {k: g.sort_values("_year") for k, g in pay.groupby([pay["ticker"].astype(str), pay["_key"]])}
     for i, row in out.iterrows():
         key = person_key(row["person"])
         left = row["moved_from_date"] if pd.notna(row["moved_from_date"]) else row["notice_date"]
         joined = row["effective_date"] if pd.notna(row["effective_date"]) else row["notice_date"]
+        prior_full = new_full = False
         before = index.get((str(row["moved_from"]), key))
         if before is not None and pd.notna(left):
-            hit = before[before["_year"] <= left.year].sort_values("_year")
+            full = before[before["_year"] < left.year]
+            hit = full if len(full) else before[before["_year"] == left.year]
             if len(hit):
+                prior_full = bool(len(full))
                 out.at[i, "prior_pay"], out.at[i, "prior_pay_year"] = hit["_pay"].iloc[-1], hit["_year"].iloc[-1]
         after = index.get((str(row["ticker"]), key))
         if after is not None and pd.notna(joined):
-            hit = after[after["_year"] >= joined.year].sort_values("_year")
+            full = after[after["_year"] > joined.year]
+            hit = full if len(full) else after[after["_year"] == joined.year]
             if len(hit):
+                new_full = bool(len(full))
                 out.at[i, "new_pay"], out.at[i, "new_pay_year"] = hit["_pay"].iloc[0], hit["_year"].iloc[0]
-    out["pay_change_pct"] = ((out["new_pay"] / out["prior_pay"] - 1) * 100).round(1)
+                out.at[i, "new_pay_title"] = str(hit["title"].iloc[0] or "")
+        if pd.isna(out.at[i, "prior_pay"]) or pd.isna(out.at[i, "new_pay"]):
+            continue
+        gap = out.at[i, "new_pay_year"] - out.at[i, "prior_pay_year"]
+        if not (prior_full and new_full):
+            out.at[i, "pay_comparable"] = "Not comparable: part-year pay"
+        elif gap > 3:
+            out.at[i, "pay_comparable"] = f"Not comparable: {int(gap)} years apart"
+        elif out.at[i, "prior_pay"] > 0:
+            out.at[i, "pay_change_pct"] = round((out.at[i, "new_pay"] / out.at[i, "prior_pay"] - 1) * 100, 1)
     return out
