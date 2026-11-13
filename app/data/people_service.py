@@ -75,7 +75,9 @@ _FORMER_REGEX = re.compile(r"\bformer\b", re.I)
 # Table ("Richard A. Galanti 8", "Fabrizio Freda ( 1 )", "Jeffrey Davis \ufeff").
 _NAME_ZERO_WIDTH = re.compile(r"[\u200b-\u200f\ufeff]")
 _NAME_FOOTNOTE = re.compile(r"\s*(\(\s*\d+\s*\)|\[\s*\d+\s*\]|\d{1,2})\s*$")
-_NAME_TRAILING_MARKS = re.compile(r"[\s*\u2013\u2014-]+$")
+# Trailing punctuation, except the period of "Jr." / "Sr." (MC wrote "Alfred F. Kelly, Jr.").
+_NAME_END = re.compile(r"(?<!\b[JS]r)(?<!\b[JS]R)[\s,;.]+$|\s+$")
+_NAME_TRAILING_MARKS = re.compile(r"[\s*\u2013\u2014\-†‡^§¶#]+$")
 # Yahoo writes "Mr. Timothy D. Cook": the honorific is not part of the name
 # (599 People rows carried one, data-team review 2026-11-13).
 _NAME_HONORIFIC_LEAD = re.compile(r"^(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame)\.?\s+(?=\S)", re.I)
@@ -119,6 +121,10 @@ def clean_person_name(name):
     # with one pay history, review 2026-11-13).
     text = re.sub(r"\b([DO])['’]\s+(?=[A-Z])", r"\1’", text)
     text = re.sub(r"\b([A-Z])\s+\.(?=\s)", r"\1.", text)         # "A . Christina Hennington"
+    # Form 3 "Leung Tak Chung Mr" reversed to "Tak Chung Mr Leung"; "(Nmn)" = no middle name.
+    text = re.sub(r"\s(?:Mr|Mrs|Ms|Dr)\.?(?=\s)|\s\(?Nmn\)?(?=\s|$)", "", text, flags=re.I)
+    text = re.sub(r",\s*age\b.*$", "", text, flags=re.I)              # "Steven B. Shiffman, age"
+    text = re.sub(r"([“\"])\s+(?=[^“”\"]+[”\"])", r"\1", text)        # 'John “ Hil” Davis'
     first = text.split(" ", 1)[0]
     if len(first) > 2 and text.count(first + " ") > 1:            # "Coolidge E. Rhodes, Jr. Coolidge E"
         once = text[:text.index(first + " ", 1)].strip()
@@ -129,7 +135,7 @@ def clean_person_name(name):
         if stripped == text or not stripped:
             break
         text = stripped
-    text = re.sub(r"\s+", " ", text).strip(" ,;.")
+    text = _NAME_END.sub("", re.sub(r"\s+", " ", text)).lstrip(" ,;.")
     tokens = text.split(" ")
     # A "name" made only of title words ("Technical Advisor") is left alone —
     # emptying it would merge unrelated rows.
@@ -139,7 +145,7 @@ def clean_person_name(name):
     # A footnote can sit before the title word ("Todd Underwood 2 Corporate"),
     # so it is only exposed once the title word is gone.
     text = _NAME_FOOTNOTE.sub("", " ".join(tokens)).strip()
-    return _NAME_TRAILING_MARKS.sub("", text).strip(" ,;.")
+    return _NAME_END.sub("", _NAME_TRAILING_MARKS.sub("", text)).lstrip(" ,;.")
 
 
 # Business-unit labels the proxy extractor read as a name ("Consumer Brands",
@@ -439,7 +445,9 @@ _TITLE_START_WORD = r"(?:Former|Interim|Executive|Senior|Chief|President|Vice|EV
 # "… U.S. Stores Carol B. Tomé Former Chief Financial Officer": a second person
 # (first name, initial, surname) run on before their own title.
 _TITLE_SECOND_PERSON = re.compile(
-    rf"\s+[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][\w'’À-ſ\-]+(?:,?\s+(?:Jr|Sr|II|III)\.?)?\s+(?={_TITLE_START_WORD}\b)")
+    rf"\s+[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][\w'’À-ſ\-]+(?:,?\s+(?:Jr|Sr|II|III)\.?)?\s+(?={_TITLE_START_WORD}\b)"
+    # IBM: "… Chief Commercial Officer G. Cohn , Vice Chairman A. Robinson , …"
+    rf"|\s+[A-Z]\.(?:\s?[A-Z]\.)?\s+[A-Z][\w'’À-ſ\-]+\s+,\s*(?={_TITLE_START_WORD}\b)")
 # A performance goal read as a title: "Drive product innovation and deliver …".
 _TITLE_GOAL = re.compile(r"^(?:Drive|Deliver|Complete|Improve|Lead|Grow|Achieve|Execute|Develop|Expand|"
                          r"Continue|Strengthen|Build|Advance|Accelerate|Support)\b", re.I)
@@ -467,7 +475,9 @@ def _one_wording(text: str) -> str:
     # Only after a complete title ("... Officer", "... (COO)"): "EVP and" + "Chief
     # Operating Officer" is one title, not two wordings.
     starts = [m.start(1) for m in re.finditer(
-        rf"(?:Officer|President|Director|Counsel|Secretary|Treasurer|Controller|Chair\w*|CEO|CFO|COO|CAO|\)|”|\")"
+        # Any word but a joining one may end the first wording: "… Product and Design EVP, AI …" (WMT).
+        rf"(?:Officer|President|Director|Counsel|Secretary|Treasurer|Controller|Chair\w*|CEO|CFO|COO|CAO|\)|”|\"|"
+        rf"\b[A-Za-z]{{3,}}(?<!\band)(?<!\bthe)(?<!\bfor))"
         rf"(\s+)(?={_TITLE_START_WORD}\b|our\s)", text)]
     for at in starts:
         head, tail = text[:at].strip(" ,;"), text[at:].strip(" ,;")
@@ -1194,6 +1204,19 @@ def _finish_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+_NAME_PARTICLE_END = re.compile(r"\s(?:de|da|do|dos|das|del|della|di|du|van|von|der|den|le|la|y)$")
+
+
+def rejoin_cut_name(name: str, title: str):
+    """("Lucas de", "Carvalho Rocha") -> ("Lucas de Carvalho Rocha", ""): a name
+    cell wrapped onto a second line that the parser read as the title (Unifi)."""
+    words = title.split()
+    if (_NAME_PARTICLE_END.search(name) and 1 <= len(words) <= 3 and all(w[:1].isupper() for w in words)
+            and not any(_is_title_token(w) for w in words)):
+        return f"{name} {title}", ""
+    return name, title
+
+
 def _proxy_records(proxy: pd.DataFrame, words: Optional[Dict[str, set]] = None) -> List[dict]:
     """Map proxy_pay rows (edgartools-read Summary Compensation Tables) onto the
     unified people schema. They are SEC proxies like coreiq_executives_compensation."""
@@ -1203,10 +1226,9 @@ def _proxy_records(proxy: pd.DataFrame, words: Optional[Dict[str, set]] = None) 
     # function on 46k rows.
     filed_years = pd.to_datetime(proxy.get("filing_date"), errors="coerce").dt.year if len(proxy) else []
     for r, filed_year in zip(proxy.to_dict("records"), filed_years):
-        name = clean_person_name(r.get("executive_name"))
+        name, title = rejoin_cut_name(clean_person_name(r.get("executive_name")), clean_title(r.get("title")))
         if not is_person_name(name) or is_company_name(name, canonical_ticker(r.get("ticker")), words):
             continue
-        title = clean_title(r.get("title"))
         out.append({
             **{col: r.get(col) for col in ("salary", "bonus", "stock_awards", "option_awards",
                                            "non_equity_incentive", "all_other_compensation",
@@ -1223,7 +1245,27 @@ def _proxy_records(proxy: pd.DataFrame, words: Optional[Dict[str, set]] = None) 
             "filing_year":     None if pd.isna(filed_year) else int(filed_year),
             "filing_blob":     r.get("url") or "",
         })
+    if out:
+        names = one_spelling(pd.DataFrame(out, columns=["ticker", "executive_name"]))["executive_name"]
+        for rec, name in zip(out, names):
+            rec["executive_name"] = name
     return out
+
+
+def one_spelling(df: pd.DataFrame) -> pd.DataFrame:
+    """One spelling per person at a company. A word split at an inline tag in
+    some proxies ("Benno Dor er", "I qbal Arshad", "Steven E. Five l") and not in
+    others, in our parse and in the data team's table: names equal without
+    spaces are one name, and the spelling with the fewest spaces wins."""
+    if df.empty:
+        return df
+    names = df["executive_name"].astype(str)
+    keys = list(zip(df["ticker"].astype(str), names.str.lower().str.replace(r"\W", "", regex=True)))
+    best: Dict[tuple, str] = {}
+    for key, name in zip(keys, names):
+        if key not in best or name.count(" ") < best[key].count(" "):
+            best[key] = name
+    return df.assign(executive_name=[best[k] for k in keys])
 
 
 NAMED_EXECUTIVE = "Named Executive Officer"
@@ -1491,7 +1533,7 @@ def _build_people_universe() -> pd.DataFrame:
 
     records = _sec_records(sec_rows, company_words()) + _yf_records(yf_rows, fx)
 
-    df = pd.DataFrame(records, columns=_FRAME_COLUMNS)
+    df = one_spelling(pd.DataFrame(records, columns=_FRAME_COLUMNS))
 
     if df.empty:
         log_warning("[PEOPLE] universe built EMPTY — both sources returned nothing")
@@ -1548,7 +1590,9 @@ def get_people_universe() -> pd.DataFrame:
         # _v5: more title lines read as names dropped ("Famous Footwear") (2026-10-16).
         # _v6: rows handed to the executive the filed row names (row_owner), titles
         #      cleaned, honorifics dropped, one ticker per company (2026-11-13).
-        "people_universe_v6", _build_people_universe, sources,
+        # _v7: footnote marks / stray spaces in names, other people's names in
+        #      titles, doubled wordings (2026-11-13, re-check of the exports).
+        "people_universe_v7", _build_people_universe, sources,
         clear=lambda: get_people_universe.clear(),
     )
     # Tickers folded on read too: a second ticker found after the frame was
@@ -1559,7 +1603,9 @@ def get_people_universe() -> pd.DataFrame:
         universe = universe.drop_duplicates(["ticker", "executive_name", "year", "source"])
     # Merged on read, not stored: proxy_pay grows in the background and clears
     # this cache when it does (cache_manager._warm_people_screening).
-    return add_status(fill_missing_titles(tidy_titles(add_proxy_pay(universe))))
+    universe = one_spelling(add_proxy_pay(universe))
+    universe = universe.drop_duplicates(["ticker", "executive_name", "year", "source"])
+    return add_status(fill_missing_titles(tidy_titles(universe)))
 
 
 # =============================================================================

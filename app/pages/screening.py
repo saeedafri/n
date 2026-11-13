@@ -6925,7 +6925,11 @@ def _people_company_meta(company_df: pd.DataFrame) -> pd.DataFrame:
         cols["sector"] = "Industry"
     if "country" in company_df.columns:
         cols["country"] = "Country of Incorporation"
-    meta = company_df[list(cols.keys())].rename(columns=cols).drop_duplicates(subset=["ticker"]).copy()
+    # coreiq_companies holds a second, blank row for some tickers (GO, NGVC, MSS,
+    # FWDI, BBXIB): per column the first non-blank value wins, not the first row
+    # (blank Country, data-team review 2026-11-13).
+    meta = (company_df[list(cols.keys())].rename(columns=cols).astype(object).replace("", None)
+            .groupby("ticker", as_index=False, sort=False).first().fillna(""))
     if "Company" in meta.columns:
         # The company's name, not a brand list, former name, ticker code or
         # ALL CAPS (data-team review 2026-11-13) — the same name in all four
@@ -7015,8 +7019,9 @@ PEOPLE_EXPORT_NOTES = {
         "Months Between": "Months from Left to Joined. Check flags gaps over 12 months: a role in between may be missing.",
         "Prior Total Pay / Year": "Total compensation for the last full year at the old company (the year before "
                                   "the year they left).",
-        "New Total Pay / Year": "Total compensation for the first full year at the new company (the year after "
-                                "the year they joined).",
+        "New Total Pay / Year": "Total compensation for the first full year at the new company: the first year "
+                                "after the year they joined that pays a full salary (at least 80% of the next "
+                                "year's or of the offer salary).",
         "Pay Change %": "Only when both are full years at most 3 years apart; otherwise 'Not comparable' and why.",
         "Offer Base Salary": "Base salary stated in the new company's appointment 8-K.",
     },

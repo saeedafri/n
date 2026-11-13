@@ -45,6 +45,14 @@ _PERSON_NAME = re.compile(
     r"(?:,?\s+(?:[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’.\-]*|de|da|del|della|der|di|du|la|le|van|von|bin|al|y|[A-Z]\.?)){1,5}$")
 
 
+# Footnote marks, "O’ Brien" / "“ Hil”" spacing, ", age", "(Nmn)" and an honorific
+# inside a name (data-team review 2026-11-13: name formatting). _NAME_CUT: a name
+# ending "de" / "van" — in a pay table the rest wrapped onto the title line
+# ("Lucas de" / "Carvalho Rocha"); in a Form 3 it is SEC's surname-first order.
+_NAME_JUNK = re.compile(r"[†‡^§¶]|\b[DO]['’]\s|[“\"]\s(?=[^“”\"]+[”\"])|,\s*age\b|\(Nmn\)|\s(?:Mr|Mrs|Ms)\.?\s", re.I)
+_NAME_CUT = re.compile(r"\s(?:de|da|dos|del|di|du|van|von|der|la)$")
+
+
 def _check(name: str, must_be_zero: bool, items) -> dict:
     return {"name": name, "must_be_zero": must_be_zero, "items": [str(i) for i in items]}
 
@@ -75,6 +83,10 @@ def run_checks(people: pd.DataFrame, changes: pd.DataFrame, layoffs: pd.DataFram
                       [f"{t} {n}: {x[:90]}" for t, n, x in people.loc[junk, ["ticker", "executive_name", "title"]].values]))
     out.append(_check("People: name starts with Mr./Ms./Dr.", True,
                       people.loc[people["executive_name"].str.match(r"(?:Mr|Ms|Mrs|Dr)\.?\s"), "executive_name"]))
+    out.append(_check("People: name carries marks or stray spaces", True,
+                      people.loc[people["executive_name"].fillna("").str.contains(_NAME_JUNK)
+                                 | people["executive_name"].fillna("").str.contains(_NAME_CUT),
+                                 "executive_name"].unique()))
 
     # Copied pay: colleagues with the same total in 2+ of the same years, checked
     # against the filing. Equal in the filing = genuine (e.l.f., Amazon).
@@ -172,6 +184,16 @@ def run_checks(people: pd.DataFrame, changes: pd.DataFrame, layoffs: pd.DataFram
                       ev.loc[tokens.map(lambda w: bool(w) and all(x.strip(".,") in _NOT_NAME for x in w)), "person"].unique()))
     out.append(_check("Management Changes: possessive prefix in a name", True,
                       ev.loc[ev["person"].fillna("").str.contains(r"\w(?:'s|s')\s", regex=True), "person"]))
+    from data.management_changes import _FORM3_ENTITY
+    out.append(_check("Management Changes: a fund or company listed as a person", True,
+                      ev.loc[ev["person"].fillna("").str.contains(_FORM3_ENTITY), "person"].unique()))
+    out.append(_check("Management Changes: name carries marks or stray spaces", True,
+                      ev.loc[ev["person"].fillna("").str.contains(_NAME_JUNK), "person"].unique()))
+    # SEC files "de Castro Melo Alessandro": where the surname ends is not in the
+    # filing, so no rule can reorder it safely (about half would come out wrong).
+    out.append(_check("Management Changes: Form 3 name in surname-first order (check)", False,
+                      ev.loc[ev["person"].fillna("").str.contains(_NAME_CUT)
+                             | ev["person"].fillna("").str.match(r"(?:de|da|la|van)\s"), "person"].unique()))
     short = r"\bChief(?:\s+(?!Officer\b|Executive\b)[A-Z][a-z]+){1,2}$"
     parts_t = ev["titles"].fillna("").str.split(r"\s\|\s")
     cut = parts_t.map(lambda ps: any(re.search(short, p) for p in ps)) & ~ev["title"].fillna("").str.contains(short, regex=True)

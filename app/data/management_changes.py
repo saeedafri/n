@@ -34,8 +34,8 @@ import pandas as pd
 import streamlit as st
 
 from core.database import db_manager
-from data.people_service import (canonical_ticker, canonical_tickers, classify_role, person_key,
-                                 refresh_ticker_aliases)
+from data.people_service import (canonical_ticker, canonical_tickers, classify_role, clean_person_name,
+                                 person_key, refresh_ticker_aliases)
 
 try:
     from utils.server_logger import log_structured_error, log_timing
@@ -1313,6 +1313,16 @@ def _build_management_changes() -> pd.DataFrame:
     return df
 
 
+# Funds file Form 3 as directors by deputization (Pershing Square, Warburg Pincus,
+# Fairmount): the director flag does not make them people. 135 of 10,755 Form 3
+# names, read reversed ("Square Capital Management, L.P. Pershing"), 2026-11-13.
+_FORM3_ENTITY = re.compile(
+    r"\b(?:L\.?L\.?C|Llc|L\.P|LP|Inc|Ltd|Limited|Corp|Co|N\.V|S\.[Aa]|Scsp|GP|Gp|Spv|SPV|Fund|Funds|Trust|"
+    r"Partners?|Holdings|Capital|Management|Advisors|Managers|Investments?|Coinvestments|Co-Invest\w*|Sponsor|"
+    r"Acquisition|Group|Bank|Aggregator|Ventures|Industries|Opportunities|Situations|Equity|Associates|"
+    r"Foundation|Hulu)\b")
+
+
 def form3_changes(rows: pd.DataFrame) -> pd.DataFrame:
     """Form 3 rows (data.form3_appointments) as appointments: the person became
     an officer or director on `became_insider`."""
@@ -1322,7 +1332,7 @@ def form3_changes(rows: pd.DataFrame) -> pd.DataFrame:
     # (13 for VACI, 16 for WKEY on 2026-10-01): a new listing, not a change.
     # ponytail: size cut-off; Corteva's 6 on the same day are real appointments.
     batch = rows.groupby(["ticker", "became_insider"], dropna=False)["person"].transform("size")
-    rows = rows[batch < 8]
+    rows = rows[(batch < 8) & ~rows["person"].astype(str).str.contains(_FORM3_ENTITY)]
     # Free-text officer titles: "(i) The reporting person's title is EVP, Chief
     # Purchasing & Merchandising Officer. (ii) ..." and "Title: ...".
     title = (rows["title"].fillna("").astype(str)
@@ -1373,7 +1383,13 @@ def get_management_changes() -> pd.DataFrame:
     # Tenure runs to today, so it is computed on read, never in the disk build.
     # Tickers folded on read too (a pair found after the frame was saved).
     refresh_ticker_aliases()
-    return add_tenure(canonical_tickers(add_form3(_filings_and_news()), ("ticker", "moved_from")))
+    df = canonical_tickers(add_form3(_filings_and_news()), ("ticker", "moved_from"))
+    # The People Screening spelling rules: "John F. O’ Brien", "Tak Chung Mr Leung".
+    df["person"] = df["person"].astype(str).map(clean_person_name)
+    # "Lean Enterprise", "Merchandise Manager": 8-K words read as a name, one word
+    # once the title word goes. A person is never one word in a filing.
+    df = df[df["person"].eq("") | df["person"].str.contains(" ")]
+    return add_tenure(df)
 
 
 def _filings_and_news() -> pd.DataFrame:
@@ -1425,6 +1441,12 @@ def compare_move_pay(moves: pd.DataFrame, people: pd.DataFrame) -> pd.DataFrame:
     A board-seat appointment whose person is a named executive at the new
     company became an executive there (Trac Pham, Sprinklr's CEO): `new_pay_title`
     carries the title the pay was disclosed under.
+
+    A fiscal year that ends early in the calendar year can still be part-paid
+    after the joining year: Genesco's fiscal 2021 ended 30 Jan 2021, six weeks
+    after Thomas George joined ($86,985). Companies label such years by their
+    start or by their end, so the salary decides instead: a year paying under
+    80% of the next year's salary (or of the 8-K offer salary) is a part year.
     """
     out = moves.copy()
     for col in ("prior_pay", "prior_pay_year", "new_pay", "new_pay_year"):
@@ -1455,7 +1477,13 @@ def compare_move_pay(moves: pd.DataFrame, people: pd.DataFrame) -> pd.DataFrame:
         after = index.get((str(row["ticker"]), key))
         if after is not None and pd.notna(joined):
             full = after[after["_year"] > joined.year]
-            hit = full if len(full) else after[after["_year"] == joined.year]
+            salary = pd.to_numeric(full["salary"] if "salary" in full else pd.Series(float("nan"), index=full.index),
+                                   errors="coerce")
+            offer = pd.to_numeric(pd.Series([row.get("offer_salary")]), errors="coerce").iloc[0]
+            while len(full) and pd.notna(salary.iloc[0]) and salary.iloc[0] < 0.8 * (
+                    salary.iloc[1] if len(salary) > 1 and pd.notna(salary.iloc[1]) else offer if pd.notna(offer) else 0):
+                full, salary = full.iloc[1:], salary.iloc[1:]
+            hit = full if len(full) else after[after["_year"] >= joined.year]
             if len(hit):
                 new_full = bool(len(full))
                 out.at[i, "new_pay"], out.at[i, "new_pay_year"] = hit["_pay"].iloc[0], hit["_year"].iloc[0]

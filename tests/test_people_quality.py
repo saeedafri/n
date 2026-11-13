@@ -137,3 +137,14 @@ def test_proxy_refresh_stops_at_once_when_nothing_new(monkeypatch, tmp_path):
     listed = []
     monkeypatch.setattr(proxy, "_wanted_proxies", lambda: listed.append(1))   # the 40 s query
     assert proxy.refresh_proxy_pay() == 0 and listed == []
+
+
+def test_name_marks_and_funds_fail_the_check():
+    people = people_frame([dict(ticker="ABC", executive_name="Chad D. Marquardt ††", title="CFO", year=2024,
+                                total_compensation=1_000_000)])
+    changes = EMPTY_CHANGES.copy()
+    changes.loc[0] = {c: "" for c in changes.columns}
+    changes.loc[0, ["ticker", "change", "person"]] = ["HHH", "Appointment", "Square Capital Management, L.P. Pershing"]
+    checks = by_name(run_checks(people, changes, EMPTY_LAYOFFS, {}))
+    assert checks["People: name carries marks or stray spaces"]["items"] == ["Chad D. Marquardt ††"]
+    assert checks["Management Changes: a fund or company listed as a person"]["items"]

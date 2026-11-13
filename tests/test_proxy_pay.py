@@ -60,4 +60,4 @@ def test_name_and_title_in_one_cell_and_title_only_rows():
     rows = parse_summary_compensation(html)
     assert [(r["executive_name"], r["title"]) for r in rows] == [
         ("Paul Paradis", "Executive Director"),
-        ("James A. Sabia, Jr", "Executive Vice President")]
+        ("James A. Sabia, Jr.", "Executive Vice President")]

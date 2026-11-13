@@ -330,3 +330,68 @@ def test_copied_pay_checked_against_the_filing():
     assert out["John J. Mulligan"] == 8_575_733.0          # the filing's figure, not McNamara's
     assert "Scott Sekella" not in out.index                # not in the 2023 filing at all: a copy
     assert out["Kory Marchisotto"] == out["Scott Milsten"] == 4_656_438.0   # equal in the filing: genuine
+
+
+# ---- Leftovers of the same kinds, found by re-checking the exports (2026-11-13) ----
+
+def test_name_marks_and_spacing_are_cleaned():
+    from data.people_service import clean_person_name
+    cases = {"Chad D. Marquardt ††": "Chad D. Marquardt", "Manon Brouillette^^^": "Manon Brouillette",
+             "Steven B. Shiffman, age": "Steven B. Shiffman", "John “ Hil” Davis": "John “Hil” Davis",
+             'Amy " Levy" Trooskin': 'Amy "Levy" Trooskin', "John F. O’ Brien": "John F. O’Brien",
+             "Tak Chung Mr Leung": "Tak Chung Leung", "Hong (Nmn) Chen": "Hong Chen",
+             "Chirantan “CJ” Desai": "Chirantan “CJ” Desai"}
+    assert {k: clean_person_name(k) for k in cases} == cases
+
+
+def test_titles_holding_other_people_or_two_wordings():
+    from data.people_service import clean_title
+    assert clean_title("Senior VP, Software & Chief Commercial Officer G. Cohn , Vice Chairman A. Robinson , "
+                       "Senior VP & Chief Legal Officer") == "Senior VP, Software & Chief Commercial Officer"
+    assert clean_title("Executive Vice President, AI Acceleration, Product and Design EVP, AI Acceleration, "
+                       "Product and Design") == "Executive Vice President, AI Acceleration, Product and Design"
+    assert clean_title("EVP and Chief Operating Officer") == "EVP and Chief Operating Officer"
+    assert clean_title("Senior Vice President, Stores Executive Vice President, Merchandising") == \
+        "Senior Vice President, Stores Executive Vice President, Merchandising"
+
+
+def test_a_word_split_by_the_parser_is_one_spelling():
+    from data.people_service import _proxy_records
+    proxy = pd.DataFrame({"ticker": ["CLX"] * 3, "executive_name": ["Benno Dor er", "Benno Dorer", "Benno Dor er"],
+                          "title": ["CEO"] * 3, "year": [2016, 2017, 2018], "total_compensation": [1.0, 2.0, 3.0],
+                          "filing_date": ["2018-10-01"] * 3, "url": [""] * 3})
+    assert {r["executive_name"] for r in _proxy_records(proxy)} == {"Benno Dorer"}
+
+
+def test_form3_funds_are_not_people():
+    from data.management_changes import form3_changes
+    rows = pd.DataFrame({
+        "ticker": ["HHH", "HHH", "MAT"], "title": ["", "", "EVP"],
+        "person": ["Square Capital Management, L.P. Pershing", "Investment Group Inc. Edgepoint", "Tiffany To"],
+        "is_officer": [False, False, True], "is_director": [True, True, False],
+        "became_insider": pd.to_datetime(["2024-01-02", "2024-02-02", "2024-03-02"]),
+        "filing_date": pd.to_datetime(["2024-01-05", "2024-02-05", "2024-03-05"]), "url": [""] * 3})
+    assert form3_changes(rows)["person"].tolist() == ["Tiffany To"]
+
+
+def test_first_full_year_pays_a_full_salary():
+    # Genesco's fiscal 2021 ended 30 Jan 2021, six weeks after Thomas George joined.
+    from data.management_changes import compare_move_pay
+    moves = pd.DataFrame({"person": ["Thomas A. George"], "moved_from": ["DECK"], "ticker": ["GCO"],
+                          "moved_from_date": pd.to_datetime(["2018-03-02"]), "notice_date": pd.to_datetime(["2020-11-01"]),
+                          "effective_date": pd.to_datetime(["2020-12-14"])})
+    people = pd.DataFrame({"ticker": ["DECK", "GCO", "GCO"], "executive_name": ["Thomas A. George"] * 3,
+                           "year": [2017, 2021, 2022], "total_compensation": [2_000_000.0, 86_985.0, 2_615_807.0],
+                           "total_pay": [None] * 3, "salary": [500_000.0, 60_000.0, 600_000.0],
+                           "title": ["CFO", "CFO", "CFO"]})
+    out = compare_move_pay(moves, people).iloc[0]
+    assert (out["new_pay_year"], out["new_pay"]) == (2022, 2_615_807.0)
+    assert out["pay_comparable"] == "Not comparable: 5 years apart"
+
+
+def test_a_name_wrapped_onto_the_title_line_is_rejoined():
+    from data.people_service import rejoin_cut_name
+    assert rejoin_cut_name("Lucas de", "Carvalho Rocha") == ("Lucas de Carvalho Rocha", "")
+    assert rejoin_cut_name("Lucas de Carvalho Rocha", "Chief Executive Officer") == \
+        ("Lucas de Carvalho Rocha", "Chief Executive Officer")
+    assert rejoin_cut_name("Jan van", "Senior Vice President") == ("Jan van", "Senior Vice President")
