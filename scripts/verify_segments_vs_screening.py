@@ -8,6 +8,8 @@ screener's segment cache would store for it (the same code the cache rebuild run
 without writing anything). Every tab cell must appear in the screener rows with the
 same type, metric, member, year and value. The screener may hold more: a segment
 named after a place is also indexed as geography, so a geography filter finds it.
+Business cells are compared after the business workbook (business_segment_map),
+which the screener applies and the tab does not.
 """
 import argparse
 import contextlib
@@ -32,9 +34,14 @@ def compare(ticker):
         return {"ticker": ticker, "error": "screening scan timed out"}
     stored = {(kind, metric, member, int(year)): value
               for _t, kind, metric, member, year, value in entries}
+    from data.business_segment_map import split_business_members
     counts, issues = Counter(), []
     for part, kind in (("business_segments", "business"), ("geo_segments", "geographical")):
         for metric, members in ((table or {}).get(part) or {}).items():
+            # The screener names business segments by the business workbook; the
+            # tab shows them as filed. Compare like with like.
+            if kind == "business":
+                members = split_business_members(members)[0]
             for member, by_year in members.items():
                 for year, value in by_year.items():
                     if value is None:

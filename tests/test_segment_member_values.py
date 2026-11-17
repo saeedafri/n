@@ -174,11 +174,12 @@ def test_a_metric_the_geographic_disclosure_skips_still_gets_the_segment():
     assert assets == {("United States", 22_547.0)}
 
 
-def test_the_business_index_still_holds_every_segment():
+def test_the_business_index_holds_what_the_business_workbook_keeps():
+    """The workbook moves "United States" to Geographical; "Retail" stays."""
     biz = {"Revenues": {"United States": {2024: 10_631.0}, "Retail": {2024: 50.0}}}
-    business = {member for _t, st, _m, member, _y, _v in cache_entries(biz, {})
-                if st == "business"}
-    assert business == {"United States", "Retail"}
+    entries = cache_entries(biz, {})
+    assert {m for _t, st, _m, m, _y, _v in entries if st == "business"} == {"Retail"}
+    assert {m for _t, st, _m, m, _y, _v in entries if st == "geographical"} == {"United States"}
 
 
 # ── the cache must notice that the rules changed ─────────────────────────────

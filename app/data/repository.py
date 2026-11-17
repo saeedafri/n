@@ -10491,6 +10491,7 @@ class SegmentDataRepository:
                                      EDGAR_BUSINESS_AXES, EDGAR_PRODUCT_AXES)
         from data.geo_hierarchy import names_a_place
         from data.segment_aliases import canonicalize_geo_label, is_geo_excluded_label
+        from data.business_segment_map import is_kept_business_label
 
         # Revenue by product or sales channel is a second breakdown of the same
         # revenue, not a segment. Wendy's files Sales, Franchise fees, … on
@@ -10625,6 +10626,12 @@ class SegmentDataRepository:
             if is_geo_excluded_label(member) or is_geo_excluded_label(filed_label):
                 return None
             member = canonicalize_geo_label(member)
+        elif is_kept_business_label(member):
+            # The business team's workbook rules it a line of business, so the
+            # place rules below must neither drop nor rename it: Hormel's
+            # "Turkey" is poultry, not Türkiye, and "International Franchise"
+            # is a franchise business the geo map would call "International".
+            pass
         elif axis in segment_axes or member_axis in segment_axes:
             # A place on a real segment axis IS the filer's segment. McDonald's
             # reports three segments and one of them is "U.S.", filed on
@@ -12985,7 +12992,8 @@ class SegmentDataRepository:
         from utils.constants import SEGMENT_METRIC_GROUPS
         here = Path(__file__).resolve().parent
         parts = [inspect.getsource(SegmentDataRepository), repr(SEGMENT_METRIC_GROUPS)]
-        for name in ("geo_label_map.json", "geo_hierarchy.json", "segment_aliases.py", "geo_hierarchy.py"):
+        for name in ("geo_label_map.json", "geo_hierarchy.json", "segment_aliases.py", "geo_hierarchy.py",
+                     "business_segment_map.json", "business_segment_map.py"):
             try:
                 parts.append((here / name).read_text(encoding="utf-8"))
             except OSError:

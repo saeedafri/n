@@ -1785,10 +1785,11 @@ _SEGMENT_VALUES_CACHE_CHUNK = 500
 _SEGMENT_OPTIONS_LIMIT = 500
 # Geographic members collapse to ~220 named places, so the raw read must not be
 # capped at the display size — a cap applied before collapsing would silently
-# drop places as filings add spellings. Business members (3.3K rows and growing)
-# stay capped: they have no collapse step, and fetching them all costs rows on a
-# packet-per-row database.
+# drop places as filings add spellings. Business members (~1.8K) are read whole
+# too: a 500 cap left every one-company segment out of the dropdown, and the
+# workbook's filters (Product = Pet Food & Treats) mostly land on those.
 _SEGMENT_GEO_ROWS_LIMIT = 1500
+_SEGMENT_BUSINESS_ROWS_LIMIT = 6000
 _SEGMENT_OPTIONS_UI_TIMEOUT_S = 3.0
 _SEGMENT_STATEMENT_DB_TIMEOUT_MS = 15000
 ENABLE_SEGMENT_REPOSITORY_FALLBACK = False
@@ -1972,11 +1973,16 @@ def _segment_cache_entries(ticker: str, biz: Dict, geo: Dict) -> List[tuple]:
     """One company's classified segments as cache rows:
     (ticker, segment_type, metric_key, member, year, value_mm).
 
-    A reportable segment named after a place is indexed under geography as well
-    as business. It is the only geography some filers publish — McDonald's
-    reports "United States" as a segment and files no geographic revenue at all,
-    so screening on a geography used to miss it entirely. The Segments tab is
-    unaffected: it still shows the member where the filer put it.
+    Business segments are screened as the business team's workbook names them
+    (business_segment_map): spellings of one segment merge into its member,
+    non-segments (corporate, eliminations, guarantor columns) are dropped, and
+    places move to geography. The Segments tab is unaffected: it still shows
+    the member where and how the filer put it.
+
+    A place moved out of Business is indexed under geography. It is the only
+    geography some filers publish — McDonald's reports "United States" as a
+    segment and files no geographic revenue at all, so screening on a geography
+    used to miss it entirely.
 
     The company's own geographic disclosure always wins, whole. Amazon reports a
     "North America" segment AND a United States / Germany / UK / Japan geographic
@@ -1985,7 +1991,7 @@ def _segment_cache_entries(ticker: str, biz: Dict, geo: Dict) -> List[tuple]:
     written only for a metric and year where the geographic disclosure says
     nothing at all, which is why matching member by member is not enough.
     """
-    from data.geo_hierarchy import names_a_place
+    from data.business_segment_map import split_business_members
 
     filed_as_geo = {
         (metric_key, int(year))
@@ -1994,18 +2000,20 @@ def _segment_cache_entries(ticker: str, biz: Dict, geo: Dict) -> List[tuple]:
         for year, value in by_year.items() if value is not None
     }
     entries: List[tuple] = []
-    for segment_type, data in (("business", biz), ("geographical", geo)):
-        for metric_key, members in data.items():
-            for member, by_year in members.items():
-                also_geography = segment_type == "business" and names_a_place(member)
+    for metric_key, members in geo.items():
+        for member, by_year in members.items():
+            for year, value in by_year.items():
+                if value is not None:
+                    entries.append((ticker, "geographical", metric_key, member, int(year), float(value)))
+    for metric_key, members in biz.items():
+        business, places = split_business_members(members)
+        for segment_type, data in (("business", business), ("geographical", places)):
+            for member, by_year in data.items():
                 for year, value in by_year.items():
-                    if value is None:
-                        continue
                     year = int(year)
-                    entries.append((ticker, segment_type, metric_key, member, year, float(value)))
-                    if also_geography and (metric_key, year) not in filed_as_geo:
-                        entries.append((ticker, "geographical", metric_key, member,
-                                        year, float(value)))
+                    if segment_type == "geographical" and (metric_key, year) in filed_as_geo:
+                        continue
+                    entries.append((ticker, segment_type, metric_key, member, year, value))
     return entries
 
 
@@ -2415,8 +2423,13 @@ def _segment_classifier_version() -> str:
     means a change to them is itself a reason to rebuild, once.
     """
     import inspect
+    from data import business_segment_map
 
-    sources = [SegmentDataRepository.rules_version(), inspect.getsource(_segment_cache_entries)]
+    # The business workbook decides which business members exist, so a new
+    # workbook (a regenerated JSON) is a reason to rebuild just like new rules.
+    sources = [SegmentDataRepository.rules_version(), inspect.getsource(_segment_cache_entries),
+               inspect.getsource(business_segment_map),
+               business_segment_map.MAP_PATH.read_text(encoding="utf-8")]
     return hashlib.sha1("".join(sources).encode("utf-8", "replace")).hexdigest()[:12]
 
 
@@ -2701,7 +2714,7 @@ def read_segment_member_labels_raw(segment_type: str) -> List[Tuple[str, int]]:
     """
     t0 = time.perf_counter()
     row_limit = (_SEGMENT_GEO_ROWS_LIMIT if segment_type == "geographical"
-                 else _SEGMENT_OPTIONS_LIMIT)
+                 else _SEGMENT_BUSINESS_ROWS_LIMIT)
     sql = f"""
         SELECT member_label, company_count
         FROM {SEGMENT_MEMBER_CACHE_TABLE}
@@ -2745,11 +2758,28 @@ def read_segment_member_labels_raw(segment_type: str) -> List[Tuple[str, int]]:
 
 
 def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]]:
-    """Segment member dropdown options — geo labels collapsed to one per place."""
+    """Segment member dropdown options — geo labels collapsed to one per place,
+    business labels as the business workbook names them."""
     out = read_segment_member_labels_raw(segment_type)
     if segment_type == "geographical":
         out = _collapse_geo_canonical_options(out)
+    else:
+        out = _business_workbook_options(out)
     return out
+
+
+def _business_workbook_options(raw_opts: List[Tuple[str, int]]) -> List[Tuple[str, int]]:
+    """Business options per the workbook: removed and moved labels gone, spellings
+    merged into their member. A rebuilt cache already holds member names, so this
+    only changes anything on a cache written before the workbook did."""
+    from data.business_segment_map import business_verdict
+
+    counts: Dict[str, int] = {}
+    for label, cnt in raw_opts:
+        action, member = business_verdict(label)
+        if action == "keep":
+            counts[member] = counts.get(member, 0) + cnt
+    return sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))
 
 
 def _collapse_geo_canonical_options(
@@ -3100,6 +3130,28 @@ def read_segment_values_cache(
                   {year_clause}
                   {member_clause}
             """
+        elif segment_type == "business":
+            # Latest is the company's latest year. A segment it stopped reporting
+            # is not part of its latest picture: per-member latest listed
+            # McDonald's "High-Growth Markets" (last filed FY2018) beside its
+            # FY2025 segments — 577 such rows in the 17-Nov business review.
+            sql = f"""
+                SELECT c.ticker, c.member_label, c.value_mm, c.report_fiscal_year
+                FROM {SEGMENT_VALUES_CACHE_TABLE} c
+                INNER JOIN (
+                    SELECT ticker, MAX(report_fiscal_year) AS report_fiscal_year
+                    FROM {SEGMENT_VALUES_CACHE_TABLE}
+                    WHERE segment_type = :st
+                      AND metric_key = :mk
+                      AND ticker IN ({ticker_sql})
+                    GROUP BY ticker
+                ) latest ON latest.ticker = c.ticker
+                    AND latest.report_fiscal_year = c.report_fiscal_year
+                WHERE c.segment_type = :st
+                  AND c.metric_key = :mk
+                  AND c.ticker IN ({ticker_sql})
+                  {member_clause}
+            """
         else:
             sql = f"""
                 SELECT c.ticker, c.member_label, c.value_mm, c.report_fiscal_year
@@ -3128,13 +3180,16 @@ def read_segment_values_cache(
             return []
 
     if segment_type != "geographical":
-        # Same rule as the dropdown: a place is not a line of business. Rows
-        # written before _classify_member learned that are still in the cache
-        # until it rebuilds, and they would otherwise reach the results grid as
-        # a "United States" business-segment column.
-        from data.geo_hierarchy import names_a_place
-        all_rows = [row for row in all_rows
-                    if not names_a_place(row.get("member_label") or "")]
+        # Same verdict as the dropdown. A rebuilt cache already holds member
+        # names; rows written before a workbook change would otherwise reach the
+        # results grid as "Corporate" or "United States" business segments.
+        from data.business_segment_map import business_verdict
+        kept = []
+        for row in all_rows:
+            action, member = business_verdict(row.get("member_label") or "")
+            if action == "keep":
+                kept.append({**row, "member_label": member})
+        all_rows = kept
 
     ms = (time.perf_counter() - t0) * 1000
     log_timing(
@@ -3594,6 +3649,19 @@ def apply_segment_statement_criterion(
             for display in selected_segments
             for raw in (groups.get(display) or [display])
         ))
+    elif selected_segments:
+        # A criterion saved before the business workbook names its member the
+        # way the filer spelled it ("Gourmet Food and Gift Baskets"). A pick the
+        # workbook removed stays as picked and finds nothing, rather than
+        # silently widening to every segment.
+        from data.business_segment_map import business_verdict, member_spellings
+        selected_segments = list(dict.fromkeys(
+            member for action, member in map(business_verdict, selected_segments)
+            if action == "keep")) or selected_segments
+        # Every spelling of each member, so a cache not yet rebuilt under the
+        # workbook still finds it (rows are renamed to the member on read).
+        query_segments = list(dict.fromkeys(
+            spelling for member in selected_segments for spelling in member_spellings(member)))
 
     log_info(
         f"[TIMING] SCREENING_SEGMENT_STATEMENT_START | stmt={stmt} "
@@ -5545,6 +5613,10 @@ def _fetch_segment_revenue_v4(
     exactly the tab's numbers. The sum of the selected members that company has,
     for `year` or, when None, the latest year any of them is filed.
     Returns {ticker: revenue_mm}."""
+    from data.business_segment_map import business_verdict, split_business_members
+
+    if not use_geo_axes:
+        segment_labels_tuple = tuple(business_verdict(l)[1] or l for l in segment_labels_tuple if l)
     labels = {SegmentDataRepository._member_key(l) for l in segment_labels_tuple if l}
     if not ticker_tuple or not labels:
         return {}
@@ -5556,7 +5628,10 @@ def _fetch_segment_revenue_v4(
         except Exception as exc:
             log_error(f"[SCREENING] segment revenue: {tk} failed — {str(exc)[:160]}")
             continue
-        chosen = {m: by for m, by in ((tables.get(part) or {}).get("Revenues") or {}).items()
+        revenues = (tables.get(part) or {}).get("Revenues") or {}
+        if not use_geo_axes:
+            revenues = split_business_members(revenues)[0]
+        chosen = {m: by for m, by in revenues.items()
                   if SegmentDataRepository._member_key(m) in labels}
         years = sorted({y for by in chosen.values() for y, v in by.items() if v is not None})
         pick = year if year is not None else (years[-1] if years else None)

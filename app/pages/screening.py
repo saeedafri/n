@@ -4210,6 +4210,40 @@ def _render_geo_hierarchy_filters(
     return filtered
 
 
+def _render_business_tag_filters(member_names: List[str]) -> List[str]:
+    """Sales Channel / Revenue Type / Product Category / Product above the member list.
+
+    The business team's workbook tags every Segment Member; picking a tag keeps
+    the members carrying it, filters combine with AND, and Any restricts nothing
+    — the same contract as the geographic cascade. The workbook's filters are
+    independent, so each one offers the tags the members reach under all the
+    others' picks (Product lists Pet Food & Treats once Product Category is Pet,
+    whichever was set first), and a pick is never dropped behind the user's back.
+    In memory off business_segment_map.json; no DB call here.
+    """
+    from data.business_segment_map import FILTERS, filter_members, filter_options
+
+    current = {name: st.session_state.get(f"scr_biz_filter_{name}") or [] for name in FILTERS}
+    selections: dict = {}
+    for column, name in zip(st.columns(len(FILTERS)), FILTERS):
+        options = sorted(set(filter_options(member_names, name, current)) | set(current[name]))
+        with column:
+            selections[name] = st.multiselect(
+                name, options=options, key=f"scr_biz_filter_{name}",
+                placeholder="Any", disabled=not options,
+            )
+
+    filtered = filter_members(member_names, selections)
+    if any(selections.values()):
+        st.caption(
+            f"{len(filtered)} of {len(member_names)} segments match — "
+            "clear the filters above to see them all."
+        )
+        if not filtered:
+            st.info("No segments match that combination. Widen a filter above.")
+    return filtered
+
+
 def _render_segment_members_step(
     segment_type: str,
     period_type: str,
@@ -4227,12 +4261,15 @@ def _render_segment_members_step(
     member_names = [m for m, _cnt in member_opts]
     member_counts = {m: cnt for m, cnt in member_opts}
 
-    # Geography has a place hierarchy behind it, so offer the cascade first and
-    # let it narrow the member list. Business segments have no such structure.
+    # Both kinds have filters that narrow the member list: a place hierarchy for
+    # geography, the business workbook's four tags for business segments.
     if segment_type == "geographical":
         member_names = _render_geo_hierarchy_filters(member_names, member_counts)
+    else:
+        member_names = _render_business_tag_filters(member_names)
 
-    geo_paths = st.session_state.get("_scr_geo_paths", {})
+    geo_paths = (st.session_state.get("_scr_geo_paths", {})
+                 if segment_type == "geographical" else {})
 
     def _member_label(name: str) -> str:
         cnt = member_counts.get(name, 0)
@@ -4247,6 +4284,12 @@ def _render_segment_members_step(
         default_seg_members = list(dict.fromkeys(
             canonicalize_geo_label(m) for m in default_seg_members
         ))
+    elif default_seg_members:
+        # Same for business: a saved filer spelling pre-populates as its member.
+        from data.business_segment_map import business_verdict
+        default_seg_members = list(dict.fromkeys(
+            business_verdict(m)[1] or m for m in default_seg_members
+        ))
 
     # A saved criterion must survive whatever the cascade is currently showing,
     # so re-admit its members to the options rather than dropping the selection.
@@ -4257,17 +4300,27 @@ def _render_segment_members_step(
         ]
 
     valid_defaults = [m for m in default_seg_members if m in member_names]
+    is_business = segment_type != "geographical"
     _ms_kwargs = dict(
         label="Segment members",
         options=member_names,
         format_func=_member_label,
         key="scr_fin_segment_members",
-        placeholder="All segments — leave empty for any member…",
+        placeholder=("All segments in the filters above — leave empty for any…" if is_business
+                     else "All segments — leave empty for any member…"),
         help="Leave empty = All Segments.",
     )
     if is_edit and valid_defaults:
         _ms_kwargs["default"] = valid_defaults
-    return st.multiselect(**_ms_kwargs)
+    picked = st.multiselect(**_ms_kwargs)
+    if picked or not is_business:
+        return picked
+    # A business filter with no member picked screens on every member it keeps;
+    # returning nothing would mean "all segments" and quietly drop the filter.
+    from data.business_segment_map import FILTERS
+    if any(st.session_state.get(f"scr_biz_filter_{name}") for name in FILTERS):
+        return member_names
+    return []
 
 
 def _submit_financial_criterion(
@@ -4295,6 +4348,13 @@ def _submit_financial_criterion(
     if metric_info is None:
         st.error("Metric not found. Please re-select.")
         return False
+    if is_segment_stmt and segment_type != "geographical" and not selected_segments:
+        # No member list here means "all segments"; with a business filter set
+        # that matched nothing it would quietly screen everything instead.
+        from data.business_segment_map import FILTERS
+        if any(st.session_state.get(f"scr_biz_filter_{name}") for name in FILTERS):
+            st.error("No business segments match the filters above. Widen or clear a filter.")
+            return False
 
     is_trailing = (period_type == "TQ")
     is_year_range = bool(year_range)
