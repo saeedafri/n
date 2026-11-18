@@ -6,6 +6,7 @@ Based on detailed wireframe analysis
 import logging
 import streamlit as st
 from datetime import date
+from html import escape as html_escape
 from typing import Optional, List
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ from core.auth_manager import require_auth
 
 hide_sidebar()
 
-from data.repository import CompanyOverviewRepository, CompanyRepository, IncomeStatementRepository, BalanceSheetRepository, KeyStatsRepository, RatiosRepository, ForexRepository, AnalystEstimatesRepository, ModelForecastsRepository
+from data.repository import CompanyOverviewRepository, CompanyRepository, IncomeStatementRepository, BalanceSheetRepository, KeyStatsRepository, RatiosRepository, ForexRepository, AnalystEstimatesRepository, ModelForecastsRepository, fx_rate, ALTMAN_EXCLUDED_INDUSTRIES
 from data.models import IncomeStatementData, Company, BalanceSheetData
 from utils.local_storage import (
     get_marketdata_company, set_marketdata_company,
@@ -134,6 +135,68 @@ def _ratios_excel_rows(data):
             "is_estimated": [False] * len(_it.get("values", [])),
         })
     return rows
+
+
+ALTMAN_TOOLTIP = (
+    "Original Altman Z-Score (1968 model), not the non-manufacturing Z'' variant.\n"
+    "Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E\n"
+    "A = (Current Assets - Current Liabilities) / Total Assets\n"
+    "B = Retained Earnings / Total Assets\n"
+    "C = EBIT / Total Assets\n"
+    "D = Market Value of Equity / Total Liabilities\n"
+    "E = Total Revenue / Total Assets\n"
+    "EBIT and Total Revenue as in Key Stats; market value of equity = close on the "
+    "fiscal year end x shares outstanding, in the reporting currency.\n"
+    "Below 1.8: higher financial risk. 1.8 to 3.0: moderate. 3.0 and above: relatively strong."
+)
+ALTMAN_ZONES = {
+    "red": ("#FDE2E2", "#991B1B", "Higher financial risk (below 1.8)"),
+    "yellow": ("#FEF3C7", "#92400E", "Moderate / uncertain financial risk (1.8 to 3.0)"),
+    "green": ("#DCFCE7", "#166534", "Relatively strong financial position (3.0 and above)"),
+}
+
+
+def add_altman_rows(data, ticker, start_date, end_date, period_type):
+    """Append the Altman Z-Score section to a get_ratios_data payload (annual only)."""
+    if period_type != "annual":
+        data["notes"].append("Altman Z-Score is shown in the Annual view only.")
+        return
+    if CompanyRepository.get_company_sector(ticker) in ALTMAN_EXCLUDED_INDUSTRIES:
+        data["notes"].append("Altman Z-Score is not shown for banks, insurers, payment companies and REITs; the model does not apply to them.")
+        return
+    scores = RatiosRepository.get_altman_z_scores(ticker, start_date, end_date)
+    altman = [scores.get(p.date, {"missing": "no annual figures for this year end"}) for p in data["periods"]]
+    data["line_items"] += [
+        {"label": "Financial Health", "values": [None] * len(altman), "is_section_header": True, "is_bold": True, "indent": 0},
+        {"label": "Altman Z-Score", "metric_key": "altman_z", "values": [s.get("z") for s in altman],
+         "altman": altman, "is_bold": False, "indent": 1},
+    ]
+    data["notes"].append(
+        "Altman Z-Score uses the original model (1.2A + 1.4B + 3.3C + 0.6D + 1.0E) with market value of equity "
+        "at the fiscal year-end close; below 1.8 red = higher financial risk, 1.8 to 3.0 yellow = moderate, "
+        "3.0 and above green = relatively strong. Hover a score for its inputs."
+    )
+
+
+def altman_cell(score):
+    """One Ratios-table cell: the colored score, its five ratios on hover."""
+    if "missing" in score:
+        tip = html_escape("Not available: " + score["missing"])
+        return f'<td class="data-cell" title="{tip}">-</td>'
+    background, color, meaning = ALTMAN_ZONES[score["zone"]]
+    tip = "\n".join([
+        meaning,
+        f"A  Working capital / Total assets: {score['a']:.3f} x 1.2",
+        f"B  Retained earnings / Total assets: {score['b']:.3f} x 1.4",
+        f"C  EBIT / Total assets: {score['c']:.3f} x 3.3",
+        f"D  Market value of equity / Total liabilities: {score['d']:.3f} x 0.6",
+        f"E  Total revenue / Total assets: {score['e']:.3f} x 1.0",
+        f"Market value of equity: {score['currency']} {score['market_value_equity'] / 1e6:,.0f}M "
+        f"(close {score['price_date']:%d-%b-%Y}, shares as of {score['shares_date']:%d-%b-%Y})",
+    ])
+    tip = html_escape(tip).replace("\n", "&#10;")
+    return (f'<td class="data-cell" title="{tip}"><span style="background:{background};color:{color};'
+            f'padding:2px 8px;border-radius:10px;font-weight:600;">{score["z"]:.2f}</span></td>')
 
 
 def format_value(value: Optional[float], conversion_rate: float = 1.0, units_scale: float = 1.0) -> str:
@@ -1315,21 +1378,6 @@ def render_ratings_data(ticker: str, start_date: date, end_date: date, sort_asce
     except Exception as e:
         log_structured_error(e, page="market_data", component="render_ratings_data", operation="render_ratings_table")
         st.error("Something went wrong loading ratings data. Please try again.")
-
-
-def fx_rate(from_currency: Optional[str], to_currency: Optional[str], on: Optional[date] = None) -> Optional[float]:
-    """Rate on `on` (latest when None), the inverse pair when only that is stored,
-    else None. ForexRepository answers 1.0 for a pair it does not have, which
-    would silently add CAD to USD — that is treated as missing here."""
-    if not from_currency or not to_currency or from_currency == to_currency:
-        return 1.0
-    rate = ForexRepository.get_conversion_rate(from_currency, to_currency, on)
-    if rate and rate != 1.0:
-        return rate
-    rate = ForexRepository.get_conversion_rate(to_currency, from_currency, on)
-    if rate and rate != 1.0:
-        return 1.0 / rate
-    return None
 
 
 CAP_MODES = ["Latest", "Calendar Year End", "Fiscal Year End"]
@@ -4172,6 +4220,7 @@ def render_page():
             def _build_ratios_xl():
                 from utils.excel_export import export_financial_excel as _xl_fn
                 _d = RatiosRepository.get_ratios_data(selected_ticker, start_date, end_date, _period_type_db)
+                add_altman_rows(_d, selected_ticker, start_date, end_date, _period_type_db)
                 if not sort_ascending:
                     _d["periods"] = list(reversed(_d["periods"]))
                     for _it in _d["line_items"]:
@@ -4199,6 +4248,8 @@ def render_page():
                 # Cold / first-render path
                 _t0 = _time.perf_counter()
                 data = RatiosRepository.get_ratios_data(selected_ticker, start_date, end_date, _period_type_db)
+                if data["periods"]:
+                    add_altman_rows(data, selected_ticker, start_date, end_date, _period_type_db)
                 _timings['ratios_fetch'] = (_time.perf_counter() - _t0) * 1000
 
                 _t0_compute = _time.perf_counter()
@@ -4206,6 +4257,8 @@ def render_page():
                     data["periods"] = list(reversed(data["periods"]))
                     for item in data["line_items"]:
                         item["values"] = list(reversed(item["values"]))
+                        if "altman" in item:
+                            item["altman"] = list(reversed(item["altman"]))
                 _timings['ratios_compute'] = (_time.perf_counter() - _t0_compute) * 1000
 
                 _t0_render = _time.perf_counter()
@@ -4235,6 +4288,12 @@ def render_page():
                         row_class_str = "row-bold" if is_bold else ""
 
                         _parts.append(f'<tr class="{row_class_str}">')
+                        if "altman" in item:
+                            _tip = html_escape(ALTMAN_TOOLTIP).replace("\n", "&#10;")
+                            _parts.append(f'<td class="indent-{indent}" title="{_tip}">{label} <span style="cursor:help;color:#6B7280;">&#9432;</span></td>')
+                            _parts.extend(altman_cell(score) for score in item["altman"])
+                            _parts.append('</tr>')
+                            continue
                         _parts.append(f'<td class="indent-{indent}">{label}</td>')
 
                         for val in values:

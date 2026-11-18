@@ -744,6 +744,7 @@ class IncomeStatementRepository:
                     MAX(CASE WHEN line_item = 'Total Other Income Expense Net' THEN value END) as other_non_operating_income,
                     MAX(CASE WHEN line_item = 'Net Interest Income' THEN value END) as net_interest_income,
                     MAX(CASE WHEN line_item = 'EBITDA' THEN value END) as ebitda,
+                    MAX(CASE WHEN line_item = 'EBIT' THEN value END) as ebit,
                     MAX(CASE WHEN line_item = 'Basic EPS' THEN value END) as basic_eps,
                     MAX(CASE WHEN line_item = 'Diluted EPS' THEN value END) as diluted_eps,
                     '{yf_currency}' as reported_currency
@@ -6146,6 +6147,88 @@ class RatiosRepository:
                     return values[period_index]
         return None
 
+    @staticmethod
+    @st.cache_data(ttl=21600, show_spinner=False)
+    @_log_query_time
+    def get_altman_z_scores(ticker: str, start_date: date, end_date: date) -> Dict[date, Dict[str, Any]]:
+        """Annual Altman Z-Score per fiscal year end in the range; {} for financials.
+
+        Kept out of get_ratios_data on purpose: screening warms that for every
+        company at boot, and the market caps here cost two queries per year.
+
+        Inputs are the numbers shown elsewhere in Market Data: Total Revenue and
+        EBIT from Key Stats, the balance sheet of the same year end, and market
+        value of equity = Key Stats "Fiscal Year End" capitalization (last close
+        on or before the year end x shares reported by then), converted to the
+        reporting currency on the price day. Each value is either the score
+        ({"z", "zone", "a".."e", ...}) or {"missing": reason}.
+        """
+        if CompanyRepository.get_company_sector(ticker) in ALTMAN_EXCLUDED_INDUSTRIES:
+            return {}
+
+        def number(value):
+            try:
+                return None if value in (None, "None", "") else float(value)
+            except (TypeError, ValueError):
+                return None
+
+        balance_by_date = {
+            row["fiscal_date_ending"]: BalanceSheetRepository._parse_raw_json(row.get("raw_json"))
+            for row in BalanceSheetRepository._fetch_all_annual_rows(ticker, "annual")
+        }
+        income_rows = IncomeStatementRepository._fetch_all_annual_rows(ticker, "annual")
+        # AV writes the string "None" for some years' currency (AMAT, DHI); use the company's.
+        known = [r["reported_currency"] for r in income_rows if r.get("reported_currency") not in (None, "None", "")]
+        share_counts = StockQuoteRepository.get_share_counts(ticker)
+        scores: Dict[date, Dict[str, Any]] = {}
+        for row in income_rows:
+            year_end = row.get("fiscal_date_ending")
+            if not year_end or not start_date <= year_end <= end_date:
+                continue
+            balance = balance_by_date.get(year_end)
+            if not balance:
+                scores[year_end] = {"missing": "no balance sheet for this year end"}
+                continue
+            currency = row.get("reported_currency")
+            if currency in (None, "None", ""):
+                currency = known[-1] if known else "USD"
+            cap = StockQuoteRepository.get_latest_capitalization(ticker, year_end)
+            if not cap:
+                scores[year_end] = {"missing": "no closing price on file on or before this year end"}
+                continue
+            # A stale price or a share count from another year would misstate equity
+            # (Yahoo share history starts in 2024, so older Yahoo years stop here).
+            if (year_end - cap["price_date"]).days > 31:
+                scores[year_end] = {"missing": f"last close on file is {cap['price_date']:%d-%b-%Y}, over a month before the year end"}
+                continue
+            # The report nearest the close, on either side: AV skips many mid-2025
+            # share reports, which left only a count nine months stale before it.
+            shares_date, shares = min(share_counts, key=lambda r: abs((r[0] - cap["price_date"]).days), default=(None, None))
+            if shares_date is None or abs((shares_date - cap["price_date"]).days) > 183:
+                scores[year_end] = {"missing": "no share count reported within six months of the year end"}
+                continue
+            if not share_count_is_stable(share_counts, cap["price_date"]):
+                scores[year_end] = {"missing": "the share count on file jumps around this year end (stock split or data error)"}
+                continue
+            rate = fx_rate(cap["currency"], currency, cap["price_date"])
+            if rate is None:
+                scores[year_end] = {"missing": f"no {cap['currency']}/{currency} exchange rate on file"}
+                continue
+            market_value_equity = cap["price"] * shares * rate
+            score = altman_z_score(
+                number(balance.get("totalCurrentAssets")), number(balance.get("totalCurrentLiabilities")),
+                number(balance.get("totalAssets")), number(balance.get("retainedEarnings")),
+                number(row.get("ebit")), market_value_equity,
+                number(balance.get("totalLiabilities")), number(row.get("total_revenue")),
+            )
+            if score is None:
+                scores[year_end] = {"missing": "a required input is missing or invalid in the reported financials"}
+                continue
+            score.update(zone=altman_zone(score["z"]), market_value_equity=market_value_equity,
+                         currency=currency, price_date=cap["price_date"], shares_date=shares_date)
+            scores[year_end] = score
+        return scores
+
 class ForexRepository:
     """Repository for currency conversion rates from coreiq_av_forex_daily table."""
 
@@ -6322,6 +6405,80 @@ def quote_currency(code: Optional[str]) -> Tuple[Optional[str], float]:
     return _MINOR_UNIT_CURRENCIES.get(code or "", (code, 1.0))
 
 
+def fx_rate(from_currency: Optional[str], to_currency: Optional[str], on: Optional[date] = None) -> Optional[float]:
+    """Rate on `on` (latest when None), the inverse pair when only that is stored,
+    a cross through USD when neither is (HKD->CNY), else None. ForexRepository
+    answers 1.0 for a pair it does not have, which would silently add CAD to
+    USD — that is treated as missing here."""
+    if not from_currency or not to_currency or from_currency == to_currency:
+        return 1.0
+    rate = ForexRepository.get_conversion_rate(from_currency, to_currency, on)
+    if rate and rate != 1.0:
+        return rate
+    rate = ForexRepository.get_conversion_rate(to_currency, from_currency, on)
+    if rate and rate != 1.0:
+        return 1.0 / rate
+    if "USD" not in (from_currency, to_currency):
+        to_usd, from_usd = fx_rate(from_currency, "USD", on), fx_rate("USD", to_currency, on)
+        if to_usd and from_usd:
+            return to_usd * from_usd
+    return None
+
+
+# Altman's model is for operating companies; bank, insurer and REIT balance
+# sheets (deposits, float, property) make its ratios meaningless.
+ALTMAN_EXCLUDED_INDUSTRIES = {"Financial Services", "Financial Technology", "Retail REITs"}
+ALTMAN_WEIGHTS = {"a": 1.2, "b": 1.4, "c": 3.3, "d": 0.6, "e": 1.0}
+
+
+def altman_z_score(current_assets, current_liabilities, total_assets, retained_earnings,
+                   ebit, market_value_equity, total_liabilities, revenue) -> Optional[Dict[str, float]]:
+    """Original Altman Z-Score (1968): Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E.
+
+    A = working capital / total assets, B = retained earnings / total assets,
+    C = EBIT / total assets, D = market value of equity / total liabilities,
+    E = revenue / total assets. All inputs in the same currency and period.
+    None when an input is missing, total assets or liabilities are not positive,
+    or EBIT exceeds revenue (an Alpha Vantage scale error, e.g. SEZL FY2024).
+    """
+    inputs = (current_assets, current_liabilities, total_assets, retained_earnings,
+              ebit, market_value_equity, total_liabilities, revenue)
+    if any(v is None for v in inputs) or total_assets <= 0 or total_liabilities <= 0 or ebit > revenue:
+        return None
+    parts = {
+        "a": (current_assets - current_liabilities) / total_assets,
+        "b": retained_earnings / total_assets,
+        "c": ebit / total_assets,
+        "d": market_value_equity / total_liabilities,
+        "e": revenue / total_assets,
+    }
+    parts["z"] = sum(ALTMAN_WEIGHTS[k] * parts[k] for k in ALTMAN_WEIGHTS)
+    return parts
+
+
+def share_count_is_stable(history: List[Tuple[date, float]], around: date) -> bool:
+    """False when the share reports either side of `around` (the last on or before
+    it and the first after it; the two newest when none comes after) differ by 45%
+    or more: a stock split between them (3-for-2 is the smallest common ratio) or a
+    bad row, e.g. AV has WMT 2024-01-31 at 24.2B shares between 2.7B and 8.1B.
+    Either way close x shares could mix two share bases. Mergers and share sales
+    below +45% (ADI/Maxim 1.43x, AMD/Xilinx 1.34x) pass."""
+    ordered = sorted(history)
+    before = [r for r in ordered if r[0] <= around]
+    after = [r for r in ordered if r[0] > around]
+    pair = before[-1:] + after[:1] if before and after else (before[-2:] or after[:2])
+    if len(pair) < 2:
+        return True
+    low, high = sorted(count for _, count in pair)
+    return high < 1.45 * low
+
+
+def altman_zone(z: float) -> str:
+    """red < 1.8 <= yellow < 3.0 <= green, judged on the 2-decimal value shown."""
+    z = round(z, 2)
+    return "red" if z < 1.8 else "yellow" if z < 3.0 else "green"
+
+
 def balance_capitalization(raw: Dict[str, Any]) -> Dict[str, Optional[float]]:
     """Cash, debt and equity from one balance-sheet raw_json, in full units.
 
@@ -6402,27 +6559,14 @@ class StockQuoteRepository:
             return None
         price_date = price[0]["day_date"]
 
-        if is_sec:
-            shares_rows = db_manager.execute_query_readonly("""
-                SELECT report_date AS d, COALESCE(shares_outstanding_basic, shares_outstanding_diluted) AS n
-                FROM coreiq_av_shares_outstanding
-                WHERE ticker = :t AND COALESCE(shares_outstanding_basic, shares_outstanding_diluted) > 0
-                ORDER BY report_date DESC
-            """, {"t": ticker})
-        else:
-            shares_rows = db_manager.execute_query_readonly("""
-                SELECT asof_date AS d, shares_outstanding AS n
-                FROM coreiq_yf_shares_outstanding
-                WHERE ticker = :t AND shares_outstanding > 0
-                ORDER BY asof_date DESC
-            """, {"t": ticker.split(".")[0]})
-        earlier = [r for r in shares_rows if r["d"] <= price_date]
+        shares_rows = StockQuoteRepository.get_share_counts(ticker)
+        earlier = [r for r in shares_rows if r[0] <= price_date]
         shares_row = earlier[0] if earlier else (shares_rows[-1] if shares_rows else None)
 
         overview = CompanyOverviewRepository.get_company_overview(ticker)
         currency, divisor = quote_currency(getattr(overview, "currency", None))
         if shares_row:
-            shares, shares_date = float(shares_row["n"]), shares_row["d"]
+            shares_date, shares = shares_row
         else:
             shares, shares_date = getattr(overview, "shares_outstanding", None), None
             shares = float(shares) if shares else None
@@ -6449,6 +6593,28 @@ class StockQuoteRepository:
             "balance_date": balance_date,
             "reported_currency": reported_currency,
         }
+
+    @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def get_share_counts(ticker: str) -> List[Tuple[date, float]]:
+        """Reported shares outstanding as (report date, count), newest first."""
+        from data.source_router import get_company_source
+
+        if (get_company_source(ticker) or "SEC") != "YFinance":
+            rows = db_manager.execute_query_readonly("""
+                SELECT report_date AS d, COALESCE(shares_outstanding_basic, shares_outstanding_diluted) AS n
+                FROM coreiq_av_shares_outstanding
+                WHERE ticker = :t AND COALESCE(shares_outstanding_basic, shares_outstanding_diluted) > 0
+                ORDER BY report_date DESC
+            """, {"t": ticker})
+        else:
+            rows = db_manager.execute_query_readonly("""
+                SELECT asof_date AS d, shares_outstanding AS n
+                FROM coreiq_yf_shares_outstanding
+                WHERE ticker = :t AND shares_outstanding > 0
+                ORDER BY asof_date DESC
+            """, {"t": ticker.split(".")[0]})
+        return [(r["d"], float(r["n"])) for r in rows]
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
