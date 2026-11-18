@@ -3856,7 +3856,7 @@ def _render_page_header():
 
         st.markdown(f"""
         <div style="margin: 24px 0 8px 0;">
-            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT MARKET INTELLIGENCE PLATFORM</div>
+            <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 24px; color: #d62e2f; letter-spacing: 1px;">CORESIGHT BUSINESS INTELLIGENCE PLATFORM</div>
             <div style="font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 28px; color: #323232;">{page_title}</div>
         </div>
         """, unsafe_allow_html=True)

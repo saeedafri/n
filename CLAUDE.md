@@ -1,6 +1,8 @@
-# CapIQReplacement — Coresight Market Intelligence Platform (MIP)
+# CapIQReplacement — Coresight Business Intelligence Platform (BIP)
 
-**App name:** Coresight Market Intelligence Platform, "MIP" (internal repo name: CapIQReplacement)
+**App name:** Coresight Business Intelligence Platform, "BIP" (internal repo name: CapIQReplacement)
+Renamed from "Market Intelligence Platform (MIP)" on 2026-11-18. The `MIP-test` / `MIP-STG` / `MIP-prod`
+folder names keep the old spelling — they are local paths, not branding.
 Renamed from "Market Data Portal" on 2026-10-06. Env var names (`MDP_CACHE_DIR`,
 `MDP_CATEGORICAL`), the `market_data_user_sessions` table, the `/market_data` URL and the
 `marketdata-stg.coresight.com` host keep their old spelling on purpose — they are

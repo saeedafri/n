@@ -998,7 +998,7 @@ def render_company_header(company_name: str, ticker: str, exchange: str = "NYSE"
 
     This is a centralized component that can be used on any page that needs
     the company header with:
-    - "CORESIGHT MARKET INTELLIGENCE PLATFORM" red title
+    - "CORESIGHT BUSINESS INTELLIGENCE PLATFORM" red title
     - Company name with dropdown
     - Company Documents button
 
@@ -1148,7 +1148,7 @@ def render_company_header(company_name: str, ticker: str, exchange: str = "NYSE"
     {header_css}
     <div class="company-header-section">
         <div class="company-header-left">
-            <div class="section-title">CORESIGHT MARKET INTELLIGENCE PLATFORM</div>
+            <div class="section-title">CORESIGHT BUSINESS INTELLIGENCE PLATFORM</div>
             <div class="company-name-dropdown">
                 <span>{display_company_name} ({exchange}:{ticker})</span>
                 <span class="dropdown-arrow">
@@ -1327,7 +1327,7 @@ def render_logo():
             font-size: {TYPOGRAPHY['text_sm']};
             color: {COLORS['gray_500']};
             margin-top: 4px;
-        ">Market Intelligence Platform</div>
+        ">Business Intelligence Platform</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1412,7 +1412,7 @@ def render_footer():
         <div style="
             font-size: {TYPOGRAPHY['text_xs']};
             color: {COLORS['gray_400']};
-        ">© 2024 Market Intelligence</div>
+        ">© 2024 Business Intelligence</div>
     </div>
     """, unsafe_allow_html=True)
 

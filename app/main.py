@@ -1,6 +1,6 @@
 # app/main.py
 """
-Coresight Market Intelligence Platform (MIP) - Main Entry Point (STG VERSION)
+Coresight Business Intelligence Platform (BIP) - Main Entry Point (STG VERSION)
 Uses ONLY server_logger - no standard library logging
 """
 
@@ -147,7 +147,7 @@ _maybe_clear_auth_cookies_once()
 
 try:
     st.set_page_config(
-        page_title="Market Intelligence Platform",
+        page_title="Business Intelligence Platform",
         page_icon="https://coresight.com/wp-content/uploads/2019/03/cropped-CoreSightTransparent_Logo_favico-32x32.png",
         layout="wide",
         initial_sidebar_state="collapsed",
