@@ -2768,6 +2768,51 @@ def read_segment_member_options_cache(segment_type: str) -> List[Tuple[str, int]
     return out
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def read_business_member_options_for_year(year_sel: str) -> List[Tuple[str, int]]:
+    """Business members that have revenue in `year_sel`, with company counts.
+
+    "Latest" means each company's latest year — the same rule the screen applies
+    — so a segment a company has since renamed (Central Garden's "Pet", now "Pet
+    Products") is not offered under Latest only to come back empty. A past year
+    offers exactly what was filed that year. Falls back to every member ever
+    filed when the read fails.
+    """
+    if str(year_sel).isdigit():
+        sql = f"""
+            SELECT member_label, COUNT(DISTINCT ticker) AS company_count
+            FROM {SEGMENT_VALUES_CACHE_TABLE}
+            WHERE segment_type = 'business' AND metric_key = 'Revenues'
+              AND report_fiscal_year = :year
+            GROUP BY member_label
+        """
+        params = {"year": int(year_sel)}
+    else:
+        sql = f"""
+            SELECT c.member_label, COUNT(DISTINCT c.ticker) AS company_count
+            FROM {SEGMENT_VALUES_CACHE_TABLE} c
+            INNER JOIN (
+                SELECT ticker, MAX(report_fiscal_year) AS report_fiscal_year
+                FROM {SEGMENT_VALUES_CACHE_TABLE}
+                WHERE segment_type = 'business' AND metric_key = 'Revenues'
+                GROUP BY ticker
+            ) latest ON latest.ticker = c.ticker
+                AND latest.report_fiscal_year = c.report_fiscal_year
+            WHERE c.segment_type = 'business' AND c.metric_key = 'Revenues'
+            GROUP BY c.member_label
+        """
+        params = {}
+    try:
+        rows = db_manager.execute_query_readonly(sql, params) or []
+    except Exception as exc:
+        log_error(f"[SCREENING] business members for {year_sel} failed: {exc}")
+        rows = []
+    if not rows:
+        return read_segment_member_options_cache("business")
+    return _business_workbook_options(
+        [(r["member_label"], int(r["company_count"] or 0)) for r in rows if r.get("member_label")])
+
+
 def _business_workbook_options(raw_opts: List[Tuple[str, int]]) -> List[Tuple[str, int]]:
     """Business options per the workbook: removed and moved labels gone, spellings
     merged into their member. A rebuilt cache already holds member names, so this
@@ -3783,6 +3828,18 @@ def apply_segment_statement_criterion(
             except Exception as exc:
                 log_error(f"[SCREENING] segment fallback failed ticker={t}: {exc}")
 
+    # The filters above the member list (Region … City, or Sales Channel …
+    # Product) are kept on the criterion and applied here, to whatever the data
+    # holds today: a segment filed tomorrow is screened without anyone re-saving
+    # the criterion. They used to only narrow the picker, so a Country pick with
+    # no member picked screened every segment.
+    segment_filters = criterion.get("segment_filters") or {}
+    if segment_filters:
+        allowed = set(segment_filter_members(
+            sorted({m for mv in ticker_values.values() for m in mv}), segment_filters, segment_type))
+        ticker_values = {t: kept for t, mv in ticker_values.items()
+                         if (kept := {m: v for m, v in mv.items() if m in allowed})}
+
     t_filter = time.perf_counter()
     passing_display: Dict[str, str] = {}
     companies_with_data = 0
@@ -3900,6 +3957,17 @@ def _apply_segment_year_range_criterion(
         "with_data":    with_data,
         "elapsed_ms":   ms_total,
     }
+
+
+def segment_filter_members(members: List[str], filters: Dict, segment_type: str) -> List[str]:
+    """The members a criterion's filters keep — the same rule the picker uses:
+    geography downward (the picked place and everything below it, nothing above),
+    business by the workbook's tags."""
+    if segment_type == "geographical":
+        from data.geo_hierarchy import filter_members as geo_filter_members
+        return geo_filter_members(members, filters, include_broader=False)
+    from data.business_segment_map import filter_members as business_filter_members
+    return business_filter_members(members, filters)
 
 
 def apply_business_segments_statement_criterion(

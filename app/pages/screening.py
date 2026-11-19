@@ -1042,6 +1042,7 @@ def _cancel_criterion_form():
         criteria = st.session_state.scr_active_criteria
         criteria.insert(min(idx, len(criteria)), prefill)
         _trigger_recompute()
+    _set_segment_filters(None)
     st.session_state.scr_active_form = None
     st.session_state.scr_prefill = None
     st.session_state.scr_prefill_idx = None
@@ -1067,6 +1068,8 @@ def _start_edit_criterion(idx: int):
                     "scr_store_locations", "scr_add_year_mode", "scr_add_year_sel",
                     "scr_add_year_from", "scr_add_year_to"):
             st.session_state.pop(key, None)
+        # The segment filters (Region … City, Sales Channel … Product) come back as saved.
+        _set_segment_filters(criterion)
     except Exception as e:
         log_structured_error(e, page="screening", component="_start_edit_criterion", operation="edit_criterion")
         st.error("Something went wrong. Please try again.")
@@ -4151,6 +4154,7 @@ def _render_geo_hierarchy_filters(
     member_names: List[str],
     member_counts: dict,
     noun: str = "segments",
+    downward: bool = False,
 ) -> List[str]:
     """Region > Sub-region > Country > State > City cascade above the member list.
 
@@ -4170,12 +4174,11 @@ def _render_geo_hierarchy_filters(
         level_options,
     )
 
-    # Broader segments are always included: a filer that reports only "Americas"
-    # still shows when you filter to United States, because the filing gives no
-    # country and dropping it would silently lose a company that does operate
-    # there. This was a checkbox; the business team wants the safe behaviour
-    # always on and the choice off the screen.
-    include_broader = True
+    # Segments filter downward: a pick is that place and everything below it
+    # (United States with its states and US regions), never EMEA or North America
+    # above it. Store locations also keep a region-only filer (Americas) when a
+    # country inside it is picked, so no store is lost.
+    include_broader = not downward
 
     selections: dict = {}
     columns = st.columns(len(LEVELS))
@@ -4211,14 +4214,16 @@ def _render_geo_hierarchy_filters(
 
 
 def _render_business_tag_filters(member_names: List[str]) -> List[str]:
-    """Sales Channel / Revenue Type / Product Category / Product above the member list.
+    """Sales Channel / Revenue Type / Segment / Product above the member list.
 
     The business team's workbook tags every Segment Member; picking a tag keeps
     the members carrying it, filters combine with AND, and Any restricts nothing
     — the same contract as the geographic cascade. The workbook's filters are
     independent, so each one offers the tags the members reach under all the
-    others' picks (Product lists Pet Food & Treats once Product Category is Pet,
+    others' picks (Product lists Pet Food & Treats once Segment is Pet,
     whichever was set first), and a pick is never dropped behind the user's back.
+    The picks are saved on the criterion as ``segment_filters`` and applied when
+    the screen runs, so Edit restores them and new filings are filtered too.
     In memory off business_segment_map.json; no DB call here.
     """
     from data.business_segment_map import FILTERS, filter_members, filter_options
@@ -4256,7 +4261,14 @@ def _render_segment_members_step(
 
     # Members are pre-loaded from the global cache (presets + nightly rebuild),
     # so the dropdown is always populated instantly with no button click.
-    member_opts: List[tuple] = read_segment_member_options_cache(segment_type) or []
+    # Business members follow the year picked in Step 4, so nothing is offered
+    # that the screen would then find no figure for; a year range spans years
+    # and keeps them all.
+    if segment_type != "geographical" and st.session_state.get("scr_fin_year_mode") != "Year range":
+        from data.screening_service import read_business_member_options_for_year
+        member_opts: List[tuple] = read_business_member_options_for_year(str(year or "Latest")) or []
+    else:
+        member_opts = read_segment_member_options_cache(segment_type) or []
 
     member_names = [m for m, _cnt in member_opts]
     member_counts = {m: cnt for m, cnt in member_opts}
@@ -4264,7 +4276,7 @@ def _render_segment_members_step(
     # Both kinds have filters that narrow the member list: a place hierarchy for
     # geography, the business workbook's four tags for business segments.
     if segment_type == "geographical":
-        member_names = _render_geo_hierarchy_filters(member_names, member_counts)
+        member_names = _render_geo_hierarchy_filters(member_names, member_counts, downward=True)
     else:
         member_names = _render_business_tag_filters(member_names)
 
@@ -4291,36 +4303,70 @@ def _render_segment_members_step(
             business_verdict(m)[1] or m for m in default_seg_members
         ))
 
+    is_business = segment_type != "geographical"
+    filters_active = _segment_filters(segment_type) != {}
     # A saved criterion must survive whatever the cascade is currently showing,
     # so re-admit its members to the options rather than dropping the selection.
-    if is_edit and default_seg_members:
+    # Not under a filter: there the filter decides, and a re-admitted pick
+    # outside it is how an edited filter used to change nothing.
+    if is_edit and default_seg_members and not filters_active:
         member_names = member_names + [
             m for m in default_seg_members
             if m in member_counts and m not in member_names
         ]
+    state = st.session_state.get("scr_fin_segment_members")
+    if filters_active and state is not None:
+        kept = [m for m in state if m in member_names]
+        if kept != state:
+            st.session_state["scr_fin_segment_members"] = kept
 
     valid_defaults = [m for m in default_seg_members if m in member_names]
-    is_business = segment_type != "geographical"
     _ms_kwargs = dict(
         label="Segment members",
         options=member_names,
         format_func=_member_label,
         key="scr_fin_segment_members",
-        placeholder=("All segments in the filters above — leave empty for any…" if is_business
-                     else "All segments — leave empty for any member…"),
-        help="Leave empty = All Segments.",
+        placeholder="All segments in the filters above — leave empty for any…",
+        help="Leave empty = every segment the filters above keep.",
     )
-    if is_edit and valid_defaults:
+    if is_edit and valid_defaults and "scr_fin_segment_members" not in st.session_state:
         _ms_kwargs["default"] = valid_defaults
-    picked = st.multiselect(**_ms_kwargs)
-    if picked or not is_business:
-        return picked
-    # A business filter with no member picked screens on every member it keeps;
-    # returning nothing would mean "all segments" and quietly drop the filter.
+    return st.multiselect(**_ms_kwargs)
+
+
+def _segment_filter_keys(segment_type: str) -> dict:
+    """Filter name → widget key for the filters above the Segment members list:
+    Region … City for geography, Sales Channel … Product for business."""
+    if segment_type == "geographical":
+        from data.geo_hierarchy import LEVELS
+        return {level: f"scr_geo_level_{level}" for level in LEVELS}
     from data.business_segment_map import FILTERS
-    if any(st.session_state.get(f"scr_biz_filter_{name}") for name in FILTERS):
-        return member_names
-    return []
+    return {name: f"scr_biz_filter_{name}" for name in FILTERS}
+
+
+def _segment_filters(segment_type: str) -> dict:
+    """The filter picks now on screen, by filter name."""
+    return {name: list(picked) for name, key in _segment_filter_keys(segment_type).items()
+            if (picked := st.session_state.get(key))}
+
+
+def _segment_filter_title(name: str) -> str:
+    """How a filter is named on screen ("country" → "Country")."""
+    from data.geo_hierarchy import LEVEL_TITLES
+    return LEVEL_TITLES.get(name, name)
+
+
+def _set_segment_filters(criterion: Optional[dict]) -> None:
+    """Load a criterion's filter picks into the widgets (Edit), or clear them all."""
+    stype = (criterion or {}).get("segment_type")
+    saved = (criterion or {}).get("segment_filters") or {}
+    for segment_type in ("business", "geographical"):
+        for name, key in _segment_filter_keys(segment_type).items():
+            picked = saved.get(name) if segment_type == stype else None
+            if picked:
+                st.session_state[key] = list(picked)
+            else:
+                st.session_state.pop(key, None)
 
 
 def _submit_financial_criterion(
@@ -4341,6 +4387,7 @@ def _submit_financial_criterion(
     is_segment_stmt: bool = False,
     segment_type: Optional[str] = None,
     selected_segments: Optional[List[str]] = None,
+    segment_filters: Optional[dict] = None,
     add_credit_ratings: bool = False,
     add_store_counts: bool = False,
 ) -> bool:
@@ -4348,12 +4395,11 @@ def _submit_financial_criterion(
     if metric_info is None:
         st.error("Metric not found. Please re-select.")
         return False
-    if is_segment_stmt and segment_type != "geographical" and not selected_segments:
-        # No member list here means "all segments"; with a business filter set
-        # that matched nothing it would quietly screen everything instead.
-        from data.business_segment_map import FILTERS
-        if any(st.session_state.get(f"scr_biz_filter_{name}") for name in FILTERS):
-            st.error("No business segments match the filters above. Widen or clear a filter.")
+    if segment_filters and not selected_segments:
+        from data.screening_service import segment_filter_members
+        members = [m for m, _cnt in read_segment_member_options_cache(segment_type) or []]
+        if not segment_filter_members(members, segment_filters, segment_type):
+            st.error("No segments match the filters above. Widen or clear a filter.")
             return False
 
     is_trailing = (period_type == "TQ")
@@ -4410,6 +4456,13 @@ def _submit_financial_criterion(
         summary = build_financial_summary(
             stmt, metric_label, operator, val1, val2, timeframe, unit=unit,
         )
+    if segment_filters:
+        # The filters are what the criterion screens on, so the card says so, and
+        # two Business Segments criteria with different filters get their own column.
+        filter_text = "; ".join(f"{_segment_filter_title(name)}: {', '.join(picked)}"
+                                for name, picked in segment_filters.items())
+        summary = f"{summary} — {filter_text}"
+        display_col = f"{display_col} | {filter_text}"
 
     criterion = {
         "type":         "financial",
@@ -4436,6 +4489,9 @@ def _submit_financial_criterion(
     if is_segment_stmt:
         criterion["segment_type"] = segment_type or "business"
         criterion["selected_segments"] = list(selected_segments or [])
+        if segment_filters:
+            criterion["segment_filters"] = {name: list(picked) for name, picked in segment_filters.items()}
+    _set_segment_filters(None)
 
     parent_idx = len(st.session_state.scr_active_criteria)
     st.session_state.scr_active_criteria.append(criterion)
@@ -4647,6 +4703,10 @@ def _render_financial_form():
             # Trailing-quarters (TQ) is offered only for statements with
             # quarterly SEC/YF tables (Income Statement, Balance Sheet, Cash Flow).
             period_options = list(PERIOD_TYPES)
+            if is_segment_stmt:
+                # Segment figures are annual (10-K). A quarter pick showed the
+                # year's figure under a quarter label.
+                period_options = ["FY"]
             if stmt in TRAILING_QUARTERS_STMTS:
                 period_options = period_options + ["TQ"]
             if default_period_type not in period_options:
@@ -4901,6 +4961,8 @@ def _render_financial_form():
                         is_segment_stmt=is_segment_stmt,
                         segment_type=segment_type,
                         selected_segments=_seg_selected,
+                        segment_filters=(_segment_filters(segment_type)
+                                         if is_segment_stmt and segment_type else None),
                         add_credit_ratings=add_credit_ratings,
                         add_store_counts=add_store_counts,
                     )
@@ -5766,12 +5828,18 @@ def _build_criterion_details_html(criterion: dict) -> str:
         )
         if stmt in SEGMENT_STATEMENT_TYPES:
             selected = criterion.get("selected_segments") or []
+            seg_filters = criterion.get("segment_filters") or {}
+            for name, picked in seg_filters.items():
+                parts.append(
+                    f"<span class='criterion-detail-kv'><strong>{html.escape(_segment_filter_title(name))}:</strong> "
+                    f"{html.escape(', '.join(picked))}</span>"
+                )
             if selected:
                 seg_str = ", ".join(selected)
             else:
-                seg_str = "All Segments"
+                seg_str = "All in the filters above" if seg_filters else "All Segments"
             parts.append(
-                f"<span class='criterion-detail-kv'><strong>Segment Members:</strong> {seg_str}</span>"
+                f"<span class='criterion-detail-kv'><strong>Segment Members:</strong> {html.escape(seg_str)}</span>"
             )
         else:
             geo = criterion.get("geo_countries", [])
@@ -7766,17 +7834,29 @@ def _build_segment_pivot(
     for sc in seg_criteria_group:
         dc         = sc.get("display_col", "")
         metric_lbl = _segment_metric_label(sc)
-        val_col    = f"{prefix} {metric_lbl} ($mm)"
-        if val_col not in val_cols:
-            val_cols.append(val_col)
+        sources    = _segment_raw_sources(sc)
+        # A year range is one row per company and segment with a column per year
+        # (FY 2022 | FY 2023 | …), side by side the way the range was picked.
+        # A single year is one value column, its year in Fiscal Year.
+        if sc.get("year_range"):
+            group_year = f"FY {sc['year_range'][0]}–{sc['year_range'][-1]}"
+        col_for = {fixed_year: (f"{prefix} {metric_lbl} FY {fixed_year} ($mm)" if fixed_year
+                                else f"{prefix} {metric_lbl} ($mm)")
+                   for _raw_col, fixed_year in sources}
+        for col in col_for.values():
+            if col not in val_cols:
+                val_cols.append(col)
 
-        for _, row in df.iterrows():
+        for raw_col, fixed_year, row in (
+                (raw_col, fixed_year, row)
+                for raw_col, fixed_year in sources
+                for _, row in df.iterrows()):
             exch = row.get("exchange", "")
             tk   = row.get("ticker", "")
             nm   = row.get("company_name", "")
             company = f"{nm} ({exch}:{tk})" if exch else f"{nm} ({tk})"
-            raw = _safe_raw(row.get(f"{dc}__raw"))
-            _yr_cell = row.get(f"{dc}__year")
+            raw = _safe_raw(row.get(raw_col))
+            _yr_cell = group_year if fixed_year else row.get(f"{dc}__year")
             # Guard against NaN/None → use the group year label
             if _yr_cell is None or (isinstance(_yr_cell, float) and pd.isna(_yr_cell)):
                 yr = group_year
@@ -7794,11 +7874,20 @@ def _build_segment_pivot(
                     if key not in acc:
                         acc[key] = {}
                         order.append(key)
-                    acc[key][val_col] = val
+                    acc[key][col_for[fixed_year]] = val
+
+    # Business rows say which workbook tags each segment carries, so a filtered
+    # screen shows why every segment is in it.
+    tag_names: tuple = ()
+    if seg_type == "business":
+        from data.business_segment_map import FILTERS as tag_names, member_tags
 
     rows = []
     for (company, yr, seg_name) in order:
         rec = {"Company Name": company, "Fiscal Year": yr, seg_col: seg_name}
+        if tag_names:
+            tags = member_tags(seg_name)
+            rec.update({name: tags.get(name, "") for name in tag_names})
         for vc in val_cols:
             v = acc[(company, yr, seg_name)].get(vc)
             rec[vc] = round(v, 2) if isinstance(v, (int, float)) and v is not None else None
@@ -7808,6 +7897,7 @@ def _build_segment_pivot(
     for (company, yr) in all_companies:
         if company not in companies_with_data:
             rec = {"Company Name": company, "Fiscal Year": group_year, seg_col: "N/A"}
+            rec.update({name: "" for name in tag_names})
             for vc in val_cols:
                 rec[vc] = None
             rows.append(rec)
@@ -7816,10 +7906,24 @@ def _build_segment_pivot(
         return None, val_cols
 
     pivot = pd.DataFrame(rows)
-    pivot = pivot.sort_values("Company Name").reset_index(drop=True)
+    # Stable, so each company keeps its segments in the order they were filed.
+    pivot = pivot.sort_values("Company Name", kind="stable").reset_index(drop=True)
     for vc in val_cols:
         pivot[vc] = pd.to_numeric(pivot[vc], errors="coerce")
     return pivot, val_cols
+
+
+def _segment_raw_sources(criterion: dict) -> List[tuple]:
+    """(raw column, fiscal year) for each column a segment criterion wrote.
+
+    A year range writes one column per year ("… [FY 2023]"), each with its own
+    raw breakdown; a single year writes its display column and records the year
+    per row, so its year is read later (None here).
+    """
+    if criterion.get("year_cols"):
+        return [(f"{col}__raw", (re.search(r"\[FY (\d{4})\]$", col) or [None, None])[1])
+                for col in criterion["year_cols"]]
+    return [(f"{criterion.get('display_col', '')}__raw", None)]
 
 
 def _group_seg_criteria_by_type(seg_criteria: List[dict]) -> "dict":
@@ -7919,15 +8023,17 @@ def _build_segment_excel(
             else:
                 ws = wb.create_sheet(sheet_title)
 
-            seg_col = f"{prefix} Segment"
-            headers = ["Company Name", "Fiscal Year", seg_col] + val_cols
+            # Company | Fiscal Year | Segment | (business tags) | metrics
+            headers = [c for c in pivot.columns if c not in val_cols] + val_cols
             ws.row_dimensions[1].height = 28
             for ci, h in enumerate(headers, 1):
                 cell = ws.cell(row=1, column=ci, value=h)
                 cell.font = hdr_font; cell.fill = hdr_fill
                 cell.alignment = hdr_align; cell.border = thin_border
 
-            # Data rows + merge company / fiscal-year cells
+            # Data rows + merge company / fiscal-year cells (merged only while
+            # every row shows the same Fiscal Year).
+            one_year = pivot["Fiscal Year"].nunique() <= 1
             prev_company = None
             company_start_row = 2
             n = len(pivot)
@@ -7941,15 +8047,16 @@ def _build_segment_excel(
                     if prev_company is not None and (excel_row - company_start_row) > 1:
                         ws.merge_cells(start_row=company_start_row, start_column=1,
                                        end_row=excel_row - 1, end_column=1)
-                        ws.merge_cells(start_row=company_start_row, start_column=2,
-                                       end_row=excel_row - 1, end_column=2)
+                        if one_year:
+                            ws.merge_cells(start_row=company_start_row, start_column=2,
+                                           end_row=excel_row - 1, end_column=2)
                     company_start_row = excel_row
                     prev_company = company
 
                 alt_fill = PatternFill(start_color=ALT_ROW, end_color=ALT_ROW, fill_type="solid") \
                     if (excel_row % 2 == 0) else None
 
-                values = [company, row["Fiscal Year"], row[seg_col]] + [row[vc] for vc in val_cols]
+                values = [row[c] for c in headers]
                 for ci, v in enumerate(values, 1):
                     # NaN → blank
                     if isinstance(v, float) and pd.isna(v):
@@ -7970,11 +8077,12 @@ def _build_segment_excel(
             if last_row > company_start_row:
                 ws.merge_cells(start_row=company_start_row, start_column=1,
                                end_row=last_row, end_column=1)
-                ws.merge_cells(start_row=company_start_row, start_column=2,
-                               end_row=last_row, end_column=2)
+                if one_year:
+                    ws.merge_cells(start_row=company_start_row, start_column=2,
+                                   end_row=last_row, end_column=2)
 
             # Column widths
-            widths = [45, 12, 40] + [18] * len(val_cols)
+            widths = [45, 12, 40] + [24] * (len(headers) - 3 - len(val_cols)) + [18] * len(val_cols)
             for ci, w in enumerate(widths, 1):
                 ws.column_dimensions[get_column_letter(ci)].width = w
             ws.freeze_panes = "A2"
@@ -8771,8 +8879,9 @@ def _render_results():
             if c.get("type") == "financial" and c.get("statement") in SEGMENT_STATEMENT_TYPES
         ]
         has_segment_results = bool(seg_criteria) and any(
-            f"{c['display_col']}__raw" in df.columns
+            raw_col in df.columns
             for c in seg_criteria if c.get("display_col")
+            for raw_col, _year in _segment_raw_sources(c)
         )
 
         _hdr_col, _dl_col = st.columns([8, 2])
@@ -8793,6 +8902,7 @@ def _render_results():
                 "seg" if has_segment_results else "flat",
                 ",".join(
                     f"{c.get('display_col')}:{c.get('operator')}:{c.get('value1')}:{c.get('value2')}"
+                    f":{c.get('selected_segments')}:{c.get('segment_filters')}:{c.get('year_range')}"
                     for c in criteria
                 ),
             ])

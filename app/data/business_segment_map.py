@@ -36,8 +36,9 @@ from data.segment_aliases import normalize_geo_key
 MAP_PATH = Path(__file__).with_name("business_segment_map.json")
 
 # The four filters above the Segment members list, outermost first. Product
-# narrows within Product Category the way State narrows within Country.
-FILTERS: Tuple[str, ...] = ("Sales Channel", "Revenue Type", "Product Category", "Product")
+# narrows within Segment (the workbook's Product Category) the way State narrows
+# within Country.
+FILTERS: Tuple[str, ...] = ("Sales Channel", "Revenue Type", "Segment", "Product")
 
 
 @functools.lru_cache(maxsize=1)
@@ -78,10 +79,16 @@ def business_verdict(label: str) -> Tuple[str, str]:
     ruling = _ruling(label)
     if ruling:
         return ruling[0], (ruling[1] if len(ruling) > 1 else "")
-    from data.geo_hierarchy import names_a_place
-    if names_a_place(label):
+    from data.geo_hierarchy import names_a_place, node_for_label
+    if names_a_place(label) and (node_for_label(label) or {}).get("level") not in _TOWN_LEVELS:
         return "geo", label
     return "keep", label
+
+
+# A town or state name on a business axis is as often a plant or a site as a
+# market, and the same name is several places: Axe Compute's (US) "Birmingham"
+# segment was moved to Geographical as Birmingham, UK. Only the workbook moves those.
+_TOWN_LEVELS = frozenset({"City", "State/Province", "Sub-national region"})
 
 
 @functools.lru_cache(maxsize=1)
@@ -154,7 +161,7 @@ def filter_options(
 ) -> List[str]:
     """Tags to offer in filter `name`: those some member reaches under the picks in
     every OTHER filter, so no option comes back empty whichever filter is set
-    first. Product under Product Category = Pet lists only the pet products."""
+    first. Product under Segment = Pet lists only the pet products."""
     others = {f: v for f, v in (selections or {}).items() if f != name}
     pool = filter_members(members, others)
     return sorted({member_tags(member).get(name) for member in pool} - {None, ""})

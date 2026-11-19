@@ -8,10 +8,18 @@ This layer only decides *grouping*. The name a user sees still comes from
 ``segment_aliases.canonicalize_geo_label``, so the business team keeps control of
 wording and the data team keeps control of placement.
 
-The guiding rule is that a filter never loses a company. A member the workbook
-has no node for is still selectable (it lands under "Unclassified"), and a level
-a node does not reach — the Nordics have no country — leaves that member visible
-at every level it does reach.
+Two filter rules, one per screen:
+
+* Geographical Segments filter downward (``include_broader=False``): a pick is
+  that place and everything below it. Country = United States is the United
+  States with its states, US regions and cities; Region = EMEA is EMEA with every
+  sub-region, country and city in it. Nothing above a pick (EMEA, North America)
+  is ever shown.
+* Store Locations take everything inside a pick, plus places on its parent chain
+  (Europe and EMEA for Germany), so a company reporting only a region is not lost.
+
+Either way a member the workbook has no node for is still selectable (it lands
+under "Unclassified").
 """
 
 from __future__ import annotations
@@ -136,8 +144,10 @@ def names_a_place(label: str) -> bool:
     return bool(node) and node.get("node") not in _CATCH_ALL_NODES
 
 
-def _index(members: Sequence[str]) -> List[Tuple[str, Dict[str, str]]]:
-    return [(member, path_for_label(member)) for member in members]
+def _index(members: Sequence[str]) -> List[Tuple[str, Dict[str, str], str]]:
+    """(member, its path, its node name) for each member."""
+    return [(member, path_for_label(member), (node_for_label(member) or {}).get("node", ""))
+            for member in members]
 
 
 def level_options(
@@ -158,8 +168,8 @@ def level_options(
     selections = selections or {}
 
     values, has_unplaced = set(), False
-    for member, path in _index(members):
-        if not _matches(path, selections, wider):
+    for member, path, node_name in _index(members):
+        if not _matches(path, selections, wider, node_name=node_name):
             continue
         value = path.get(level, "")
         if value:
@@ -178,14 +188,18 @@ def _matches(
     selections: Dict[str, Iterable[str]],
     levels: Iterable[str],
     include_broader: bool = True,
+    node_name: str = "",
 ) -> bool:
     """Does one member's path satisfy every selection made at `levels`?
 
-    A member whose path stops short of a filtered level is kept by default: a
-    filer reporting only "Americas" has no country, and hiding it when someone
-    picks United States would silently drop that company. Pass
-    ``include_broader=False`` for a strict view that shows only members at or
-    inside the chosen place.
+    A member whose path stops short of a filtered level is kept by default when
+    it CONTAINS a chosen place — when its node is on the chosen place's parent
+    chain: a filer reporting only "Americas" has no country, and hiding it when
+    someone picks United States would silently drop that company. Sharing a
+    region is not containing: keeping every region-level member made a Germany
+    screen list Americas, Asia Pacific, "U.K. and Ireland" and "Middle East and
+    Africa". Pass ``include_broader=False`` for a strict view that shows only
+    members at or inside the chosen place.
     """
     for level in levels:
         chosen = [value for value in (selections.get(level) or []) if value]
@@ -203,7 +217,35 @@ def _matches(
             return False
         elif not include_broader:
             return False
+        elif node_name not in _containers_of(level, tuple(chosen)):
+            return False
     return True
+
+
+# The node "level" that IS the place a filter value names: the Country node
+# "Germany", the Region node "EMEA (Europe, Middle East, and Africa)".
+_PLACE_NODE_LEVEL = {"region": "Region", "sub_region": "Sub-region", "country": "Country",
+                     "state": "State/Province", "city": "City"}
+
+
+@lru_cache(maxsize=1024)
+def _containers_of(level: str, values: Tuple[str, ...]) -> frozenset:
+    """Node names on the parent chain above the places `values` name at `level`
+    (Germany → Europe, EMEA). "Global" is left out: a company's worldwide total
+    is not a figure for Germany."""
+    nodes = _hierarchy()["nodes"]
+    wanted = set(values)
+    places = [name for name, node in nodes.items()
+              if node.get(level) in wanted and node.get("level") == _PLACE_NODE_LEVEL[level]]
+    if not places:
+        places = [name for name, node in nodes.items() if node.get(level) in wanted]
+    found = set()
+    for name in places:
+        parent = nodes[name].get("parent")
+        while parent in nodes and parent not in found and parent != "Global":
+            found.add(parent)
+            parent = nodes[parent].get("parent")
+    return frozenset(found)
 
 
 def filter_members(
@@ -211,7 +253,11 @@ def filter_members(
     selections: Optional[Dict[str, Iterable[str]]] = None,
     include_broader: bool = True,
 ) -> List[str]:
-    """The members left after applying every level selection. Order is preserved."""
+    """The members left after applying every level selection. Order is preserved.
+
+    ``include_broader=False`` filters downward: the picked place and everything
+    below it, nothing above — what the Geographical Segments screen uses.
+    """
     selections = {
         level: [value for value in (selections or {}).get(level) or [] if value]
         for level in LEVELS
@@ -220,8 +266,8 @@ def filter_members(
         return list(members)
     return [
         member
-        for member, path in _index(members)
-        if _matches(path, selections, LEVELS, include_broader)
+        for member, path, node_name in _index(members)
+        if _matches(path, selections, LEVELS, include_broader, node_name)
     ]
 
 

@@ -137,32 +137,39 @@ def _ratios_excel_rows(data):
     return rows
 
 
-ALTMAN_TOOLTIP = (
-    "Original Altman Z-Score (1968 model), not the non-manufacturing Z'' variant.\n"
-    "Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E\n"
-    "A = (Current Assets - Current Liabilities) / Total Assets\n"
-    "B = Retained Earnings / Total Assets\n"
-    "C = EBIT / Total Assets\n"
-    "D = Market Value of Equity / Total Liabilities\n"
-    "E = Total Revenue / Total Assets\n"
-    "EBIT and Total Revenue as in Key Stats; market value of equity = close on the "
-    "fiscal year end x shares outstanding, in the reporting currency.\n"
-    "Below 1.8: higher financial risk. 1.8 to 3.0: moderate. 3.0 and above: relatively strong."
-)
 ALTMAN_ZONES = {
-    "red": ("#FDE2E2", "#991B1B", "Higher financial risk (below 1.8)"),
-    "yellow": ("#FEF3C7", "#92400E", "Moderate / uncertain financial risk (1.8 to 3.0)"),
-    "green": ("#DCFCE7", "#166534", "Relatively strong financial position (3.0 and above)"),
+    "red": ("#FDE2E2", "#991B1B"),
+    "yellow": ("#FEF3C7", "#92400E"),
+    "green": ("#DCFCE7", "#166534"),
 }
+
+
+def altman_pill(zone, text):
+    """Text in the traffic-light pill used for Altman Z-Scores."""
+    background, color = ALTMAN_ZONES[zone]
+    return (f'<span style="background:{background};color:{color};'
+            f'padding:2px 8px;border-radius:10px;font-weight:600;">{text}</span>')
+
+
+ALTMAN_TIP_HTML = (
+    '<div class="altman-tip-box">'
+    '<p><i>The Altman Z-score is a method of determining the probability of a company filing for bankruptcy '
+    'in the subsequent two years. The lower the Z-score, the higher the chance that a company will go bankrupt. '
+    'Our “traffic light” color coding reflects scores for each year</i></p>'
+    '<b>Bankruptcy Risk Scoring:</b>'
+    '<ul>'
+    f'<li>{altman_pill("red", "Red (Below 1.8)")}: High risk of bankruptcy.</li>'
+    f'<li>{altman_pill("yellow", "Yellow (1.8 – 2.99)")}: Intermediate or moderate risk.</li>'
+    f'<li>{altman_pill("green", "Green (3.0 and above)")}: Low risk; company is unlikely to file for bankruptcy.</li>'
+    '</ul>'
+    '<i>Source: Company reports / Coresight Research</i>'
+    '</div>'
+)
 
 
 def add_altman_rows(data, ticker, start_date, end_date, period_type):
     """Append the Altman Z-Score section to a get_ratios_data payload (annual only)."""
-    if period_type != "annual":
-        data["notes"].append("Altman Z-Score is shown in the Annual view only.")
-        return
-    if CompanyRepository.get_company_sector(ticker) in ALTMAN_EXCLUDED_INDUSTRIES:
-        data["notes"].append("Altman Z-Score is not shown for banks, insurers, payment companies and REITs; the model does not apply to them.")
+    if period_type != "annual" or CompanyRepository.get_company_sector(ticker) in ALTMAN_EXCLUDED_INDUSTRIES:
         return
     scores = RatiosRepository.get_altman_z_scores(ticker, start_date, end_date)
     altman = [scores.get(p.date, {"missing": "no annual figures for this year end"}) for p in data["periods"]]
@@ -171,32 +178,30 @@ def add_altman_rows(data, ticker, start_date, end_date, period_type):
         {"label": "Altman Z-Score", "metric_key": "altman_z", "values": [s.get("z") for s in altman],
          "altman": altman, "is_bold": False, "indent": 1},
     ]
-    data["notes"].append(
-        "Altman Z-Score uses the original model (1.2A + 1.4B + 3.3C + 0.6D + 1.0E) with market value of equity "
-        "at the fiscal year-end close; below 1.8 red = higher financial risk, 1.8 to 3.0 yellow = moderate, "
-        "3.0 and above green = relatively strong. Hover a score for its inputs."
-    )
+
+
+# Instant hover tooltip for the Altman Z-Score label (native title waits ~1s and hides on mouse move).
+TIP_CSS = """<style>
+.data-table td.altman-tip { cursor: help; }
+.data-table td.altman-tip:hover { z-index: 20; }
+.altman-tip-box {
+    display: none; position: absolute; bottom: 100%; left: 0; z-index: 20;
+    width: max-content; max-width: 560px; padding: 12px 14px; border-radius: 8px;
+    background: #111827; color: #FFFFFF; font-size: 12.5px; font-weight: 400; line-height: 1.5;
+    text-align: left; white-space: normal; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+}
+.data-table td.altman-tip:hover .altman-tip-box { display: block; }
+.altman-tip-box p { margin: 0 0 10px; color: #FFFFFF; font-size: 12.5px; }
+.altman-tip-box ul { margin: 6px 0 10px; padding-left: 18px; }
+.altman-tip-box li { margin: 0 0 4px; line-height: 1.9; color: #FFFFFF; font-size: 12.5px; }
+</style>"""
 
 
 def altman_cell(score):
-    """One Ratios-table cell: the colored score, its five ratios on hover."""
+    """One Ratios-table cell: the score in its traffic-light color, '-' when missing."""
     if "missing" in score:
-        tip = html_escape("Not available: " + score["missing"])
-        return f'<td class="data-cell" title="{tip}">-</td>'
-    background, color, meaning = ALTMAN_ZONES[score["zone"]]
-    tip = "\n".join([
-        meaning,
-        f"A  Working capital / Total assets: {score['a']:.3f} x 1.2",
-        f"B  Retained earnings / Total assets: {score['b']:.3f} x 1.4",
-        f"C  EBIT / Total assets: {score['c']:.3f} x 3.3",
-        f"D  Market value of equity / Total liabilities: {score['d']:.3f} x 0.6",
-        f"E  Total revenue / Total assets: {score['e']:.3f} x 1.0",
-        f"Market value of equity: {score['currency']} {score['market_value_equity'] / 1e6:,.0f}M "
-        f"(close {score['price_date']:%d-%b-%Y}, shares as of {score['shares_date']:%d-%b-%Y})",
-    ])
-    tip = html_escape(tip).replace("\n", "&#10;")
-    return (f'<td class="data-cell" title="{tip}"><span style="background:{background};color:{color};'
-            f'padding:2px 8px;border-radius:10px;font-weight:600;">{score["z"]:.2f}</span></td>')
+        return '<td class="data-cell">-</td>'
+    return f'<td class="data-cell">{altman_pill(score["zone"], format(score["z"], ".2f"))}</td>'
 
 
 def format_value(value: Optional[float], conversion_rate: float = 1.0, units_scale: float = 1.0) -> str:
@@ -4232,15 +4237,12 @@ def render_page():
             # Phase 5: Session-state short-circuit — reuse cached HTML when inputs unchanged
             _ratios_cache_key = f"_ratios_html_{selected_ticker}_{start_date}_{end_date}_{_period_type_db}_{sort_ascending}"
             _cached_html = st.session_state.get(_ratios_cache_key)
-            _cached_notes = st.session_state.get(_ratios_cache_key + "_notes")
 
             if _cached_html is not None:
                 _timings['ratios_fetch'] = 0.0
                 _timings['ratios_compute'] = 0.0
                 _t0_render = _time.perf_counter()
                 st.html(_cached_html)
-                if _cached_notes:
-                    st.caption("Ratios assumptions: " + " | ".join(_cached_notes))
                 _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
                 _timings['ratios_render'] = (_time.perf_counter() - _t0_render) * 1000
                 _timings['ratios_total'] = (_time.perf_counter() - _t0_tab) * 1000
@@ -4264,7 +4266,7 @@ def render_page():
                 _t0_render = _time.perf_counter()
                 if data["periods"] and data["line_items"]:
                     # Phase 6: Build HTML via list-append + join (avoid O(n²) concat)
-                    _parts = ['<div class="table-container"><div class="table-scroll"><table class="data-table"><thead>',
+                    _parts = [TIP_CSS, '<div class="table-container"><div class="table-scroll"><table class="data-table"><thead>',
                               '<tr class="row-grey-separator"><th>For Fiscal Period Ending<span class="header-subtext">Ratios and percentages (no unit scaling or currency conversion).</span></th>']
                     for period in data["periods"]:
                         lines = period.label.split('\n')
@@ -4289,8 +4291,7 @@ def render_page():
 
                         _parts.append(f'<tr class="{row_class_str}">')
                         if "altman" in item:
-                            _tip = html_escape(ALTMAN_TOOLTIP).replace("\n", "&#10;")
-                            _parts.append(f'<td class="indent-{indent}" title="{_tip}">{label} <span style="cursor:help;color:#6B7280;">&#9432;</span></td>')
+                            _parts.append(f'<td class="indent-{indent} altman-tip">{label} <span style="color:#6B7280;">&#9432;</span>{ALTMAN_TIP_HTML}</td>')
                             _parts.extend(altman_cell(score) for score in item["altman"])
                             _parts.append('</tr>')
                             continue
@@ -4313,10 +4314,6 @@ def render_page():
                     html = ''.join(_parts)
                     st.html(html)
 
-                    notes = data.get("notes", [])
-                    if notes:
-                        st.caption("Ratios assumptions: " + " | ".join(notes))
-
                     # Excel download (built lazily — only when the user clicks Excel)
                     _t_xl_rat_inner = _time.perf_counter()
                     _lazy_excel_download(f"ratios_{selected_ticker}", f"{selected_ticker}_Ratios.xlsx", _build_ratios_xl)
@@ -4324,7 +4321,6 @@ def render_page():
 
                     # Store in session_state for instant reuse on next rerun
                     st.session_state[_ratios_cache_key] = html
-                    st.session_state[_ratios_cache_key + "_notes"] = notes
                 else:
                     st.info("No ratios data available for the selected date range")
 
