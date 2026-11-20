@@ -1,0 +1,14 @@
+{
+ "ticker": "WEYS",
+ "fiscal_year": 2016,
+ "value": 13,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "nt constituted 7% of total sales in each of the years 2016, 2015, and 2014. As of December 31, 2016, the retail segment consisted of 13 Company-operated stores and an internet business in the United States. Sales in ret",
+ "fye_date": "2016-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WEYS/2017/10-K/filing.html::2016",
+ "extractor_version": 5
+}

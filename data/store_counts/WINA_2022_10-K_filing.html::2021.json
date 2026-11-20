@@ -1,0 +1,14 @@
+{
+ "ticker": "WINA",
+ "fiscal_year": 2021,
+ "value": 1271,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "ises - US | | 37 | | — | | — | | 37 | | 1 | | 1 | | 100 | % | Total Franchised Stores | | 1,264 | | 16 | | (9) | | 1,271 | | 116 | | 115 | | 99 | % Of the 1,271 total franchised stores as of December 25, 2021, 132 were located in Canada. Sustainabi",
+ "fye_date": "2021-12-25",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WINA/2022/10-K/filing.html::2021",
+ "extractor_version": 5
+}

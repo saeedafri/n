@@ -1,0 +1,14 @@
+{
+ "ticker": "VLO",
+ "fiscal_year": 2023,
+ "value": 9908,
+ "confidence": "medium",
+ "basis": "L2_table",
+ "evidence": "| Total | | 9,908 |",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "VLO/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

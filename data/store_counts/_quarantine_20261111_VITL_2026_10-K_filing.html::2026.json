@@ -1,0 +1,14 @@
+{
+ "ticker": "_quarantine_20261111",
+ "fiscal_year": 2026,
+ "value": 95,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "rsecurity, and any material failure, weakness, interruption or breach of security could prevent us from effectively operating our business.” Item 2. Properties As of August 31, 2026, we operate 95 restaurants in 24 U.S. states and Washington, D.C.",
+ "fye_date": "2026-08-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "_quarantine_20261111/VITL/2026/10-K/filing.html::2026",
+ "extractor_version": 5
+}

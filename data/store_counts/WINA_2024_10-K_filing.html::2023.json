@@ -1,0 +1,14 @@
+{
+ "ticker": "WINA",
+ "fiscal_year": 2023,
+ "value": 1319,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "1,319 | | 177 | | 176 | | 99 | % | | (1) | All stores are owned and operated by franchisees. Winmark does not own or operate any corporate stores. Of the 1,319 total franchised stores as of December 30, 2023, 149 were located in Canada. Sustainabi",
+ "fye_date": "2023-12-30",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WINA/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

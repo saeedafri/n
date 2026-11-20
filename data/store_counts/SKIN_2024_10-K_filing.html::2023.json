@@ -1,0 +1,14 @@
+{
+ "ticker": "SKIN",
+ "fiscal_year": 2023,
+ "value": 1400,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "the estimated reselling price, the difference would result in an increase or decrease in gross profit in the periods the refurbished Delivery Systems are sold. As of December 31, 2023, the Company had approximately 1,400 units at an estimated value of approximately",
+ "fye_date": "2023-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "SKIN/2024/10-K/filing.html::2023",
+ "extractor_version": 5
+}

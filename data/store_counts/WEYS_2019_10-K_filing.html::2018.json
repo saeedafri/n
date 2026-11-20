@@ -1,0 +1,14 @@
+{
+ "ticker": "WEYS",
+ "fiscal_year": 2018,
+ "value": 9,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "nt constituted 8% and 7% of total net sales in 2018 and 2017, respectively. As of December 31, 2018, the retail segment consisted of nine brick and mortar stores and internet businesses in the United States. Sales in reta",
+ "fye_date": "2018-12-31",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WEYS/2019/10-K/filing.html::2018",
+ "extractor_version": 5
+}

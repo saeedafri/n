@@ -1,0 +1,14 @@
+{
+ "ticker": "TBI",
+ "fiscal_year": 2015,
+ "value": 37,
+ "confidence": "medium",
+ "basis": "L2_prose",
+ "evidence": "e acquired substantially all of the assets and assumed certain liabilities of TWC, a light industrial staffing provider with 37 branches located predominantly in the Midwest with minimal overlap w",
+ "fye_date": "2015-12-25",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "TBI/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}

@@ -1,0 +1,14 @@
+{
+ "ticker": "WINA",
+ "fiscal_year": 2015,
+ "value": 1150,
+ "confidence": "medium",
+ "basis": "L2_prose_asof",
+ "evidence": "nd by purchasing customers’ used goods that have been outgrown or are no longer used. Our concepts also offer a limited amount of new merchandise to customers. As of December 26, 2015, we had 1,150 franchised stores across the United States and Canada.",
+ "fye_date": "2015-12-26",
+ "by_country": {},
+ "by_continent": {},
+ "needs_review": false,
+ "accession": "WINA/2016/10-K/filing.html::2015",
+ "extractor_version": 5
+}
